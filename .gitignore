@@ -1,0 +1,10 @@
+# Environment variables (secrets) — never commit actual values
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+
+# Dependencies
+node_modules/
