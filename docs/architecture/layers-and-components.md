@@ -6,6 +6,8 @@
 > **Metodología:** Design Science Research (DSR)  
 > **Versión:** 1.0.0
 
+> Las discrepancias detectadas entre este documento, el SAD original y los diagramas C4 se registran en [`sad-inconsistencies.md`](./sad-inconsistencies.md), con su estado de resolución y las correcciones pendientes en el documento fuente.
+
 ---
 
 ## 1. Estructura de Directorios del Repositorio (`src/` y `api/`)
@@ -27,7 +29,8 @@ kit-pagos-colombia/
 │   │   │   ├── TransactionStatus.ts            <-- Enum: APPROVED, DECLINED, PENDING, EXPIRED, VOIDED, ERROR
 │   │   │   ├── RejectionCategory.ts            <-- Enum: INSUFFICIENT_FUNDS, INVALID_CARD_DATA, etc.
 │   │   │   ├── SdkErrorCode.ts                 <-- Enum: INVALID_CREDENTIALS, GATEWAY_TIMEOUT, etc.
-│   │   │   └── Gateway.ts                      <-- Enum: wompi, payu, mercadopago, kushki
+│   │   │   ├── Gateway.ts                      <-- Enum: WOMPI, PAYU, MERCADOPAGO, KUSHKI
+│   │   │   └── WebhookEvent.ts                 <-- Value Object: evento normalizado de webhook (RF-04)
 │   │   ├── errors/
 │   │   │   └── SdkError.ts                     <-- Excepción tipada unificada (code, gateway, originalPayload)
 │   │   └── services/
@@ -85,8 +88,8 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 
 - **Patrón Arquitectónico:** GoF Facade.
 - **Responsabilidad:** Es el punto de entrada único del SDK y el único componente que el desarrollador que consume el SDK instancia directamente.
-- **Métodos Públicos:** Expone tres métodos: `createPayment(request)`, `getStatus(id)` y `verifyWebhook(payload, headers)`.
-- **Comportamiento:** Oculta la complejidad interna del sistema detrás de una interfaz simple y predecible. Mantiene una referencia a `SDKConfigurator` y a `GatewayFactory`; antes de ejecutar cualquier operación consulta al Configurator para determinar la pasarela activa y sus credenciales, solicita al Factory la instancia del adaptador correspondiente, y envuelve la llamada resultante con `RetryHandler`. Retorna entidades `Transaction` normalizadas al desarrollador o excepciones `SdkError` tipadas en caso de fallo.
+- **Métodos Públicos:** Expone tres métodos: `createPayment(request)`, `getPaymentStatus(id)` y `validateWebhook(payload, headers)`. Estos nombres coinciden con el Component Diagram C4 y la sección 9.1.1 del SAD; la sección 15.2 usa nombres distintos (`getStatus`, `verifyWebhook`), inconsistencia registrada en `sad-inconsistencies.md` (punto 1).
+- **Comportamiento:** Oculta la complejidad interna del sistema detrás de una interfaz simple y predecible. Mantiene una referencia a `SDKConfigurator` y a `GatewayFactory`; antes de ejecutar cualquier operación consulta al Configurator para determinar la pasarela activa y sus credenciales, solicita al Factory la instancia del adaptador correspondiente, y envuelve la llamada resultante con `RetryHandler`. Retorna entidades `Transaction` normalizadas al desarrollador o excepciones `SdkError` tipadas en caso de fallo. `validateWebhook()` retorna un `WebhookEvent` en lugar de un booleano, para cumplir RF-04 (ver sección 2.10).
 
 ---
 
@@ -178,21 +181,23 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 ### 2.10. Webhook Verifier (`src/domain/services/WebhookVerifier.ts`)
 
 - **Patrón Arquitectónico:** Servicio de Dominio (DDD) sin estado propio.
-- **Responsabilidad:** Verifica la autenticidad de los webhooks entrantes de cada pasarela mediante el único método público `verify(payload, headers, secret, gateway): boolean`, delegando internamente en la lógica de verificación de firma correspondiente al Gateway recibido.
+- **Responsabilidad:** Verifica la autenticidad de los webhooks entrantes de cada pasarela mediante `verify(payload, headers, secret, gateway): boolean`, delegando internamente en la lógica de verificación de firma correspondiente al Gateway recibido.
 - **Implementación por pasarela:**
   - **Wompi:** SHA-256 sobre cadena de propiedades + timestamp + secreto. Implementación completa y validada.
   - **PayU:** MD5 o SHA-256 según configuración del comercio. Implementación suficiente para validar webhooks del simulador.
   - **Mercado Pago:** HMAC-SHA256 sobre headers y body. Implementación suficiente para validar webhooks del simulador.
   - **Kushki:** HMAC-SHA256. Implementación suficiente para validar webhooks del simulador.
-- **Integración:** Una vez verificada la firma, delega la actualización del estado de la `Transaction` con el evento recibido.
+- **Segundo método público — `parse(payload, gateway): WebhookEvent`:** Construye el evento normalizado (`WebhookEvent`) a partir del payload ya verificado, para cumplir RF-04 ("retornar un evento normalizado si la firma es válida"). Este método no está en la sección 15.1 del SAD, que describe a `WebhookVerifier` con un único método público; es una desviación deliberada registrada en `sad-inconsistencies.md` (punto 6), porque ningún otro componente vigente del SAD define cómo se construye ese evento.
+- **Integración:** `KitPagos.validateWebhook()` llama primero a `verify()` y, si la firma es válida, a `parse()`, devolviendo el `WebhookEvent` resultante al comercio (o un `SdkError(WEBHOOK_SIGNATURE_INVALID)` si la firma no es válida).
 
 ---
 
 ### 2.11. Transaction Entity (`src/domain/entities/Transaction.ts`)
 
 - **Responsabilidad:** Es la única clase con identidad propia del dominio del SDK.
-- **Encapsulamiento:** Se construye a partir de los objetos de valor `Amount`, `Currency`, `OrderReference`, `Payer` y `GatewayTransactionId`, además de referenciar el enum `TransactionStatus` que indica su estado y, opcionalmente, una instancia de `RejectionReason` cuando ese estado es `DECLINED`. Conserva además el campo `rawStatus`, que guarda el valor nativo devuelto por la pasarela antes de ser normalizado, con fines de auditoría.
+- **Encapsulamiento:** Se construye a partir de los objetos de valor `Amount`, `Currency`, `OrderReference`, `Payer` y `GatewayTransactionId`, además de referenciar el enum `TransactionStatus` que indica su estado y, opcionalmente, una instancia de `RejectionReason` cuando ese estado es `DECLINED`. Conserva además el campo `rawStatus`, que guarda el valor nativo devuelto por la pasarela antes de ser normalizado, con fines de auditoría, y el campo opcional `authorizationCode` (sección 9.1.8).
 - **Métodos de negocio:** Expone `isApproved()`, `isPending()` e `isFinal()`, que permiten al desarrollador tomar decisiones de negocio sin necesidad de comparar directamente contra los valores del enum ni depender de los estados crudos de ninguna pasarela.
+- **Inmutabilidad:** `Transaction` no expone ningún método de mutación. Cuando una transacción `PENDING` se concilia mediante webhook, el `Response Normalizer` construye una instancia nueva a partir del evento recibido, en lugar de mutar la instancia existente (ver `sad-inconsistencies.md`, punto 3).
 
 ---
 
@@ -344,7 +349,7 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 | **RF-01** Crear intención de pago | `KitPagos` → `GatewayFactory` → `Adapter` | `HTTPRouter` → `ScenarioEngine` → `GatewayMockFactory` |
 | **RF-02** Respuesta normalizada con Transaction | `ResponseNormalizer` → `Transaction Entity` | `GatewayMockFactory` (payload de referencia) |
 | **RF-03** Consultar estado de transacción | `KitPagos` → `Adapter` → `ResponseNormalizer` | `GatewayMockFactory` |
-| **RF-04** Validar firma de webhook | `WebhookVerifier` | `SignatureGenerator` → `WebhookTriggerEndpoint` |
+| **RF-04** Validar firma de webhook y retornar evento normalizado | `WebhookVerifier` (`verify()` + `parse()`) → `WebhookEvent` | `SignatureGenerator` → `WebhookTriggerEndpoint` |
 | **RF-05** Excepciones tipadas SdkError | `ErrorHandler` (`SdkError` + `SdkErrorCode`) | `ScenarioEngine` (escenario `ERROR_RED`) |
 | **RF-06** Cambiar pasarela sin modificar código | `SDKConfigurator` + `GatewayFactory` | N/A |
 | **RF-07** Reintentos con backoff exponencial | `RetryHandler` | `ScenarioEngine` (escenario `TIMEOUT`) |

@@ -1,0 +1,161 @@
+@startuml Hexagonal Architecture Class Diagram
+title Diagrama de Clases de la Arquitectura Hexagonal - SDK Kit Pagos Colombia
+skinparam backgroundColor white
+skinparam classFontSize 12
+skinparam packageFontSize 14
+skinparam packageStyle rectangle
+skinparam class {
+  BorderColor #666666
+  ArrowColor #666666
+}
+
+package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
+  class Transaction <<Entidad>> #FFE0B2 {
+    gatewayTransactionId : GatewayTransactionId
+    amount : Amount
+    currency : Currency
+    payer : Payer
+    rawStatus : string
+    authorizationCode : string | null
+    rejectionReason : RejectionReason | null
+    --
+    isApproved() : boolean
+    isPending() : boolean
+    isFinal() : boolean
+  }
+
+  class Amount <<Value Object>> #C8E6C9 {
+    value : number
+    --
+    toMinorUnits() : number
+    equals(other) : boolean
+  }
+
+  class Currency <<Value Object>> #C8E6C9 {
+    code : string
+  }
+
+  class Payer <<Value Object>> #C8E6C9 {
+    email : string
+    fullName : string | null
+  }
+
+  class GatewayTransactionId <<Value Object>> #C8E6C9 {
+    value : string
+    gateway : Gateway
+  }
+
+  class RejectionReason <<Value Object>> #C8E6C9 {
+    rejectionCode : string
+    rejectionCategory : RejectionCategory
+  }
+
+  class WebhookEvent <<Value Object>> #C8E6C9 {
+    eventType : string
+    gatewayTransactionId : string
+    newStatus : TransactionStatus
+    gateway : Gateway
+  }
+
+  class WebhookVerifier <<Servicio de Dominio>> #BBDEFB {
+    verify(payload, headers, secret, gateway) : boolean
+    parse(payload, gateway) : WebhookEvent
+  }
+
+  class SdkError <<Error>> #F8BBD0 {
+    code : SdkErrorCode
+    gateway : Gateway
+    originalPayload : unknown
+  }
+
+  enum TransactionStatus #E0E0E0 {
+    APPROVED
+    DECLINED
+    PENDING
+    EXPIRED
+    VOIDED
+    ERROR
+  }
+
+  enum Gateway #E0E0E0 {
+    WOMPI
+    PAYU
+    MERCADOPAGO
+    KUSHKI
+  }
+
+  Transaction *-- Amount
+  Transaction *-- Currency
+  Transaction *-- Payer
+  Transaction *-- GatewayTransactionId
+  Transaction "0..1" *-- RejectionReason
+  Transaction --> TransactionStatus : estado
+  GatewayTransactionId --> Gateway
+}
+
+package "APLICACION (Puertos)" #FFFFFF {
+  interface PaymentGatewayPort <<Puerto>> #90CAF9 {
+    createPayment(request) : Promise<Transaction>
+    getStatus(gatewayTransactionId) : Promise<Transaction>
+    verifySignature(payload, headers, secret) : boolean
+  }
+}
+
+package "INFRAESTRUCTURA (Facade, Factory y Adapters)" #FFFFFF {
+  class KitPagos <<Facade Pattern>> #1F4E79 {
+    createPayment(request) : Promise<Transaction>
+    getPaymentStatus(id) : Promise<Transaction>
+    validateWebhook(payload, headers) : WebhookEvent
+  }
+
+  class SDKConfigurator <<Configuration Module>> #2E75B6 {
+    configure(options) : void
+    getActiveGateway() : Gateway
+    getCredentials(gateway) : Credentials
+  }
+
+  class GatewayFactory <<Factory Pattern>> #2E75B6 {
+    create(gateway) : PaymentGatewayPort
+  }
+
+  class WompiAdapter <<Adapter Pattern>> #5B9BD5
+  class PayUAdapter <<Adapter Pattern>> #5B9BD5
+  class MercadoPagoAdapter <<Adapter Pattern>> #5B9BD5
+  class KushkiAdapter <<Adapter Pattern>> #5B9BD5
+
+  class ResponseNormalizer <<Domain Service>> #2E75B6 {
+    normalize(rawResponse, gateway) : Transaction
+  }
+
+  class RetryHandler <<Resilience Utility>> #2E75B6 {
+    execute(operation) : Promise<T>
+    isTransient(error) : boolean
+  }
+
+  class ErrorHandler <<Domain Service>> #2E75B6 {
+    handle(rawError, gateway) : SdkError
+  }
+
+  KitPagos --> SDKConfigurator : consulta
+  KitPagos --> GatewayFactory : solicita adapter
+  KitPagos --> RetryHandler : envuelve llamada
+  KitPagos ..> WebhookVerifier : valida webhook
+  GatewayFactory ..> PaymentGatewayPort : instancia
+  WompiAdapter ..|> PaymentGatewayPort
+  PayUAdapter ..|> PaymentGatewayPort
+  MercadoPagoAdapter ..|> PaymentGatewayPort
+  KushkiAdapter ..|> PaymentGatewayPort
+  RetryHandler --> ErrorHandler : MAX_RETRIES_EXCEEDED
+  ResponseNormalizer --> Transaction : construye
+  KitPagos --> ResponseNormalizer : normaliza respuesta
+}
+
+note bottom of KitPagos
+  Diseno "facade directo": sin capa
+  explicita de UseCases ni Controller.
+  Reemplaza al diagrama anterior con
+  CrearPagoUseCase / WebhookController
+  (ver sad-inconsistencies.md, punto 7).
+end note
+
+@enduml

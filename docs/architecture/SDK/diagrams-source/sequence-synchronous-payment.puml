@@ -1,0 +1,39 @@
+@startuml Sequence Diagram - Synchronous Payment
+title B - Pago Sincrono (Kushki - Tarjeta)
+skinparam backgroundColor white
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #666666
+skinparam LifeLineBorderColor #666666
+
+participant "Comercio" as Comercio
+participant "KitPagos\n(Facade)" as Facade
+participant "KushkiAdapter" as Kushki
+participant "Kushki API" as API
+
+Comercio -> Facade : createPayment(request)
+Facade -> Kushki : createPayment(request)
+Kushki -> API : POST /card/v1/charges
+
+alt Pago aprobado
+  API --> Kushki : HTTP 201\ntransaction_status = APPROVAL
+  Kushki --> Facade : rawResponse
+  Facade --> Comercio : Transaction(APPROVED)
+else Pago rechazado
+  API --> Kushki : HTTP 402\ntransaction_status = DECLINED
+  Kushki --> Facade : rawResponse
+  Facade --> Comercio : Transaction(DECLINED)
+else Error tecnico
+  API --> Kushki : HTTP 500
+  Kushki --> Facade : error nativo
+  Facade --> Comercio : throw SdkError(GATEWAY_SERVER_ERROR)
+end
+
+note over Comercio, API
+  Excepcion al patron "pendiente + webhook": para
+  tarjeta, Kushki devuelve el resultado final en la
+  misma respuesta HTTP, sin conciliacion posterior.
+  Esta particularidad la absorbe KushkiAdapter; no
+  se filtra hacia el codigo del comercio.
+end note
+
+@enduml

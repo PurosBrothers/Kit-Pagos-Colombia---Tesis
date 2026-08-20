@@ -1,0 +1,37 @@
+@startuml Sequence Diagram - Webhook Conciliation
+title C - Conciliacion por Webhook (asincrono)
+skinparam backgroundColor white
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #666666
+skinparam LifeLineBorderColor #666666
+
+participant "Pasarela" as Pasarela
+participant "Comercio\n(endpoint propio)" as Comercio
+participant "KitPagos\n(Facade)" as Facade
+participant "WebhookVerifier" as Verifier
+
+Pasarela -> Comercio : POST /webhook(payload, headers)
+Comercio -> Facade : validateWebhook(payload, headers)
+Facade -> Verifier : verify(payload, headers, secret, gateway)
+
+alt Firma valida
+  Verifier --> Facade : true
+  Facade -> Verifier : parse(payload, gateway)
+  Verifier --> Facade : WebhookEvent
+  Facade --> Comercio : WebhookEvent
+  Comercio -> Facade : getPaymentStatus(gatewayTransactionId)
+  Facade --> Comercio : Transaction (reconstruido con el nuevo estado)
+else Firma invalida
+  Verifier --> Facade : false
+  Facade --> Comercio : throw SdkError(WEBHOOK_SIGNATURE_INVALID)
+end
+
+note over Facade, Verifier
+  Transaction es inmutable: la conciliacion no muta
+  la instancia previa, getPaymentStatus() reconstruye
+  una instancia nueva a partir del estado actualizado.
+  Kushki no publica su algoritmo de firma: el
+  KushkiAdapter debe informar esta limitacion.
+end note
+
+@enduml
