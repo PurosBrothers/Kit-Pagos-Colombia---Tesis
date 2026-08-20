@@ -17,6 +17,12 @@ import { TransactionStatus } from "../value-objects/TransactionStatus";
  * isPending() [...]. Conserva ademas el campo rawStatus, que guarda el valor
  * nativo devuelto por la pasarela antes de ser normalizado, con fines de
  * auditoria."
+ *
+ * authorizationCode se agrega por la seccion 9.1.8 (Transaction Entity), que
+ * lista explicitamente ese atributo. Transaction es inmutable: cuando una
+ * transaccion PENDING se concilia por webhook, el Response Normalizer debe
+ * construir una instancia nueva en lugar de mutar la existente (ver
+ * docs/architecture/sad-inconsistencies.md, punto 3).
  */
 export class Transaction {
   constructor(
@@ -28,6 +34,7 @@ export class Transaction {
     private readonly status: TransactionStatus,
     public readonly rawStatus: string,
     public readonly rejectionReason?: RejectionReason,
+    public readonly authorizationCode?: string,
   ) {}
 
   getStatus(): TransactionStatus {
