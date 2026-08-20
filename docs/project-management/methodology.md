@@ -50,7 +50,7 @@ Importante: la revisión grupal obligatoria al cierre de la Iteración 1 es una 
 
 Usar exactamente los nombres del WBS y de la tabla anterior, para que el tablero de GitHub sea trazable 1:1 contra el SPMP sin traducción mental. No inventar nombres de iteraciones que no existen en el documento aprobado (por ejemplo, evitar términos como "Iteración 0"): si un bloque de trabajo no es código de una de las tres iteraciones de Fase 4, probablemente es el cierre de una fase anterior (típicamente Fase 3, cerrando el Hito H2) y el milestone debe nombrarse en función de esa fase, no de una iteración inexistente.
 
-| Milestone | Cuándo usarlo |
+| Milestone (nombre base) | Cuándo usarlo |
 |---|---|
 | `Fase 3 – Diseño (cierre)` | Correcciones sobre artefactos de diseño ya producidos (SAD, ADRs, diagramas) antes de que el equipo empiece a escribir código de comportamiento. Hito H2. |
 | `Iteración 1 – Núcleo del SDK` | Todo lo que sea dominio, puertos, y los servicios de aplicación agnósticos de pasarela (Configurator, Factory, Normalizer, Retry, ErrorHandler). Hito H3 parcial. |
@@ -60,6 +60,22 @@ Usar exactamente los nombres del WBS y de la tabla anterior, para que el tablero
 | `Fase 6 – Comunicación` | Documento de grado y publicación del repositorio. Hito H6. Crear cuando se llegue a esa fase, no antes. |
 
 Las fechas de vencimiento de cada milestone son un estimado nuestro basado en el rango de semanas del SPMP (Fase 4 = semanas 7 a 13, es decir, seis semanas para tres iteraciones, aproximadamente dos semanas cada una); el SPMP no fija una fecha calendario exacta de inicio, así que estas fechas se ajustan sobre la marcha sin que eso cuente como un cambio de alcance que requiera aprobación del director (el propio SPMP excluye del control de cambios los "ajustes al cronograma que no afecten los hitos principales").
+
+### 3.1. Granularidad semanal dentro de cada iteración
+
+El equipo se reúne semanalmente, así que un milestone de dos semanas completo (una iteración entera) es una unidad demasiado grande para revisar avance cada semana: para el jueves de la primera semana no hay nada que "cerrar" todavía. Por eso, **cada iteración de Fase 4 se divide en milestones semanales**, uno por semana de trabajo, y cada milestone semanal declara explícitamente a qué iteración pertenece en su propio nombre. Esto no reemplaza la tabla anterior, la complementa: la tabla define el nombre base y el alcance de contenido de cada iteración; esta sección define cómo se corta ese mismo contenido en checkpoints semanales.
+
+Convención de nombre: `<Nombre base de la iteración> · Semana N (dd–dd mes)`, donde `N` reinicia en 1 al comenzar cada iteración (no es un contador global de todo el proyecto). Ejemplo con la Iteración 1, que ya está en curso:
+
+- `Iteración 1 – Núcleo del SDK · Semana 1 (20–24 ago)`
+- `Iteración 1 – Núcleo del SDK · Semana 2 (25–31 ago)`
+- `Iteración 1 – Núcleo del SDK · Semana 3 (1–4 sep)` (si el núcleo no queda cerrado en la semana 2)
+
+El número de semanas por iteración no está fijado de antemano: si una iteración se atrasa, simplemente se agrega el siguiente milestone semanal bajo el mismo prefijo, en vez de forzar que quepa en las dos semanas que el SPMP estimó. Esto es consistente con el principio del SPMP de no forzar que todo el trabajo dure exactamente lo mismo.
+
+**Excepción explícita: el milestone `Fase 3 – Diseño (cierre)` no se divide por semana.** No es una iteración de desarrollo con checkpoints de avance de código; es un cierre puntual de documentación con una sola fecha de entrega, así que se queda como un único milestone.
+
+Cuando una iteración completa ya cerró (todas sus semanas terminaron y el Hito correspondiente se cumplió), el nombre base de la iteración en la tabla de la sección 2 sigue sirviendo como referencia de agrupación conceptual, pero el trabajo real siempre vivió en los milestones semanales, no en un milestone único de dos semanas.
 
 ## 4. Convención de estructura para Issues de GitHub
 
@@ -137,12 +153,24 @@ Convención de título: `<área>: <acción concreta>`, donde `<área>` es `SAD` 
 
 ## 9. Plantilla para milestones
 
-Antes de crear un milestone nuevo, verificar contra la tabla de la sección 3 que el nombre corresponde exactamente a una fase o iteración real del SPMP. Si no calza con ninguna fila de esa tabla, no crear el milestone todavía: primero decidir a cuál fase o iteración pertenece el trabajo, o si de verdad es necesario ampliar la tabla de la sección 3 (lo cual implicaría revisar si el SPMP también necesita un ajuste).
+Antes de crear un milestone nuevo, verificar contra la tabla de la sección 3 que el nombre base corresponde exactamente a una fase o iteración real del SPMP. Si no calza con ninguna fila de esa tabla, no crear el milestone todavía: primero decidir a cuál fase o iteración pertenece el trabajo, o si de verdad es necesario ampliar la tabla de la sección 3 (lo cual implicaría revisar si el SPMP también necesita un ajuste).
+
+Recordar la regla de la sección 3.1: si el milestone es de una iteración de Fase 4, va con sufijo semanal (`· Semana N (dd–dd mes)`); si es el cierre de Fase 3 (o de una futura Fase 5/6), va sin sufijo semanal, como milestone único.
+
+**Para un milestone semanal dentro de una iteración:**
 
 ```markdown
-Título: [nombre exacto de la fase o iteración, tal como aparece en la tabla de la sección 3, entre comillas simples de GitHub: `Iteración N – Nombre` o `Fase N – Nombre (cierre)`]
-Descripción: [qué agrupa este milestone en términos del WBS del SPMP, y a qué Hito (H1 a H6) cierra o contribuye]
-Fecha de vencimiento: [estimado en función del rango de semanas del SPMP para esa fase/iteración; ajustable sin necesidad de aprobación del director mientras no se comprometan los hitos principales]
+Título: [Nombre base de la iteración, tal como aparece en la tabla de la sección 3] · Semana [N] ([fecha inicio]–[fecha fin])
+Descripción: [Qué parte del contenido de esa iteración se espera cerrar o avanzar en esta semana puntual, y a qué Hito contribuye la iteración completa. Si es la última semana esperada de la iteración, indicarlo.]
+Fecha de vencimiento: [el jueves o el día de la reunión semanal que corresponda]
+```
+
+**Para el cierre de una fase (sin división semanal):**
+
+```markdown
+Título: [Fase N – Nombre (cierre)]
+Descripción: [Qué agrupa este milestone en términos del WBS del SPMP, y a qué Hito (H1 a H6) cierra]
+Fecha de vencimiento: [fecha única de entrega, sin dividir por semana]
 ```
 
 Comando de referencia para crearlo con `gh` (los milestones no tienen subcomando propio en `gh`, se crean contra la API REST):
