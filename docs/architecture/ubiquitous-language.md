@@ -10,7 +10,7 @@
 
 ## 1. Flujo de Inicialización / Creación del Pago
 
-**Contrato de Interfaz del Puerto:** `src/domain/interfaces/IRequestCrearPago.ts` y `IResponseCrearPago.ts`
+**Contrato de Interfaz del Puerto:** `src/application/ports/IRequestCrearPago.ts` y `IResponseCrearPago.ts`
 
 | Atributo SDK (Normalizado) | Tipo de Dato (TypeScript) | Descripción Conceptual (Contexto Colombiano) | Wompi (Nativo) | PayU Latam (Nativo) | Mercado Pago (Nativo) | Kushki (Nativo) | Regla de Transformación / Caso Borde (Para el Adaptador) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -25,7 +25,7 @@
 
 ## 2. Flujo de Notificación Asíncrona (Webhooks)
 
-**Contrato de Interfaz del Puerto:** `src/domain/interfaces/IWebhookPayload.ts`
+**Contrato de Interfaz del Puerto:** `src/application/ports/IWebhookPayload.ts`
 
 | Atributo SDK (Normalizado) | Tipo de Dato (TypeScript) | Descripción Conceptual (Contexto Colombiano) | Wompi (Nativo) | PayU Latam (Nativo) | Mercado Pago (Nativo) | Kushki (Nativo) | Regla de Transformación / Caso Borde (Para el Adaptador) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -37,7 +37,7 @@
 
 ## 3. Flujo de Consulta de Estado (Polling)
 
-**Contrato de Interfaz del Puerto:** `src/domain/interfaces/IResponseConsultaPago.ts`
+**Contrato de Interfaz del Puerto:** `src/application/ports/IResponseConsultaPago.ts`
 
 | Atributo SDK (Normalizado) | Tipo de Dato (TypeScript) | Descripción Conceptual (Contexto Colombiano) | Wompi (Nativo) | PayU Latam (Nativo) | Mercado Pago (Nativo) | Kushki (Nativo) | Regla de Transformación / Caso Borde (Para el Adaptador) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |

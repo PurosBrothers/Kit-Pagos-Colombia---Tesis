@@ -15,21 +15,29 @@ kit-pagos-colombia/
 ├── src/                                        <-- CONTENEDOR 1: SDK KIT PAGOS COLOMBIA
 │   ├── domain/                                 <-- Capa de Dominio (Núcleo Puro)
 │   │   ├── entities/
-│   │   │   └── Transaction.ts                  <-- Transaction Entity
+│   │   │   └── Transaction.ts                  <-- Transaction Entity (única entidad con identidad propia)
 │   │   ├── value-objects/
+│   │   │   ├── Amount.ts                       <-- Value Object: monto, toMinorUnits(), equals()
+│   │   │   ├── Currency.ts                     <-- Value Object: código ISO 4217, "COP" por defecto
+│   │   │   ├── OrderReference.ts               <-- Value Object: referencia de orden del comercio
+│   │   │   ├── Payer.ts                        <-- Value Object: datos del pagador (email obligatorio)
+│   │   │   ├── GatewayTransactionId.ts         <-- Value Object: id nativo + Gateway que lo originó
+│   │   │   ├── RejectionReason.ts              <-- Value Object: rejectionCode + rejectionCategory
+│   │   │   ├── ReturnUrlConfig.ts              <-- Value Object: resolveFor(status)
 │   │   │   ├── TransactionStatus.ts            <-- Enum: APPROVED, DECLINED, PENDING, EXPIRED, VOIDED, ERROR
+│   │   │   ├── RejectionCategory.ts            <-- Enum: INSUFFICIENT_FUNDS, INVALID_CARD_DATA, etc.
 │   │   │   ├── SdkErrorCode.ts                 <-- Enum: INVALID_CREDENTIALS, GATEWAY_TIMEOUT, etc.
-│   │   │   ├── Gateway.ts                      <-- Enum: WOMPI, PAYU, MERCADOPAGO, KUSHKI
-│   │   │   └── ReturnUrlConfig.ts              <-- Value Object: returnUrl, success, failure, pending
-│   │   └── errors/
-│   │       └── SdkError.ts                     <-- Excepción tipada unificada
+│   │   │   └── Gateway.ts                      <-- Enum: wompi, payu, mercadopago, kushki
+│   │   ├── errors/
+│   │   │   └── SdkError.ts                     <-- Excepción tipada unificada (code, gateway, originalPayload)
+│   │   └── services/
+│   │       └── WebhookVerifier.ts              <-- Webhook Verifier (servicio de dominio sin estado propio)
 │   │
 │   ├── application/                            <-- Capa de Aplicación (Puertos y Servicios)
 │   │   ├── ports/
 │   │   │   └── PaymentGatewayPort.ts           <-- Payment Gateway Port (Contrato hexagonal)
 │   │   └── services/
 │   │       ├── ResponseNormalizer.ts           <-- Response Normalizer
-│   │       ├── WebhookVerifier.ts              <-- Webhook Verifier
 │   │       ├── RetryHandler.ts                 <-- Retry Handler (Resiliencia & Backoff)
 │   │       └── ErrorHandler.ts                 <-- Error Handler (Mapeo de excepciones)
 │   │
@@ -44,7 +52,7 @@ kit-pagos-colombia/
 │       │   ├── MercadoPagoAdapter.ts           <-- Mercado Pago Adapter
 │       │   └── KushkiAdapter.ts                <-- Kushki Adapter
 │       └── facade/
-│           └── PaymentFacade.ts                <-- Payment Facade (Patrón GoF Facade — Punto de entrada público)
+│           └── KitPagos.ts                     <-- KitPagos (Patrón GoF Facade — Punto de entrada público)
 │
 └── api/                                        <-- CONTENEDOR 2: API DE SIMULACIÓN (FASTIFY)
     ├── routes/
@@ -73,12 +81,12 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 
 ---
 
-### 2.1. Payment Facade (`src/infrastructure/facade/PaymentFacade.ts`)
+### 2.1. KitPagos (`src/infrastructure/facade/KitPagos.ts`)
 
 - **Patrón Arquitectónico:** GoF Facade.
-- **Responsabilidad:** Es el punto de entrada único del SDK y el único componente con el que el desarrollador interactúa directamente.
-- **Métodos Públicos:** Expone tres métodos: `createPayment()`, `getPaymentStatus()` y `validateWebhook()`.
-- **Comportamiento:** Oculta la complejidad interna del sistema detrás de una interfaz simple y predecible. Consulta al SDK Configurator para determinar la pasarela activa y el modo de entorno, delega la operación al Gateway Factory y retorna entidades `Transaction` normalizadas al desarrollador o excepciones `SdkError` tipadas en caso de fallo.
+- **Responsabilidad:** Es el punto de entrada único del SDK y el único componente que el desarrollador que consume el SDK instancia directamente.
+- **Métodos Públicos:** Expone tres métodos: `createPayment(request)`, `getStatus(id)` y `verifyWebhook(payload, headers)`.
+- **Comportamiento:** Oculta la complejidad interna del sistema detrás de una interfaz simple y predecible. Mantiene una referencia a `SDKConfigurator` y a `GatewayFactory`; antes de ejecutar cualquier operación consulta al Configurator para determinar la pasarela activa y sus credenciales, solicita al Factory la instancia del adaptador correspondiente, y envuelve la llamada resultante con `RetryHandler`. Retorna entidades `Transaction` normalizadas al desarrollador o excepciones `SdkError` tipadas en caso de fallo.
 
 ---
 
@@ -99,8 +107,8 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 
 ### 2.4. Payment Gateway Port (`src/application/ports/PaymentGatewayPort.ts`)
 
-- **Patrón Arquitectónico:** Puerto de Aplicación de la Arquitectura Hexagonal. Define el contrato que los adaptadores de infraestructura deben implementar para conectarse al núcleo del sistema.
-- **Responsabilidad:** Es la interfaz abstracta que especifica las tres operaciones disponibles — `createPayment()`, `getPaymentStatus()` y `validateWebhook()` — sin conocimiento de ningún proveedor específico.
+- **Patrón Arquitectónico:** Puerto de salida de la Arquitectura Hexagonal. Define el contrato que los adaptadores de infraestructura deben implementar para conectarse al núcleo del sistema.
+- **Responsabilidad:** Es la interfaz abstracta que especifica las tres operaciones disponibles — `createPayment()`, `getStatus()` y `verifySignature()` — sin conocimiento de ningún proveedor específico.
 - **Extensibilidad:** Cualquier clase que implemente este contrato puede conectarse al sistema como pasarela válida, lo que hace posible incorporar nuevos proveedores sin modificar el núcleo.
 
 ---
@@ -167,9 +175,10 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 
 ---
 
-### 2.10. Webhook Verifier (`src/application/services/WebhookVerifier.ts`)
+### 2.10. Webhook Verifier (`src/domain/services/WebhookVerifier.ts`)
 
-- **Responsabilidad:** Verifica la autenticidad de los webhooks entrantes de cada pasarela mediante el método `verify(payload, headers, secret, gateway): boolean`.
+- **Patrón Arquitectónico:** Servicio de Dominio (DDD) sin estado propio.
+- **Responsabilidad:** Verifica la autenticidad de los webhooks entrantes de cada pasarela mediante el único método público `verify(payload, headers, secret, gateway): boolean`, delegando internamente en la lógica de verificación de firma correspondiente al Gateway recibido.
 - **Implementación por pasarela:**
   - **Wompi:** SHA-256 sobre cadena de propiedades + timestamp + secreto. Implementación completa y validada.
   - **PayU:** MD5 o SHA-256 según configuración del comercio. Implementación suficiente para validar webhooks del simulador.
@@ -181,9 +190,9 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 
 ### 2.11. Transaction Entity (`src/domain/entities/Transaction.ts`)
 
-- **Responsabilidad:** Es la entidad central del dominio del SDK.
-- **Encapsulamiento:** Encapsula el estado unificado de una transacción: `rawStatus`, `authorizationCode`, `payer`, `amount`, `currency` y `returnUrlConfig` (instancia de `ReturnUrlConfig`).
-- **Métodos de negocio:** Expone `isApproved()`, `isPending()`, `isFinal()` y `updateStatus(status, rawStatus, rejectionReason, authorizationCode)`, que permiten al desarrollador tomar decisiones de negocio sin depender de los estados crudos de ninguna pasarela.
+- **Responsabilidad:** Es la única clase con identidad propia del dominio del SDK.
+- **Encapsulamiento:** Se construye a partir de los objetos de valor `Amount`, `Currency`, `OrderReference`, `Payer` y `GatewayTransactionId`, además de referenciar el enum `TransactionStatus` que indica su estado y, opcionalmente, una instancia de `RejectionReason` cuando ese estado es `DECLINED`. Conserva además el campo `rawStatus`, que guarda el valor nativo devuelto por la pasarela antes de ser normalizado, con fines de auditoría.
+- **Métodos de negocio:** Expone `isApproved()`, `isPending()` e `isFinal()`, que permiten al desarrollador tomar decisiones de negocio sin necesidad de comparar directamente contra los valores del enum ni depender de los estados crudos de ninguna pasarela.
 
 ---
 
@@ -191,7 +200,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 
 - **Patrón Arquitectónico:** Value Object del dominio.
 - **Responsabilidad:** Encapsula las URLs de redirección post-pago configuradas por el comercio: `returnUrl` (URL base), `success` (pago aprobado), `failure` (pago rechazado) y `pending` (pago pendiente de confirmación).
-- **Uso:** La entidad `Transaction` utiliza este objeto de valor para resolver la URL de redirección correspondiente mediante el método `resolveUrl(status)`.
+- **Uso:** La entidad `Transaction` utiliza este objeto de valor para resolver la URL de redirección correspondiente mediante el método `resolveFor(status)`.
 
 ---
 
@@ -207,12 +216,10 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 ### 2.14. Error Handler (`src/application/services/ErrorHandler.ts`)
 
 - **Responsabilidad:** Convierte cualquier error no recuperable en una excepción `SdkError` tipada.
-- **Estructura de SdkError:**
+- **Estructura de SdkError:** extiende la clase `Error` nativa de JavaScript y añade tres atributos:
   - `code`: código normalizado del enum `SdkErrorCode` (valores: `INVALID_CREDENTIALS`, `GATEWAY_TIMEOUT`, `CONNECTION_FAILED`, `RATE_LIMIT_EXCEEDED`, `RESOURCE_NOT_FOUND`, `WEBHOOK_SIGNATURE_INVALID`, `MAX_RETRIES_EXCEEDED`, `MALFORMED_RESPONSE`, `UNSUPPORTED_OPERATION`, `UNKNOWN_ERROR`).
-  - `message`: descripción legible en español e inglés con sugerencia de resolución cuando es posible.
-  - `httpStatus`: código HTTP asociado al error.
-  - `originalError`: error original de la pasarela para referencia de depuración.
-  - `requestId`: identificador de la solicitud que originó el error.
+  - `gateway`: la pasarela (`Gateway`) que originó el error.
+  - `originalPayload`: tipado como `unknown` para forzar una verificación explícita antes de su uso, en lugar de `any`.
 - **Garantía:** El desarrollador nunca recibe excepciones no manejadas ni errores en formato nativo de ninguna pasarela.
 
 ---
@@ -334,9 +341,9 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 
 | Requisito (SRS) | Componente del SDK | Componente de la API de Simulación |
 |:---|:---|:---|
-| **RF-01** Crear intención de pago | `PaymentFacade` → `GatewayFactory` → `Adapter` | `HTTPRouter` → `ScenarioEngine` → `GatewayMockFactory` |
+| **RF-01** Crear intención de pago | `KitPagos` → `GatewayFactory` → `Adapter` | `HTTPRouter` → `ScenarioEngine` → `GatewayMockFactory` |
 | **RF-02** Respuesta normalizada con Transaction | `ResponseNormalizer` → `Transaction Entity` | `GatewayMockFactory` (payload de referencia) |
-| **RF-03** Consultar estado de transacción | `PaymentFacade` → `Adapter` → `ResponseNormalizer` | `GatewayMockFactory` |
+| **RF-03** Consultar estado de transacción | `KitPagos` → `Adapter` → `ResponseNormalizer` | `GatewayMockFactory` |
 | **RF-04** Validar firma de webhook | `WebhookVerifier` | `SignatureGenerator` → `WebhookTriggerEndpoint` |
 | **RF-05** Excepciones tipadas SdkError | `ErrorHandler` (`SdkError` + `SdkErrorCode`) | `ScenarioEngine` (escenario `ERROR_RED`) |
 | **RF-06** Cambiar pasarela sin modificar código | `SDKConfigurator` + `GatewayFactory` | N/A |
