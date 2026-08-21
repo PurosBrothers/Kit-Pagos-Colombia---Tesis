@@ -20,15 +20,15 @@ import { WebhookEvent } from "../value-objects/WebhookEvent";
  */
 export class WebhookVerifier {
   verify(
-    payload: string,
-    headers: Record<string, string>,
-    secret: string,
-    gateway: Gateway,
+    _payload: string,
+    _headers: Record<string, string>,
+    _secret: string,
+    _gateway: Gateway
   ): boolean {
     throw new Error("WebhookVerifier.verify aun no esta implementado");
   }
 
-  parse(payload: string, gateway: Gateway): WebhookEvent {
+  parse(_payload: string, _gateway: Gateway): WebhookEvent {
     throw new Error("WebhookVerifier.parse aun no esta implementado");
   }
 }
