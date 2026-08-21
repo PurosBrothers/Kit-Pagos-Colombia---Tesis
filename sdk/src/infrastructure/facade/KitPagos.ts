@@ -20,17 +20,17 @@ import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort
  * correspondiente y envolver la llamada con RetryHandler.
  */
 export class KitPagos {
-  async createPayment(request: CreatePaymentRequest): Promise<Transaction> {
+  async createPayment(_request: CreatePaymentRequest): Promise<Transaction> {
     throw new Error("KitPagos.createPayment aun no esta implementado");
   }
 
-  async getPaymentStatus(id: string): Promise<Transaction> {
+  async getPaymentStatus(_id: string): Promise<Transaction> {
     throw new Error("KitPagos.getPaymentStatus aun no esta implementado");
   }
 
   validateWebhook(
-    payload: string,
-    headers: Record<string, string>,
+    _payload: string,
+    _headers: Record<string, string>,
   ): WebhookEvent {
     throw new Error("KitPagos.validateWebhook aun no esta implementado");
   }
