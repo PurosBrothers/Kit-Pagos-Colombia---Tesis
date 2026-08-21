@@ -7,6 +7,8 @@
 > **Versión:** 1.0.0
 
 > Las discrepancias detectadas entre este documento, el SAD original y los diagramas C4 se registran en [`sad-inconsistencies.md`](./sad-inconsistencies.md), con su estado de resolución y las correcciones pendientes en el documento fuente.
+>
+> Para una explicación conceptual de por qué se eligió esta arquitectura y una demostración directa de cómo se refleja en el código real de `sdk/src/` (incluyendo qué partes ya están implementadas y cuáles siguen pendientes), ver [`architecture-explained.md`](./architecture-explained.md).
 
 ---
 
