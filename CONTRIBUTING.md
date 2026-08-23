@@ -92,9 +92,9 @@ chore(repo): add commit message guidelines
 
 - Antes de empezar a trabajar en un issue, asígnate y muévelo a estado "En progreso" (o el equivalente en la herramienta que se esté usando).
 - Cuando termines el trabajo de un issue:
-  - Referéncialo en la descripción del Pull Request usando palabras clave de cierre automático (`Closes #12`, `Fixes #45`), para que se cierre solo al mergear.
-  - Si el PR avanza el issue pero no lo resuelve del todo, usa `Refs #12` en lugar de `Closes #12`, y deja un comentario en el issue explicando qué quedó pendiente y por qué.
-- No cierres un issue manualmente sin dejar un comentario de cierre que explique brevemente la solución y enlace el commit o PR correspondiente. Esto es lo que permite rastrear después qué cambio de código resolvió qué requisito.
+  - Referéncialo en la descripción del Pull Request usando palabras clave de cierre automático (`Closes #12`, `Fixes #45`) para dejar la trazabilidad, aunque casi nunca cierren el issue solas: GitHub solo auto-cierra un issue cuando el PR se mergea a la rama por defecto del repositorio (`main`), y bajo nuestra política de ramas casi todos los PR se mergean a `devops`. En la práctica, esto significa que hay que cerrar el issue a mano en casi todos los casos.
+  - Al cerrar un issue manualmente, deja un comentario de cierre que explique brevemente la solución tomada y enlace el commit o PR correspondiente. Esto es lo que permite rastrear después qué cambio de código resolvió qué requisito.
+  - Si el PR avanza el issue pero no lo resuelve del todo, usa `Refs #12` en lugar de `Closes #12`, deja el issue abierto, y comenta qué quedó pendiente y por qué.
 - Si el trabajo en un issue queda bloqueado (por ejemplo, esperando una definición del SAD o una decisión de arquitectura), coméntalo en el issue con la razón del bloqueo en lugar de dejarlo en silencio.
 
 ## Pull Requests
