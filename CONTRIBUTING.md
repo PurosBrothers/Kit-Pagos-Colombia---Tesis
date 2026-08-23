@@ -77,15 +77,16 @@ chore(repo): add commit message guidelines
 
 ## Política de ramas
 
-- **`main`**: rama protegida. Siempre debe quedar en un estado desplegable. Nadie hace push directo aquí; todo cambio entra a través de un Pull Request revisado.
-- **Ramas de trabajo**: se crean desde `main` con el prefijo del tipo de cambio, seguido de una descripción corta en kebab-case y, si existe, el número del issue relacionado:
+- **`main`**: rama protegida y siempre desplegable. Nadie hace push directo aquí y nadie mergea una rama de trabajo directamente aquí; `main` solo recibe merges desde `devops`, mediante un Pull Request dedicado al cierre de cada iteración o hito relevante.
+- **`devops`**: rama de integración permanente. Es donde vive el trabajo en curso de la iteración activa. Todas las ramas de trabajo se crean desde `devops` y se mergean de vuelta a `devops` vía Pull Request revisado. Cuando el trabajo integrado en `devops` está validado y listo, se mergea a `main` como un solo Pull Request.
+- **Ramas de trabajo**: se crean desde `devops` (no desde `main`), con el prefijo del tipo de cambio, seguido de una descripción corta en kebab-case y, si existe, el número del issue relacionado:
   - `feature/12-create-payment-endpoint`
   - `fix/45-wompi-signature-mismatch`
   - `docs/update-sad-domain-model`
   - `refactor/align-domain-with-sad`
-- **Ramas de propósito especial** (como `devops`, usada para el ciclo de alineación del código con el SAD): se documentan explícitamente en el issue o PR que las originó, y se eliminan una vez que su trabajo se integra a `main`.
-- Una rama de trabajo debe vivir el tiempo mínimo necesario. Una vez el PR se mergea, se elimina tanto localmente como en el remoto (`git branch -d <rama>` y `git push origin --delete <rama>`).
-- Si `main` avanza mientras trabajas en tu rama, actualízala con `git rebase main` (o `git merge main` si ya la compartiste con alguien más) antes de abrir o actualizar el PR.
+  - `test/6-simulator-api-test-framework`
+- Una rama de trabajo debe vivir el tiempo mínimo necesario. Una vez el PR se mergea a `devops`, se elimina tanto localmente como en el remoto (`git branch -d <rama>` y `git push origin --delete <rama>`).
+- Si `devops` avanza mientras trabajas en tu rama, actualízala con `git rebase devops` (o `git merge devops` si ya la compartiste con alguien más) antes de abrir o actualizar el PR.
 
 ## Issues: seguimiento y cierre
 
@@ -104,6 +105,6 @@ chore(repo): add commit message guidelines
   - **Changes**: lista de los cambios principales (archivos o componentes relevantes).
   - **Related issues / ASR / ADR**: número de issue relacionado (`Closes #N` / `Refs #N`) y, si aplica, el identificador del ASR o ADR del SAD que motiva el cambio.
   - **Test plan**: cómo se verificó el cambio (pruebas automatizadas ejecutadas, pasos manuales, o ambos).
-- Un PR debe tener al menos una revisión aprobada antes de mergear a `main`.
-- No se mergea un PR si el CI está en rojo o si tiene conflictos sin resolver con `main`.
-- Se prefiere *squash merge* para ramas de trabajo con muchos commits intermedios ("wip", "fix typo", etc.), de forma que `main` mantenga un historial limpio con un commit por cambio lógico.
+- Un PR debe tener al menos una revisión aprobada antes de mergear a su rama base (`devops` para ramas de trabajo, `main` para el PR de cierre de iteración desde `devops`).
+- No se mergea un PR si el CI está en rojo o si tiene conflictos sin resolver con su rama base.
+- Se prefiere *squash merge* para ramas de trabajo con muchos commits intermedios ("wip", "fix typo", etc.), de forma que la rama base mantenga un historial limpio con un commit por cambio lógico.
