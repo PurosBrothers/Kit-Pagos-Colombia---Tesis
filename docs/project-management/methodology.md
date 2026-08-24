@@ -182,7 +182,41 @@ gh api repos/PurosBrothers/Kit-Pagos-Colombia---Tesis/milestones \
   -f due_on="<AAAA-MM-DD>T23:59:59Z"
 ```
 
-## 10. Documentos relacionados
+## 10. Cronograma proyectado hasta la entrega final
+
+Esta sección traduce las semanas relativas del SPMP (sección 1) a fechas de calendario reales, ancladas en los milestones que ya existen en GitHub, y fija la fecha límite de entrega con un colchón explícito antes de ella. A diferencia de las demás secciones de este documento, esto es una proyección, no una decisión metodológica fija: debe revisarse en cada reunión semanal y corregirse si la Fase 4 se atrasa, siguiendo el mismo criterio de "ajuste de cronograma sin aprobación del director" de la sección 7, siempre que el ajuste sea de fechas y no de alcance.
+
+### 10.1. Fecha de entrega y colchón
+
+La entrega final del proyecto (Hito H6: documento de grado y repositorio público publicados) está fijada para la semana del **9 de noviembre de 2026**. Esa fecha no se corre. Para protegerla, el plan deja **2 semanas de colchón** inmediatamente antes (26 de octubre – 9 de noviembre), sin ningún trabajo nuevo planeado ahí: es tiempo reservado para imprevistos, ajustes de última hora y preparación de la entrega, no una cuarta fase encubierta.
+
+### 10.2. Cronograma completo, anclado a las fechas reales de GitHub
+
+`Iteración 1 – Núcleo del SDK · Semana 1` ya quedó fijada en GitHub como 24–31 de agosto de 2026 (milestone #2), con `Semana 2` cerrando el 7 de septiembre (milestone #3). Proyectando el mismo patrón de dos semanas por iteración para el resto de la Fase 4, y comprimiendo las Fases 5 y 6 para respetar el colchón de la sección 10.1, el cronograma completo queda así:
+
+| Bloque | Duración SPMP original | Duración en este plan | Ventana | Hito que cierra |
+|---|---|---|---|---|
+| Iteración 1 – Núcleo del SDK | 2 semanas | 2 semanas (sin cambio) | 24 ago – 7 sep | H3 parcial |
+| Iteración 2 – Adaptadores de pasarela | 2 semanas | 2 semanas (sin cambio) | 8 sep – 21 sep | H3 completo |
+| Iteración 3 – API de simulación | 2 semanas | 2 semanas (sin cambio) | 22 sep – 5 oct | H4 |
+| Fase 5 – Demostración y evaluación | 3 semanas | **2 semanas (comprimida)** | 5 oct – 19 oct | H5 |
+| Fase 6 – Comunicación | 2 semanas | **1 semana (comprimida)** | 19 oct – 26 oct | H6 (contenido) |
+| Colchón de entrega | — | 2 semanas | 26 oct – 9 nov | — |
+| **Entrega final** | | | **9 nov 2026** | H6 (entrega) |
+
+Este plan no le quita tiempo a la Fase 4: la única fase con margen cero para atrasarse es exactamente la que tiene más incertidumbre técnica (tres iteraciones de código real), así que cualquier atraso ahí consume directamente el colchón de la sección 10.1, no las fases posteriores.
+
+### 10.3. Qué debe ser cierto para que la compresión de la Fase 5 y la Fase 6 funcione
+
+Comprimir la Fase 6 de 2 a 1 semana se sostiene siempre que el documento de grado se redacte en paralelo desde antes (usando lo que ya existe en `docs/`: SAD, ADRs, esta misma metodología), y no se deje para escribir de cero al llegar a esa semana.
+
+Comprimir la Fase 5 de 3 a 2 semanas es más riesgoso, porque ahí es donde se comparan los proyectos prototípicos (con y sin el framework) y se calculan las métricas CK (WMC, CBO, RFC) que sustentan la evaluación experimental del DSR. Esa semana solo alcanza si el tooling de métricas (`ts-morph`, ya presente en `sdk/package.json` pero sin script ni issue que lo use todavía) se prueba y queda funcionando **antes** de entrar a la Fase 5, no como parte de ella. Si eso no ocurre a tiempo, la única forma de que la fase quepa en 2 semanas es reduciendo qué se evalúa (menos escenarios, menos pasarelas comparadas), y eso deja de ser un ajuste de cronograma: se vuelve un cambio de alcance que, según la sección 7, sí requiere alineación con el director antes de aplicarse.
+
+### 10.4. Disparador para reevaluar el plan
+
+Si al cierre de la Semana 1 de Iteración 1 (jueves antes del 31 de agosto) el trabajo de núcleo real (issues como el de scaffolding de la capa de aplicación) no muestra avance sustancial, ese es el punto para decidir en la reunión semanal si se necesita una Semana 3 en Iteración 1, en vez de forzar que las iteraciones 2 y 3 se compriman para compensar. Si se agrega esa semana, esta sección debe actualizarse de inmediato para que el colchón de la sección 10.1 refleje cuánto tiempo real queda antes del 9 de noviembre.
+
+## 11. Documentos relacionados
 
 - `SPMP - Kit Pagos Colombia.md` (fuera del repositorio, en Google Drive/Downloads): el documento formal completo. Este archivo es un resumen operativo, no un remplazo.
 - `Descripción de la Arquitectura del Software (SAD).docx.md` (fuera del repositorio): la fuente de verdad de la arquitectura. Ver `docs/architecture/sad-inconsistencies.md` para el registro de discrepancias pendientes de corregir ahí.
