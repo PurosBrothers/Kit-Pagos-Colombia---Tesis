@@ -8,7 +8,7 @@ export interface SDKOptions {
 
 export class SdkConfigurator {
   configure (options:SDKOptions): void {
-    throw new Error("Aun no esta implementado");
+    throw new Error("aun no esta implementado");
   }
   getActiveGateway(): Gateway {
     throw new Error("aun no esta implementado");

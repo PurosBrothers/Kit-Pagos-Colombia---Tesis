@@ -3,6 +3,6 @@ import { Transaction } from "../../domain/entities/Transaction";
 
 export class ResponseNormalizer {
     normalize(rawResponse: unknown, gateway: Gateway): Transaction {
-        throw new Error("Aun no esta implementado");
+        throw new Error("aun no esta implementado");
     }
 }
