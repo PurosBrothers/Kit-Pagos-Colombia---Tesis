@@ -1,11 +1,12 @@
 import { SdkConfigurator, SDKOptions } from "./SDKConfigurator";
+import { Gateway } from "../../domain/value-objects/Gateway";
 
 describe("SDKConfigurator", () => {
   const configurator = new SdkConfigurator();
 
   it("configure() debe existir y aceptar opciones", () => {
     const options: SDKOptions = {
-      gateway: "WOMPI",
+      gateway: Gateway.WOMPI,
       credentials: {},
     };
     expect(() => configurator.configure(options))
@@ -18,7 +19,7 @@ describe("SDKConfigurator", () => {
   });
 
   it("getCredentials() debe existir y aceptar una pasarela", () => {
-    expect(() => configurator.getCredentials("WOMPI"))
+    expect(() => configurator.getCredentials(Gateway.WOMPI))
       .toThrow("aun no esta implementado");
   });
 });

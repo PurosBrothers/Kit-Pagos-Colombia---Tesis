@@ -19,12 +19,27 @@ import { WebhookEvent } from "../value-objects/WebhookEvent";
  * y Kushki), tal como se documenta en el ADR-04.
  */
 export class WebhookVerifier {
+
   verify(
-    _payload: string,
-    _headers: Record<string, string>,
-    _secret: string,
-    _gateway: Gateway
+    payload: string,
+    headers: Record<string, string>,
+    secret: string,
+    gateway: Gateway
   ): boolean {
+    //
+    switch (gateway) {
+      case Gateway.WOMPI:
+        
+      case Gateway.PAYU:
+        
+      case Gateway.MERCADOPAGO:
+        
+      case Gateway.KUSHKI:
+        
+      default:
+        throw new Error(`WebhookVerifier.verify: Gateway desconocido: ${gateway}`);
+    }
+
     throw new Error("WebhookVerifier.verify aun no esta implementado");
   }
 
