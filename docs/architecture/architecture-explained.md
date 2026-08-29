@@ -156,10 +156,15 @@ El valor interno (`value`) es privado, así que la única forma de crear un `Amo
 Los enums del dominio, en cambio, no necesitan clase ni validación propia porque TypeScript ya garantiza en tiempo de compilación que solo se puedan usar los valores listados. `Gateway` es el ejemplo más pequeño:
 
 ```typescript
-export type Gateway = "WOMPI" | "PAYU" | "MERCADOPAGO" | "KUSHKI";
+export enum Gateway {
+  WOMPI = "WOMPI",
+  PAYU = "PAYU",
+  MERCADOPAGO = "MERCADOPAGO",
+  KUSHKI = "KUSHKI",
+}
 ```
 
-y `TransactionStatus` sigue el mismo patrón con sus seis valores posibles (`APPROVED`, `DECLINED`, `PENDING`, `EXPIRED`, `VOIDED`, `ERROR`). Cualquier intento de asignar `"aprobado"` o `"Approved"` a una variable tipada como `TransactionStatus` falla en la compilación, no en tiempo de ejecución.
+y `TransactionStatus` sigue el mismo patrón con sus seis valores posibles (`APPROVED`, `DECLINED`, `PENDING`, `EXPIRED`, `VOIDED`, `ERROR`). Cualquier intento de asignar `"aprobado"` o `"Approved"` a una variable tipada como `TransactionStatus` falla en la compilación, no en tiempo de ejecución. El uso de `enum` con valores string en lugar de `type` alias permite además referenciar los valores como constantes con nombre (por ejemplo `Gateway.WOMPI`) en sentencias `switch`/`case` y comparaciones en tiempo de ejecución.
 
 ### 9. `SdkError` y `WebhookEvent`: el dominio comunicándose hacia afuera sin exponer sus detalles internos
 
