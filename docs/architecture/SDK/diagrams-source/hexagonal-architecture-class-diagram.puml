@@ -119,7 +119,7 @@ package "INFRAESTRUCTURA (Facade, Factory y Adapters)" #FFFFFF {
   }
 
   class WompiAdapter <<Adapter Pattern>> #5B9BD5
-  class PayUAdapter <<Adapter Pattern>> #5B9BD5
+  class RapydAdapter <<Adapter Pattern>> #5B9BD5
   class MercadoPagoAdapter <<Adapter Pattern>> #5B9BD5
   class KushkiAdapter <<Adapter Pattern>> #5B9BD5
 
@@ -142,7 +142,7 @@ package "INFRAESTRUCTURA (Facade, Factory y Adapters)" #FFFFFF {
   KitPagos ..> WebhookVerifier : valida webhook
   GatewayFactory ..> PaymentGatewayPort : instancia
   WompiAdapter ..|> PaymentGatewayPort
-  PayUAdapter ..|> PaymentGatewayPort
+  RapydAdapter ..|> PaymentGatewayPort
   MercadoPagoAdapter ..|> PaymentGatewayPort
   KushkiAdapter ..|> PaymentGatewayPort
   RetryHandler --> ErrorHandler : MAX_RETRIES_EXCEEDED

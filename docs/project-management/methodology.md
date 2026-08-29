@@ -41,7 +41,7 @@ Este es el bloque de trabajo donde vamos a vivir la mayoría del tiempo. La arqu
 | Iteración | Nombre exacto (usar tal cual en milestones de GitHub) | Contenido (WBS) | Hito | Responsable primario | Herramientas |
 |---|---|---|---|---|---|
 | 1 | `Iteración 1 – Núcleo del SDK` | Implementación del modelo de dominio y contratos de puerto; pruebas unitarias del núcleo (cobertura ≥80%); revisión técnica grupal | H3 parcial | Líder de arquitectura (Joshua) | TypeScript, Jest, GitHub (PR + CI), VS Code |
-| 2 | `Iteración 2 – Adaptadores de pasarela` | Adaptadores de Wompi, PayU, Mercado Pago y Kushki, cada uno con pruebas de integración; validación cruzada de los cuatro | H3 completo | Líder de integración (David); cada adaptador en par con otro integrante | TypeScript, Jest, sandboxes de las 4 pasarelas, GitHub |
+| 2 | `Iteración 2 – Adaptadores de pasarela` | Adaptadores de Wompi, Rapyd, Mercado Pago y Kushki, cada uno con pruebas de integración; validación cruzada de los cuatro | H3 completo | Líder de integración (David); cada adaptador en par con otro integrante | TypeScript, Jest, sandboxes de las 4 pasarelas, GitHub |
 | 3 | `Iteración 3 – API de simulación y soporte de validación` | Escenarios de prueba de las pasarelas soportadas; despliegue en Render; documentación centralizada de datos de prueba; colección Postman versionada | H4 | Líder de integración (David); líder de arquitectura apoya en diseño de contratos | Fastify, TypeScript, Render, Postman, GitHub |
 
 Importante: la revisión grupal obligatoria al cierre de la Iteración 1 es una condición explícita del SPMP antes de empezar la Iteración 2 ("revisión obligatoria de todos antes de iniciar Iter 2"). No es opcional saltarla aunque el equipo sienta presión de tiempo.

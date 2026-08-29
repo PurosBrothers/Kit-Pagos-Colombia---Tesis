@@ -16,7 +16,9 @@ Todo el código citado aquí corresponde al estado del repositorio en la rama `d
 
 ### 1. El problema que la arquitectura tiene que resolver
 
-Antes de justificar una arquitectura hay que tener claro el problema que la motiva. Kit Pagos Colombia existe porque cuatro pasarelas de pago colombianas (Wompi, PayU, Mercado Pago y Kushki) exponen contratos completamente distintos entre sí: autenticación diferente, formato de solicitud diferente, nombres de estado diferentes para el mismo resultado de negocio (Kushki llama `APPROVAL` a lo que las demás llaman `APPROVED`), y mecanismos de firma de webhook distintos (SHA-256 en Wompi, HMAC-SHA256 en Mercado Pago y Kushki, MD5 o SHA-256 en PayU).
+Antes de justificar una arquitectura hay que tener claro el problema que la motiva. Kit Pagos Colombia existe porque cuatro pasarelas de pago colombianas (Wompi, Rapyd, Mercado Pago y Kushki) exponen contratos completamente distintos entre sí: autenticación diferente, formato de solicitud diferente, nombres de estado diferentes para el mismo resultado de negocio (Kushki llama `APPROVAL` a lo que las demás llaman `APPROVED`), y mecanismos de firma de webhook distintos (SHA-256 en Wompi, HMAC-SHA256 en Mercado Pago y Kushki, HMAC-SHA256 con Base64 en Rapyd).
+
+> **Nota:** la cuarta pasarela originalmente era PayU. Rapyd adquirió la operación de PayU en Latinoamérica en 2025, y desde 2026 el registro de comercio nuevo para Colombia ya no otorga acceso a la API clásica de PayU, sino únicamente a la API de Rapyd Collect. Ver el punto 15 de [`sad-inconsistencies.md`](./sad-inconsistencies.md) para el detalle de esta decisión.
 
 Un comercio que quisiera integrar las cuatro pasarelas sin ningún tipo de abstracción tendría que escribir, entender y mantener cuatro veces la misma lógica de negocio (crear un pago, consultar su estado, validar un webhook), cada vez adaptada a las particularidades de un proveedor distinto. Si mañana decide cambiar de proveedor principal, o agregar un quinto, ese cambio se propaga por todo su código. Este es exactamente el tipo de problema que la Arquitectura Hexagonal fue diseñada para resolver: aislar la lógica de negocio de los detalles técnicos externos que cambian con más frecuencia que las reglas de negocio mismas.
 
@@ -24,11 +26,11 @@ Un comercio que quisiera integrar las cuatro pasarelas sin ningún tipo de abstr
 
 La Arquitectura Hexagonal, propuesta originalmente por Alistair Cockburn, organiza un sistema en tres capas concéntricas con una regla de dependencia estricta: las capas externas pueden conocer a las internas, pero las internas nunca conocen a las externas. En Kit Pagos Colombia esas tres capas son dominio, aplicación e infraestructura, y viven literalmente como tres carpetas hermanas dentro de `sdk/src/`.
 
-**El dominio** es el centro del hexágono. Contiene las reglas de negocio puras: qué es una transacción, qué significa que esté aprobada, qué forma tiene un monto de dinero válido. El dominio no sabe que existen HTTP, JSON, Wompi o PayU. No importa ninguna librería externa. Si mañana se reemplazara Fastify por Express, o Wompi dejara de existir como empresa, ni una sola línea del dominio tendría que cambiar.
+**El dominio** es el centro del hexágono. Contiene las reglas de negocio puras: qué es una transacción, qué significa que esté aprobada, qué forma tiene un monto de dinero válido. El dominio no sabe que existen HTTP, JSON, Wompi o Rapyd. No importa ninguna librería externa. Si mañana se reemplazara Fastify por Express, o Wompi dejara de existir como empresa, ni una sola línea del dominio tendría que cambiar.
 
 **La aplicación** es la capa intermedia. Define los **puertos**, que son las interfaces abstractas a través de las cuales el dominio se comunica con el mundo exterior, y los **servicios de aplicación**, que orquestan casos de uso completos combinando el dominio con esos puertos. Un puerto no sabe quién lo va a implementar: solo define qué operaciones deben existir y con qué forma de entrada y salida.
 
-**La infraestructura** es la capa externa. Contiene las implementaciones concretas de los puertos, llamadas **adaptadores**, que sí conocen los detalles técnicos de un proveedor específico. Aquí viven `WompiAdapter`, `PayUAdapter`, `MercadoPagoAdapter` y `KushkiAdapter`, cada uno traduciendo el contrato abstracto del puerto hacia las particularidades reales de su pasarela. También vive aquí el `KitPagos` facade, que es el punto de entrada público del SDK.
+**La infraestructura** es la capa externa. Contiene las implementaciones concretas de los puertos, llamadas **adaptadores**, que sí conocen los detalles técnicos de un proveedor específico. Aquí viven `WompiAdapter`, `RapydAdapter`, `MercadoPagoAdapter` y `KushkiAdapter`, cada uno traduciendo el contrato abstracto del puerto hacia las particularidades reales de su pasarela. También vive aquí el `KitPagos` facade, que es el punto de entrada público del SDK.
 
 La regla de dependencia se puede resumir en una sola frase: **el dominio no importa nada de la aplicación ni de la infraestructura; la aplicación no importa nada de la infraestructura; la infraestructura importa de ambas**. Esta regla es la que hace posible que agregar una quinta pasarela algún día sea "escribir un adaptador nuevo" en lugar de "modificar el núcleo del sistema".
 
@@ -54,7 +56,7 @@ Sobre la base hexagonal y de DDD, el proyecto usa tres patrones clásicos del ca
 
 **Factory.** El patrón Factory centraliza la lógica de creación de objetos cuando esa lógica depende de una condición en tiempo de ejecución. `GatewayFactory` (todavía no implementado, ver sección 6) recibirá el valor del enum `Gateway` configurado por el desarrollador y devolverá la instancia del adaptador correspondiente, sin que el resto del sistema necesite un `switch` o un `if` repartido por varios archivos para saber qué adaptador usar.
 
-**Adapter.** El patrón Adapter (que le da nombre a media arquitectura del proyecto) traduce una interfaz existente hacia la que el cliente espera. Cada `Adapter` de pasarela traducirá el contrato abstracto `PaymentGatewayPort` hacia las llamadas HTTP reales, la autenticación y el formato de payload específico de Wompi, PayU, Mercado Pago o Kushki.
+**Adapter.** El patrón Adapter (que le da nombre a media arquitectura del proyecto) traduce una interfaz existente hacia la que el cliente espera. Cada `Adapter` de pasarela traducirá el contrato abstracto `PaymentGatewayPort` hacia las llamadas HTTP reales, la autenticación y el formato de payload específico de Wompi, Rapyd, Mercado Pago o Kushki.
 
 ### 5. Principio de Inversión de Dependencias (el porqué técnico de todo lo anterior)
 
@@ -296,7 +298,7 @@ Para que este documento sirva también como mapa de trabajo pendiente, esta tabl
 |---|---|---|
 | `SDKConfigurator` | `infrastructure/config/SDKConfigurator.ts` | Punto único de configuración; permite que `KitPagos` no conozca cómo se resuelven las credenciales |
 | `GatewayFactory` | `infrastructure/factories/GatewayFactory.ts` | Patrón GoF Factory (sección 4) |
-| `WompiAdapter`, `PayUAdapter`, `MercadoPagoAdapter`, `KushkiAdapter` | `infrastructure/adapters/*.ts` | Patrón GoF Adapter (sección 4), implementan `PaymentGatewayPort` (sección 10) |
+| `WompiAdapter`, `RapydAdapter`, `MercadoPagoAdapter`, `KushkiAdapter` | `infrastructure/adapters/*.ts` | Patrón GoF Adapter (sección 4), implementan `PaymentGatewayPort` (sección 10) |
 | `ResponseNormalizer` | `application/services/ResponseNormalizer.ts` | Traduce el resultado de cualquier Adapter al vocabulario común del dominio (`TransactionStatus`) |
 | `RetryHandler` | `application/services/RetryHandler.ts` | Orquesta reintentos entre el Facade y el Adapter, sin que ninguno de los dos conozca al otro directamente |
 | `ErrorHandler` | `application/services/ErrorHandler.ts` | Construye instancias de `SdkError` (sección 9) a partir de fallos técnicos crudos |

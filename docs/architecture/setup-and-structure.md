@@ -47,7 +47,7 @@ sdk/src/
 │   ├── interfaces/     # IIntencionPago.ts, IPuertoPasarela.ts
 │   └── errors/         # ErrorNormalizado.ts
 ├── infrastructure/     # Implementaciones relacionadas con servicios externos
-│   └── adapters/       # Adaptadores de Wompi, PayU, Mercado Pago y Kushki
+│   └── adapters/       # Adaptadores de Wompi, Rapyd, Mercado Pago y Kushki
 ├── application/        # Servicios y fachada principal del SDK
 │   └── KitPagos.ts     # Clase principal expuesta al usuario
 └── index.ts            # Exportaciones públicas del paquete
