@@ -168,4 +168,50 @@ De paso se revisó RF-04 (*"...retornar un evento normalizado si la firma es vá
 
 **Decisión:** Los 6 valores en inglés (`APPROVED`, `DECLINED`, `PENDING`, `EXPIRED`, `VOIDED`, `ERROR`) son los correctos, porque coinciden en tres artefactos independientes (código, sección 15.1 y ADR-03) contra uno solo (RF-03).
 
+
 **Estado:** Pendiente en el SAD. Reemplazar en RF-03 la frase "PENDIENTE, APROBADO, RECHAZADO, EXPIRADO o ERROR" por "APPROVED, DECLINED, PENDING, EXPIRED, VOIDED o ERROR".
+
+## 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum
+
+**Responsable de corregirlo en el SAD:** David (sección 15, WebhookVerifier) y Joshua (sección 7, Contexto; sección 16, Glosario).
+
+**Contexto:** Rapyd completó la adquisición de PayU GPO en América Latina el 14 de marzo de 2025
+(fuente: https://www.rapyd.net/es/). La API de procesamiento continúa en `api.payulatam.com`
+durante el período de transición, pero el mecanismo de autenticación de **webhooks** cambia
+completamente.
+
+**Encontrado — tres impactos concretos:**
+
+1. **Algoritmo de firma de webhooks (impacto en código):** El algoritmo previo de PayU era
+   MD5/SHA-256 sobre el body `x-www-form-urlencoded` (`apiKey~merchantId~referenceCode~...`). El
+   nuevo algoritmo de Rapyd es HMAC-SHA256 con resultado en Base64, enviado en el **header**
+   `signature`, no en el body. Cadena de firma:
+   `url_path + salt + timestamp + access_key + secret_key + body_string`.
+   Fuente: https://docs.rapyd.net/en/webhook-authentication.html
+
+2. **Headers de Rapyd (impacto en tabla de la sección 15.1):** La tabla de headers del SAD para
+   `Gateway.PAYU` indicaba `null` (firma en body). Con Rapyd, los headers relevantes son
+   `access_key`, `salt`, `signature` y `timestamp`. El campo `signature` reemplaza al campo
+   `sign` del body.
+
+3. **Enum `Gateway` (impacto en código y glosario):** El valor `PAYU = "PAYU"` fue renombrado a
+   `RAPYD = "RAPYD"` en `sdk/src/domain/value-objects/Gateway.ts` para reflejar la nueva marca.
+   El adaptador de infraestructura pasó de `PayUAdapter.ts` a `RapydAdapter.ts`.
+
+**Decisión tomada:**
+
+- **Opción A (aplicada):** Reemplazar directamente el algoritmo de firma por el de Rapyd. No se
+  implementa dual-mode MD5/Rapyd porque añadiría complejidad WMC/CBO innecesaria en el período
+  de transición, y los webhooks nuevos ya usan el formato Rapyd.
+- El parámetro `url_path` (que no viaja en los headers de Rapyd) se inyecta como header
+  `x-webhook-url-path` por el middleware del comercio antes de llamar a `verify()`.
+- El bloque `parse()` para `Gateway.RAPYD` conserva el formato `URLSearchParams` con `state_pol`,
+  porque la **estructura del payload de notificación** de la API PayU/Rapyd no ha cambiado aún
+  durante la transición.
+
+**Estado:** Resuelto en código (`Gateway.ts`, `WebhookVerifier.ts`, `WebhookVerifier.test.ts`) y
+en documentación (`ubiquitous-language.md`, `layers-and-components.md`, `architecture-explained.md`).
+**Pendiente en el SAD:** actualizar sección 15.1 (tabla de headers de WebhookVerifier), sección 7
+(contexto de pasarelas), y sección 16 (glosario: entrada "PayU" debe actualizarse a
+"Rapyd / PayU GPO").
+

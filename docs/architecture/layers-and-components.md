@@ -132,13 +132,13 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 
 ---
 
-### 2.6. PayU Adapter (`src/infrastructure/adapters/PayUAdapter.ts`)
+### 2.6. Rapyd Adapter (`src/infrastructure/adapters/RapydAdapter.ts`)
 
 - **Patrón Arquitectónico:** GoF Adapter.
-- **Responsabilidad:** Implementa el `PaymentGatewayPort` y traduce su contrato hacia las convenciones de PayU.
+- **Responsabilidad:** Implementa el `PaymentGatewayPort` y traduce su contrato hacia las convenciones de Rapyd / PayU GPO (adquirido el 14 mar 2025).
 - **Detalles de implementación:**
-  - Autenticación: campos `merchantId`, `apiKey` y firma en el body de la solicitud.
-  - Firma: MD5 o SHA-256 sobre `apiKey~merchantId~referenceCode~amount~currency~estado`.
+  - Autenticación: campos `merchantId`, `apiKey` y firma en el body de la solicitud (API de procesamiento sigue en `api.payulatam.com` durante transición).
+  - Firma webhook: HMAC-SHA256, resultado en Base64, en header `signature`. Cadena: `url_path + salt + timestamp + access_key + secret_key + body`. Fuente: https://docs.rapyd.net/en/webhook-authentication.html
   - Mapeo de estado: campo `transactionResponse.state`.
 - **Prioridad:** Media. Implementación funcional validada en sandbox.
 - **Modo simulación:** Redirige solicitudes al simulador en modo pruebas.
@@ -186,7 +186,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 - **Responsabilidad:** Verifica la autenticidad de los webhooks entrantes de cada pasarela mediante `verify(payload, headers, secret, gateway): boolean`, delegando internamente en la lógica de verificación de firma correspondiente al Gateway recibido.
 - **Implementación por pasarela:**
   - **Wompi:** SHA-256 sobre cadena de propiedades + timestamp + secreto. Implementación completa y validada.
-  - **PayU:** MD5 o SHA-256 según configuración del comercio. Implementación suficiente para validar webhooks del simulador.
+  - **Rapyd / PayU GPO:** HMAC-SHA256 (Base64) sobre `url_path+salt+timestamp+access_key+secret_key+body`. Header `signature`. Implementación completa con nueva API Rapyd (adq. 14 mar 2025).
   - **Mercado Pago:** HMAC-SHA256 sobre headers y body. Implementación suficiente para validar webhooks del simulador.
   - **Kushki:** HMAC-SHA256. Implementación suficiente para validar webhooks del simulador.
 - **Segundo método público — `parse(payload, gateway): WebhookEvent`:** Construye el evento normalizado (`WebhookEvent`) a partir del payload ya verificado, para cumplir RF-04 ("retornar un evento normalizado si la firma es válida"). Este método no está en la sección 15.1 del SAD, que describe a `WebhookVerifier` con un único método público; es una desviación deliberada registrada en `sad-inconsistencies.md` (punto 6), porque ningún otro componente vigente del SAD define cómo se construye ese evento.
@@ -263,7 +263,7 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 - **Responsabilidad:** Orquesta la construcción de payloads JSON que replican con exactitud la estructura de las respuestas nativas de cada pasarela.
 - **Fábricas internas:**
   - `WompiMockFactory`: genera `data.status: "APPROVED"` o `"DECLINED"` con estructura completa de Wompi.
-  - `PayUMockFactory`: genera `transactionResponse.state` con estructura de PayU, incluyendo campos `code` y `error`.
+  - `RapydMockFactory`: genera `transactionResponse.state` con estructura de Rapyd/PayU GPO, incluyendo campos `code` y `error`.
   - `MercadoPagoMockFactory`: genera `status` y `status_detail` en minúsculas. Para fondos insuficientes: `status_detail: "cc_rejected_insufficient_amount"`.
   - `KushkiMockFactory`: genera `transaction_status: "APPROVAL"` o `"DECLINED"` respetando el vocabulario propio de Kushki.
 - **Criticidad:** La precisión de este componente es crítica para la validación del framework. Si el formato del Mock no coincide con el de la pasarela real, el `Response Normalizer` del SDK fallará en los escenarios de prueba.
@@ -275,7 +275,7 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 - **Responsabilidad:** Calcula la firma criptográfica que acompaña a los webhooks simulados, de modo que el `Webhook Verifier` del SDK pueda verificarla con su lógica de validación real.
 - **Implementación por pasarela:**
   - **Wompi:** SHA-256 sobre cadena de propiedades + timestamp + secreto de integridad. Implementación completa y validada.
-  - **PayU:** MD5 o SHA-256 sobre `apiKey~merchantId~referenceCode~amount~currency~estado`. Implementación suficiente para la fase de evaluación.
+  - **Rapyd / PayU GPO:** HMAC-SHA256 (Base64) sobre `url_path+salt+timestamp+access_key+secret_key+body`, enviado en header `signature`. Fuente: https://docs.rapyd.net/en/webhook-authentication.html
   - **Mercado Pago / Kushki:** HMAC-SHA256 sobre headers y body. Implementación suficiente para la fase de evaluación.
 - **Invocación:** No opera de forma automática. Es invocado exclusivamente por el `Webhook Trigger Endpoint` cuando el desarrollador solicita explícitamente el envío de un webhook sintético.
 
