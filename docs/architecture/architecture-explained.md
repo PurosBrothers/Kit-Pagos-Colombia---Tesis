@@ -16,7 +16,9 @@ Todo el código citado aquí corresponde al estado del repositorio en la rama `d
 
 ### 1. El problema que la arquitectura tiene que resolver
 
-Antes de justificar una arquitectura hay que tener claro el problema que la motiva. Kit Pagos Colombia existe porque cuatro pasarelas de pago colombianas (Wompi, Rapyd/PayU GPO, Mercado Pago y Kushki) exponen contratos completamente distintos entre sí: autenticación diferente, formato de solicitud diferente, nombres de estado diferentes para el mismo resultado de negocio (Kushki llama `APPROVAL` a lo que las demás llaman `APPROVED`), y mecanismos de firma de webhook distintos (SHA-256 en Wompi, HMAC-SHA256 en Mercado Pago, Kushki y Rapyd/PayU GPO).
+Antes de justificar una arquitectura hay que tener claro el problema que la motiva. Kit Pagos Colombia existe porque cuatro pasarelas de pago colombianas (Wompi, Rapyd, Mercado Pago y Kushki) exponen contratos completamente distintos entre sí: autenticación diferente, formato de solicitud diferente, nombres de estado diferentes para el mismo resultado de negocio (Kushki llama `APPROVAL` a lo que las demás llaman `APPROVED`), y mecanismos de firma de webhook distintos (SHA-256 en Wompi, HMAC-SHA256 en Mercado Pago y Kushki, HMAC-SHA256 con Base64 en Rapyd).
+
+> **Nota:** la cuarta pasarela originalmente era PayU. Rapyd adquirió la operación de PayU en Latinoamérica en 2025, y desde 2026 el registro de comercio nuevo para Colombia ya no otorga acceso a la API clásica de PayU, sino únicamente a la API de Rapyd Collect. Ver el punto 15 de [`sad-inconsistencies.md`](./sad-inconsistencies.md) para el detalle de esta decisión.
 
 Un comercio que quisiera integrar las cuatro pasarelas sin ningún tipo de abstracción tendría que escribir, entender y mantener cuatro veces la misma lógica de negocio (crear un pago, consultar su estado, validar un webhook), cada vez adaptada a las particularidades de un proveedor distinto. Si mañana decide cambiar de proveedor principal, o agregar un quinto, ese cambio se propaga por todo su código. Este es exactamente el tipo de problema que la Arquitectura Hexagonal fue diseñada para resolver: aislar la lógica de negocio de los detalles técnicos externos que cambian con más frecuencia que las reglas de negocio mismas.
 
@@ -54,7 +56,7 @@ Sobre la base hexagonal y de DDD, el proyecto usa tres patrones clásicos del ca
 
 **Factory.** El patrón Factory centraliza la lógica de creación de objetos cuando esa lógica depende de una condición en tiempo de ejecución. `GatewayFactory` (todavía no implementado, ver sección 6) recibirá el valor del enum `Gateway` configurado por el desarrollador y devolverá la instancia del adaptador correspondiente, sin que el resto del sistema necesite un `switch` o un `if` repartido por varios archivos para saber qué adaptador usar.
 
-**Adapter.** El patrón Adapter (que le da nombre a media arquitectura del proyecto) traduce una interfaz existente hacia la que el cliente espera. Cada `Adapter` de pasarela traducirá el contrato abstracto `PaymentGatewayPort` hacia las llamadas HTTP reales, la autenticación y el formato de payload específico de Wompi, Rapyd/PayU GPO, Mercado Pago o Kushki.
+**Adapter.** El patrón Adapter (que le da nombre a media arquitectura del proyecto) traduce una interfaz existente hacia la que el cliente espera. Cada `Adapter` de pasarela traducirá el contrato abstracto `PaymentGatewayPort` hacia las llamadas HTTP reales, la autenticación y el formato de payload específico de Wompi, Rapyd, Mercado Pago o Kushki.
 
 ### 5. Principio de Inversión de Dependencias (el porqué técnico de todo lo anterior)
 

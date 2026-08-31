@@ -21,7 +21,7 @@ export interface CreatePaymentRequest {
 
 /**
  * Puerto de salida de la Arquitectura Hexagonal. Contrato que deben
- * implementar los cuatro Adapters de pasarela (WompiAdapter, PayUAdapter,
+ * implementar los cuatro Adapters de pasarela (WompiAdapter, RapydAdapter,
  * MercadoPagoAdapter, KushkiAdapter).
  * Fuente: SAD, seccion 15.2 (SDK) - "Los cuatro Adapters [...] implementan
  * la interfaz PaymentGatewayPort, que define los metodos createPayment(),
