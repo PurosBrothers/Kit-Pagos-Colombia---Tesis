@@ -46,34 +46,72 @@ describe("WebhookVerifier", () => {
       });
     });
 
-    describe("PayU", () => {
-      const apiKey = "4Vj8eK4rloUd272L48hsrarnUA";
-      const merchantId = "508029";
-      const referenceSale = "TestPayU001";
-      const currency = "COP";
-      const statePol = "4";
-
-      const sign = crypto
-        .createHash("md5")
-        .update(`${apiKey}~${merchantId}~${referenceSale}~150.0~${currency}~${statePol}`)
-        .digest("hex");
+    describe("Rapyd / PayU GPO", () => {
+      // Rapyd adquirio PayU GPO el 14 mar 2025.
+      // Algoritmo: Base64( HMAC-SHA256( url_path + salt + timestamp + access_key + secret_key + body ) )
+      // Fuente: https://docs.rapyd.net/en/webhook-authentication.html
+      const secretKey  = "rapyd_secret_key_test";
+      const accessKey  = "rapyd_access_key_test";
+      const salt       = "random_salt_abc123";
+      const timestamp  = "1727001234";
+      const urlPath    = "/webhooks/rapyd";
 
       const payload = new URLSearchParams({
-        merchant_id: merchantId,
-        reference_sale: referenceSale,
+        merchant_id: "508029",
+        reference_sale: "TestRapyd001",
+        transaction_id: "f5e668f1-7ecc-4b83-a4d1-0aaa68260862",
         value: "150.00",
-        currency,
-        state_pol: statePol,
-        sign,
+        currency: "COP",
+        state_pol: "4",
       }).toString();
 
-      it("valida una firma correcta en el body", () => {
-        expect(verifier.verify(payload, {}, apiKey, Gateway.PAYU)).toBe(true);
+      const signature = crypto
+        .createHmac("sha256", secretKey)
+        .update(urlPath + salt + timestamp + accessKey + secretKey + payload)
+        .digest("base64");
+
+      it("valida una firma Rapyd correcta en el header signature", () => {
+        const headers = {
+          signature,
+          access_key: accessKey,
+          salt,
+          timestamp,
+          "x-webhook-url-path": urlPath,
+        };
+        expect(verifier.verify(payload, headers, secretKey, Gateway.RAPYD)).toBe(true);
       });
 
-      it("rechaza si la firma no coincide", () => {
-        const tampered = payload.replace(sign, "invalidsign");
-        expect(verifier.verify(tampered, {}, apiKey, Gateway.PAYU)).toBe(false);
+      it("rechaza si el body fue alterado", () => {
+        const tampered = payload + "&extra=injected";
+        const headers = {
+          signature,
+          access_key: accessKey,
+          salt,
+          timestamp,
+          "x-webhook-url-path": urlPath,
+        };
+        expect(verifier.verify(tampered, headers, secretKey, Gateway.RAPYD)).toBe(false);
+      });
+
+      it("rechaza si el secret es incorrecto", () => {
+        const headers = {
+          signature,
+          access_key: accessKey,
+          salt,
+          timestamp,
+          "x-webhook-url-path": urlPath,
+        };
+        expect(verifier.verify(payload, headers, "wrong_secret", Gateway.RAPYD)).toBe(false);
+      });
+
+      it("rechaza si falta el header signature", () => {
+        const headers = {
+          access_key: accessKey,
+          salt,
+          timestamp,
+          "x-webhook-url-path": urlPath,
+        };
+        expect(verifier.verify(payload, headers, secretKey, Gateway.RAPYD)).toBe(false);
       });
     });
 
@@ -159,17 +197,17 @@ describe("WebhookVerifier", () => {
       expect(event.gateway).toBe(Gateway.WOMPI);
     });
 
-    it("normaliza eventos de PayU", () => {
+    it("normaliza eventos de Rapyd / PayU GPO", () => {
       const payload = new URLSearchParams({
-        transaction_id: "payu-tx-456",
+        transaction_id: "rapyd-tx-456",
         state_pol: "4",
       }).toString();
 
-      const event = verifier.parse(payload, Gateway.PAYU);
+      const event = verifier.parse(payload, Gateway.RAPYD);
       expect(event.eventType).toBe("transaction.updated");
-      expect(event.gatewayTransactionId).toBe("payu-tx-456");
+      expect(event.gatewayTransactionId).toBe("rapyd-tx-456");
       expect(event.newStatus).toBe("APPROVED");
-      expect(event.gateway).toBe(Gateway.PAYU);
+      expect(event.gateway).toBe(Gateway.RAPYD);
     });
 
     it("normaliza eventos de Mercado Pago con estado en minuscula", () => {
@@ -205,8 +243,8 @@ describe("WebhookVerifier", () => {
       });
       expect(verifier.parse(wompiDeclined, Gateway.WOMPI).newStatus).toBe("DECLINED");
 
-      const payuDeclined = new URLSearchParams({ transaction_id: "2", state_pol: "6" }).toString();
-      expect(verifier.parse(payuDeclined, Gateway.PAYU).newStatus).toBe("DECLINED");
+      const rapydDeclined = new URLSearchParams({ transaction_id: "2", state_pol: "6" }).toString();
+      expect(verifier.parse(rapydDeclined, Gateway.RAPYD).newStatus).toBe("DECLINED");
 
       const mpRejected = JSON.stringify({ data: { id: "3" }, status: "rejected" });
       expect(verifier.parse(mpRejected, Gateway.MERCADOPAGO).newStatus).toBe("DECLINED");

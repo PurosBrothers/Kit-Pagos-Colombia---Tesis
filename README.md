@@ -1,1 +1,20 @@
-# Kit-Pagos-Colombia---Tesis
+# Kit Pagos Colombia — Tesis
+
+SDK unificado para la integración de pasarelas de pago colombianas.
+
+## Pasarelas soportadas
+
+| Enum `Gateway` | Proveedor | Notas |
+|---|---|---|
+| `Gateway.WOMPI` | [Wompi](https://docs.wompi.co) | Firma: SHA-256 header `x-event-checksum` |
+| `Gateway.RAPYD` | [Rapyd / PayU GPO](https://docs.rapyd.net) | Adquisición completada 14 mar 2025. Firma webhook: HMAC-SHA256 header `signature` |
+| `Gateway.MERCADOPAGO` | [Mercado Pago](https://mercadopago.com.co/developers) | Firma: HMAC-SHA256 header `x-signature` |
+| `Gateway.KUSHKI` | [Kushki](https://docs.kushki.com/co) | Firma: HMAC-SHA256 header `x-kushki-signature` |
+
+## Documentación
+
+- [`docs/architecture/architecture-explained.md`](docs/architecture/architecture-explained.md) — Fundamentos y verificación en código
+- [`docs/architecture/layers-and-components.md`](docs/architecture/layers-and-components.md) — Especificación oficial de componentes (C4 nivel 3)
+- [`docs/architecture/ubiquitous-language.md`](docs/architecture/ubiquitous-language.md) — Lenguaje ubicuo por pasarela
+- [`docs/architecture/sad-inconsistencies.md`](docs/architecture/sad-inconsistencies.md) — Registro de inconsistencias del SAD y decisiones tomadas
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — Guía de contribución y flujo de trabajo

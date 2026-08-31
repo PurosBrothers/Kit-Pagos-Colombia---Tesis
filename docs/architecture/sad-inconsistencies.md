@@ -168,28 +168,50 @@ De paso se revisó RF-04 (*"...retornar un evento normalizado si la firma es vá
 
 **Decisión:** Los 6 valores en inglés (`APPROVED`, `DECLINED`, `PENDING`, `EXPIRED`, `VOIDED`, `ERROR`) son los correctos, porque coinciden en tres artefactos independientes (código, sección 15.1 y ADR-03) contra uno solo (RF-03).
 
+
 **Estado:** Pendiente en el SAD. Reemplazar en RF-03 la frase "PENDIENTE, APROBADO, RECHAZADO, EXPIRADO o ERROR" por "APPROVED, DECLINED, PENDING, EXPIRED, VOIDED o ERROR".
 
-## 15. Transición de la cuarta pasarela: PayU a Rapyd
+## 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum
 
-**Responsables de corregirlo en el SAD:** Joshua (secciones 1, 7, 8, 9 y `Component Diagram - C4.png` del SDK), Henao (`Domain Class Diagram.png`), David (Restricciones, Riesgo técnico, Glosario), Joan (ADR, si documentan el vocabulario nativo de PayU).
+**Responsable de corregirlo en el SAD:** David (sección 15, WebhookVerifier) y Joshua (sección 7, Contexto; sección 16, Glosario).
 
-**Encontrado:** Rapyd completó la compra de la operación de PayU en Latinoamérica (y África) en marzo de 2025. Desde 2026, el registro de un comercio nuevo en Colombia ya no otorga acceso a la API clásica de PayU (`apiLogin`/`apiKey`, autenticación por body, firma MD5/SHA-256 sobre `apiKey~merchantId~referenceCode~amount~currency~estado`), sino únicamente credenciales de Rapyd Collect (`access_key`/`secret_key`, firma de webhook `Base64(HMAC-SHA256(url_path + salt + timestamp + access_key + secret_key + body_string))`). Esto no es un cambio de nombre cosmético: el modelo de autenticación y el algoritmo de firma son distintos entre ambas pasarelas.
+**Contexto:** Rapyd completó la adquisición de PayU GPO en América Latina el 14 de marzo de 2025
+(fuente: https://www.rapyd.net/es/). La API de procesamiento continúa en `api.payulatam.com`
+durante el período de transición, pero el mecanismo de autenticación de **webhooks** cambia
+completamente.
 
-El nombre "PayU" aparece explícitamente en el SAD en, al menos, los siguientes puntos confirmados:
-- Sección 1.2: "cuatro proveedores principales (Wompi, PayU, Mercado Pago y Kushki)".
-- Sección 7.1.3: párrafo completo describiendo la autenticación y firma de "PayU Latam".
-- Sección 7.2.4: "las pasarelas reales (Wompi, PayU, Mercado Pago y Kushki)".
-- Sección 8.1.1: "cuatro adaptadores... Wompi, PayU, Mercado Pago y Kushki" y "Adaptador Wompi, Adaptador PayU, Adaptador Mercado Pago y Adaptador Kushki".
-- Sección 9.1.3 (Gateway Factory): "el enum Gateway, con valores WOMPI, PAYU, MERCADOPAGO o KUSHKI".
-- Sección 9.1.5: título "Wompi Adapter, PayU Adapter, Mercado Pago Adapter y Kushki Adapter" y su contenido ("Los adaptadores de PayU, Mercado Pago y Kushki tienen el mismo nivel de completitud funcional...").
-- Sección 9.1.7 (Webhook Verifier) y 9.2.4 (Signature Generator): "Para PayU, Mercado Pago y Kushki se implementa la verificación/firma con el algoritmo correspondiente, MD5/SHA-256...".
-- Sección 9.2.3 (Gateway Mock Factory): "PayUMockFactory".
-- `Component Diagram - C4.png` (SDK): etiqueta explícitamente "PayU Adapter", "Traduce a PayU (Body auth, MD5/SHA)" y "PayU API — Latam Sandbox".
-- `Domain Class Diagram.png`: el enum `Gateway` lista "WOMPI, PAYU, MERCADOPAGO, KUSHKI".
+**Encontrado — tres impactos concretos:**
 
-**Decisión:** Renombrar la cuarta pasarela de PayU a Rapyd en todo el SAD, incluyendo ambos diagramas de imagen. En el repositorio ya se aplicó el renombrado mecánico en `architecture-explained.md`, `layers-and-components.md`, `setup-and-structure.md`, `methodology.md` y el diagrama `Hexagonal architecture class diagram.png` (regenerado desde su fuente PlantUML). El código del SDK (`sdk/src/domain/value-objects/Gateway.ts`, que hoy define `PAYU = "PAYU"`, y la rama `case Gateway.PAYU` de `WebhookVerifier.ts` con su algoritmo de firma de PayU, ya implementado y con pruebas pasando desde la Iteración 1) **no se tocó todavía**: cambiarlo ahora significaría renombrar un símbolo sin tener lista la lógica real de Rapyd que debe reemplazarlo, dejando código con el nombre correcto pero el comportamiento equivocado. Ese cambio de código queda condicionado al issue de investigación del contrato de Rapyd Collect (ver más abajo), no a este punto de documentación.
+1. **Algoritmo de firma de webhooks (impacto en código):** El algoritmo previo de PayU era
+   MD5/SHA-256 sobre el body `x-www-form-urlencoded` (`apiKey~merchantId~referenceCode~...`). El
+   nuevo algoritmo de Rapyd es HMAC-SHA256 con resultado en Base64, enviado en el **header**
+   `signature`, no en el body. Cadena de firma:
+   `url_path + salt + timestamp + access_key + secret_key + body_string`.
+   Fuente: https://docs.rapyd.net/en/webhook-authentication.html
 
-`ubiquitous-language.md` no se corrigió como parte de este renombrado mecánico porque sus ~30 menciones de "PayU" eran la columna completa de mapeo de campos contra la API clásica de PayU (solicitud de pago, webhook, consulta de estado, catálogo de errores); reemplazar solo la palabra habría dejado contenido técnico falso. Ese archivo requería el mismo nivel de investigación de campo que ya se había hecho para Wompi, Mercado Pago y Kushki, sobre la API real de Rapyd Collect/Checkout. Esa investigación se hizo en el issue [#23](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/issues/23) contra `docs.rapyd.net`: la columna "PayU Latam" fue reemplazada por "Rapyd" en las cuatro tablas y en el apéndice del enum de estados, con la fórmula real de firma (de request y de webhook, que son distintas entre sí), los endpoints de creación/consulta de pago, los tres tipos de webhook (`PAYMENT_SUCCEEDED`/`PAYMENT_COMPLETED`/`PAYMENT_FAILED`) y el formato de error. Quedaron explícitamente marcados como `⚠️ PENDIENTE` los campos que Rapyd modela de forma dinámica por método de pago (identidad del pagador para `co_pse_bank`) y que requieren credenciales de sandbox reales para confirmarse (ver issue [#14](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/issues/14)), y el criterio exacto para distinguir `DECLINED` de `ERROR` dentro del único valor de estado `"ERR"` que Rapyd usa para ambos casos.
+2. **Headers de Rapyd (impacto en tabla de la sección 15.1):** La tabla de headers del SAD para
+   `Gateway.PAYU` indicaba `null` (firma en body). Con Rapyd, los headers relevantes son
+   `access_key`, `salt`, `signature` y `timestamp`. El campo `signature` reemplaza al campo
+   `sign` del body.
 
-**Estado:** Pendiente en el SAD (todas las menciones listadas arriba). **Resuelto en `ubiquitous-language.md`** (columna Rapyd documentada, issue #23 cerrado). El diagrama `Component Diagram - C4.png` del SDK y el `Domain Class Diagram.png` no tienen fuente PlantUML en el repositorio, por lo que deben corregirse manualmente por sus respectivos dueños (Joshua y Henao) con la herramienta con la que se crearon originalmente. El código de `WebhookVerifier.ts` (rama `case Gateway.PAYU`) sigue sin migrarse a Rapyd: ese cambio se hace en la Iteración 2, ahora que ya existe la fórmula real de firma para implementarlo correctamente.
+3. **Enum `Gateway` (impacto en código y glosario):** El valor `PAYU = "PAYU"` fue renombrado a
+   `RAPYD = "RAPYD"` en `sdk/src/domain/value-objects/Gateway.ts` para reflejar la nueva marca.
+   El adaptador de infraestructura pasó de `PayUAdapter.ts` a `RapydAdapter.ts`.
+
+**Decisión tomada:**
+
+- **Opción A (aplicada):** Reemplazar directamente el algoritmo de firma por el de Rapyd. No se
+  implementa dual-mode MD5/Rapyd porque añadiría complejidad WMC/CBO innecesaria en el período
+  de transición, y los webhooks nuevos ya usan el formato Rapyd.
+- El parámetro `url_path` (que no viaja en los headers de Rapyd) se inyecta como header
+  `x-webhook-url-path` por el middleware del comercio antes de llamar a `verify()`.
+- El bloque `parse()` para `Gateway.RAPYD` conserva el formato `URLSearchParams` con `state_pol`,
+  porque la **estructura del payload de notificación** de la API PayU/Rapyd no ha cambiado aún
+  durante la transición.
+
+**Estado:** Resuelto en código (`Gateway.ts`, `WebhookVerifier.ts`, `WebhookVerifier.test.ts`) y
+en documentación (`ubiquitous-language.md`, `layers-and-components.md`, `architecture-explained.md`).
+**Pendiente en el SAD:** actualizar sección 15.1 (tabla de headers de WebhookVerifier), sección 7
+(contexto de pasarelas), y sección 16 (glosario: entrada "PayU" debe actualizarse a
+"Rapyd / PayU GPO").
+

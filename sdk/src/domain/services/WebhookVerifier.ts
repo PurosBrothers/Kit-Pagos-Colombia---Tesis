@@ -40,31 +40,28 @@ export class WebhookVerifier {
         const calculatedChecksum = crypto.createHash("sha256").update(concatenated).digest("hex");
         return receivedChecksum === calculatedChecksum;
       }
-      case Gateway.PAYU: {
-        // PayU: firma ("sign") viaja en el body (x-www-form-urlencoded), no en header.
-        // Cadena: apiKey~merchantId~referenceSale~newValue~currency~statePol
-        // Algoritmo: MD5 por defecto (configurable a SHA-256 por el comercio).
-        const params = new URLSearchParams(payload);
-        const receivedSign = params.get("sign") ?? "";
-        const merchantId = params.get("merchant_id") ?? "";
-        const referenceSale = params.get("reference_sale") ?? "";
-        const currency = params.get("currency") ?? "";
-        const statePol = params.get("state_pol") ?? "";
+      case Gateway.RAPYD: {
+        // Rapyd / PayU GPO (adq. 14 mar 2025): firma en header "signature" (Base64 HMAC-SHA256).
+        // Cadena: url_path + salt + timestamp + access_key + secret_key + body_string
+        // Fuente: https://docs.rapyd.net/en/webhook-authentication.html
+        // Nota: el middleware del comercio debe inyectar "x-webhook-url-path" en headers
+        //       con el path del endpoint receptor (ej. "/webhooks/rapyd") antes de llamar verify().
+        const receivedSignature = headers["signature"] ?? "";
+        const accessKey         = headers["access_key"] ?? "";
+        const salt              = headers["salt"] ?? "";
+        const timestamp         = headers["timestamp"] ?? "";
+        const urlPath           = headers["x-webhook-url-path"] ?? "";
 
-        // Regla de redondeo: si el segundo decimal es 0, usar un decimal.
-        const rawValue = parseFloat(params.get("value") ?? "0");
-        const secondDecimal = Math.round((rawValue * 100) % 10);
-        const newValue = secondDecimal === 0
-          ? rawValue.toFixed(1)
-          : rawValue.toFixed(2);
-
-        const chain = `${secret}~${merchantId}~${referenceSale}~${newValue}~${currency}~${statePol}`;
-        const calculatedSign = crypto.createHash("md5").update(chain).digest("hex");
-        return receivedSign === calculatedSign;
+        const toSign = urlPath + salt + timestamp + accessKey + secret + payload;
+        const calculatedSignature = crypto
+          .createHmac("sha256", secret)
+          .update(toSign)
+          .digest("base64");
+        return receivedSignature === calculatedSignature;
       }
       case Gateway.MERCADOPAGO: {
         // Mercado Pago: firma ("v1") viaja en header "x-signature" con formato "ts={timestamp},v1={hash}".
-        // Cadena: id:{data.id};request-id:{x-request-id};ts:{ts};
+        // Cadena: id:{data.id};request-id:{x-request-id};ts:{ts}
         // Algoritmo: HMAC-SHA256 (con clave secreta de la aplicación).
         const xSignature = headers["x-signature"];
         const requestId = headers["x-request-id"];
@@ -134,7 +131,11 @@ export class WebhookVerifier {
           gateway: Gateway.WOMPI,
         });
       }
-      case Gateway.PAYU: {
+      case Gateway.RAPYD: {
+        // Rapyd / PayU GPO: el body de confirmacion sigue siendo x-www-form-urlencoded
+        // con el formato original de PayU (state_pol) durante el periodo de transicion.
+        // La autenticacion del webhook cambio a HMAC-SHA256 (ver verify()), pero la
+        // estructura del payload de notificacion no ha cambiado aun.
         const params = new URLSearchParams(payload);
         const eventType = "transaction.updated";
         const gatewayTransactionId = params.get("transaction_id") ?? "";
@@ -170,7 +171,7 @@ export class WebhookVerifier {
           eventType,
           gatewayTransactionId,
           newStatus,
-          gateway: Gateway.PAYU,
+          gateway: Gateway.RAPYD,
         });
       }
       case Gateway.MERCADOPAGO: {
