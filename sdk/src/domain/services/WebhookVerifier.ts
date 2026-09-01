@@ -41,18 +41,22 @@ export class WebhookVerifier {
         return receivedChecksum === calculatedChecksum;
       }
       case Gateway.RAPYD: {
-        // Rapyd / PayU GPO (adq. 14 mar 2025): firma en header "signature" (Base64 HMAC-SHA256).
+        // Rapyd (adq. de PayU GPO, 14 mar 2025): firma en header "signature" (Base64 HMAC-SHA256).
         // Cadena: url_path + salt + timestamp + access_key + secret_key + body_string
         // Fuente: https://docs.rapyd.net/en/webhook-authentication.html
-        // Nota: el middleware del comercio debe inyectar "x-webhook-url-path" en headers
-        //       con el path del endpoint receptor (ej. "/webhooks/rapyd") antes de llamar verify().
+        // Nota: "url_path" aqui es la URL COMPLETA (protocolo + dominio + path) configurada
+        //       en el panel de Rapyd para recibir el webhook, no un path relativo del request
+        //       entrante (a diferencia de la firma de requests salientes, que si usa el path
+        //       relativo). El SDK no puede derivarla del propio request, asi que el middleware
+        //       del comercio debe inyectarla en el header sintetico "x-webhook-url" antes de
+        //       llamar verify(). Ver docs/architecture/sad-inconsistencies.md, punto 16.
         const receivedSignature = headers["signature"] ?? "";
         const accessKey         = headers["access_key"] ?? "";
         const salt              = headers["salt"] ?? "";
         const timestamp         = headers["timestamp"] ?? "";
-        const urlPath           = headers["x-webhook-url-path"] ?? "";
+        const webhookUrl        = headers["x-webhook-url"] ?? "";
 
-        const toSign = urlPath + salt + timestamp + accessKey + secret + payload;
+        const toSign = webhookUrl + salt + timestamp + accessKey + secret + payload;
         const calculatedSignature = crypto
           .createHmac("sha256", secret)
           .update(toSign)
@@ -132,35 +136,35 @@ export class WebhookVerifier {
         });
       }
       case Gateway.RAPYD: {
-        // Rapyd / PayU GPO: el body de confirmacion sigue siendo x-www-form-urlencoded
-        // con el formato original de PayU (state_pol) durante el periodo de transicion.
-        // La autenticacion del webhook cambio a HMAC-SHA256 (ver verify()), pero la
-        // estructura del payload de notificacion no ha cambiado aun.
-        const params = new URLSearchParams(payload);
-        const eventType = "transaction.updated";
-        const gatewayTransactionId = params.get("transaction_id") ?? "";
-        const statePol = params.get("state_pol") ?? "";
+        // Rapyd envia un webhook JSON distinto segun el resultado, no un unico
+        // evento con un campo de estado variable como Wompi: "type" vale
+        // "PAYMENT_SUCCEEDED", "PAYMENT_COMPLETED" o "PAYMENT_FAILED", y el
+        // objeto "data" trae el id del pago y su status interno ("ACT" | "CLO" | "ERR").
+        // Fuente: docs/architecture/ubiquitous-language.md, seccion 2 (columna
+        // Rapyd Nativo) y Apendice EstadoTransaccion. Corrige la suposicion sin
+        // cita que asumia el formato x-www-form-urlencoded de PayU (ver
+        // docs/architecture/sad-inconsistencies.md, punto 16).
+        const body = JSON.parse(payload);
+        const eventType: string = body.type ?? "";
+        const gatewayTransactionId = body.data?.id ?? "";
 
         let newStatus: TransactionStatus;
-        switch (statePol) {
-          case "4":
+        switch (eventType) {
+          case "PAYMENT_COMPLETED":
             newStatus = "APPROVED";
             break;
-          case "6":
-            newStatus = "DECLINED";
-            break;
-          case "5":
-            newStatus = "EXPIRED";
-            break;
-          case "7":
-          case "10":
-          case "12":
-          case "14":
-          case "15":
-          case "18":
+          case "PAYMENT_SUCCEEDED":
+            // data.status "ACT": la solicitud fue recibida pero puede seguir
+            // pendiente de un paso adicional (ej. 3DS).
             newStatus = "PENDING";
             break;
-          case "104":
+          case "PAYMENT_FAILED":
+            // TODO: Rapyd no distingue aqui un rechazo de negocio (DECLINED,
+            // ej. fondos insuficientes) de un fallo tecnico (ERROR); ambos
+            // viajan mezclados en data.failure_code. Falta el catalogo
+            // completo de failure_code (requiere sandbox real) para separar
+            // los dos casos; se retoma al iniciar Iteracion 2, sin issue
+            // creado aun. Mientras tanto se usa ERROR como valor conservador.
             newStatus = "ERROR";
             break;
           default:

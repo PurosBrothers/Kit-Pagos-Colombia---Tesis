@@ -204,14 +204,65 @@ completamente.
   implementa dual-mode MD5/Rapyd porque añadiría complejidad WMC/CBO innecesaria en el período
   de transición, y los webhooks nuevos ya usan el formato Rapyd.
 - El parámetro `url_path` (que no viaja en los headers de Rapyd) se inyecta como header
-  `x-webhook-url-path` por el middleware del comercio antes de llamar a `verify()`.
-- El bloque `parse()` para `Gateway.RAPYD` conserva el formato `URLSearchParams` con `state_pol`,
-  porque la **estructura del payload de notificación** de la API PayU/Rapyd no ha cambiado aún
-  durante la transición.
+  sintético `x-webhook-url` por el middleware del comercio antes de llamar a `verify()`. Debe
+  contener la URL completa configurada en el panel de Rapyd, no un path relativo (aclarado en
+  el punto 16, tras una imprecisión inicial en el nombre y la descripción del header).
+- El bloque `parse()` para `Gateway.RAPYD` conservó inicialmente el formato `URLSearchParams` con
+  `state_pol`, bajo la suposición de que la **estructura del payload de notificación** de la API
+  PayU/Rapyd no había cambiado durante la transición. Esa suposición no tenía cita y resultó ser
+  incorrecta: la investigación de campo del issue #23 (documentada en `ubiquitous-language.md`)
+  confirmó que Rapyd envía un webhook JSON con forma completamente distinta. Corregido en el
+  punto 16.
 
 **Estado:** Resuelto en código (`Gateway.ts`, `WebhookVerifier.ts`, `WebhookVerifier.test.ts`) y
-en documentación (`ubiquitous-language.md`, `layers-and-components.md`, `architecture-explained.md`).
+en documentación (`ubiquitous-language.md`, `layers-and-components.md`, `architecture-explained.md`),
+con la excepción del formato de `parse()` descrita arriba, corregida por separado en el punto 16.
 **Pendiente en el SAD:** actualizar sección 15.1 (tabla de headers de WebhookVerifier), sección 7
 (contexto de pasarelas), y sección 16 (glosario: entrada "PayU" debe actualizarse a
 "Rapyd / PayU GPO").
+
+## 16. `WebhookVerifier.parse()` para `Gateway.RAPYD` usaba el formato de notificación de PayU sin cita
+
+**Responsable de corregirlo en el SAD:** David (sección 15, WebhookVerifier).
+
+**Contexto:** El punto 15 documentó correctamente la migración del algoritmo de **firma** de
+webhooks de PayU a Rapyd (HMAC-SHA256 en el header `signature`), pero dejó sin tocar el método
+`parse()`, que sigue construyendo el evento normalizado a partir de `URLSearchParams` con el
+campo `state_pol`, el formato clásico de notificación de PayU. El comentario que acompañaba ese
+código afirmaba que "la estructura del payload de notificación no ha cambiado aún", sin ninguna
+fuente que lo respaldara.
+
+**Encontrado:** La investigación de campo del issue #23, ya documentada en
+`ubiquitous-language.md` (sección 2, columna "Rapyd Nativo"), muestra que Rapyd envía un webhook
+JSON con forma completamente distinta a la de PayU: un campo raíz `type` (`PAYMENT_SUCCEEDED` |
+`PAYMENT_COMPLETED` | `PAYMENT_FAILED`) y un objeto `data` con `id`, `status` (`ACT` | `CLO` |
+`ERR`) y `paid`. La suposición del código nunca se validó contra esa investigación, a pesar de
+que ambas conviven en el mismo repositorio desde el cierre del issue #23.
+
+De paso se encontró una segunda imprecisión, más pequeña, en `verify()`: el comentario describía
+el parámetro `url_path` de la fórmula de firma como "el path del endpoint receptor" (ej.
+`/webhooks/rapyd`), cuando la documentación de Rapyd exige la **URL completa** configurada en el
+panel de webhooks (protocolo, dominio y path). El algoritmo de firma en sí ya era el correcto;
+solo la semántica de ese parámetro estaba mal descrita, y el header sintético que lo transportaba
+se renombró de `x-webhook-url-path` a `x-webhook-url` para reflejarlo.
+
+**Decisión tomada:**
+
+- `parse()` para `Gateway.RAPYD` ahora lee `type` y `data.id`/`data.status`, con el mapeo
+  `PAYMENT_COMPLETED → APPROVED`, `PAYMENT_SUCCEEDED → PENDING`, cualquier otro valor → `ERROR`.
+- El caso `PAYMENT_FAILED` se deja deliberadamente sin resolver del todo: Rapyd no distingue ahí
+  un rechazo de negocio (`DECLINED`) de un fallo técnico (`ERROR`); ambos viajan mezclados en
+  `data.failure_code`. Separarlos requiere el catálogo completo de `failure_code`, que solo se
+  puede obtener disparando escenarios reales contra un sandbox de Rapyd. Mientras tanto se usa
+  `ERROR` como valor conservador, con un comentario `TODO` en el código citando este punto. No se
+  crea un issue de seguimiento todavía; se retoma al iniciar la Iteración 2, cuando se reparta el
+  trabajo de `RapydAdapter`.
+- `WebhookVerifier.test.ts` se reescribió para probar el payload JSON real de Rapyd en vez del
+  formato de PayU, tanto en `verify()` como en `parse()`.
+
+**Estado:** Resuelto en código (`WebhookVerifier.ts`, `WebhookVerifier.test.ts`) y en
+`.env.example` (variables `PAYU_*` renombradas a `RAPYD_*`, alineadas al modelo de credenciales
+`access_key`/`secret_key` de Rapyd en vez del modelo `apiKey`/`apiLogin` de PayU). Pendiente el
+mapeo fino de `PAYMENT_FAILED` descrito arriba, y la actualización de sección 15.1 del SAD para
+reflejar el nuevo comentario de `url_path`.
 
