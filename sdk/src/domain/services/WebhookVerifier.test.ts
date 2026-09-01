@@ -274,5 +274,57 @@ describe("WebhookVerifier", () => {
       const kushkiDeclined = JSON.stringify({ transaction_id: "4", transaction_status: "DECLINED" });
       expect(verifier.parse(kushkiDeclined, Gateway.KUSHKI).newStatus).toBe("DECLINED");
     });
+
+    it("mapea estados adicionales como VOIDED, ERROR y PENDING", () => {
+      const wompiVoided = JSON.stringify({
+        data: { transaction: { id: "1", status: "VOIDED" } },
+      });
+      expect(verifier.parse(wompiVoided, Gateway.WOMPI).newStatus).toBe("VOIDED");
+
+      const wompiError = JSON.stringify({
+        data: { transaction: { id: "1", status: "ERROR" } },
+      });
+      expect(verifier.parse(wompiError, Gateway.WOMPI).newStatus).toBe("ERROR");
+
+      const wompiUnknown = JSON.stringify({
+        data: { transaction: { id: "1", status: "OTHER" } },
+      });
+      expect(verifier.parse(wompiUnknown, Gateway.WOMPI).newStatus).toBe("ERROR");
+
+      const rapydUnknown = JSON.stringify({
+        type: "OTHER_EVENT",
+        data: { id: "payment_unk" },
+      });
+      expect(verifier.parse(rapydUnknown, Gateway.RAPYD).newStatus).toBe("ERROR");
+
+      const mpPending = JSON.stringify({
+        action: "payment.updated",
+        data: { id: "mp-pend" },
+        status: "pending",
+      });
+      expect(verifier.parse(mpPending, Gateway.MERCADOPAGO).newStatus).toBe("PENDING");
+
+      const mpUnknown = JSON.stringify({
+        action: "payment.updated",
+        data: { id: "mp-unk" },
+        status: "unknown_status",
+      });
+      expect(verifier.parse(mpUnknown, Gateway.MERCADOPAGO).newStatus).toBe("ERROR");
+
+      const kushkiUnknown = JSON.stringify({
+        transaction_id: "k-unk",
+        transaction_status: "UNKNOWN",
+      });
+      expect(verifier.parse(kushkiUnknown, Gateway.KUSHKI).newStatus).toBe("ERROR");
+    });
+
+    it("lanza error si el gateway no es reconocido", () => {
+      expect(() => verifier.parse("{}", "UNKNOWN_GW" as unknown as Gateway)).toThrow(
+        "WebhookVerifier.parse: Gateway desconocido"
+      );
+      expect(() => verifier.verify("{}", {}, "secret", "UNKNOWN_GW" as unknown as Gateway)).toThrow(
+        "WebhookVerifier.verify: Gateway desconocido"
+      );
+    });
   });
 });
