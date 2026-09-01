@@ -7,14 +7,14 @@ export interface SDKOptions {
 }
 
 export class SdkConfigurator {
-  configure (options:SDKOptions): void {
+  configure (_options:SDKOptions): void {
     throw new Error("aun no esta implementado");
   }
   getActiveGateway(): Gateway {
     throw new Error("aun no esta implementado");
   }
 
-  getCredentials(gateway: Gateway): Credentials {
+  getCredentials(_gateway: Gateway): Credentials {
     throw new Error("aun no esta implementado");
   }
 }
