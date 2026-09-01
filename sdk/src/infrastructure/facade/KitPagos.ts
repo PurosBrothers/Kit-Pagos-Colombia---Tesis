@@ -8,12 +8,12 @@ import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort
  * que coinciden en createPayment(), getPaymentStatus() y validateWebhook()
  * como los tres metodos publicos del SDK. La seccion 15.2 usa nombres
  * distintos (getStatus, verifyWebhook); se prioriza la version que coincide
- * en mas artefactos del SAD (ver docs/architecture/sad-inconsistencies.md,
+ * en mas artefactos del SAD (ver docs/architecture/architecture-log.md,
  * punto 1).
  *
  * validateWebhook() retorna WebhookEvent en lugar de boolean para cumplir
  * RF-04 ("retornar un evento normalizado si la firma es valida"), ver
- * docs/architecture/sad-inconsistencies.md, punto 6.
+ * docs/architecture/architecture-log.md, punto 6.
  *
  * TODO: integrar SdkConfigurator y GatewayFactory (pendientes de
  * implementacion) para resolver la pasarela activa, delegar en el Adapter

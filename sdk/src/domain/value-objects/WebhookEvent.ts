@@ -13,7 +13,7 @@ export interface WebhookEventAttributes {
  * de un webhook entrante es valida. No forma parte de las secciones 3, 9.1.7
  * ni 15.1 del SAD; se reintroduce para cerrar la brecha entre ese requisito
  * funcional y el resto del modelo de dominio (ver
- * docs/architecture/sad-inconsistencies.md, punto 6).
+ * docs/architecture/architecture-log.md, punto 6).
  */
 export class WebhookEvent {
   public readonly eventType: string;

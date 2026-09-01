@@ -2,7 +2,7 @@
 
 Este documento resume la metodología definida en el SPMP (`SPMP - Kit Pagos Colombia.md`) en la forma que necesitamos para el día a día de gestión en GitHub: crear milestones, escribir issues, y decidir en qué fase o iteración cae cada corrección o funcionalidad nueva. No sustituye al SPMP, que sigue siendo el documento formal y la fuente de verdad ante el director del trabajo de grado; esto es una traducción operativa de esa fuente para no tener que releer el documento completo cada vez que hay que abrir un issue.
 
-Si el SPMP cambia (por ejemplo, si se ajustan fechas o el alcance de una iteración), este archivo debe actualizarse para que no quede desalineado, igual que hacemos con `sad-inconsistencies.md` respecto al SAD.
+Si el SPMP cambia (por ejemplo, si se ajustan fechas o el alcance de una iteración), este archivo debe actualizarse para que no quede desalineado, igual que hacemos con `architecture-log.md` respecto al SAD.
 
 ## 1. Modelo de ciclo de vida: Design Science Research (DSR)
 
@@ -219,6 +219,6 @@ Si al cierre de la Semana 1 de Iteración 1 (jueves antes del 31 de agosto) el t
 ## 11. Documentos relacionados
 
 - `SPMP - Kit Pagos Colombia.md` (fuera del repositorio, en Google Drive/Downloads): el documento formal completo. Este archivo es un resumen operativo, no un remplazo.
-- `Descripción de la Arquitectura del Software (SAD).docx.md` (fuera del repositorio): la fuente de verdad de la arquitectura. Ver `docs/architecture/sad-inconsistencies.md` para el registro de discrepancias pendientes de corregir ahí.
+- `Descripción de la Arquitectura del Software (SAD).docx.md` (fuera del repositorio): la fuente de verdad de la arquitectura. Ver `docs/architecture/architecture-log.md` para el registro de discrepancias pendientes de corregir ahí.
 - `docs/architecture/layers-and-components.md` y `docs/architecture/ubiquitous-language.md`: la estructura de código vigente, sincronizada con las decisiones tomadas sobre el SAD.
 - `CONTRIBUTING.md`: estándares de commits, política de ramas y pull requests.

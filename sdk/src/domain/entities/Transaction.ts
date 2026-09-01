@@ -22,7 +22,7 @@ import { TransactionStatus } from "../value-objects/TransactionStatus";
  * lista explicitamente ese atributo. Transaction es inmutable: cuando una
  * transaccion PENDING se concilia por webhook, el Response Normalizer debe
  * construir una instancia nueva en lugar de mutar la existente (ver
- * docs/architecture/sad-inconsistencies.md, punto 3).
+ * docs/architecture/architecture-log.md, punto 3).
  */
 export class Transaction {
   constructor(

@@ -6,11 +6,11 @@
 > **Metodología:** Design Science Research (DSR)  
 > **Versión:** 1.0.0
 
-> Las discrepancias detectadas entre este documento, el SAD original y los diagramas C4 se registran en [`sad-inconsistencies.md`](./sad-inconsistencies.md), con su estado de resolución y las correcciones pendientes en el documento fuente.
+> Las discrepancias detectadas entre este documento, el SAD original y los diagramas C4 se registran en [`architecture-log.md`](./architecture-log.md), con su estado de resolución y las correcciones pendientes en el documento fuente.
 >
 > Para una explicación conceptual de por qué se eligió esta arquitectura y una demostración directa de cómo se refleja en el código real de `sdk/src/` (incluyendo qué partes ya están implementadas y cuáles siguen pendientes), ver [`architecture-explained.md`](./architecture-explained.md).
 >
-> La cuarta pasarela originalmente era PayU. Rapyd adquirió la operación de PayU en Latinoamérica en 2025, y el registro de comercio nuevo para Colombia ya no otorga acceso a la API clásica de PayU, sino únicamente a la de Rapyd Collect. Este documento ya refleja ese cambio de nombre; ver el punto 15 de [`sad-inconsistencies.md`](./sad-inconsistencies.md) para el detalle de la decisión y el estado pendiente de investigación del contrato real de Rapyd.
+> La cuarta pasarela originalmente era PayU. Rapyd adquirió la operación de PayU en Latinoamérica en 2025, y el registro de comercio nuevo para Colombia ya no otorga acceso a la API clásica de PayU, sino únicamente a la de Rapyd Collect. Este documento ya refleja ese cambio de nombre; ver el punto 15 de [`architecture-log.md`](./architecture-log.md) para el detalle de la decisión y el estado pendiente de investigación del contrato real de Rapyd.
 
 ---
 
@@ -33,7 +33,7 @@ kit-pagos-colombia/
 │   │   │   ├── TransactionStatus.ts            <-- Enum: APPROVED, DECLINED, PENDING, EXPIRED, VOIDED, ERROR
 │   │   │   ├── RejectionCategory.ts            <-- Enum: INSUFFICIENT_FUNDS, INVALID_CARD_DATA, etc.
 │   │   │   ├── SdkErrorCode.ts                 <-- Enum: INVALID_CREDENTIALS, GATEWAY_TIMEOUT, etc.
-│   │   │   ├── Gateway.ts                      <-- Enum: WOMPI, PAYU, MERCADOPAGO, KUSHKI
+│   │   │   ├── Gateway.ts                      <-- Enum: WOMPI, RAPYD, MERCADOPAGO, KUSHKI
 │   │   │   └── WebhookEvent.ts                 <-- Value Object: evento normalizado de webhook (RF-04)
 │   │   ├── errors/
 │   │   │   └── SdkError.ts                     <-- Excepción tipada unificada (code, gateway, originalPayload)
@@ -92,7 +92,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 
 - **Patrón Arquitectónico:** GoF Facade.
 - **Responsabilidad:** Es el punto de entrada único del SDK y el único componente que el desarrollador que consume el SDK instancia directamente.
-- **Métodos Públicos:** Expone tres métodos: `createPayment(request)`, `getPaymentStatus(id)` y `validateWebhook(payload, headers)`. Estos nombres coinciden con el Component Diagram C4 y la sección 9.1.1 del SAD; la sección 15.2 usa nombres distintos (`getStatus`, `verifyWebhook`), inconsistencia registrada en `sad-inconsistencies.md` (punto 1).
+- **Métodos Públicos:** Expone tres métodos: `createPayment(request)`, `getPaymentStatus(id)` y `validateWebhook(payload, headers)`. Estos nombres coinciden con el Component Diagram C4 y la sección 9.1.1 del SAD; la sección 15.2 usa nombres distintos (`getStatus`, `verifyWebhook`), inconsistencia registrada en `architecture-log.md` (punto 1).
 - **Comportamiento:** Oculta la complejidad interna del sistema detrás de una interfaz simple y predecible. Mantiene una referencia a `SDKConfigurator` y a `GatewayFactory`; antes de ejecutar cualquier operación consulta al Configurator para determinar la pasarela activa y sus credenciales, solicita al Factory la instancia del adaptador correspondiente, y envuelve la llamada resultante con `RetryHandler`. Retorna entidades `Transaction` normalizadas al desarrollador o excepciones `SdkError` tipadas en caso de fallo. `validateWebhook()` retorna un `WebhookEvent` en lugar de un booleano, para cumplir RF-04 (ver sección 2.10).
 
 ---
@@ -140,12 +140,13 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 - **Responsabilidad:** Implementa el `PaymentGatewayPort` y traduce su contrato hacia las convenciones de Rapyd Collect.
 - **Detalles de implementación (confirmados):**
   - Autenticación: header `access_key` más firma calculada con `secret_key` (no hay `apiLogin`/`apiKey` como en la antigua API de PayU).
-  - Firma de webhook: `Base64(HMAC-SHA256(url_path + salt + timestamp + access_key + secret_key + body_string))`, distinta de la fórmula que usaba PayU.
-  - **⚠️ PENDIENTE:** el mapeo exacto de campos de creación de pago y de consulta de estado (endpoint de Checkout/Collect, forma del payload, catálogo de estados) todavía no está investigado con el mismo nivel de detalle que las otras tres pasarelas. Ver el issue de investigación del contrato de Rapyd Collect antes de implementar este adaptador.
-- **Prioridad:** Media. Pendiente de implementación (ver `sad-inconsistencies.md`, punto 15).
+  - Firma de webhook: `Base64(HMAC-SHA256(url_path + salt + timestamp + access_key + secret_key + body_string))`, distinta de la fórmula que usaba PayU. **Implementada y validada** en `WebhookVerifier.ts` (ver sección 2.10).
+  - Creación de pago y consulta de estado (endpoint, forma del payload, catálogo de `data.status`): investigado y documentado en `ubiquitous-language.md` (issue #23).
+  - **⚠️ PENDIENTE (requiere sandbox real, ver `architecture-log.md`, punto 19):** el esquema exacto de campos de identidad del pagador para PSE Colombia. Rapyd no expone PSE como un único método; lo modela como una familia `co_{banco}_bank` (uno por banco afiliado, ej. `co_bbva_colombia_bank`), cuyo catálogo completo y campos requeridos solo se pueden confirmar con credenciales de sandbox reales.
+- **Prioridad:** Media. La investigación del contrato ya cerró; **pendiente de implementación la clase `RapydAdapter.ts` en sí** (no existe todavía en `src/infrastructure/adapters/`, que solo tiene `WompiAdapter` en curso vía el issue #29).
 - **Modo simulación:** Redirige solicitudes al simulador en modo pruebas.
 
-> **Nota histórica:** esta pasarela era originalmente PayU. `sdk/src/domain/services/WebhookVerifier.ts` y sus pruebas ya tienen implementado y validado el algoritmo de firma de PayU (`Gateway.PAYU`, MD5/SHA-256 sobre `apiKey~merchantId~referenceCode~amount~currency~estado`) como parte del trabajo de Iteración 1. Ese código sigue funcionando pero queda obsoleto frente a la pasarela real disponible hoy; debe migrarse a la fórmula de Rapyd cuando se resuelva la investigación pendiente, no antes, para no reemplazar lógica probada por una fórmula a medio confirmar.
+> **Nota histórica:** esta pasarela era originalmente PayU. `sdk/src/domain/services/WebhookVerifier.ts` implementó primero el algoritmo de firma de PayU (`Gateway.PAYU`, MD5/SHA-256) durante la Iteración 1, y ya se migró por completo a la fórmula de Rapyd (`Gateway.RAPYD`, HMAC-SHA256) — ver sección 2.10. Este párrafo se conserva únicamente para que quien lea el historial del proyecto entienda por qué existió esa rama de código intermedia.
 
 ---
 
@@ -190,10 +191,10 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 - **Responsabilidad:** Verifica la autenticidad de los webhooks entrantes de cada pasarela mediante `verify(payload, headers, secret, gateway): boolean`, delegando internamente en la lógica de verificación de firma correspondiente al Gateway recibido.
 - **Implementación por pasarela:**
   - **Wompi:** SHA-256 sobre cadena de propiedades + timestamp + secreto. Implementación completa y validada.
-  - **Rapyd:** `Base64(HMAC-SHA256(url_path + salt + timestamp + access_key + secret_key + body_string))`. **⚠️ PENDIENTE de implementar**; el código actual (`Gateway.PAYU`) todavía implementa la fórmula de PayU (MD5/SHA-256 sobre `apiKey~merchantId~referenceCode~amount~currency~estado`), que ya no aplica a la pasarela real disponible. Migrar cuando se resuelva la investigación del contrato de Rapyd Collect (ver `sad-inconsistencies.md`, punto 15).
+  - **Rapyd:** `Base64(HMAC-SHA256(url_path + salt + timestamp + access_key + secret_key + body_string))`. **Implementado y validado** (`Gateway.RAPYD`), incluyendo el método `parse()` con el mapeo completo de estados (`PAYMENT_COMPLETED`, `PAYMENT_SUCCEEDED`, `PAYMENT_FAILED` con desambiguación `DECLINED`/`ERROR` por `failure_code`, `PAYMENT_EXPIRED`, `PAYMENT_CANCELED`). Ver `architecture-log.md`, puntos 16 y 18, para el detalle de la migración desde la fórmula previa de PayU.
   - **Mercado Pago:** HMAC-SHA256 sobre headers y body. Implementación suficiente para validar webhooks del simulador.
   - **Kushki:** HMAC-SHA256. Implementación suficiente para validar webhooks del simulador.
-- **Segundo método público — `parse(payload, gateway): WebhookEvent`:** Construye el evento normalizado (`WebhookEvent`) a partir del payload ya verificado, para cumplir RF-04 ("retornar un evento normalizado si la firma es válida"). Este método no está en la sección 15.1 del SAD, que describe a `WebhookVerifier` con un único método público; es una desviación deliberada registrada en `sad-inconsistencies.md` (punto 6), porque ningún otro componente vigente del SAD define cómo se construye ese evento.
+- **Segundo método público — `parse(payload, gateway): WebhookEvent`:** Construye el evento normalizado (`WebhookEvent`) a partir del payload ya verificado, para cumplir RF-04 ("retornar un evento normalizado si la firma es válida"). Este método no está en la sección 15.1 del SAD, que describe a `WebhookVerifier` con un único método público; es una desviación deliberada registrada en `architecture-log.md` (punto 6), porque ningún otro componente vigente del SAD define cómo se construye ese evento.
 - **Integración:** `KitPagos.validateWebhook()` llama primero a `verify()` y, si la firma es válida, a `parse()`, devolviendo el `WebhookEvent` resultante al comercio (o un `SdkError(WEBHOOK_SIGNATURE_INVALID)` si la firma no es válida).
 
 ---
@@ -203,7 +204,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 - **Responsabilidad:** Es la única clase con identidad propia del dominio del SDK.
 - **Encapsulamiento:** Se construye a partir de los objetos de valor `Amount`, `Currency`, `OrderReference`, `Payer` y `GatewayTransactionId`, además de referenciar el enum `TransactionStatus` que indica su estado y, opcionalmente, una instancia de `RejectionReason` cuando ese estado es `DECLINED`. Conserva además el campo `rawStatus`, que guarda el valor nativo devuelto por la pasarela antes de ser normalizado, con fines de auditoría, y el campo opcional `authorizationCode` (sección 9.1.8).
 - **Métodos de negocio:** Expone `isApproved()`, `isPending()` e `isFinal()`, que permiten al desarrollador tomar decisiones de negocio sin necesidad de comparar directamente contra los valores del enum ni depender de los estados crudos de ninguna pasarela.
-- **Inmutabilidad:** `Transaction` no expone ningún método de mutación. Cuando una transacción `PENDING` se concilia mediante webhook, el `Response Normalizer` construye una instancia nueva a partir del evento recibido, en lugar de mutar la instancia existente (ver `sad-inconsistencies.md`, punto 3).
+- **Inmutabilidad:** `Transaction` no expone ningún método de mutación. Cuando una transacción `PENDING` se concilia mediante webhook, el `Response Normalizer` construye una instancia nueva a partir del evento recibido, en lugar de mutar la instancia existente (ver `architecture-log.md`, punto 3).
 
 ---
 
@@ -267,7 +268,7 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 - **Responsabilidad:** Orquesta la construcción de payloads JSON que replican con exactitud la estructura de las respuestas nativas de cada pasarela.
 - **Fábricas internas:**
   - `WompiMockFactory`: genera `data.status: "APPROVED"` o `"DECLINED"` con estructura completa de Wompi.
-  - `RapydMockFactory`: **⚠️ PENDIENTE de diseñar.** Reemplaza al antiguo `PayUMockFactory` (que generaba `transactionResponse.state` con estructura de PayU); su forma real depende de la investigación del contrato de Rapyd Collect (ver `sad-inconsistencies.md`, punto 15).
+  - `RapydMockFactory`: **⚠️ PENDIENTE de implementar** (no de investigar: la forma del payload de Rapyd ya está documentada en `ubiquitous-language.md`, issue #23). Reemplaza al antiguo `PayUMockFactory` (que generaba `transactionResponse.state` con estructura de PayU); debe generar el objeto `data` de Rapyd (`id`, `status: "ACT"|"CLO"|"ERR"|"EXP"|"CAN"`, `failure_code` cuando aplique).
   - `MercadoPagoMockFactory`: genera `status` y `status_detail` en minúsculas. Para fondos insuficientes: `status_detail: "cc_rejected_insufficient_amount"`.
   - `KushkiMockFactory`: genera `transaction_status: "APPROVAL"` o `"DECLINED"` respetando el vocabulario propio de Kushki.
 - **Criticidad:** La precisión de este componente es crítica para la validación del framework. Si el formato del Mock no coincide con el de la pasarela real, el `Response Normalizer` del SDK fallará en los escenarios de prueba.
@@ -279,7 +280,7 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 - **Responsabilidad:** Calcula la firma criptográfica que acompaña a los webhooks simulados, de modo que el `Webhook Verifier` del SDK pueda verificarla con su lógica de validación real.
 - **Implementación por pasarela:**
   - **Wompi:** SHA-256 sobre cadena de propiedades + timestamp + secreto de integridad. Implementación completa y validada.
-  - **Rapyd:** `Base64(HMAC-SHA256(url_path + salt + timestamp + access_key + secret_key + body_string))`. **⚠️ PENDIENTE de implementar**, reemplaza la fórmula de PayU (MD5/SHA-256 sobre `apiKey~merchantId~referenceCode~amount~currency~estado`) usada hasta ahora.
+  - **Rapyd:** `Base64(HMAC-SHA256(url_path + salt + timestamp + access_key + secret_key + body_string))`. **⚠️ PENDIENTE de implementar** en este componente de la API de Simulación (a diferencia del `WebhookVerifier.ts` del SDK, que sí ya implementa y valida esta fórmula, ver sección 2.10); la fórmula es la misma, solo falta la clase `SignatureGenerator.ts`, que todavía no existe en `simulator-api/src`.
   - **Mercado Pago / Kushki:** HMAC-SHA256 sobre headers y body. Implementación suficiente para la fase de evaluación.
 - **Invocación:** No opera de forma automática. Es invocado exclusivamente por el `Webhook Trigger Endpoint` cuando el desarrollador solicita explícitamente el envío de un webhook sintético.
 

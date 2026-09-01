@@ -51,7 +51,7 @@ describe("WebhookVerifier", () => {
       // Algoritmo: Base64( HMAC-SHA256( url_path + salt + timestamp + access_key + secret_key + body ) )
       // Fuente: https://docs.rapyd.net/en/webhook-authentication.html
       // "url_path" es la URL COMPLETA configurada en el panel de Rapyd para el
-      // webhook, no un path relativo (ver sad-inconsistencies.md, punto 16).
+      // webhook, no un path relativo (ver architecture-log.md, punto 16).
       const secretKey  = "rapyd_secret_key_test";
       const accessKey  = "rapyd_access_key_test";
       const salt       = "random_salt_abc123";
@@ -225,6 +225,28 @@ describe("WebhookVerifier", () => {
       expect(event.newStatus).toBe("PENDING");
     });
 
+    it("normaliza eventos de Rapyd expirados (PAYMENT_EXPIRED)", () => {
+      const payload = JSON.stringify({
+        id: "wh_exp001",
+        type: "PAYMENT_EXPIRED",
+        data: { id: "payment_rapyd-tx-exp", status: "EXP" },
+      });
+
+      const event = verifier.parse(payload, Gateway.RAPYD);
+      expect(event.newStatus).toBe("EXPIRED");
+    });
+
+    it("normaliza eventos de Rapyd cancelados (PAYMENT_CANCELED)", () => {
+      const payload = JSON.stringify({
+        id: "wh_can001",
+        type: "PAYMENT_CANCELED",
+        data: { id: "payment_rapyd-tx-can", status: "CAN" },
+      });
+
+      const event = verifier.parse(payload, Gateway.RAPYD);
+      expect(event.newStatus).toBe("VOIDED");
+    });
+
     it("normaliza eventos de Mercado Pago con estado en minuscula", () => {
       const payload = JSON.stringify({
         action: "payment.updated",
@@ -258,15 +280,22 @@ describe("WebhookVerifier", () => {
       });
       expect(verifier.parse(wompiDeclined, Gateway.WOMPI).newStatus).toBe("DECLINED");
 
-      // Rapyd no expone un webhook de rechazo de negocio separado de uno tecnico
-      // (ver el TODO en WebhookVerifier.parse()); PAYMENT_FAILED mapea a ERROR
-      // de forma conservadora hasta tener el catalogo de failure_code.
-      const rapydFailed = JSON.stringify({
+      // Rapyd usa el prefijo de failure_code para distinguir un rechazo de
+      // negocio (del procesador de tarjeta) de un fallo tecnico, ya que
+      // data.status es "ERR" en ambos casos. Ver docs.rapyd.net/en/card-network-errors.html.
+      const rapydCardDeclined = JSON.stringify({
         id: "wh_def456",
         type: "PAYMENT_FAILED",
-        data: { id: "payment_2", status: "ERR", failure_code: "ERROR_PROCESSING_CARD-[51]" },
+        data: { id: "payment_2", status: "ERR", failure_code: "ERROR_PROCESSING_CARD - [51]" },
       });
-      expect(verifier.parse(rapydFailed, Gateway.RAPYD).newStatus).toBe("ERROR");
+      expect(verifier.parse(rapydCardDeclined, Gateway.RAPYD).newStatus).toBe("DECLINED");
+
+      const rapydTechnicalError = JSON.stringify({
+        id: "wh_def789",
+        type: "PAYMENT_FAILED",
+        data: { id: "payment_3", status: "ERR", failure_code: "MISSING_AUTHENTICATION_HEADERS" },
+      });
+      expect(verifier.parse(rapydTechnicalError, Gateway.RAPYD).newStatus).toBe("ERROR");
 
       const mpRejected = JSON.stringify({ data: { id: "3" }, status: "rejected" });
       expect(verifier.parse(mpRejected, Gateway.MERCADOPAGO).newStatus).toBe("DECLINED");

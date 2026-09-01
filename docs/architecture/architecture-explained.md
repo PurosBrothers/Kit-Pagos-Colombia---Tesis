@@ -18,7 +18,7 @@ Todo el código citado aquí corresponde al estado del repositorio en la rama `d
 
 Antes de justificar una arquitectura hay que tener claro el problema que la motiva. Kit Pagos Colombia existe porque cuatro pasarelas de pago colombianas (Wompi, Rapyd, Mercado Pago y Kushki) exponen contratos completamente distintos entre sí: autenticación diferente, formato de solicitud diferente, nombres de estado diferentes para el mismo resultado de negocio (Kushki llama `APPROVAL` a lo que las demás llaman `APPROVED`), y mecanismos de firma de webhook distintos (SHA-256 en Wompi, HMAC-SHA256 en Mercado Pago y Kushki, HMAC-SHA256 con Base64 en Rapyd).
 
-> **Nota:** la cuarta pasarela originalmente era PayU. Rapyd adquirió la operación de PayU en Latinoamérica en 2025, y desde 2026 el registro de comercio nuevo para Colombia ya no otorga acceso a la API clásica de PayU, sino únicamente a la API de Rapyd Collect. Ver el punto 15 de [`sad-inconsistencies.md`](./sad-inconsistencies.md) para el detalle de esta decisión.
+> **Nota:** la cuarta pasarela originalmente era PayU. Rapyd adquirió la operación de PayU en Latinoamérica en 2025, y desde 2026 el registro de comercio nuevo para Colombia ya no otorga acceso a la API clásica de PayU, sino únicamente a la API de Rapyd Collect. Ver el punto 15 de [`architecture-log.md`](./architecture-log.md) para el detalle de esta decisión.
 
 Un comercio que quisiera integrar las cuatro pasarelas sin ningún tipo de abstracción tendría que escribir, entender y mantener cuatro veces la misma lógica de negocio (crear un pago, consultar su estado, validar un webhook), cada vez adaptada a las particularidades de un proveedor distinto. Si mañana decide cambiar de proveedor principal, o agregar un quinto, ese cambio se propaga por todo su código. Este es exactamente el tipo de problema que la Arquitectura Hexagonal fue diseñada para resolver: aislar la lógica de negocio de los detalles técnicos externos que cambian con más frecuencia que las reglas de negocio mismas.
 
@@ -160,7 +160,7 @@ Los enums del dominio, en cambio, no necesitan clase ni validación propia porqu
 ```typescript
 export enum Gateway {
   WOMPI = "WOMPI",
-  PAYU = "PAYU",
+  RAPYD = "RAPYD",
   MERCADOPAGO = "MERCADOPAGO",
   KUSHKI = "KUSHKI",
 }
@@ -311,7 +311,7 @@ Cada una de estas piezas, cuando se implemente, debería poder explicarse con la
 
 - [`layers-and-components.md`](./layers-and-components.md): especificación oficial de cada componente (Nivel 3 del modelo C4), incluyendo los que todavía no existen como archivo.
 - [`ubiquitous-language.md`](./ubiquitous-language.md): tabla de equivalencias exactas entre el modelo normalizado del SDK y el formato nativo de cada pasarela, necesaria para implementar cada `Adapter`.
-- [`sad-inconsistencies.md`](./sad-inconsistencies.md): registro de discrepancias detectadas entre el SAD, sus diagramas y el código, incluyendo las dos decisiones de nombres mencionadas en las secciones 10 y 11 de este documento.
+- [`architecture-log.md`](./architecture-log.md): registro de discrepancias detectadas entre el SAD, sus diagramas y el código, incluyendo las dos decisiones de nombres mencionadas en las secciones 10 y 11 de este documento.
 - [`setup-and-structure.md`](./setup-and-structure.md): decisiones de configuración del entorno de desarrollo (TypeScript, Jest, Fastify) que no son parte de la arquitectura en sí, pero condicionan cómo se prueba y se ejecuta el código descrito aquí.
 
 ---

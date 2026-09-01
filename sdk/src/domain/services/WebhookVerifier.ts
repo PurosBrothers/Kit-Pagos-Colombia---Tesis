@@ -15,7 +15,7 @@ import * as crypto from "crypto";
  * parse() se agrega como segundo metodo publico para cerrar la brecha de
  * RF-04, que exige un evento normalizado despues de validar la firma. Esta
  * es una desviacion deliberada del "unico metodo publico" de la seccion
- * 15.1 (ver docs/architecture/sad-inconsistencies.md, punto 6).
+ * 15.1 (ver docs/architecture/architecture-log.md, punto 6).
  */
 export class WebhookVerifier {
 
@@ -49,7 +49,7 @@ export class WebhookVerifier {
         //       entrante (a diferencia de la firma de requests salientes, que si usa el path
         //       relativo). El SDK no puede derivarla del propio request, asi que el middleware
         //       del comercio debe inyectarla en el header sintetico "x-webhook-url" antes de
-        //       llamar verify(). Ver docs/architecture/sad-inconsistencies.md, punto 16.
+        //       llamar verify(). Ver docs/architecture/architecture-log.md, punto 16.
         const receivedSignature = headers["signature"] ?? "";
         const accessKey         = headers["access_key"] ?? "";
         const salt              = headers["salt"] ?? "";
@@ -138,15 +138,17 @@ export class WebhookVerifier {
       case Gateway.RAPYD: {
         // Rapyd envia un webhook JSON distinto segun el resultado, no un unico
         // evento con un campo de estado variable como Wompi: "type" vale
-        // "PAYMENT_SUCCEEDED", "PAYMENT_COMPLETED" o "PAYMENT_FAILED", y el
-        // objeto "data" trae el id del pago y su status interno ("ACT" | "CLO" | "ERR").
+        // "PAYMENT_SUCCEEDED", "PAYMENT_COMPLETED", "PAYMENT_FAILED",
+        // "PAYMENT_EXPIRED" o "PAYMENT_CANCELED", y el objeto "data" trae el
+        // id del pago y su status interno ("ACT" | "CLO" | "ERR" | "EXP" | "CAN").
         // Fuente: docs/architecture/ubiquitous-language.md, seccion 2 (columna
         // Rapyd Nativo) y Apendice EstadoTransaccion. Corrige la suposicion sin
         // cita que asumia el formato x-www-form-urlencoded de PayU (ver
-        // docs/architecture/sad-inconsistencies.md, punto 16).
+        // docs/architecture/architecture-log.md, punto 16).
         const body = JSON.parse(payload);
         const eventType: string = body.type ?? "";
         const gatewayTransactionId = body.data?.id ?? "";
+        const failureCode: string = body.data?.failure_code ?? body.data?.error_code ?? "";
 
         let newStatus: TransactionStatus;
         switch (eventType) {
@@ -158,14 +160,25 @@ export class WebhookVerifier {
             // pendiente de un paso adicional (ej. 3DS).
             newStatus = "PENDING";
             break;
+          case "PAYMENT_EXPIRED":
+            newStatus = "EXPIRED";
+            break;
+          case "PAYMENT_CANCELED":
+            newStatus = "VOIDED";
+            break;
           case "PAYMENT_FAILED":
-            // TODO: Rapyd no distingue aqui un rechazo de negocio (DECLINED,
-            // ej. fondos insuficientes) de un fallo tecnico (ERROR); ambos
-            // viajan mezclados en data.failure_code. Falta el catalogo
-            // completo de failure_code (requiere sandbox real) para separar
-            // los dos casos; se retoma al iniciar Iteracion 2, sin issue
-            // creado aun. Mientras tanto se usa ERROR como valor conservador.
-            newStatus = "ERROR";
+            // Rapyd no separa el rechazo de negocio (DECLINED, ej. fondos
+            // insuficientes) del fallo tecnico (ERROR) mediante data.status
+            // (siempre "ERR" en ambos casos). El criterio de desambiguacion
+            // es el prefijo de failure_code/error_code: "ERROR_PROCESSING_CARD"
+            // identifica un rechazo del procesador de tarjeta (catalogo
+            // completo en docs.rapyd.net/en/card-network-errors.html, ej.
+            // "ERROR_PROCESSING_CARD - [51]" = fondos insuficientes); cualquier
+            // otro codigo (ej. MISSING_AUTHENTICATION_HEADERS) es un fallo de
+            // validacion o infraestructura previo al intento de cobro.
+            newStatus = failureCode.startsWith("ERROR_PROCESSING_CARD")
+              ? "DECLINED"
+              : "ERROR";
             break;
           default:
             newStatus = "ERROR";
