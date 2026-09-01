@@ -46,28 +46,31 @@ describe("WebhookVerifier", () => {
       });
     });
 
-    describe("Rapyd / PayU GPO", () => {
+    describe("Rapyd", () => {
       // Rapyd adquirio PayU GPO el 14 mar 2025.
       // Algoritmo: Base64( HMAC-SHA256( url_path + salt + timestamp + access_key + secret_key + body ) )
       // Fuente: https://docs.rapyd.net/en/webhook-authentication.html
+      // "url_path" es la URL COMPLETA configurada en el panel de Rapyd para el
+      // webhook, no un path relativo (ver sad-inconsistencies.md, punto 16).
       const secretKey  = "rapyd_secret_key_test";
       const accessKey  = "rapyd_access_key_test";
       const salt       = "random_salt_abc123";
       const timestamp  = "1727001234";
-      const urlPath    = "/webhooks/rapyd";
+      const webhookUrl = "https://comercio-ejemplo.com/webhooks/rapyd";
 
-      const payload = new URLSearchParams({
-        merchant_id: "508029",
-        reference_sale: "TestRapyd001",
-        transaction_id: "f5e668f1-7ecc-4b83-a4d1-0aaa68260862",
-        value: "150.00",
-        currency: "COP",
-        state_pol: "4",
-      }).toString();
+      const payload = JSON.stringify({
+        id: "wh_e0afb507504b5eb901449993fadba20f",
+        type: "PAYMENT_COMPLETED",
+        data: {
+          id: "payment_f5e668f17ecc4b83a4d10aaa68260862",
+          status: "CLO",
+          paid: true,
+        },
+      });
 
       const signature = crypto
         .createHmac("sha256", secretKey)
-        .update(urlPath + salt + timestamp + accessKey + secretKey + payload)
+        .update(webhookUrl + salt + timestamp + accessKey + secretKey + payload)
         .digest("base64");
 
       it("valida una firma Rapyd correcta en el header signature", () => {
@@ -76,19 +79,19 @@ describe("WebhookVerifier", () => {
           access_key: accessKey,
           salt,
           timestamp,
-          "x-webhook-url-path": urlPath,
+          "x-webhook-url": webhookUrl,
         };
         expect(verifier.verify(payload, headers, secretKey, Gateway.RAPYD)).toBe(true);
       });
 
       it("rechaza si el body fue alterado", () => {
-        const tampered = payload + "&extra=injected";
+        const tampered = payload.replace("PAYMENT_COMPLETED", "PAYMENT_FAILED");
         const headers = {
           signature,
           access_key: accessKey,
           salt,
           timestamp,
-          "x-webhook-url-path": urlPath,
+          "x-webhook-url": webhookUrl,
         };
         expect(verifier.verify(tampered, headers, secretKey, Gateway.RAPYD)).toBe(false);
       });
@@ -99,7 +102,7 @@ describe("WebhookVerifier", () => {
           access_key: accessKey,
           salt,
           timestamp,
-          "x-webhook-url-path": urlPath,
+          "x-webhook-url": webhookUrl,
         };
         expect(verifier.verify(payload, headers, "wrong_secret", Gateway.RAPYD)).toBe(false);
       });
@@ -109,7 +112,7 @@ describe("WebhookVerifier", () => {
           access_key: accessKey,
           salt,
           timestamp,
-          "x-webhook-url-path": urlPath,
+          "x-webhook-url": webhookUrl,
         };
         expect(verifier.verify(payload, headers, secretKey, Gateway.RAPYD)).toBe(false);
       });
@@ -197,17 +200,29 @@ describe("WebhookVerifier", () => {
       expect(event.gateway).toBe(Gateway.WOMPI);
     });
 
-    it("normaliza eventos de Rapyd / PayU GPO", () => {
-      const payload = new URLSearchParams({
-        transaction_id: "rapyd-tx-456",
-        state_pol: "4",
-      }).toString();
+    it("normaliza eventos de Rapyd (PAYMENT_COMPLETED)", () => {
+      const payload = JSON.stringify({
+        id: "wh_e0afb507504b5eb901449993fadba20f",
+        type: "PAYMENT_COMPLETED",
+        data: { id: "payment_rapyd-tx-456", status: "CLO", paid: true },
+      });
 
       const event = verifier.parse(payload, Gateway.RAPYD);
-      expect(event.eventType).toBe("transaction.updated");
-      expect(event.gatewayTransactionId).toBe("rapyd-tx-456");
+      expect(event.eventType).toBe("PAYMENT_COMPLETED");
+      expect(event.gatewayTransactionId).toBe("payment_rapyd-tx-456");
       expect(event.newStatus).toBe("APPROVED");
       expect(event.gateway).toBe(Gateway.RAPYD);
+    });
+
+    it("normaliza eventos de Rapyd pendientes (PAYMENT_SUCCEEDED con data.status ACT)", () => {
+      const payload = JSON.stringify({
+        id: "wh_abc123",
+        type: "PAYMENT_SUCCEEDED",
+        data: { id: "payment_rapyd-tx-789", status: "ACT", paid: false },
+      });
+
+      const event = verifier.parse(payload, Gateway.RAPYD);
+      expect(event.newStatus).toBe("PENDING");
     });
 
     it("normaliza eventos de Mercado Pago con estado en minuscula", () => {
@@ -243,8 +258,15 @@ describe("WebhookVerifier", () => {
       });
       expect(verifier.parse(wompiDeclined, Gateway.WOMPI).newStatus).toBe("DECLINED");
 
-      const rapydDeclined = new URLSearchParams({ transaction_id: "2", state_pol: "6" }).toString();
-      expect(verifier.parse(rapydDeclined, Gateway.RAPYD).newStatus).toBe("DECLINED");
+      // Rapyd no expone un webhook de rechazo de negocio separado de uno tecnico
+      // (ver el TODO en WebhookVerifier.parse()); PAYMENT_FAILED mapea a ERROR
+      // de forma conservadora hasta tener el catalogo de failure_code.
+      const rapydFailed = JSON.stringify({
+        id: "wh_def456",
+        type: "PAYMENT_FAILED",
+        data: { id: "payment_2", status: "ERR", failure_code: "ERROR_PROCESSING_CARD-[51]" },
+      });
+      expect(verifier.parse(rapydFailed, Gateway.RAPYD).newStatus).toBe("ERROR");
 
       const mpRejected = JSON.stringify({ data: { id: "3" }, status: "rejected" });
       expect(verifier.parse(mpRejected, Gateway.MERCADOPAGO).newStatus).toBe("DECLINED");
