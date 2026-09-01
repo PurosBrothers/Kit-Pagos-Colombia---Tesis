@@ -1,0 +1,41 @@
+@startuml Component Diagram - Simulador API
+title Diagrama de Componentes — API de Simulación (Fastify Container) — Nivel 3
+skinparam backgroundColor white
+skinparam rectangleFontSize 11
+skinparam wrapWidth 190
+skinparam rectangle {
+  BorderColor #666666
+  ArrowColor #666666
+  FontColor white
+}
+
+rectangle "**Desarrollador / Tester QA**\n\nEjecuta pruebas y dispara\nwebhooks" as Dev #1F4E79
+rectangle "**Aplicacion del Comercio**\n\nRecibe webhooks sinteticos\nfirmados" as Comercio #A9A9A9
+rectangle "**SDK Kit Pagos**\n\nRedirige en modo\nsimulacion" as SDK #A9A9A9
+
+rectangle "API de Simulacion (Fastify / Node.js 18+)\n[container]" as System #FFFFFF {
+  rectangle "**HTTP Router & Headers Middleware**\n<i>[Fastify Plugin\nTypeScript]</i>\n\nIntercepta\n/v1/sim/{pasarela}/*.\nExtrae x-simulate-scenario\ny delay" as Router #2E75B6
+  rectangle "**Webhook Trigger Endpoint**\n<i>[REST Endpoint\nTypeScript]</i>\n\nPOST\n/v1/sim/webhooks/trigger.\nInvocacion manual" as WebhookEndpoint #2E75B6
+  rectangle "**OpenAPI Docs Provider**\n<i>[Swagger Plugin\nOpenAPI 3.0]</i>\n\nEspecificacion OpenAPI y\nUI en /docs" as OpenAPI #2E75B6
+  rectangle "**Gateway Mock Factory**\n<i>[Factory Pattern\nTypeScript]</i>\n\nConstruye payloads JSON\nemulando Wompi, Rapyd,\nMercado Pago y Kushki" as MockFactory #2E75B6
+  rectangle "**Scenario Execution Engine**\n<i>[Domain Service\nTypeScript]</i>\n\nDetermina la respuesta:\nExito, Rechazo, Timeout o\nError" as ScenarioEngine #2E75B6
+  rectangle "**Signature Generator**\n<i>[Security Utility\nNode.js Crypto]</i>\n\nCalcula firmas\ncriptograficas\n(SHA-256, HMAC)" as SignatureGen #2E75B6
+}
+
+Comercio --> Router : Modo simulacion\n[HTTPS]
+SDK --> Router : Despacha webhook\n[HTTP POST]
+Dev --> Router : Headers control\n[HTTPS]
+Dev --> WebhookEndpoint : Solicita webhook\n[HTTPS]
+Dev --> OpenAPI : Explora /docs\n[HTTPS]
+
+Router --> ScenarioEngine : Enruta escenario
+ScenarioEngine --> MockFactory : Solicita mock
+MockFactory --> SignatureGen : Solicita firma
+WebhookEndpoint --> SignatureGen : Solicita firma
+
+note bottom of MockFactory
+  "PayU" reemplazado por "Rapyd" tras la adquisicion
+  (ver architecture-log.md, punto 15/17).
+end note
+
+@enduml

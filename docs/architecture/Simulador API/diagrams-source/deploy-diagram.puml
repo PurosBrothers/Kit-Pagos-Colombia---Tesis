@@ -1,0 +1,31 @@
+@startuml Deploy Diagram - Simulador API
+title Diagrama de Despliegue — API de Simulación Kit Pagos Colombia
+skinparam backgroundColor white
+skinparam rectangleFontSize 12
+skinparam wrapWidth 210
+skinparam rectangle {
+  BorderColor #666666
+  ArrowColor #666666
+  FontColor white
+}
+
+rectangle "**Desarrollador / Tester QA**\n\nPrueba escenarios de pago y\nconsume la API durante la\nevaluacion" as Dev #1F4E79
+rectangle "**Aplicacion del Comercio (SDK embebido)**\n\nNode.js — Fuera de alcance\nde esta vista. El SDK se\ndistribuye via npm y no se\ndetalla a nivel de\ninfraestructura" as Comercio #A9A9A9
+
+rectangle "Plataforma Cloud (Render)\n[Platform as a Service]" as Cloud #FFFFFF {
+  rectangle "Instancia de Aplicacion\n[Node.js 18+ Runtime]" as Instance #FFFFFF {
+    rectangle "**API de Simulacion**\n<i>[Fastify / TypeScript]</i>\n\nReplica el comportamiento\nde Wompi, Rapyd, Mercado\nPago y Kushki. Expone\n/v1/sim/{pasarela}/*,\n/v1/sim/webhooks/trigger y\n/docs (OpenAPI 3.0)" as API #2E75B6
+  }
+}
+
+Dev --> API : Explora endpoints,\nprueba escenarios y\ndispara webhooks\n[HTTPS/REST]
+Comercio --> API : Envia solicitudes de\npago en modo simulacion\n[HTTPS/REST]
+API --> Comercio : Despacha webhooks\nsinteticos firmados\n[HTTP POST]
+
+note bottom of Cloud
+  Decision de plataforma ya tomada (Render, no Railway),
+  consistente con Container Diagram - C4.png y .env.example.
+  "PayU" reemplazado por "Rapyd" (architecture-log.md, punto 5/15/17).
+end note
+
+@enduml

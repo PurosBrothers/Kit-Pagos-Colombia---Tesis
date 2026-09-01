@@ -79,7 +79,7 @@ package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
 
   enum Gateway #E0E0E0 {
     WOMPI
-    PAYU
+    RAPYD
     MERCADOPAGO
     KUSHKI
   }
@@ -155,7 +155,7 @@ note bottom of KitPagos
   explicita de UseCases ni Controller.
   Reemplaza al diagrama anterior con
   CrearPagoUseCase / WebhookController
-  (ver sad-inconsistencies.md, punto 7).
+  (ver architecture-log.md, punto 7).
 end note
 
 @enduml

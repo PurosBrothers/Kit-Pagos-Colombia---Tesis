@@ -1,0 +1,32 @@
+@startuml Sequence Diagram - Successful Payment
+title Escenario 1 - Pago Exitoso (Simulator API)
+skinparam backgroundColor white
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #666666
+skinparam LifeLineBorderColor #666666
+
+participant "Comercio\n(Backend)" as Comercio
+participant "SDK KitPagos" as SDK
+participant "Simulator API\n(Fastify)" as SimAPI
+participant "Scenario Engine" as Engine
+
+Comercio -> SDK : createPayment(CreatePaymentRequest)
+SDK -> SimAPI : POST /simulate/{gateway}/payments\n(GatewayCreateTransactionRequest)
+SimAPI -> Engine : resolveScenario(orderReference, gateway)
+note right of Engine
+  orderReference codifica el escenario,
+  ej. sufijo "-SUCCESS"
+end note
+Engine --> SimAPI : payload nativo de exito
+SimAPI --> SDK : GatewayCreateTransactionResult\n(rawStatus nativo + rawGatewayResponse)
+SDK -> SDK : normalizar rawStatus -> transactionStatus
+SDK --> Comercio : CreatePaymentResult{transactionStatus: APPROVED}
+
+note right of Engine
+  Wompi: data.transaction.status="APPROVED"
+  Rapyd: data.status="CLO" (data.paid=true)
+  Mercado Pago: status="approved" (minusculas)
+  Kushki: transaction_status="APPROVAL" (!) no "APPROVED"
+end note
+
+@enduml

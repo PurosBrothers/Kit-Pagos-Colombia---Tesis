@@ -1,0 +1,51 @@
+@startuml Container Diagram - SDK
+title Diagrama de Contenedores — Kit Pagos Colombia (Nivel 2)
+skinparam backgroundColor white
+skinparam rectangleFontSize 12
+skinparam wrapWidth 200
+skinparam rectangle {
+  BorderColor #666666
+  ArrowColor #666666
+  FontColor white
+}
+
+rectangle "**Desarrollador Junior/Senior**\n\nIntegra pasarelas de pago\nen su aplicacion" as Dev #1F4E79
+rectangle "**Tester / QA**\n\nValida flujos de pago en\nentornos controlados" as QA #1F4E79
+
+rectangle "Kit Pagos Colombia\n[system]" as System #FFFFFF {
+  rectangle "**SDK Kit Pagos Colombia**\n<i>[TypeScript / Node.js 18+\nPaquete npm]</i>\n\nExpone interfaz unificada\npara crear pagos, consultar\nestados y validar webhooks.\nImplementa arquitectura\nhexagonal con adaptadores\ninternos por pasarela\n(Wompi, Rapyd, Mercado\nPago, Kushki). En modo\nsimulacion redirige las\nsolicitudes a la API de\nSimulacion" as SDK #2E75B6
+  rectangle "**Documentacion Centralizada**\n<i>[Markdown / GitHub Pages\nRepositorio publico]</i>\n\nCarpeta de archivos\nestaticos desplegada en\nGitHub Pages. Consolida\ndatos de prueba por\npasarela y la especificacion\nOpenAPI 3.0 de la API de\nSimulacion" as Docs #2E75B6
+  rectangle "**API de Simulacion**\n<i>[Fastify / Node.js 18+\nDesplegada en Render —\nURL publica HTTPS]</i>\n\nServicio REST desplegado de\nforma independiente que\nreplica el comportamiento de\nlas cuatro pasarelas de\nprueba para escenarios\ncontrolados. Incluye motor\nde escenarios, fabricas de\nrespuestas por pasarela,\ngenerador de firmas\ncriptograficas, endpoint de\ntrigger de webhooks y\ndocumentacion OpenAPI 3.0\nen /docs" as SimAPI #2E75B6
+}
+
+rectangle "**Wompi API**\nAPI REST de pagos —\nBancolombia" as WompiAPI #A9A9A9
+rectangle "**Rapyd API**\nAPI REST de pagos —\nLatam" as RapydAPI #A9A9A9
+rectangle "**Mercado Pago API**\nAPI REST de pagos —\nMercado Libre" as MPAPI #A9A9A9
+rectangle "**Kushki API**\nAPI REST de pagos —\nLatinoamerica" as KushkiAPI #A9A9A9
+
+Dev --> SDK : Instala y consume la\ninterfaz unificada\n[npm install / TypeScript API]
+QA --> SDK : Consulta datos de\nprueba y guias\n[HTTPS / Browser]
+QA --> Docs : Consulta tarjetas y\nparametros de prueba\n[HTTPS / Browser]
+QA --> SimAPI : Simula escenarios y\nactiva webhooks\n[HTTPS / REST]
+QA --> SimAPI : Explora endpoints en\n/docs\n[HTTPS / Swagger UI]
+
+SDK --> WompiAPI : Crea pagos y\nconsulta estados\n[HTTPS / REST]
+WompiAPI --> SDK : Recibe y valida\neventos asincronos\n[Webhook / HTTPS]
+
+SDK --> RapydAPI : Crea pagos y\nconsulta estados\n[HTTPS / REST]
+RapydAPI --> SDK : Recibe y valida\neventos asincronos\n[Webhook / HTTPS]
+
+SDK --> MPAPI : Crea pagos y\nconsulta estados\n[HTTPS / REST]
+MPAPI --> SDK : Recibe y valida\neventos asincronos\n[Webhook / HTTPS]
+
+SDK --> KushkiAPI : Crea pagos y\nconsulta estados\n[HTTPS / REST]
+KushkiAPI --> SDK : Recibe y valida\neventos asincronos\n[Webhook / HTTPS]
+
+SDK --> SimAPI : Redirige solicitudes\nen modo simulacion\n[HTTPS / JSON]
+
+note bottom of RapydAPI
+  Reemplaza a "PayU API" tras la adquisicion
+  (ver architecture-log.md, punto 15).
+end note
+
+@enduml

@@ -1,0 +1,28 @@
+@startuml Context Diagram - Simulador API
+title Diagrama de Contexto — API de Simulación Kit Pagos Colombia (Nivel 1)
+left to right direction
+skinparam backgroundColor white
+skinparam rectangleFontSize 12
+skinparam wrapWidth 200
+skinparam rectangle {
+  BorderColor #666666
+  ArrowColor #666666
+  FontColor white
+}
+
+rectangle "**Desarrollador / Tester QA**\n\nConfigura escenarios de\nprueba y valida flujos de\npago en modo simulacion" as Dev #1F4E79
+rectangle "**Aplicacion del Comercio (Huesped)**\n\nAplicacion web o movil que\nintegra el SDK para aceptar\npagos. Actua como cliente\ndel simulador durante las\npruebas" as Comercio #A9A9A9
+rectangle "**Kit Pagos Colombia**\n\nEcosistema de herramientas\nque incluye el SDK de\nintegracion y la API de\nSimulacion desplegada" as KitPagos #2E75B6
+rectangle "**Pasarelas Reales**\n(Wompi · Rapyd · Mercado\nPago · Kushki)\n\nAPIs de pago productivas.\nFuera del alcance durante\nlas pruebas de simulacion.\nReferencia para replicar\nformatos de respuesta" as Pasarelas #A9A9A9
+
+Dev --> Comercio : Configura escenarios de\nprueba en modo\nSandbox / Simulacion
+Comercio --> KitPagos : Envia solicitudes de\npago y consulta de estado\n[HTTPS / JSON]
+KitPagos --> Comercio : Notifica cambios de\nestado asincronos\n[HTTP POST — Webhooks\nsinteticos]
+KitPagos --> Pasarelas : Referencia de formato\npara replica de respuestas\nnativas\n[Sin conexion real en\nmodo simulacion]
+
+note bottom of Pasarelas
+  "PayU" reemplazado por "Rapyd" tras la adquisicion
+  (ver architecture-log.md, punto 15/17).
+end note
+
+@enduml
