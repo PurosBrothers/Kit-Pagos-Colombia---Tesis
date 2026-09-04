@@ -10,6 +10,7 @@ export { Gateway } from "./domain/value-objects/Gateway";
 export {GatewayTransactionId} from "./domain/value-objects/GatewayTransactionId";
 export {OrderReference} from "./domain/value-objects/OrderReference";
 export { Payer } from "./domain/value-objects/Payer";
+export { RejectionCategory } from "./domain/value-objects/RejectionCategory";
 export { RejectionReason } from "./domain/value-objects/RejectionReason";
 export { ReturnUrlConfig } from "./domain/value-objects/ReturnUrlConfig";
 export { SdkErrorCode } from "./domain/value-objects/SdkErrorCode";
@@ -17,4 +18,4 @@ export { TransactionStatus } from "./domain/value-objects/TransactionStatus";
 export { WebhookEvent } from "./domain/value-objects/WebhookEvent";
 
 // Tipos del puerto
-export {PaymentGatewayPort} from "./application/ports/PaymentGatewayPort";
+export type {PaymentGatewayPort} from "./application/ports/PaymentGatewayPort";
