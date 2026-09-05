@@ -17,4 +17,5 @@ SDK unificado para la integración de pasarelas de pago colombianas.
 - [`docs/architecture/layers-and-components.md`](docs/architecture/layers-and-components.md) — Especificación oficial de componentes (C4 nivel 3)
 - [`docs/architecture/ubiquitous-language.md`](docs/architecture/ubiquitous-language.md) — Lenguaje ubicuo por pasarela
 - [`docs/architecture/architecture-log.md`](docs/architecture/architecture-log.md) — Inconsistencias SAD-vs-código, decisiones técnicas (migración Rapyd) y seguimiento de diagramas
+- [`docs/architecture/money-representation-analysis.md`](docs/architecture/money-representation-analysis.md) — Auditoría del tipo de dato usado para dinero (`Amount`) frente a las 4 pasarelas
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — Guía de contribución y flujo de trabajo
