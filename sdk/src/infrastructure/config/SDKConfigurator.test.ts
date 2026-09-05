@@ -22,13 +22,13 @@ describe("SDKConfigurator", () => {
   });
 
   describe("getActiveGateway()", () => {
-    it("debe lanzar un Error si se consulta la pasarela activa antes de configurar", () => {
+    it("should throw an Error if active gateway is queried before configuring", () => {
       expect(() => configurator.getActiveGateway()).toThrow(
-        "No se ha configurado ninguna pasarela activa"
+        "No active gateway has been configured"
       );
     });
 
-    it("debe retornar la pasarela configurada", () => {
+    it("should return the configured gateway", () => {
       const options: SDKOptions = {
         gateway: Gateway.WOMPI,
         credentials: {
@@ -40,7 +40,7 @@ describe("SDKConfigurator", () => {
       expect(configurator.getActiveGateway()).toBe(Gateway.WOMPI);
     });
 
-    it("debe permitir cambiar de pasarela activa reconfigurando", () => {
+    it("should allow changing active gateway by reconfiguring", () => {
       configurator.configure({
         gateway: Gateway.WOMPI,
         credentials: { [Gateway.WOMPI]: wompiCredentials },
@@ -56,7 +56,7 @@ describe("SDKConfigurator", () => {
   });
 
   describe("configure()", () => {
-    it("debe lanzar SdkError si falta el objeto gateway o credentials", () => {
+    it("should throw SdkError if gateway or credentials are missing", () => {
       const invalidOptions = {
         gateway: undefined as unknown as Gateway,
         credentials: { [Gateway.WOMPI]: wompiCredentials },
@@ -74,7 +74,7 @@ describe("SDKConfigurator", () => {
   });
 
   describe("getCredentials()", () => {
-    it("debe retornar las credenciales de la pasarela configurada", () => {
+    it("should return credentials for the configured gateway", () => {
       configurator.configure({
         gateway: Gateway.WOMPI,
         credentials: {
@@ -88,7 +88,7 @@ describe("SDKConfigurator", () => {
       expect(configurator.getCredentials(Gateway.RAPYD)).toEqual(rapydCredentials);
     });
 
-    it("debe lanzar SdkError(INVALID_CREDENTIALS) si la pasarela solicitada no tiene credenciales", () => {
+    it("should throw SdkError(INVALID_CREDENTIALS) if requested gateway has no credentials", () => {
       configurator.configure({
         gateway: Gateway.WOMPI,
         credentials: {
@@ -109,7 +109,7 @@ describe("SDKConfigurator", () => {
       }
     });
 
-    it("RF-08: nunca debe incluir valores de credenciales ni secretos en el mensaje de error", () => {
+    it("RF-08: should never include credentials or secrets in error message", () => {
       configurator.configure({
         gateway: Gateway.WOMPI,
         credentials: {
@@ -119,13 +119,13 @@ describe("SDKConfigurator", () => {
 
       try {
         configurator.getCredentials(Gateway.KUSHKI);
-        fail("Deberia haber lanzado SdkError");
+        fail("Should have thrown SdkError");
       } catch (error) {
         expect(error).toBeInstanceOf(SdkError);
         const sdkError = error as SdkError;
         expect(sdkError.message).not.toContain(wompiCredentials.publicKey);
         expect(sdkError.message).not.toContain(wompiCredentials.privateKey);
-        expect(sdkError.message).toContain("KUSHKI");
+        expect(sdkError.message).toContain("Credentials not configured for gateway: KUSHKI");
       }
     });
   });

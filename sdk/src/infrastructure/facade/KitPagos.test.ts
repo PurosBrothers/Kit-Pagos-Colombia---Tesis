@@ -8,7 +8,7 @@ import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort
 describe("KitPagos", () => {
   const kitPagos = new KitPagos();
 
-  it("createPayment() debe existir y lanzar stub error", async () => {
+  it("createPayment() should exist and throw stub error", async () => {
     const request: CreatePaymentRequest = {
       amount: new Amount(50000),
       currency: new Currency("COP"),
@@ -21,13 +21,13 @@ describe("KitPagos", () => {
     );
   });
 
-  it("getPaymentStatus() debe existir y lanzar stub error", async () => {
+  it("getPaymentStatus() should exist and throw stub error", async () => {
     await expect(kitPagos.getPaymentStatus("tx-123")).rejects.toThrow(
       "KitPagos.getPaymentStatus aun no esta implementado"
     );
   });
 
-  it("validateWebhook() debe existir y lanzar stub error", () => {
+  it("validateWebhook() should exist and throw stub error", () => {
     expect(() => kitPagos.validateWebhook("{}", {})).toThrow(
       "KitPagos.validateWebhook aun no esta implementado"
     );

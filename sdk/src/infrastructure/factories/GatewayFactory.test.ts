@@ -12,7 +12,7 @@ describe("GatewayFactory", () => {
   });
 
   describe("create()", () => {
-    it("debe retornar una instancia de WompiAdapter cuando la pasarela es WOMPI", () => {
+    it("should return an instance of WompiAdapter when gateway is WOMPI", () => {
       const adapter = factory.create(Gateway.WOMPI);
 
       expect(adapter).toBeDefined();
@@ -22,7 +22,7 @@ describe("GatewayFactory", () => {
       expect(typeof adapter.verifySignature).toBe("function");
     });
 
-    it("debe lanzar SdkError(UNSUPPORTED_OPERATION) para RAPYD", () => {
+    it("should throw SdkError(UNSUPPORTED_OPERATION) for RAPYD", () => {
       expect(() => factory.create(Gateway.RAPYD)).toThrow(SdkError);
 
       try {
@@ -33,11 +33,11 @@ describe("GatewayFactory", () => {
         expect(sdkError.code).toBe(SdkErrorCode.UNSUPPORTED_OPERATION);
         expect(sdkError.gateway).toBe(Gateway.RAPYD);
         expect(sdkError.originalPayload).toBeNull();
-        expect(sdkError.message).toContain("RAPYD");
+        expect(sdkError.message).toContain("Gateway not supported in this iteration: RAPYD");
       }
     });
 
-    it("debe lanzar SdkError(UNSUPPORTED_OPERATION) para MERCADOPAGO", () => {
+    it("should throw SdkError(UNSUPPORTED_OPERATION) for MERCADOPAGO", () => {
       expect(() => factory.create(Gateway.MERCADOPAGO)).toThrow(SdkError);
 
       try {
@@ -48,11 +48,11 @@ describe("GatewayFactory", () => {
         expect(sdkError.code).toBe(SdkErrorCode.UNSUPPORTED_OPERATION);
         expect(sdkError.gateway).toBe(Gateway.MERCADOPAGO);
         expect(sdkError.originalPayload).toBeNull();
-        expect(sdkError.message).toContain("MERCADOPAGO");
+        expect(sdkError.message).toContain("Gateway not supported in this iteration: MERCADOPAGO");
       }
     });
 
-    it("debe lanzar SdkError(UNSUPPORTED_OPERATION) para KUSHKI", () => {
+    it("should throw SdkError(UNSUPPORTED_OPERATION) for KUSHKI", () => {
       expect(() => factory.create(Gateway.KUSHKI)).toThrow(SdkError);
 
       try {
@@ -63,11 +63,11 @@ describe("GatewayFactory", () => {
         expect(sdkError.code).toBe(SdkErrorCode.UNSUPPORTED_OPERATION);
         expect(sdkError.gateway).toBe(Gateway.KUSHKI);
         expect(sdkError.originalPayload).toBeNull();
-        expect(sdkError.message).toContain("KUSHKI");
+        expect(sdkError.message).toContain("Gateway not supported in this iteration: KUSHKI");
       }
     });
 
-    it("debe lanzar SdkError(UNSUPPORTED_OPERATION) para pasarelas desconocidas (default)", () => {
+    it("should throw SdkError(UNSUPPORTED_OPERATION) for unknown gateways (default)", () => {
       const unknownGateway = "UNKNOWN_GATEWAY" as Gateway;
 
       expect(() => factory.create(unknownGateway)).toThrow(SdkError);
@@ -79,6 +79,7 @@ describe("GatewayFactory", () => {
         const sdkError = error as SdkError;
         expect(sdkError.code).toBe(SdkErrorCode.UNSUPPORTED_OPERATION);
         expect(sdkError.gateway).toBe(unknownGateway);
+        expect(sdkError.message).toContain("Gateway not supported in this iteration: UNKNOWN_GATEWAY");
       }
     });
   });

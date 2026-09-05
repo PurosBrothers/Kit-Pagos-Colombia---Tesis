@@ -19,7 +19,7 @@ export class GatewayFactory {
           SdkErrorCode.UNSUPPORTED_OPERATION,
           gateway,
           null,
-          `Pasarela no soportada en esta iteración: ${gateway}`
+          `Gateway not supported in this iteration: ${gateway}`
         );
     }
   }

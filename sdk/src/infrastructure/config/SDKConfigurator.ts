@@ -20,7 +20,7 @@ export class SdkConfigurator {
         SdkErrorCode.INVALID_REQUEST,
         gateway,
         null,
-        "debe configurar una pasarela y credenciales"
+        "Both gateway and credentials must be configured"
       );
     }
     this.activeGateway = gateway;
@@ -33,7 +33,7 @@ export class SdkConfigurator {
 
   getActiveGateway(): Gateway {
     if (!this.activeGateway) {
-      throw new Error("No se ha configurado ninguna pasarela activa");
+      throw new Error("No active gateway has been configured");
     }
     return this.activeGateway;
   }
@@ -45,7 +45,7 @@ export class SdkConfigurator {
         SdkErrorCode.INVALID_CREDENTIALS,
         gateway,
         null,
-        `Credenciales no configuradas para la pasarela: ${gateway}`
+        `Credentials not configured for gateway: ${gateway}`
       ); // (Cumplimiento de RF-08)
     }
     return creds;
