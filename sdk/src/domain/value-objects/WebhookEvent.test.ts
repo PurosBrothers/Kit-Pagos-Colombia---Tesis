@@ -3,7 +3,7 @@ import { Gateway } from "../../../src/domain/value-objects/Gateway";
 import { TransactionStatus } from "../../../src/domain/value-objects/TransactionStatus";
 
 describe("WebhookEvent", () => {
-  it("preserva los cuatro campos sin transformarlos", () => {
+  it("preserves the four fields without transforming them", () => {
     const event = new WebhookEvent({
       eventType: "payment.updated",
       gatewayTransactionId: "wompi_txn_123",

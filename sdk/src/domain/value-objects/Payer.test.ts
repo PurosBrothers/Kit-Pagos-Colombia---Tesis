@@ -1,8 +1,8 @@
 import { Payer } from "../../../src/domain/value-objects/Payer";
 
 describe("Payer", () => {
-  describe("construcción válida", () => {
-    it("acepta solo el email, ya que es el único campo obligatorio", () => {
+  describe("valid construction", () => {
+    it("accepts only the email, since it is the only required field", () => {
       const payer = new Payer({ email: "cliente@example.com" });
       expect(payer.email).toBe("cliente@example.com");
       expect(payer.fullName).toBeUndefined();
@@ -11,7 +11,7 @@ describe("Payer", () => {
       expect(payer.phone).toBeUndefined();
     });
 
-    it("preserva todos los campos opcionales cuando se proveen", () => {
+    it("preserves all optional fields when provided", () => {
       const payer = new Payer({
         email: "cliente@example.com",
         fullName: "Juan Pérez",
@@ -27,14 +27,14 @@ describe("Payer", () => {
     });
   });
 
-  describe("invariantes de validación", () => {
-    it("rechaza la ausencia de email", () => {
+  describe("validation invariants", () => {
+    it("rejects a missing email", () => {
       expect(
         () => new Payer({ email: undefined as unknown as string }),
       ).toThrow("Payer requiere el campo email");
     });
 
-    it("rechaza un email vacío", () => {
+    it("rejects an empty email", () => {
       expect(() => new Payer({ email: "" })).toThrow(
         "Payer requiere el campo email",
       );
