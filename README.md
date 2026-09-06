@@ -13,6 +13,7 @@ SDK unificado para la integración de pasarelas de pago colombianas.
 
 ## Documentación
 
+- [SAD (Software Architecture Document)](https://docs.google.com/document/d/1woixOGOkZ3N4OQ1YdFYthfP15brxFDec/edit) — Documento de arquitectura completo del proyecto
 - [`docs/architecture/architecture-explained.md`](docs/architecture/architecture-explained.md) — Fundamentos y verificación en código
 - [`docs/architecture/layers-and-components.md`](docs/architecture/layers-and-components.md) — Especificación oficial de componentes (C4 nivel 3)
 - [`docs/architecture/ubiquitous-language.md`](docs/architecture/ubiquitous-language.md) — Lenguaje ubicuo por pasarela
