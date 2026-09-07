@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "test": "jest",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "metrics": "ts-node --project tsconfig.json scripts/ck-metrics.ts"
   },
   "keywords": [],
   "author": "",
@@ -21,6 +22,7 @@
     "prettier": "^3.9.6",
     "ts-jest": "^29.4.12",
     "ts-morph": "^28.0.0",
+    "ts-node": "^10.9.2",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.67.0"
   }
