@@ -67,8 +67,8 @@ async function main(): Promise<void> {
     currency: new Currency("COP"),
     orderReference: new OrderReference(`ORDER-${Date.now()}`),
     payer: new Payer({
-      email: "ana.gomez@example.com",
-      fullName: "Ana Gomez",
+      email: "jaime.pavlich@example.com",
+      fullName: "Jaime Pavlich",
     }),
   };
 
@@ -107,7 +107,7 @@ async function main(): Promise<void> {
    * suelto. Es la demostracion de como un comercio distingue por codigo que
    * fue lo que paso.
    */
-  console.log("Consultando el estado de la transaccion...");
+  /* console.log("Consultando el estado de la transaccion...");
   try {
     const consulted = await kitPagos.getPaymentStatus(
       transaction.gatewayTransactionId.value,
@@ -117,12 +117,10 @@ async function main(): Promise<void> {
     if (error instanceof SdkError && error.code === SdkErrorCode.UNSUPPORTED_OPERATION) {
       console.log(`  No disponible todavia. Codigo de error: ${error.code}`);
       console.log(`  Detalle: ${error.message}`);
-      console.log("  La consulta de estado se implementa cuando la API de Simulacion");
-      console.log("  exponga su endpoint de consulta (Iteracion 2).\n");
     } else {
       throw error;
     }
-  }
+  } */
 
   console.log("=== Fin del ejemplo ===");
 }

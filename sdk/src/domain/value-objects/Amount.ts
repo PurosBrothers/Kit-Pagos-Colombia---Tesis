@@ -28,7 +28,7 @@ export class Amount {
     }
     // Numero de decimales leido del string canonico (mas corto que reproduce
     // el mismo double), no de una multiplicacion. Evita el falso rechazo de
-    // montos validos como 19.99 o 1.15 (ver docblock de la clase).
+    // montos validos como 19.99 o 1.15 como en la validación anterior.
     const decimalPart = value.toString().split(".")[1] ?? "";
     if (decimalPart.length > 2) {
       throw new Error("Amount solo admite hasta dos decimales significativos");
