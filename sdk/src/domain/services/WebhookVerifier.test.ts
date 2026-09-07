@@ -44,6 +44,14 @@ describe("WebhookVerifier", () => {
         const headers = { "x-event-checksum": "invalidsignature123" };
         expect(verifier.verify(payload, headers, secret, Gateway.WOMPI)).toBe(false);
       });
+
+      it("rechaza si la firma tiene la misma longitud pero difiere en un solo caracter", () => {
+        const alteredChecksum = (checksum[0] === "a" ? "b" : "a") + checksum.slice(1);
+        const headers = { "x-event-checksum": alteredChecksum };
+
+        const result = verifier.verify(payload, headers, secret, Gateway.WOMPI);
+        expect(result).toBe(false);
+      });
     });
 
     describe("Rapyd", () => {

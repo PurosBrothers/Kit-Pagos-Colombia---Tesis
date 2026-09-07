@@ -17,6 +17,15 @@ import * as crypto from "crypto";
  * es una desviacion deliberada del "unico metodo publico" de la seccion
  * 15.1 (ver docs/architecture/architecture-log.md, punto 6).
  */
+
+
+function safeCompare(a?: string, b?: string): boolean {
+  if (!a || !b) return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
+
 export class WebhookVerifier {
 
   verify(
@@ -38,7 +47,7 @@ export class WebhookVerifier {
         );
         const concatenated = values.join("") + body.timestamp + secret;
         const calculatedChecksum = crypto.createHash("sha256").update(concatenated).digest("hex");
-        return receivedChecksum === calculatedChecksum;
+        return safeCompare(receivedChecksum,calculatedChecksum);
       }
       case Gateway.RAPYD: {
         // Rapyd (adq. de PayU GPO, 14 mar 2025): firma en header "signature" (Base64 HMAC-SHA256).
@@ -61,7 +70,7 @@ export class WebhookVerifier {
           .createHmac("sha256", secret)
           .update(toSign)
           .digest("base64");
-        return receivedSignature === calculatedSignature;
+        return safeCompare(receivedSignature,calculatedSignature);
       }
       case Gateway.MERCADOPAGO: {
         // Mercado Pago: firma ("v1") viaja en header "x-signature" con formato "ts={timestamp},v1={hash}".
@@ -83,7 +92,7 @@ export class WebhookVerifier {
         const calculatedV1 = crypto.createHmac("sha256", secret)
           .update(manifest)
           .digest("hex");
-        return receivedV1 === calculatedV1;
+        return safeCompare(receivedV1, calculatedV1);
       }
       case Gateway.KUSHKI: {
         // Kushki: firma viaja en header "x-kushki-signature" (y timestamp en "x-kushki-id").
@@ -95,7 +104,7 @@ export class WebhookVerifier {
         const calculatedSignature = crypto.createHmac("sha256", secret)
           .update(data)
           .digest("hex");
-        return receivedSignature === calculatedSignature;
+        return safeCompare(receivedSignature,calculatedSignature);
       }
       default:
         throw new Error(`WebhookVerifier.verify: Gateway desconocido: ${gateway}`);
