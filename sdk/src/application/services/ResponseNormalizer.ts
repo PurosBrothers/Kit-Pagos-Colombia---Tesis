@@ -6,8 +6,8 @@ import { Currency } from "../../domain/value-objects/Currency";
 import { OrderReference } from "../../domain/value-objects/OrderReference";
 import { Payer } from "../../domain/value-objects/Payer";
 import { GatewayTransactionId } from "../../domain/value-objects/GatewayTransactionId";
-import { SdkError } from "../../domain/errors/SdkError";
-import { SdkErrorCode } from "../../domain/value-objects/SdkErrorCode";
+import { KitPagosError } from "../../domain/errors/KitPagosError";
+import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 
 export class ResponseNormalizer {
   normalize(rawResponse: unknown, gateway: Gateway): Transaction {
@@ -21,8 +21,8 @@ export class ResponseNormalizer {
               ? (JSON.parse(rawResponse) as Record<string, unknown>)
               : (rawResponse as Record<string, unknown>);
         } catch {
-          throw new SdkError(
-            SdkErrorCode.MALFORMED_RESPONSE,
+          throw new KitPagosError(
+            KitPagosErrorCode.MALFORMED_RESPONSE,
             Gateway.WOMPI,
             rawResponse,
             "Failed to parse JSON response from Wompi"
@@ -32,8 +32,8 @@ export class ResponseNormalizer {
         // Paso 2: Validar que la respuesta contenga el objeto data y su identificador
         const data = payload?.data as Record<string, unknown> | undefined;
         if (!data || typeof data !== "object" || !data.id) {
-          throw new SdkError(
-            SdkErrorCode.MALFORMED_RESPONSE,
+          throw new KitPagosError(
+            KitPagosErrorCode.MALFORMED_RESPONSE,
             Gateway.WOMPI,
             rawResponse,
             "Malformed response from Wompi gateway: missing data.id"
@@ -107,8 +107,8 @@ export class ResponseNormalizer {
       case Gateway.MERCADOPAGO:
       case Gateway.KUSHKI:
       default:
-        throw new SdkError(
-          SdkErrorCode.UNSUPPORTED_OPERATION,
+        throw new KitPagosError(
+          KitPagosErrorCode.UNSUPPORTED_OPERATION,
           gateway,
           rawResponse,
           `Gateway not supported for response normalization: ${gateway}`

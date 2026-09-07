@@ -41,7 +41,7 @@ Antes de empezar a implementar nada de la primera iteración de código, cada co
 |---|---|---|---|
 | 1 | Introducción | Joshua | La sección 1.2 ya dice Apache 2.0 correctamente (ver punto 12, que era un error solo en el código). **Punto 15:** en 1.2, cambiar "Wompi, PayU, Mercado Pago y Kushki" por "Wompi, Rapyd, Mercado Pago y Kushki". |
 | 2 | Requisitos funcionales | Joan | Punto 14: corregir RF-03 para que use los mismos seis valores que el enum `TransactionStatus` implementado (`APPROVED`, `DECLINED`, `PENDING`, `EXPIRED`, `VOIDED`, `ERROR`), en vez de la lista en español que tiene hoy. RF-04 no requiere ningún cambio de texto. **Punto 15:** ninguna RF nombra "PayU" explícitamente, no requiere corrección por este punto. |
-| 3 | Modelo de dominio | Henao | Punto 2 (`SdkError` del diagrama de clases), punto 3 (quitar `updateStatus()` del diagrama, es inmutable), punto 6 (agregar `WebhookEvent` a la tabla de conceptos), **y punto 13 (falta por completo el modelo de dominio de la API de Simulación)**. **Punto 15:** en `Domain Class Diagram.png`, el enum `Gateway` lista "WOMPI, PAYU, MERCADOPAGO, KUSHKI"; cambiar "PAYU" por "RAPYD". Esta imagen no tiene fuente PlantUML en el repo, se corrige manualmente con la herramienta original. |
+| 3 | Modelo de dominio | Henao | Punto 2 (`SdkError` del diagrama de clases), punto 3 (quitar `updateStatus()` del diagrama, es inmutable), punto 6 (agregar `WebhookEvent` a la tabla de conceptos), **y punto 13 (falta por completo el modelo de dominio de la API de Simulación)**. **Punto 15:** en `Domain Class Diagram.png`, el enum `Gateway` lista "WOMPI, PAYU, MERCADOPAGO, KUSHKI"; cambiar "PAYU" por "RAPYD". Esta imagen no tiene fuente PlantUML en el repo, se corrige manualmente con la herramienta original. **Punto 23:** renombrar `SdkError` a `KitPagosError` y `SdkErrorCode` a `KitPagosErrorCode` en `Domain Class Diagram.png` y tabla de conceptos. |
 | 4 | Stakeholders | Henao | Ninguna encontrada. |
 | 5 | ASR | Joan | Ninguna encontrada. |
 | 6 | Restricciones | David | **Punto 15:** revisar si esta sección menciona términos específicos de la API de PayU (`apiLogin`/`apiKey`, MD5) como restricción técnica; de ser así, actualizar a los términos de Rapyd (`access_key`/`secret_key`) o señalar explícitamente que el contrato de Rapyd está pendiente de investigación (ver punto 19 para el detalle de qué sigue pendiente). |
@@ -53,7 +53,7 @@ Antes de empezar a implementar nada de la primera iteración de código, cada co
 | 12 | Modelo de datos | Henao | Ninguna encontrada. |
 | 13 | ADR | Joan | Punto 7: la sección 13.1 sí referencia el `Hexagonal architecture class diagram.png` por nombre ("el Diagrama de Clases de la Arquitectura Hexagonal"), confirmado por el propio texto. Reemplazar la imagen embebida por la versión regenerada, y agregarle un número de figura ("Figura N"), ya que hoy es el único diagrama del documento sin ese rótulo, a diferencia del resto de figuras citadas en la sección 13. **Punto 15:** revisar si algún ADR de esta sección documenta el vocabulario nativo de PayU (`state_pol`, la particularidad de que PayU siempre devuelve HTTP 200) y corregirlo o marcarlo como pendiente de la investigación de Rapyd. |
 | 14 | Riesgo técnico | David | Punto 10 (falta framework de pruebas en `simulator-api`, ya resuelto vía issue #6) es un riesgo de calidad que vale la pena registrar ahí, aunque no sea una inconsistencia de redacción. **Punto 15:** registrar la transición de PayU a Rapyd como un riesgo ya materializado (cambio de proveedor externo fuera de control del equipo, que invalidó documentación e implementación ya hecha del algoritmo de firma). |
-| 15 | Estructura del Sistema | David | Punto 1 (corregir nombres de métodos en 15.2 a `getPaymentStatus`/`validateWebhook`), punto 3 (aclarar que la reconciliación reconstruye la entidad), punto 6 (aclarar que `WebhookVerifier` tiene dos métodos públicos, no uno). |
+| 15 | Estructura del Sistema | David | Punto 1 (corregir nombres de métodos en 15.2 a `getPaymentStatus`/`validateWebhook`), punto 3 (aclarar que la reconciliación reconstruye la entidad), punto 6 (aclarar que `WebhookVerifier` tiene dos métodos públicos, no uno). **Punto 22:** validateWebhook retorna `WebhookEvent` y lanza `KitPagosError`. **Punto 23:** actualizar sección 15.1 con `KitPagosError` y `KitPagosErrorCode`. |
 | 16 | Glosario | David | **Punto 15:** si la definición de `Gateway`/`Adapter` usa a PayU como ejemplo, reemplazarlo por Rapyd, y agregar una nota breve sobre la adquisición de PayU por Rapyd para que el lector entienda por qué cambió el nombre. |
 
 Los puntos 4, 8, 9, 11 y 12 de la Sección B, y toda la Sección E, no corresponden a ninguna de las 16 secciones del SAD (son documentos de repositorio o decisiones de código ya resueltas), así que no tienen un responsable de esta lista; se dejan como tareas de ingeniería general para la primera iteración.
@@ -178,6 +178,22 @@ También se renombró el paquete de `sdk` a `kit-pagos-colombia`, coherente con 
 3. **Privacidad y prevención de fuga de datos en logs y errores:** cuando la verificación de firma falla, el SDK **nunca** debe registrar en logs ni adjuntar en el atributo `originalPayload` de `SdkError` el cuerpo de la notificación ni la firma recibida, ya que estos datos podrían contener información sensible o vectores de inyección. Se registra únicamente el identificador de la pasarela afectada y el hecho de que la firma falló.
 
 **Estado:** Resuelto en código (`KitPagos.ts`, `WebhookVerifier.ts`). **Pendiente en el SAD:** en la sección 15.2, aclarar que `validateWebhook()` retorna `WebhookEvent` directamente ante firmas válidas y lanza `SdkError(WEBHOOK_SIGNATURE_INVALID)` cuando la firma no coincide o es inválida, en lugar de retornar un booleano.
+
+### 23. Renombrado y reemplazo total de `SdkError` a `KitPagosError` y `SdkErrorCode` a `KitPagosErrorCode`
+
+**Responsable de corregirlo en el SAD:** Henao (sección 3, modelo de dominio / `Domain Class Diagram.png`) y David (sección 15.1, núcleo del dominio).
+
+**Contexto:** Por instrucción de la dirección de tesis, se solicitó evitar nombres genéricos y potencialmente repetitivos como `SdkError` y `SdkErrorCode` en la superficie del SDK. En aplicaciones reales de comercio electrónico que integran múltiples librerías (ej. AWS SDK, Stripe SDK, Firebase SDK), un nombre genérico como `SdkError` ocasiona colisiones en importaciones, reduce la legibilidad y complica el manejo diferenciado de excepciones con `instanceof`.
+
+**Decisión:** 
+1. Se renombró la clase canónica de error del SDK a `KitPagosError` (`sdk/src/domain/errors/KitPagosError.ts`), heredando de `Error` y fijando `this.name = "KitPagosError"`. Conserva los atributos establecidos en el punto 2: `code: KitPagosErrorCode`, `gateway: Gateway` y `originalPayload: unknown`.
+2. Se renombró el enum de códigos a `KitPagosErrorCode` (`sdk/src/domain/value-objects/KitPagosErrorCode.ts`).
+3. Se eliminaron por completo los archivos obsoletos (`SdkErrorCode.ts`, `SdkError.ts` y `SdkError.test.ts`) para evitar duplicidad de fuentes de verdad en el árbol del dominio y asegurar consistencia limpia tanto en exportaciones de `sdk/src/index.ts` como en la futura defensa de tesis y el SAD.
+4. Todos los componentes internos (`KitPagos`, `WompiAdapter`, `GatewayFactory`, `SDKConfigurator`, `ResponseNormalizer`, `ErrorHandler`), sus respectivas pruebas unitarias y ejemplos externos (`simulate-wompi-payment.ts`) se migraron exclusivamente a los identificadores canónicos `KitPagosError` y `KitPagosErrorCode`.
+
+**Estado:** Resuelto en código y pruebas (`sdk/src/`). **Pendiente en el SAD:**
+1. Sección 3 (Modelo de dominio) y `Domain Class Diagram.png`: renombrar la clase `SdkError` a `KitPagosError` y `SdkErrorCode` a `KitPagosErrorCode`.
+2. Sección 15.1: documentar formalmente `KitPagosError` y `KitPagosErrorCode` en sustitución de la nomenclatura genérica previa.
 
 ---
 

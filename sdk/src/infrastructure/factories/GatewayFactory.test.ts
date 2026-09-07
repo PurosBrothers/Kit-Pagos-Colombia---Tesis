@@ -1,8 +1,8 @@
 import { GatewayFactory } from "./GatewayFactory";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { WompiAdapter } from "../adapters/WompiAdapter";
-import { SdkError } from "../../domain/errors/SdkError";
-import { SdkErrorCode } from "../../domain/value-objects/SdkErrorCode";
+import { KitPagosError } from "../../domain/errors/KitPagosError";
+import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import { Amount } from "../../domain/value-objects/Amount";
 import { Currency } from "../../domain/value-objects/Currency";
 import { OrderReference } from "../../domain/value-objects/OrderReference";
@@ -69,62 +69,62 @@ describe("GatewayFactory", () => {
       global.fetch = originalFetch;
     });
 
-    it("should throw SdkError(UNSUPPORTED_OPERATION) for RAPYD", () => {
-      expect(() => factory.create(Gateway.RAPYD)).toThrow(SdkError);
+    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for RAPYD", () => {
+      expect(() => factory.create(Gateway.RAPYD)).toThrow(KitPagosError);
 
       try {
         factory.create(Gateway.RAPYD);
       } catch (error) {
-        expect(error).toBeInstanceOf(SdkError);
-        const sdkError = error as SdkError;
-        expect(sdkError.code).toBe(SdkErrorCode.UNSUPPORTED_OPERATION);
+        expect(error).toBeInstanceOf(KitPagosError);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
         expect(sdkError.gateway).toBe(Gateway.RAPYD);
         expect(sdkError.originalPayload).toBeNull();
         expect(sdkError.message).toContain("Gateway not supported in this iteration: RAPYD");
       }
     });
 
-    it("should throw SdkError(UNSUPPORTED_OPERATION) for MERCADOPAGO", () => {
-      expect(() => factory.create(Gateway.MERCADOPAGO)).toThrow(SdkError);
+    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for MERCADOPAGO", () => {
+      expect(() => factory.create(Gateway.MERCADOPAGO)).toThrow(KitPagosError);
 
       try {
         factory.create(Gateway.MERCADOPAGO);
       } catch (error) {
-        expect(error).toBeInstanceOf(SdkError);
-        const sdkError = error as SdkError;
-        expect(sdkError.code).toBe(SdkErrorCode.UNSUPPORTED_OPERATION);
+        expect(error).toBeInstanceOf(KitPagosError);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
         expect(sdkError.gateway).toBe(Gateway.MERCADOPAGO);
         expect(sdkError.originalPayload).toBeNull();
         expect(sdkError.message).toContain("Gateway not supported in this iteration: MERCADOPAGO");
       }
     });
 
-    it("should throw SdkError(UNSUPPORTED_OPERATION) for KUSHKI", () => {
-      expect(() => factory.create(Gateway.KUSHKI)).toThrow(SdkError);
+    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for KUSHKI", () => {
+      expect(() => factory.create(Gateway.KUSHKI)).toThrow(KitPagosError);
 
       try {
         factory.create(Gateway.KUSHKI);
       } catch (error) {
-        expect(error).toBeInstanceOf(SdkError);
-        const sdkError = error as SdkError;
-        expect(sdkError.code).toBe(SdkErrorCode.UNSUPPORTED_OPERATION);
+        expect(error).toBeInstanceOf(KitPagosError);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
         expect(sdkError.gateway).toBe(Gateway.KUSHKI);
         expect(sdkError.originalPayload).toBeNull();
         expect(sdkError.message).toContain("Gateway not supported in this iteration: KUSHKI");
       }
     });
 
-    it("should throw SdkError(UNSUPPORTED_OPERATION) for unknown gateways (default)", () => {
+    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for unknown gateways (default)", () => {
       const unknownGateway = "UNKNOWN_GATEWAY" as Gateway;
 
-      expect(() => factory.create(unknownGateway)).toThrow(SdkError);
+      expect(() => factory.create(unknownGateway)).toThrow(KitPagosError);
 
       try {
         factory.create(unknownGateway);
       } catch (error) {
-        expect(error).toBeInstanceOf(SdkError);
-        const sdkError = error as SdkError;
-        expect(sdkError.code).toBe(SdkErrorCode.UNSUPPORTED_OPERATION);
+        expect(error).toBeInstanceOf(KitPagosError);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
         expect(sdkError.gateway).toBe(unknownGateway);
         expect(sdkError.message).toContain("Gateway not supported in this iteration: UNKNOWN_GATEWAY");
       }

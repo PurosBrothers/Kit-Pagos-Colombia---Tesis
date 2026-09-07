@@ -18,8 +18,8 @@ import {
   Currency,
   OrderReference,
   Payer,
-  SdkError,
-  SdkErrorCode,
+  KitPagosError,
+  KitPagosErrorCode,
   type SDKOptions,
 } from "kit-pagos-colombia";
 
@@ -114,7 +114,7 @@ async function main(): Promise<void> {
     );
     console.log(`  Estado consultado: ${consulted.getStatus()}\n`);
   } catch (error) {
-    if (error instanceof SdkError && error.code === SdkErrorCode.UNSUPPORTED_OPERATION) {
+    if (error instanceof KitPagosError && error.code === KitPagosErrorCode.UNSUPPORTED_OPERATION) {
       console.log(`  No disponible todavia. Codigo de error: ${error.code}`);
       console.log(`  Detalle: ${error.message}`);
     } else {
@@ -128,7 +128,7 @@ async function main(): Promise<void> {
 main().catch((error: unknown) => {
   // El unico fallo esperable al correr esto es que la API de Simulacion no este
   // arriba. Se traduce a una instruccion concreta en vez de una traza cruda.
-  if (error instanceof SdkError && error.code === SdkErrorCode.CONNECTION_FAILED) {
+  if (error instanceof KitPagosError && error.code === KitPagosErrorCode.CONNECTION_FAILED) {
     console.error("\nNo se pudo conectar con la API de Simulacion.");
     console.error("Arrancala en otra terminal y vuelve a correr el ejemplo:\n");
     console.error("  cd simulator-api && npm run dev\n");

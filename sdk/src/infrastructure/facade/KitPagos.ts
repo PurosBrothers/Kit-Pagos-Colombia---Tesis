@@ -4,8 +4,8 @@ import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort
 import { SdkConfigurator, SDKOptions } from "../config/SDKConfigurator";
 import { GatewayFactory } from "../factories/GatewayFactory";
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
-import { SdkError } from "../../domain/errors/SdkError";
-import { SdkErrorCode } from "../../domain/value-objects/SdkErrorCode";
+import { KitPagosError } from "../../domain/errors/KitPagosError";
+import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 
 /**
  * Unica clase que el desarrollador que consume el SDK instancia directamente.
@@ -64,7 +64,7 @@ export class KitPagos {
   }
 
   /**
-   * Para Wompi propaga SdkError(UNSUPPORTED_OPERATION): la API de Simulacion
+   * Para Wompi propaga KitPagosError(UNSUPPORTED_OPERATION): la API de Simulacion
    * todavia no expone consulta de estado, solo creacion (issue #27).
    */
   async getPaymentStatus(id: string): Promise<Transaction> {
@@ -79,7 +79,7 @@ export class KitPagos {
     const gateway = this.configurator.getActiveGateway();
     const credentials = this.configurator.getCredentials(gateway);
     const secret = credentials.privateKey;
-    let isValid = false;
+    let isValid: boolean;
     try {
       isValid = this.verifier.verify(payload, headers, secret, gateway);
     } catch {
@@ -87,8 +87,8 @@ export class KitPagos {
     }
 
     if (!isValid) {
-      throw new SdkError(
-        SdkErrorCode.WEBHOOK_SIGNATURE_INVALID,
+      throw new KitPagosError(
+        KitPagosErrorCode.WEBHOOK_SIGNATURE_INVALID,
         gateway,
         null,
         "Invalid webhook signature",

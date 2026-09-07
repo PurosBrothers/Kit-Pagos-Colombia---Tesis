@@ -2,8 +2,8 @@ import { Gateway } from "../../domain/value-objects/Gateway";
 import { Credentials } from "../../domain/value-objects/Credentials";
 import { PaymentGatewayPort } from "../../application/ports/PaymentGatewayPort";
 import { WompiAdapter } from "../adapters/WompiAdapter";
-import { SdkError } from "../../domain/errors/SdkError";
-import { SdkErrorCode } from "../../domain/value-objects/SdkErrorCode";
+import { KitPagosError } from "../../domain/errors/KitPagosError";
+import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 
 export class GatewayFactory {
   /**
@@ -28,8 +28,8 @@ export class GatewayFactory {
       case Gateway.MERCADOPAGO:
       case Gateway.KUSHKI:
       default:
-        throw new SdkError(
-          SdkErrorCode.UNSUPPORTED_OPERATION,
+        throw new KitPagosError(
+          KitPagosErrorCode.UNSUPPORTED_OPERATION,
           gateway,
           null,
           `Gateway not supported in this iteration: ${gateway}`

@@ -6,8 +6,8 @@ import { OrderReference } from "../../domain/value-objects/OrderReference";
 import { Payer } from "../../domain/value-objects/Payer";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { Credentials } from "../../domain/value-objects/Credentials";
-import { SdkError } from "../../domain/errors/SdkError";
-import { SdkErrorCode } from "../../domain/value-objects/SdkErrorCode";
+import { KitPagosError } from "../../domain/errors/KitPagosError";
+import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
 
 describe("KitPagos", () => {
@@ -119,24 +119,24 @@ describe("KitPagos", () => {
       );
     });
 
-    it("should throw SdkError(INVALID_CREDENTIALS) when the active gateway has no credentials", async () => {
+    it("should throw KitPagosError(INVALID_CREDENTIALS) when the active gateway has no credentials", async () => {
       const kitPagos = new KitPagos({
         gateway: Gateway.WOMPI,
         credentials: { [Gateway.KUSHKI]: wompiCredentials },
       });
 
-      await expect(kitPagos.createPayment(validRequest)).rejects.toThrow(SdkError);
+      await expect(kitPagos.createPayment(validRequest)).rejects.toThrow(KitPagosError);
 
       try {
         await kitPagos.createPayment(validRequest);
       } catch (error) {
-        const sdkError = error as SdkError;
-        expect(sdkError.code).toBe(SdkErrorCode.INVALID_CREDENTIALS);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.INVALID_CREDENTIALS);
         expect(sdkError.gateway).toBe(Gateway.WOMPI);
       }
     });
 
-    it("should throw SdkError(UNSUPPORTED_OPERATION) for a gateway without an Adapter yet", async () => {
+    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for a gateway without an Adapter yet", async () => {
       const kitPagos = new KitPagos({
         gateway: Gateway.RAPYD,
         credentials: { [Gateway.RAPYD]: wompiCredentials },
@@ -144,36 +144,36 @@ describe("KitPagos", () => {
 
       try {
         await kitPagos.createPayment(validRequest);
-        fail("Should have thrown SdkError");
+        fail("Should have thrown KitPagosError");
       } catch (error) {
-        const sdkError = error as SdkError;
-        expect(sdkError.code).toBe(SdkErrorCode.UNSUPPORTED_OPERATION);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
         expect(sdkError.gateway).toBe(Gateway.RAPYD);
       }
     });
 
-    it("should propagate SdkError(CONNECTION_FAILED) when the gateway is unreachable", async () => {
+    it("should propagate KitPagosError(CONNECTION_FAILED) when the gateway is unreachable", async () => {
       global.fetch = jest.fn().mockRejectedValue(new Error("ECONNREFUSED"));
 
       try {
         await buildConfiguredSdk().createPayment(validRequest);
-        fail("Should have thrown SdkError");
+        fail("Should have thrown KitPagosError");
       } catch (error) {
-        const sdkError = error as SdkError;
-        expect(sdkError.code).toBe(SdkErrorCode.CONNECTION_FAILED);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.CONNECTION_FAILED);
         expect(sdkError.gateway).toBe(Gateway.WOMPI);
       }
     });
   });
 
   describe("getPaymentStatus()", () => {
-    it("should propagate SdkError(UNSUPPORTED_OPERATION), since the Wompi mock has no status endpoint", async () => {
+    it("should propagate KitPagosError(UNSUPPORTED_OPERATION), since the Wompi mock has no status endpoint", async () => {
       try {
         await buildConfiguredSdk().getPaymentStatus("wompi-tx-abc-123");
-        fail("Should have thrown SdkError");
+        fail("Should have thrown KitPagosError");
       } catch (error) {
-        const sdkError = error as SdkError;
-        expect(sdkError.code).toBe(SdkErrorCode.UNSUPPORTED_OPERATION);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
         expect(sdkError.gateway).toBe(Gateway.WOMPI);
         expect(sdkError.message).toContain("status query is not supported");
       }
@@ -329,7 +329,7 @@ describe("KitPagos", () => {
     });
 
     describe("security: tampered signatures and data leakage prevention", () => {
-      it("should throw SdkError(WEBHOOK_SIGNATURE_INVALID) when signature is tampered by a single character", () => {
+      it("should throw KitPagosError(WEBHOOK_SIGNATURE_INVALID) when signature is tampered by a single character", () => {
         const timestamp = 1602113476;
         const txId = "wompi-tx-999";
         const status = "APPROVED";
@@ -358,20 +358,19 @@ describe("KitPagos", () => {
 
         const sdk = buildConfiguredSdk();
 
-        expect(() => sdk.validateWebhook(payload, headers)).toThrow(SdkError);
+        expect(() => sdk.validateWebhook(payload, headers)).toThrow(KitPagosError);
 
         try {
           sdk.validateWebhook(payload, headers);
-          fail("Should have thrown SdkError");
+          fail("Should have thrown KitPagosError");
         } catch (error) {
-          const sdkError = error as SdkError;
-          expect(sdkError.code).toBe(SdkErrorCode.WEBHOOK_SIGNATURE_INVALID);
+          const sdkError = error as KitPagosError;
+          expect(sdkError.code).toBe(KitPagosErrorCode.WEBHOOK_SIGNATURE_INVALID);
           expect(sdkError.gateway).toBe(Gateway.WOMPI);
         }
       });
 
-      it("should not leak the payload or received signature in the SdkError instance", () => {
-        const secret = wompiCredentials.privateKey;
+      it("should not leak the payload or received signature in the KitPagosError instance", () => {
         const payload = JSON.stringify({ secret_sensitive_info: "card-number-1234" });
         const invalidChecksum = "tampered_signature_string_xyz";
         const headers = { "x-event-checksum": invalidChecksum };
@@ -380,9 +379,9 @@ describe("KitPagos", () => {
 
         try {
           sdk.validateWebhook(payload, headers);
-          fail("Should have thrown SdkError");
+          fail("Should have thrown KitPagosError");
         } catch (error) {
-          const sdkError = error as SdkError;
+          const sdkError = error as KitPagosError;
           // Decisión 22: originalPayload debe ser null para no fugar datos sensibles
           expect(sdkError.originalPayload).toBeNull();
           expect(sdkError.message).not.toContain(payload);
@@ -400,20 +399,20 @@ describe("KitPagos", () => {
         );
       });
 
-      it("should throw SdkError(INVALID_CREDENTIALS) if credentials are not configured for the active gateway", () => {
+      it("should throw KitPagosError(INVALID_CREDENTIALS) if credentials are not configured for the active gateway", () => {
         const sdkWithoutCreds = new KitPagos({
           gateway: Gateway.WOMPI,
           credentials: {},
         });
 
-        expect(() => sdkWithoutCreds.validateWebhook("{}", {})).toThrow(SdkError);
+        expect(() => sdkWithoutCreds.validateWebhook("{}", {})).toThrow(KitPagosError);
 
         try {
           sdkWithoutCreds.validateWebhook("{}", {});
-          fail("Should have thrown SdkError");
+          fail("Should have thrown KitPagosError");
         } catch (error) {
-          const sdkError = error as SdkError;
-          expect(sdkError.code).toBe(SdkErrorCode.INVALID_CREDENTIALS);
+          const sdkError = error as KitPagosError;
+          expect(sdkError.code).toBe(KitPagosErrorCode.INVALID_CREDENTIALS);
           expect(sdkError.gateway).toBe(Gateway.WOMPI);
         }
       });
