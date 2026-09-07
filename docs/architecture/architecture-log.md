@@ -167,6 +167,18 @@ También se renombró el paquete de `sdk` a `kit-pagos-colombia`, coherente con 
 1. El CI no cubre `examples/`; hoy solo tiene trabajos para `sdk` y `simulator-api`, así que la compilación del ejemplo podría romperse en silencio.
 2. `npm run build` compila también los archivos `*.test.ts` hacia `dist/`, porque el `tsconfig.json` del SDK incluye `src/**/*` sin excluirlos. El paquete publicado enviaría su propia suite de pruebas. No se corrigió aquí porque excluirlos del `tsconfig` le quitaría verificación de tipos en el editor a todo el equipo; la solución correcta es un `tsconfig.build.json` aparte o un campo `files` en el `package.json`.
 
+### 22. Validación de firma de webhook en `KitPagos`: lanzamiento de `SdkError`, tiempo constante y política de no divulgación en logs
+
+**Responsable de corregirlo en el SAD:** Henao (sección 3, modelo de dominio) y David (sección 15, `KitPagos` y `WebhookVerifier`).
+
+**Contexto:** al conectar `KitPagos.validateWebhook()` con el servicio de dominio `WebhookVerifier` (issue #54), se fijaron tres decisiones de seguridad y arquitectura no negociables:
+
+1. **Firma inválida como excepción (`SdkError`), no booleano:** devolver un booleano (`false`) permitiría que un comercio, por omisión o error en la lógica de control (`if (!sdk.validateWebhook(...))`), procese notificaciones no autenticadas o fraudulentas como pagos legítimos. Lanzar `SdkError(WEBHOOK_SIGNATURE_INVALID)` detiene de forma segura el flujo transaccional y fuerza al integrador a gestionar el fallo explícitamente.
+2. **Comparación criptográfica en tiempo constante (`timingSafeEqual`):** `WebhookVerifier` comparaba las firmas usando igualdad estricta (`===`), vulnerable a ataques de temporización (*timing attacks*) donde un atacante puede inferir la firma carácter por carácter midiendo diferencias en el tiempo de respuesta. Se adoptó una función segura a nivel de archivo (`safeCompare`) que utiliza `crypto.timingSafeEqual` sobre buffers de igual longitud, evitando exponer nuevos métodos en la clase que alteren el diagrama de clases del SAD.
+3. **Privacidad y prevención de fuga de datos en logs y errores:** cuando la verificación de firma falla, el SDK **nunca** debe registrar en logs ni adjuntar en el atributo `originalPayload` de `SdkError` el cuerpo de la notificación ni la firma recibida, ya que estos datos podrían contener información sensible o vectores de inyección. Se registra únicamente el identificador de la pasarela afectada y el hecho de que la firma falló.
+
+**Estado:** Resuelto en código (`KitPagos.ts`, `WebhookVerifier.ts`). **Pendiente en el SAD:** en la sección 15.2, aclarar que `validateWebhook()` retorna `WebhookEvent` directamente ante firmas válidas y lanza `SdkError(WEBHOOK_SIGNATURE_INVALID)` cuando la firma no coincide o es inválida, en lugar de retornar un booleano.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
