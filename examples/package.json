@@ -1,0 +1,20 @@
+{
+  "name": "kit-pagos-colombia-examples",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ejemplos ejecutables de integración del SDK Kit Pagos Colombia, consumido como un paquete externo.",
+  "scripts": {
+    "start": "tsx simulate-wompi-payment.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "author": "Andres Henao, Joan Orduz, Joshua Prieto, David Rodriguez",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "kit-pagos-colombia": "file:../sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "tsx": "^4.20.6",
+    "typescript": "^6.0.3"
+  }
+}
