@@ -1,14 +1,27 @@
 import { Gateway } from "../../domain/value-objects/Gateway";
+import { Credentials } from "../../domain/value-objects/Credentials";
 import { PaymentGatewayPort } from "../../application/ports/PaymentGatewayPort";
 import { WompiAdapter } from "../adapters/WompiAdapter";
 import { SdkError } from "../../domain/errors/SdkError";
 import { SdkErrorCode } from "../../domain/value-objects/SdkErrorCode";
 
 export class GatewayFactory {
-  create(gateway: Gateway): PaymentGatewayPort {
+  /**
+   * Construye el Adapter de la pasarela pedida.
+   *
+   * Recibe las credenciales y el endpoint ya resueltos por el SdkConfigurator
+   * en lugar de leerlos por su cuenta: la Factory decide QUE clase instanciar,
+   * no DE DONDE sale la configuracion. Ambos son opcionales para que un
+   * Adapter siga siendo construible con sus valores por defecto.
+   */
+  create(
+    gateway: Gateway,
+    credentials?: Credentials,
+    baseUrl?: string,
+  ): PaymentGatewayPort {
     switch (gateway) {
       case Gateway.WOMPI:
-        return new WompiAdapter();
+        return new WompiAdapter(baseUrl, credentials);
 
       // Los adaptadores para RAPYD, MERCADOPAGO y KUSHKI se incorporan en la Iteración 2
       case Gateway.RAPYD:
