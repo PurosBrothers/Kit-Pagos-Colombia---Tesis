@@ -136,6 +136,37 @@ De paso se revisó RF-04 (*"...retornar un evento normalizado si la firma es vá
 
 **Estado:** Pendiente en el SAD. Reemplazar en RF-03 la frase "PENDIENTE, APROBADO, RECHAZADO, EXPIRADO o ERROR" por "APPROVED, DECLINED, PENDING, EXPIRED, VOIDED o ERROR".
 
+### 20. `KitPagos` no envuelve la llamada en `RetryHandler`, y la normalización vive en el Adapter
+
+**Responsable de corregirlo en el SAD:** Joshua (secciones 8 y 9, Component Diagram) y David (sección 15.2).
+
+**Encontrado:** al implementar `KitPagos.createPayment()` (issue #31) aparecieron dos divergencias frente al `Hexagonal architecture class diagram`, que declara `KitPagos --> RetryHandler : envuelve llamada` y `KitPagos --> ResponseNormalizer : normaliza respuesta`.
+
+La primera es una ausencia real: `RetryHandler.execute()` sigue siendo un esqueleto que lanza `"aun no esta implementado"`, y sus propias pruebas consagran ese comportamiento. Envolver la llamada en él dejaría el ejemplo inservible.
+
+La segunda es una atribución equivocada: quien invoca al `ResponseNormalizer` es el Adapter concreto (`WompiAdapter`), no la fachada. Y tiene que ser así, porque normalizar exige conocer el formato nativo de la pasarela, que es justamente lo que la fachada no debe saber. La fachada delega en el puerto y recibe una `Transaction` ya construida.
+
+**Decisión:** `KitPagos` resuelve la pasarela activa mediante `SdkConfigurator`, pide el Adapter a `GatewayFactory` y le delega directamente, sin `RetryHandler`. El reintento se integra en la Iteración 2, cuando existan pasarelas reales: reintentar contra la API de Simulación, que responde de forma determinista, no ejercitaría nada. El diagrama sigue siendo válido como diseño objetivo.
+
+De paso se decidió **no** convertir el `Error` nativo de `SdkConfigurator.getActiveGateway()` en `SdkError`. Ese fallo ocurre antes de que exista una pasarela, y `SdkError` exige el atributo `gateway` por la sección 15.1; convertirlo obligaría a ensanchar ese contrato del dominio, decisión que no corresponde a este issue. Queda como deuda identificada.
+
+**Estado:** Resuelto en código. **Pendiente en el SAD:** en la sección 15.2 y en la descripción del Component Diagram, aclarar que la normalización de respuestas es responsabilidad del Adapter y no de la fachada, y anotar que la integración de `RetryHandler` en la fachada está prevista para la Iteración 2.
+
+### 21. La superficie pública del paquete no alcanzaba para integrarlo desde afuera
+
+**Responsable de corregirlo en el SAD:** ninguno; es deuda de código, no del documento.
+
+**Encontrado:** el issue #20 exportó `KitPagos`, la entidad y los objetos de valor desde `sdk/src/index.ts`, pero dejó fuera `SdkError`, `SDKOptions`, `Credentials` y `CreatePaymentRequest`. La consecuencia se hizo evidente al escribir el ejemplo del issue #31 como paquete externo: un comercio no podía tipar el objeto que le pasa al constructor de `KitPagos` ni distinguir errores del SDK con `instanceof SdkError`. El defecto era invisible mientras todo el código que consumía el SDK vivía dentro del propio paquete y usaba rutas relativas.
+
+**Decisión:** se completa la superficie pública y el ejemplo se mantiene deliberadamente fuera de `sdk/`, en `examples/`, consumiendo el paquete por su nombre. Cualquier omisión futura en `index.ts` rompe la compilación del ejemplo, que es la única forma de detectarla sin publicar en npm.
+
+También se renombró el paquete de `sdk` a `kit-pagos-colombia`, coherente con el nombre de la carpeta raíz que ya usa `layers-and-components.md`. Ningún documento ni el SAD citaban el nombre anterior, solo mencionan `npm install` de forma genérica.
+
+**Estado:** Resuelto en código. Quedan dos pendientes menores que este issue destapó pero no aborda:
+
+1. El CI no cubre `examples/`; hoy solo tiene trabajos para `sdk` y `simulator-api`, así que la compilación del ejemplo podría romperse en silencio.
+2. `npm run build` compila también los archivos `*.test.ts` hacia `dist/`, porque el `tsconfig.json` del SDK incluye `src/**/*` sin excluirlos. El paquete publicado enviaría su propia suite de pruebas. No se corrigió aquí porque excluirlos del `tsconfig` le quitaría verificación de tipos en el editor a todo el equipo; la solución correcta es un `tsconfig.build.json` aparte o un campo `files` en el `package.json`.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd

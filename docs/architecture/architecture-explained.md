@@ -74,12 +74,14 @@ Antes de recorrer el código, es importante ser preciso sobre qué existe hoy y 
 |---|---|---|
 | Dominio | `domain/entities/`, `domain/value-objects/`, `domain/errors/`, `domain/services/` | **Implementado.** Todas las clases y tipos descritos en la Parte I existen como archivos reales, con su lógica de validación e invariantes funcionando (ver secciones 7 a 9). |
 | Aplicación (puertos) | `application/ports/` | **Implementado.** El contrato `PaymentGatewayPort` existe y está completo (sección 10). |
-| Aplicación (servicios) | `application/services/` | **No existe todavía.** `ResponseNormalizer`, `RetryHandler` y `ErrorHandler` están descritos en `layers-and-components.md` pero no tienen ningún archivo creado. |
-| Infraestructura (facade) | `infrastructure/facade/` | **Esqueleto.** `KitPagos.ts` existe con la forma correcta (nombres de método, tipos de entrada y salida) pero cada método lanza un error indicando que no está implementado (sección 11). |
-| Infraestructura (config, factories, adapters) | `infrastructure/config/`, `infrastructure/factories/`, `infrastructure/adapters/` | **No existe todavía.** Ningún adaptador de pasarela, el `SDKConfigurator` ni el `GatewayFactory` tienen archivo creado. |
-| API de Simulación | `simulator-api/src/` | **Solo scaffolding.** `server.ts` está vacío y las carpetas `routes/`, `scenarios/`, `types/` solo contienen un `.gitkeep`. |
+| Aplicación (servicios) | `application/services/` | **Parcial.** `ResponseNormalizer` está implementado para Wompi y lanza `UNSUPPORTED_OPERATION` para las otras tres pasarelas. `RetryHandler` y `ErrorHandler` siguen siendo esqueletos que lanzan `"aun no esta implementado"`. |
+| Infraestructura (facade) | `infrastructure/facade/` | **Parcial.** `KitPagos.createPayment()` y `getPaymentStatus()` están implementados sobre la cadena real (`SdkConfigurator` → `GatewayFactory` → Adapter). `validateWebhook()` sigue siendo esqueleto. No envuelve la llamada en `RetryHandler`; ver `architecture-log.md`, punto 20. |
+| Infraestructura (config, factories, adapters) | `infrastructure/config/`, `infrastructure/factories/`, `infrastructure/adapters/` | **Parcial.** `SdkConfigurator` y `GatewayFactory` están implementados. De los cuatro adaptadores solo existe `WompiAdapter`; los demás llegan en la Iteración 2. |
+| API de Simulación | `simulator-api/src/` | **Parcial.** Expone `GET /health` y `POST /v1/sim/wompi/transactions` con el escenario `APPROVED`. El `ScenarioEngine` rechaza cualquier otro escenario con un HTTP 501 explícito en vez de devolver un aprobado falso. Faltan los escenarios de rechazo, timeout y error de red, y el resto de pasarelas. |
 
 Esto no es un problema, es el punto exacto en el que está el proyecto en esta etapa: la arquitectura hexagonal ya se decidió y ya se construyó su parte más difícil de acertar (el núcleo de dominio y el contrato del puerto), que es precisamente la parte que después es costosa de cambiar. Lo que falta es más volumen de trabajo que complejidad de diseño nuevo.
+
+Para ver la cadena completa en funcionamiento, [`docs/examples/simulated-payment.md`](../examples/simulated-payment.md) documenta el ejemplo ejecutable que atraviesa todas estas capas de punta a punta contra la API de Simulación.
 
 ### 7. Recorrido por el dominio: `Transaction`, la única entidad
 
