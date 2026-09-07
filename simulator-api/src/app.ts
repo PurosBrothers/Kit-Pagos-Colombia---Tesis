@@ -1,5 +1,6 @@
 import Fastify, { FastifyInstance } from "fastify";
 import { healthRoute } from "./routes/health";
+import { wompiRoutes } from "./routes/wompi";
 
 /**
  * Construye y configura la instancia de Fastify de la API de Simulacion,
@@ -17,6 +18,7 @@ export function buildApp(): FastifyInstance {
   const app = Fastify();
 
   app.register(healthRoute);
+  app.register(wompiRoutes);
 
   return app;
 }
