@@ -21,8 +21,8 @@ export class GatewayMockFactory {
   /**
    * Construye la respuesta de una transacción aprobada, con la misma forma
    * que retornaría la API real de Wompi: el objeto `transaction` envuelto
-   * en `data`, con un `id` generado y reflejando el monto y la referencia
-   * recibidos en la solicitud original.
+   * en `data`, con un `id` generado y reflejando el monto, la referencia y el
+   * correo del pagador recibidos en la solicitud original.
    */
   buildApprovedResponse(
     requestBody: WompiCreateTransactionRequestBody,
@@ -34,6 +34,7 @@ export class GatewayMockFactory {
         amount_in_cents: requestBody.amount_in_cents,
         currency: requestBody.currency,
         reference: requestBody.reference,
+        customer_email: requestBody.customer_email,
       },
     };
   }

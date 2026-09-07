@@ -25,6 +25,13 @@ export interface WompiTransaction {
   amount_in_cents: number;
   currency: string;
   reference: string;
+  /**
+   * Wompi devuelve el correo del pagador en la transacción creada. El mock lo
+   * refleja porque el SDK lo usa para reconstruir su objeto de valor Payer; si
+   * no viniera, el SDK caería a un correo de relleno y la transacción
+   * normalizada mostraría un pagador que nunca existió.
+   */
+  customer_email: string;
 }
 
 /** Envoltorio de respuesta real de Wompi: el objeto de negocio siempre viaja dentro de `data`. */
