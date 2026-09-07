@@ -1,6 +1,8 @@
 import { Transaction } from "../../domain/entities/Transaction";
 import { WebhookEvent } from "../../domain/value-objects/WebhookEvent";
 import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
+import { SdkConfigurator, SDKOptions } from "../config/SDKConfigurator";
+import { GatewayFactory } from "../factories/GatewayFactory";
 
 /**
  * Unica clase que el desarrollador que consume el SDK instancia directamente.
@@ -19,7 +21,23 @@ import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort
  * implementacion) para resolver la pasarela activa, delegar en el Adapter
  * correspondiente y envolver la llamada con RetryHandler.
  */
+
+
 export class KitPagos {
+  private configurator: SdkConfigurator;
+  private factory: GatewayFactory;
+
+  constructor(options?:SDKOptions) {
+    this.configurator = new SdkConfigurator();
+    this.factory = new GatewayFactory();
+
+    if (options){
+       // Aquí se alimenta nuestro SdkConfigurator con las credenciales:
+      this.configurator.configure(options);
+    }
+  }
+
+
   async createPayment(_request: CreatePaymentRequest): Promise<Transaction> {
     throw new Error("KitPagos.createPayment aun no esta implementado");
   }
