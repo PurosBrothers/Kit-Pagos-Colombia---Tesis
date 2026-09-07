@@ -17,9 +17,12 @@ import { GatewayFactory } from "../factories/GatewayFactory";
  * RF-04 ("retornar un evento normalizado si la firma es valida"), ver
  * docs/architecture/architecture-log.md, punto 6.
  *
- * TODO: integrar SdkConfigurator y GatewayFactory (pendientes de
- * implementacion) para resolver la pasarela activa, delegar en el Adapter
- * correspondiente y envolver la llamada con RetryHandler.
+ * El diagrama de clases hexagonal del SAD muestra que esta fachada envuelve
+ * la llamada en RetryHandler. Todavia no lo hace, porque RetryHandler sigue
+ * siendo un esqueleto y reintentar contra la API de Simulacion, que responde
+ * de forma determinista, no ejercitaria nada. Se integra en la Iteracion 2
+ * junto con las pasarelas reales (ver docs/architecture/architecture-log.md,
+ * punto 20).
  */
 
 
@@ -37,13 +40,31 @@ export class KitPagos {
     }
   }
 
-
-  async createPayment(_request: CreatePaymentRequest): Promise<Transaction> {
-    throw new Error("KitPagos.createPayment aun no esta implementado");
+  /**
+   * Resuelve el Adapter de la pasarela activa.
+   *
+   * Los tipos de la pasarela, sus credenciales y el puerto quedan inferidos y
+   * no se anotan: son detalle interno de la fachada, cuya firma publica solo
+   * debe hablar de CreatePaymentRequest y Transaction.
+   */
+  private resolveAdapter() {
+    const gateway = this.configurator.getActiveGateway();
+    const credentials = this.configurator.getCredentials(gateway);
+    return this.factory.create(gateway, credentials, this.configurator.getBaseUrl());
   }
 
-  async getPaymentStatus(_id: string): Promise<Transaction> {
-    throw new Error("KitPagos.getPaymentStatus aun no esta implementado");
+  async createPayment(request: CreatePaymentRequest): Promise<Transaction> {
+    const adapter = this.resolveAdapter();
+    return adapter.createPayment(request);
+  }
+
+  /**
+   * Para Wompi propaga SdkError(UNSUPPORTED_OPERATION): la API de Simulacion
+   * todavia no expone consulta de estado, solo creacion (issue #27).
+   */
+  async getPaymentStatus(id: string): Promise<Transaction> {
+    const adapter = this.resolveAdapter();
+    return adapter.getStatus(id);
   }
 
   validateWebhook(

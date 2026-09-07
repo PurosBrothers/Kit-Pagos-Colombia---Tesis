@@ -73,6 +73,54 @@ describe("WompiAdapter", () => {
       expect(transaction.orderReference.getValue()).toBe("ord-12345");
     });
 
+    it("should authenticate with the public key as a Bearer token when credentials are given", async () => {
+      const credentials = {
+        publicKey: "pub_test_wompi_123",
+        privateKey: "prv_test_wompi_456",
+      };
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => approvedWompiMockResponse,
+      });
+      global.fetch = mockFetch;
+
+      const adapter = new WompiAdapter(undefined, credentials);
+      await adapter.createPayment(validRequest);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3000/v1/sim/wompi/transactions",
+        expect.objectContaining({
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer pub_test_wompi_123",
+          },
+        })
+      );
+      // La llave privada nunca debe viajar en la petición de creación de pago.
+      expect(JSON.stringify(mockFetch.mock.calls[0])).not.toContain(
+        credentials.privateKey
+      );
+    });
+
+    it("should omit the Authorization header when no credentials are given, so the mock stays consumable", async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => approvedWompiMockResponse,
+      });
+      global.fetch = mockFetch;
+
+      await new WompiAdapter().createPayment(validRequest);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+    });
+
     it("should use custom baseUrl when provided in constructor", async () => {
       const customUrl = "https://custom.api.wompi.test/transactions";
       const mockFetch = jest.fn().mockResolvedValue({

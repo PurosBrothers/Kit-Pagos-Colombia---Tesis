@@ -4,6 +4,7 @@ import {
 } from "../../application/ports/PaymentGatewayPort";
 import { Transaction } from "../../domain/entities/Transaction";
 import { Gateway } from "../../domain/value-objects/Gateway";
+import { Credentials } from "../../domain/value-objects/Credentials";
 import { SdkError } from "../../domain/errors/SdkError";
 import { SdkErrorCode } from "../../domain/value-objects/SdkErrorCode";
 import { ResponseNormalizer } from "../../application/services/ResponseNormalizer";
@@ -24,15 +25,24 @@ const DEFAULT_WOMPI_URL = "http://localhost:3000/v1/sim/wompi/transactions";
  */
 export class WompiAdapter implements PaymentGatewayPort {
   private readonly baseUrl: string;
+  private readonly credentials?: Credentials;
   private readonly normalizer: ResponseNormalizer;
   private readonly webhookVerifier: WebhookVerifier;
 
+  /**
+   * Las credenciales llegan resueltas desde el SdkConfigurator via
+   * GatewayFactory; el Adapter nunca las lee del entorno. Son opcionales
+   * porque el endpoint mock de la API de Simulacion no autentica, de modo que
+   * el Adapter siga siendo instanciable sin configuracion en pruebas.
+   */
   constructor(
     baseUrl: string = DEFAULT_WOMPI_URL,
+    credentials?: Credentials,
     normalizer: ResponseNormalizer = new ResponseNormalizer(),
     webhookVerifier: WebhookVerifier = new WebhookVerifier()
   ) {
     this.baseUrl = baseUrl;
+    this.credentials = credentials;
     this.normalizer = normalizer;
     this.webhookVerifier = webhookVerifier;
   }
@@ -46,13 +56,23 @@ export class WompiAdapter implements PaymentGatewayPort {
       customer_email: request.payer.email,
     };
 
+    // 2. Autenticación: Wompi identifica al comercio con su llave pública como
+    //    Bearer token. Se omite el header cuando no hay credenciales para que el
+    //    endpoint mock, que no autentica, siga siendo consumible sin configurar.
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (this.credentials) {
+      headers["Authorization"] = `Bearer ${this.credentials.publicKey}`;
+    }
+
     let response: Response;
 
-    // 2. Realizar petición HTTP con fetch nativo de Node.js
+    // 3. Realizar petición HTTP con fetch nativo de Node.js
     try {
       response = await fetch(this.baseUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(payload),
       });
     } catch (networkError) {
@@ -65,7 +85,7 @@ export class WompiAdapter implements PaymentGatewayPort {
       );
     }
 
-    // 3. Verificación de código de estado HTTP exitoso
+    // 4. Verificación de código de estado HTTP exitoso
     if (!response.ok) {
       let errorBody: unknown;
       try {
@@ -82,7 +102,7 @@ export class WompiAdapter implements PaymentGatewayPort {
       );
     }
 
-    // 4. Parseo de la respuesta JSON cruda
+    // 5. Parseo de la respuesta JSON cruda
     let rawResponse: unknown;
     try {
       rawResponse = await response.json();
@@ -95,7 +115,7 @@ export class WompiAdapter implements PaymentGatewayPort {
       );
     }
 
-    // 5. Normalización hacia la entidad Transaction del dominio
+    // 6. Normalización hacia la entidad Transaction del dominio
     return this.normalizer.normalize(rawResponse, Gateway.WOMPI);
   }
 

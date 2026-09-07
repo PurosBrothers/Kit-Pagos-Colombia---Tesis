@@ -2,6 +2,10 @@
 export { KitPagos } from "./infrastructure/facade/KitPagos";
 
 
+// Error tipado del SDK: el comercio necesita la clase (no solo el tipo) para
+// poder hacer `catch (e) { if (e instanceof SdkError) ... }`.
+export { SdkError } from "./domain/errors/SdkError";
+
 // Entidad y objetos de valor del dominio
 export { Transaction } from "./domain/entities/Transaction";
 export { Amount } from "./domain/value-objects/Amount";
@@ -17,5 +21,10 @@ export { SdkErrorCode } from "./domain/value-objects/SdkErrorCode";
 export { TransactionStatus } from "./domain/value-objects/TransactionStatus";
 export { WebhookEvent } from "./domain/value-objects/WebhookEvent";
 
-// Tipos del puerto
-export type {PaymentGatewayPort} from "./application/ports/PaymentGatewayPort";
+// Tipos del puerto y de la entrada de un pago
+export type {PaymentGatewayPort, CreatePaymentRequest} from "./application/ports/PaymentGatewayPort";
+
+// Tipos de configuracion: sin ellos el comercio no puede tipar el objeto que
+// le pasa al constructor de KitPagos.
+export type { SDKOptions } from "./infrastructure/config/SDKConfigurator";
+export type { Credentials } from "./domain/value-objects/Credentials";
