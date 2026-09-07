@@ -26,6 +26,11 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/v1/sim/wompi/transactions",
     async (request: FastifyRequest, reply: FastifyReply) => {
+      // Fastify tipa las cabeceras como string | string[] | undefined, de ahí
+      // la comprobación del arreglo. En la práctica esa rama no se alcanza por
+      // HTTP: el parser de Node colapsa una cabecera repetida en un único
+      // string separado por comas y solo devuelve arreglo para set-cookie. Se
+      // conserva para satisfacer el tipo, no porque describa un caso real.
       const scenarioHeader = request.headers[SCENARIO_HEADER];
       const scenario = Array.isArray(scenarioHeader)
         ? scenarioHeader[0]
