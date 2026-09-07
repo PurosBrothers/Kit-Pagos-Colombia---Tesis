@@ -3,6 +3,9 @@ import { WebhookEvent } from "../../domain/value-objects/WebhookEvent";
 import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
 import { SdkConfigurator, SDKOptions } from "../config/SDKConfigurator";
 import { GatewayFactory } from "../factories/GatewayFactory";
+import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
+import { SdkError } from "../../domain/errors/SdkError";
+import { SdkErrorCode } from "../../domain/value-objects/SdkErrorCode";
 
 /**
  * Unica clase que el desarrollador que consume el SDK instancia directamente.
@@ -29,10 +32,12 @@ import { GatewayFactory } from "../factories/GatewayFactory";
 export class KitPagos {
   private configurator: SdkConfigurator;
   private factory: GatewayFactory;
+  private verifier: WebhookVerifier;
 
   constructor(options?:SDKOptions) {
     this.configurator = new SdkConfigurator();
     this.factory = new GatewayFactory();
+    this.verifier = new WebhookVerifier();
 
     if (options){
        // Aquí se alimenta nuestro SdkConfigurator con las credenciales:
@@ -68,9 +73,27 @@ export class KitPagos {
   }
 
   validateWebhook(
-    _payload: string,
-    _headers: Record<string, string>,
+    payload: string,
+    headers: Record<string, string>,
   ): WebhookEvent {
-    throw new Error("KitPagos.validateWebhook aun no esta implementado");
+    const gateway = this.configurator.getActiveGateway();
+    const credentials = this.configurator.getCredentials(gateway);
+    const secret = credentials.privateKey;
+    let isValid = false;
+    try {
+      isValid = this.verifier.verify(payload, headers, secret, gateway);
+    } catch {
+      isValid = false;
+    }
+
+    if (!isValid) {
+      throw new SdkError(
+        SdkErrorCode.WEBHOOK_SIGNATURE_INVALID,
+        gateway,
+        null,
+        "Invalid webhook signature",
+      );
+    }
+    return this.verifier.parse(payload, gateway);
   }
 }
