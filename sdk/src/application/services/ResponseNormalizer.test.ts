@@ -1,7 +1,7 @@
 import { ResponseNormalizer } from "./ResponseNormalizer";
 import { Gateway } from "../../domain/value-objects/Gateway";
-import { SdkError } from "../../domain/errors/SdkError";
-import { SdkErrorCode } from "../../domain/value-objects/SdkErrorCode";
+import { KitPagosError } from "../../domain/errors/KitPagosError";
+import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 
 describe("ResponseNormalizer", () => {
   let normalizer: ResponseNormalizer;
@@ -84,35 +84,35 @@ describe("ResponseNormalizer", () => {
       }
     });
 
-    it("should throw SdkError(MALFORMED_RESPONSE) when JSON parsing fails", () => {
+    it("should throw KitPagosError(MALFORMED_RESPONSE) when JSON parsing fails", () => {
       const invalidJson = "{ invalid json ";
 
-      expect(() => normalizer.normalize(invalidJson, Gateway.WOMPI)).toThrow(SdkError);
+      expect(() => normalizer.normalize(invalidJson, Gateway.WOMPI)).toThrow(KitPagosError);
 
       try {
         normalizer.normalize(invalidJson, Gateway.WOMPI);
       } catch (error) {
-        expect(error).toBeInstanceOf(SdkError);
-        const sdkError = error as SdkError;
-        expect(sdkError.code).toBe(SdkErrorCode.MALFORMED_RESPONSE);
+        expect(error).toBeInstanceOf(KitPagosError);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
         expect(sdkError.gateway).toBe(Gateway.WOMPI);
         expect(sdkError.message).toContain("Failed to parse JSON response");
       }
     });
 
-    it("should throw SdkError(MALFORMED_RESPONSE) when data or data.id is missing", () => {
+    it("should throw KitPagosError(MALFORMED_RESPONSE) when data or data.id is missing", () => {
       const missingData = {};
       const missingId = { data: { status: "APPROVED" } };
 
-      expect(() => normalizer.normalize(missingData, Gateway.WOMPI)).toThrow(SdkError);
-      expect(() => normalizer.normalize(missingId, Gateway.WOMPI)).toThrow(SdkError);
+      expect(() => normalizer.normalize(missingData, Gateway.WOMPI)).toThrow(KitPagosError);
+      expect(() => normalizer.normalize(missingId, Gateway.WOMPI)).toThrow(KitPagosError);
 
       try {
         normalizer.normalize(missingId, Gateway.WOMPI);
       } catch (error) {
-        expect(error).toBeInstanceOf(SdkError);
-        const sdkError = error as SdkError;
-        expect(sdkError.code).toBe(SdkErrorCode.MALFORMED_RESPONSE);
+        expect(error).toBeInstanceOf(KitPagosError);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
         expect(sdkError.gateway).toBe(Gateway.WOMPI);
         expect(sdkError.message).toContain("missing data.id");
       }
@@ -120,48 +120,48 @@ describe("ResponseNormalizer", () => {
   });
 
   describe("normalize() with other gateways (open for Iteration 2)", () => {
-    it("should throw SdkError(UNSUPPORTED_OPERATION) for RAPYD", () => {
-      expect(() => normalizer.normalize({}, Gateway.RAPYD)).toThrow(SdkError);
+    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for RAPYD", () => {
+      expect(() => normalizer.normalize({}, Gateway.RAPYD)).toThrow(KitPagosError);
       try {
         normalizer.normalize({}, Gateway.RAPYD);
       } catch (error) {
-        const sdkError = error as SdkError;
-        expect(sdkError.code).toBe(SdkErrorCode.UNSUPPORTED_OPERATION);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
         expect(sdkError.gateway).toBe(Gateway.RAPYD);
         expect(sdkError.message).toContain("Gateway not supported for response normalization: RAPYD");
       }
     });
 
-    it("should throw SdkError(UNSUPPORTED_OPERATION) for MERCADOPAGO", () => {
-      expect(() => normalizer.normalize({}, Gateway.MERCADOPAGO)).toThrow(SdkError);
+    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for MERCADOPAGO", () => {
+      expect(() => normalizer.normalize({}, Gateway.MERCADOPAGO)).toThrow(KitPagosError);
       try {
         normalizer.normalize({}, Gateway.MERCADOPAGO);
       } catch (error) {
-        const sdkError = error as SdkError;
-        expect(sdkError.code).toBe(SdkErrorCode.UNSUPPORTED_OPERATION);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
         expect(sdkError.gateway).toBe(Gateway.MERCADOPAGO);
       }
     });
 
-    it("should throw SdkError(UNSUPPORTED_OPERATION) for KUSHKI", () => {
-      expect(() => normalizer.normalize({}, Gateway.KUSHKI)).toThrow(SdkError);
+    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for KUSHKI", () => {
+      expect(() => normalizer.normalize({}, Gateway.KUSHKI)).toThrow(KitPagosError);
       try {
         normalizer.normalize({}, Gateway.KUSHKI);
       } catch (error) {
-        const sdkError = error as SdkError;
-        expect(sdkError.code).toBe(SdkErrorCode.UNSUPPORTED_OPERATION);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
         expect(sdkError.gateway).toBe(Gateway.KUSHKI);
       }
     });
 
-    it("should throw SdkError(UNSUPPORTED_OPERATION) for unknown gateway (default)", () => {
+    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for unknown gateway (default)", () => {
       const unknown = "UNKNOWN_GATEWAY" as Gateway;
-      expect(() => normalizer.normalize({}, unknown)).toThrow(SdkError);
+      expect(() => normalizer.normalize({}, unknown)).toThrow(KitPagosError);
       try {
         normalizer.normalize({}, unknown);
       } catch (error) {
-        const sdkError = error as SdkError;
-        expect(sdkError.code).toBe(SdkErrorCode.UNSUPPORTED_OPERATION);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
         expect(sdkError.gateway).toBe(unknown);
       }
     });

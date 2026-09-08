@@ -3,6 +3,9 @@ import { WebhookEvent } from "../../domain/value-objects/WebhookEvent";
 import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
 import { SdkConfigurator, SDKOptions } from "../config/SDKConfigurator";
 import { GatewayFactory } from "../factories/GatewayFactory";
+import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
+import { KitPagosError } from "../../domain/errors/KitPagosError";
+import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 
 /**
  * Unica clase que el desarrollador que consume el SDK instancia directamente.
@@ -29,10 +32,12 @@ import { GatewayFactory } from "../factories/GatewayFactory";
 export class KitPagos {
   private configurator: SdkConfigurator;
   private factory: GatewayFactory;
+  private verifier: WebhookVerifier;
 
   constructor(options?:SDKOptions) {
     this.configurator = new SdkConfigurator();
     this.factory = new GatewayFactory();
+    this.verifier = new WebhookVerifier();
 
     if (options){
        // Aquí se alimenta nuestro SdkConfigurator con las credenciales:
@@ -59,7 +64,7 @@ export class KitPagos {
   }
 
   /**
-   * Para Wompi propaga SdkError(UNSUPPORTED_OPERATION): la API de Simulacion
+   * Para Wompi propaga KitPagosError(UNSUPPORTED_OPERATION): la API de Simulacion
    * todavia no expone consulta de estado, solo creacion (issue #27).
    */
   async getPaymentStatus(id: string): Promise<Transaction> {
@@ -68,9 +73,27 @@ export class KitPagos {
   }
 
   validateWebhook(
-    _payload: string,
-    _headers: Record<string, string>,
+    payload: string,
+    headers: Record<string, string>,
   ): WebhookEvent {
-    throw new Error("KitPagos.validateWebhook aun no esta implementado");
+    const gateway = this.configurator.getActiveGateway();
+    const credentials = this.configurator.getCredentials(gateway);
+    const secret = credentials.privateKey;
+    let isValid: boolean;
+    try {
+      isValid = this.verifier.verify(payload, headers, secret, gateway);
+    } catch {
+      isValid = false;
+    }
+
+    if (!isValid) {
+      throw new KitPagosError(
+        KitPagosErrorCode.WEBHOOK_SIGNATURE_INVALID,
+        gateway,
+        null,
+        "Invalid webhook signature",
+      );
+    }
+    return this.verifier.parse(payload, gateway);
   }
 }

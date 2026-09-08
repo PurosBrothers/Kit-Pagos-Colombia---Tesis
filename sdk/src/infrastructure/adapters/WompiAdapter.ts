@@ -5,8 +5,8 @@ import {
 import { Transaction } from "../../domain/entities/Transaction";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { Credentials } from "../../domain/value-objects/Credentials";
-import { SdkError } from "../../domain/errors/SdkError";
-import { SdkErrorCode } from "../../domain/value-objects/SdkErrorCode";
+import { KitPagosError } from "../../domain/errors/KitPagosError";
+import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import { ResponseNormalizer } from "../../application/services/ResponseNormalizer";
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 
@@ -56,7 +56,7 @@ export class WompiAdapter implements PaymentGatewayPort {
       customer_email: request.payer.email,
     };
 
-    // 2. Autenticación: Wompi identifica al comercio con su llave pública como
+    // 2. Cabeceras HTTP: si el comercio configuro credenciales, se envia la publicKey como
     //    Bearer token. Se omite el header cuando no hay credenciales para que el
     //    endpoint mock, que no autentica, siga siendo consumible sin configurar.
     const headers: Record<string, string> = {
@@ -77,8 +77,8 @@ export class WompiAdapter implements PaymentGatewayPort {
       });
     } catch (networkError) {
       // Captura fallos de red (DNS, socket timeout, conexión rechazada)
-      throw new SdkError(
-        SdkErrorCode.CONNECTION_FAILED,
+      throw new KitPagosError(
+        KitPagosErrorCode.CONNECTION_FAILED,
         Gateway.WOMPI,
         networkError,
         `Failed to connect to Wompi gateway: ${networkError instanceof Error ? networkError.message : String(networkError)}`
@@ -94,8 +94,8 @@ export class WompiAdapter implements PaymentGatewayPort {
         errorBody = await response.text();
       }
 
-      throw new SdkError(
-        SdkErrorCode.GATEWAY_SERVER_ERROR,
+      throw new KitPagosError(
+        KitPagosErrorCode.GATEWAY_SERVER_ERROR,
         Gateway.WOMPI,
         errorBody,
         `Wompi gateway returned an HTTP error status ${response.status}`
@@ -107,8 +107,8 @@ export class WompiAdapter implements PaymentGatewayPort {
     try {
       rawResponse = await response.json();
     } catch (parseError) {
-      throw new SdkError(
-        SdkErrorCode.MALFORMED_RESPONSE,
+      throw new KitPagosError(
+        KitPagosErrorCode.MALFORMED_RESPONSE,
         Gateway.WOMPI,
         parseError,
         "Failed to parse JSON response from Wompi gateway"
@@ -124,8 +124,8 @@ export class WompiAdapter implements PaymentGatewayPort {
    * de estado; solo soporta la creación de transacciones.
    */
   async getStatus(_gatewayTransactionId: string): Promise<Transaction> {
-    throw new SdkError(
-      SdkErrorCode.UNSUPPORTED_OPERATION,
+    throw new KitPagosError(
+      KitPagosErrorCode.UNSUPPORTED_OPERATION,
       Gateway.WOMPI,
       null,
       "WompiAdapter.getStatus: status query is not supported by the Wompi mock endpoint"

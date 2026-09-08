@@ -1,7 +1,7 @@
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { Credentials } from "../../domain/value-objects/Credentials";
-import { SdkError } from "../../domain/errors/SdkError";
-import { SdkErrorCode } from "../../domain/value-objects/SdkErrorCode";
+import { KitPagosError } from "../../domain/errors/KitPagosError";
+import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 
 export interface SDKOptions {
   gateway: Gateway;
@@ -24,8 +24,8 @@ export class SdkConfigurator {
     const gateway = options.gateway;
     const credentials = options.credentials;
     if (!gateway || !credentials) {
-      throw new SdkError(
-        SdkErrorCode.INVALID_REQUEST,
+      throw new KitPagosError(
+        KitPagosErrorCode.INVALID_REQUEST,
         gateway,
         null,
         "Both gateway and credentials must be configured"
@@ -42,8 +42,8 @@ export class SdkConfigurator {
 
   getActiveGateway(): Gateway {
     if (!this.activeGateway) {
-      // Se mantiene Error nativo y no SdkError: este fallo ocurre antes de que
-      // exista una pasarela, y SdkError exige el atributo gateway por la
+      // Se mantiene Error nativo y no KitPagosError: este fallo ocurre antes de que
+      // exista una pasarela, y KitPagosError exige el atributo gateway por la
       // seccion 15.1 del SAD. Convertirlo obligaria a ensanchar ese contrato
       // del dominio, decision que no corresponde a este issue
       // (ver docs/architecture/architecture-log.md, punto 20).
@@ -60,8 +60,8 @@ export class SdkConfigurator {
   getCredentials(gateway: Gateway): Credentials {
     const creds = this.credentialsMap.get(gateway);
     if (!creds) {
-      throw new SdkError(
-        SdkErrorCode.INVALID_CREDENTIALS,
+      throw new KitPagosError(
+        KitPagosErrorCode.INVALID_CREDENTIALS,
         gateway,
         null,
         `Credentials not configured for gateway: ${gateway}`

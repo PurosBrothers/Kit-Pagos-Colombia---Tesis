@@ -1,9 +1,11 @@
 /**
- * Codigos de error tecnico normalizados por el SDK, independientes de
- * cualquier pasarela. Fuente: lenguaje ubicuo del proyecto y SAD,
+ * Codigos de error tecnico normalizados por Kit Pagos Colombia, independientes
+ * de cualquier pasarela. Fuente: lenguaje ubicuo del proyecto y SAD,
  * seccion 15.1 (Nucleo del dominio).
+ * Renombrado de SdkErrorCode a KitPagosErrorCode por decision de direccion de tesis
+ * (architecture-log.md, punto 23).
  */
-export enum SdkErrorCode {
+export enum KitPagosErrorCode {
   INVALID_CREDENTIALS = "INVALID_CREDENTIALS",
   GATEWAY_TIMEOUT = "GATEWAY_TIMEOUT",
   CONNECTION_FAILED = "CONNECTION_FAILED",
