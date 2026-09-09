@@ -62,12 +62,32 @@ export class ResponseNormalizer {
             break;
         }
 
-        // Paso 4: Normalizar el monto (Wompi envía el dinero en centavos, acá se divide entre 100 para volverlo a la unidad mayor)
-        const amountInCents = Number(data.amount_in_cents ?? 0);
-        const amount = new Amount(amountInCents / 100);
-
-        // Paso 5: Normalizar la divisa ISO 4217 (ej. 'COP')
+        // Paso 4: Normalizar la divisa ISO 4217 (ej. 'COP'). Va antes del monto
+        // porque es la divisa la que sabe cuántos decimales tiene, y por lo
+        // tanto dónde cae el punto decimal al reconstruir el monto.
         const currency = new Currency(String(data.currency ?? "COP"));
+
+        // Paso 5: Normalizar el monto. Wompi lo envía en centavos, y se
+        // reconstruye insertando el punto decimal en vez de dividir entre 100:
+        // 1990 centavos deben volver como "19.90", y una división daría "19.9",
+        // que es un monto distinto del que el comercio cobró.
+        let amount: Amount;
+        try {
+          amount = Amount.fromMinorUnits(
+            String(data.amount_in_cents ?? 0),
+            currency
+          );
+        } catch (amountError) {
+          // Un monto que no se puede interpretar es una respuesta malformada, y
+          // debe llegar al comercio como error tipado igual que los pasos 1 y 2,
+          // no como el Error nativo que lanza el objeto de valor.
+          throw new KitPagosError(
+            KitPagosErrorCode.MALFORMED_RESPONSE,
+            Gateway.WOMPI,
+            rawResponse,
+            `Malformed amount in Wompi response: ${(amountError as Error).message}`
+          );
+        }
 
         // Paso 6: Normalizar la referencia de orden del comercio
         const orderReference = new OrderReference(String(data.reference ?? data.id));

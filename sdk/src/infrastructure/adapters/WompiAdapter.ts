@@ -55,9 +55,18 @@ export class WompiAdapter implements PaymentGatewayPort {
   }
 
   async createPayment(request: CreatePaymentRequest): Promise<Transaction> {
-    // 1. Mapeo de objetos de valor del dominio a campos nativos de Wompi
+    // 1. Mapeo de objetos de valor del dominio a campos nativos de Wompi.
+    //
+    //    `toMinorUnits()` devuelve un string de dígitos, y Wompi espera un
+    //    entero JSON en `amount_in_cents`. La conversión a `number` se hace acá,
+    //    a la vista, porque esta es la frontera del SDK con el formato de cable:
+    //    JSON solo tiene el tipo `number` (un double IEEE 754) y no hay manera
+    //    de evitarlo. Es segura porque el valor ya es un entero de centavos, muy
+    //    por debajo de Number.MAX_SAFE_INTEGER, así que la conversión no pierde
+    //    precisión. Lo que el dominio garantiza es que ese entero se calculó sin
+    //    aritmética de punto flotante.
     const payload = {
-      amount_in_cents: request.amount.toMinorUnits(),
+      amount_in_cents: Number(request.amount.toMinorUnits(request.currency)),
       currency: request.currency.getCode(),
       reference: request.orderReference.getValue(),
       customer_email: request.payer.email,

@@ -34,8 +34,8 @@ describe("ResponseNormalizer", () => {
       expect(transaction.rawStatus).toBe("APPROVED");
       expect(transaction.gatewayTransactionId.value).toBe("wompi-sim-12345");
       expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.WOMPI);
-      expect(transaction.amount.getValue()).toBe(50000);
-      expect(transaction.amount.toMinorUnits()).toBe(5000000);
+      expect(transaction.amount.getValue()).toBe("50000.00");
+      expect(transaction.amount.toMinorUnits(transaction.currency)).toBe("5000000");
       expect(transaction.currency.getCode()).toBe("COP");
       expect(transaction.orderReference.getValue()).toBe("ORDER-123");
       expect(transaction.payer.email).toBe("cliente@example.com");
@@ -55,7 +55,48 @@ describe("ResponseNormalizer", () => {
 
       const transaction = normalizer.normalize(wompiJsonString, Gateway.WOMPI);
       expect(transaction.gatewayTransactionId.value).toBe("wompi-sim-str-1");
-      expect(transaction.amount.getValue()).toBe(25000);
+      expect(transaction.amount.getValue()).toBe("25000.00");
+    });
+
+    it("conserva el cero a la derecha al reconstruir el monto desde centavos", () => {
+      // La implementación anterior dividía entre 100, y 1990 / 100 da 19.9: el
+      // comercio cobraba 19.90 y recibía de vuelta un monto escrito distinto.
+      // Ahora el punto decimal se inserta sobre los dígitos.
+      const payload = {
+        data: {
+          id: "tx-trailing-zero",
+          status: "APPROVED",
+          amount_in_cents: 1990,
+          currency: "COP",
+          reference: "REF-TZ",
+        },
+      };
+
+      const transaction = normalizer.normalize(payload, Gateway.WOMPI);
+      expect(transaction.amount.getValue()).toBe("19.90");
+      expect(transaction.amount.toMinorUnits(transaction.currency)).toBe("1990");
+    });
+
+    it("lanza KitPagosError(MALFORMED_RESPONSE) si el monto no es un entero de centavos", () => {
+      // Un monto ilegible es una respuesta malformada, y debe llegar como error
+      // tipado igual que un JSON roto, no como el Error nativo del objeto de valor.
+      const payload = {
+        data: {
+          id: "tx-bad-amount",
+          status: "APPROVED",
+          amount_in_cents: "no-es-un-numero",
+          currency: "COP",
+          reference: "REF-BAD",
+        },
+      };
+
+      expect(() => normalizer.normalize(payload, Gateway.WOMPI)).toThrow(KitPagosError);
+
+      try {
+        normalizer.normalize(payload, Gateway.WOMPI);
+      } catch (error) {
+        expect((error as KitPagosError).code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
+      }
     });
 
     it("should map different Wompi transaction statuses properly", () => {

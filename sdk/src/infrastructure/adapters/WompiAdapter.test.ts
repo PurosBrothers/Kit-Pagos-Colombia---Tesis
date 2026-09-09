@@ -13,7 +13,7 @@ describe("WompiAdapter", () => {
   const originalFetch = global.fetch;
 
   const validRequest: CreatePaymentRequest = {
-    amount: new Amount(50000),
+    amount: new Amount("50000"),
     currency: new Currency("COP"),
     orderReference: new OrderReference("ord-12345"),
     payer: new Payer({ email: "cliente@example.com" }),
@@ -68,9 +68,44 @@ describe("WompiAdapter", () => {
       expect(transaction.getStatus()).toBe("APPROVED");
       expect(transaction.gatewayTransactionId.value).toBe("wompi-mock-tx-123");
       expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.WOMPI);
-      expect(transaction.amount.getValue()).toBe(50000);
+      expect(transaction.amount.getValue()).toBe("50000.00");
       expect(transaction.currency.getCode()).toBe("COP");
       expect(transaction.orderReference.getValue()).toBe("ord-12345");
+    });
+
+    it("envía el monto como entero JSON de centavos, conservando el cero a la derecha", async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => approvedWompiMockResponse,
+      });
+      global.fetch = mockFetch;
+
+      const adapter = new WompiAdapter();
+      await adapter.createPayment({ ...validRequest, amount: new Amount("19.90") });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      // 1990 y no 199 ni 19.9: el cero a la derecha sobrevive hasta el cable.
+      expect(body.amount_in_cents).toBe(1990);
+      // Wompi espera un entero, no el string que devuelve toMinorUnits().
+      expect(typeof body.amount_in_cents).toBe("number");
+    });
+
+    it("rechaza un monto con más decimales de los que admite la divisa", async () => {
+      const mockFetch = jest.fn();
+      global.fetch = mockFetch;
+
+      const adapter = new WompiAdapter();
+      // CLP es divisa de exponente 0: un monto con centavos no tiene sentido y
+      // debe fallar antes de llegar a la red, no truncarse en silencio.
+      await expect(
+        adapter.createPayment({
+          ...validRequest,
+          amount: new Amount("19.99"),
+          currency: new Currency("CLP"),
+        })
+      ).rejects.toThrow("no cabe en CLP");
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it("should authenticate with the public key as a Bearer token when credentials are given", async () => {

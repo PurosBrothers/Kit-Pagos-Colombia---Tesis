@@ -61,9 +61,15 @@ async function main(): Promise<void> {
    * objetos de valor que validan en su propio constructor: un monto con mas de
    * dos decimales, una divisa que no sea ISO 4217 o un pagador sin correo
    * fallan aca mismo, antes de que exista cualquier peticion de red.
+   *
+   * El monto se escribe como texto y no como numero. Es el unico tipo que
+   * conserva la escala: `new Amount("150000.00")` sigue valiendo "150000.00" al
+   * leerlo, mientras `150000.00` en JavaScript es indistinguible de `150000`.
+   * Esa diferencia importa porque Rapyd calcula la firma de la peticion sobre el
+   * cuerpo serializado, donde "19.90" y "19.9" no son lo mismo.
    */
   const request = {
-    amount: new Amount(150000),
+    amount: new Amount("150000.00"),
     currency: new Currency("COP"),
     orderReference: new OrderReference(`ORDER-${Date.now()}`),
     payer: new Payer({
@@ -74,6 +80,9 @@ async function main(): Promise<void> {
 
   console.log("Solicitud de pago:");
   console.log(`  Monto:      ${request.amount.getValue()} ${request.currency.getCode()}`);
+  // Lo que el Adapter le va a mandar a Wompi. Se imprime para dejar ver que la
+  // traduccion a centavos ocurre en la infraestructura y no la escribe el comercio.
+  console.log(`  En centavos: ${request.amount.toMinorUnits(request.currency)} (lo que recibe Wompi)`);
   console.log(`  Referencia: ${request.orderReference.getValue()}`);
   console.log(`  Pagador:    ${request.payer.email}\n`);
 

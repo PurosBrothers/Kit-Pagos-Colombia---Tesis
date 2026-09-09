@@ -19,7 +19,7 @@ describe("KitPagos", () => {
   };
 
   const validRequest: CreatePaymentRequest = {
-    amount: new Amount(150000),
+    amount: new Amount("150000"),
     currency: new Currency("COP"),
     orderReference: new OrderReference("ORDER-1042"),
     payer: new Payer({ email: "cliente@example.com" }),
@@ -68,7 +68,7 @@ describe("KitPagos", () => {
       expect(transaction.getStatus()).toBe("APPROVED");
       expect(transaction.gatewayTransactionId.value).toBe("wompi-tx-abc-123");
       expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.WOMPI);
-      expect(transaction.amount.getValue()).toBe(150000);
+      expect(transaction.amount.getValue()).toBe("150000.00");
       expect(transaction.currency.getCode()).toBe("COP");
       expect(transaction.orderReference.getValue()).toBe("ORDER-1042");
       // El correo llega desde la respuesta, no desde el relleno del normalizador.

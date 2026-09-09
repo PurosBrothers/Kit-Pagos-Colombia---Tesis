@@ -10,8 +10,12 @@ export { ErrorHandler, ErrorFamily } from "./application/services/ErrorHandler";
 
 // Entidad y objetos de valor del dominio
 export { Transaction } from "./domain/entities/Transaction";
-export { Amount } from "./domain/value-objects/Amount";
+// RoundingMode viaja junto a Amount porque multiply() y divide() lo piden como
+// argumento: sin exportarlo, el comercio no puede elegir el modo de redondeo.
+export { Amount, RoundingMode } from "./domain/value-objects/Amount";
 export { Currency } from "./domain/value-objects/Currency";
+// Necesario para armar el monto descompuesto que exige Kushki.
+export { TaxBreakdown } from "./domain/value-objects/TaxBreakdown";
 export { Gateway } from "./domain/value-objects/Gateway";
 export {GatewayTransactionId} from "./domain/value-objects/GatewayTransactionId";
 export {OrderReference} from "./domain/value-objects/OrderReference";
