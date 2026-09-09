@@ -6,6 +6,7 @@ export { KitPagos } from "./infrastructure/facade/KitPagos";
 // poder hacer `catch (e) { if (e instanceof KitPagosError) ... }`.
 // Renombrado a KitPagosError para evitar colisiones con otros SDKs (architecture-log.md, punto 23).
 export { KitPagosError } from "./domain/errors/KitPagosError";
+export { ErrorHandler, ErrorFamily } from "./application/services/ErrorHandler";
 
 // Entidad y objetos de valor del dominio
 export { Transaction } from "./domain/entities/Transaction";
