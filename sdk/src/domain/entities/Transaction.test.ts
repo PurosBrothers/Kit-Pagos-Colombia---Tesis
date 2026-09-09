@@ -17,7 +17,7 @@ function buildTransaction(
   return new Transaction(
     new GatewayTransactionId("tx-123", Gateway.WOMPI),
     new OrderReference("order-123"),
-    new Amount(100.5),
+    new Amount("100.5"),
     new Currency("COP"),
     new Payer({ email: "cliente@example.com" }),
     status,
@@ -112,7 +112,7 @@ describe("Transaction", () => {
     it("expone gatewayTransactionId, orderReference, amount, currency y payer tal como se construyeron", () => {
       const gatewayTransactionId = new GatewayTransactionId("tx-999", Gateway.KUSHKI);
       const orderReference = new OrderReference("order-999");
-      const amount = new Amount(250);
+      const amount = new Amount("250");
       const currency = new Currency("USD");
       const payer = new Payer({ email: "otro@example.com" });
 

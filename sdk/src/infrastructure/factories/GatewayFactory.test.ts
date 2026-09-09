@@ -51,7 +51,7 @@ describe("GatewayFactory", () => {
 
       const adapter = factory.create(Gateway.WOMPI, credentials, customUrl);
       await adapter.createPayment({
-        amount: new Amount(1000),
+        amount: new Amount("1000"),
         currency: new Currency("COP"),
         orderReference: new OrderReference("ord-1"),
         payer: new Payer({ email: "cliente@example.com" }),
