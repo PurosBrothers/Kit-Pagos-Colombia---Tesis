@@ -211,6 +211,35 @@ También se renombró el paquete de `sdk` a `kit-pagos-colombia`, coherente con 
 
 **Estado:** Resuelto en código y pruebas (`sdk/src/application/services/ErrorHandler.ts`, `WompiAdapter.ts`). **Pendiente en el SAD:** actualizar la descripción de `ErrorHandler` en la vista de componentes (sección 9) y sección 15.2 para reflejar las responsabilidades de clasificación (`ErrorFamily`) y sanitización.
 
+### 25. Reversión del tipo de dato de `Amount`: de `number` a string decimal exacto, con exponente ISO 4217 en `Currency` (issue #63)
+
+**Responsable de corregirlo en el SAD:** Joan (sección 15.1, núcleo del dominio) y Henao (sección 3, modelo de dominio / `Domain Class Diagram.png`).
+
+**Contexto:** El issue #28 auditó el tipo de dato de `Amount` y concluyó **mantener `number`**, con la justificación de que el objeto de valor nunca ejecutaba aritmética sobre sí mismo. Esa conclusión está documentada y argumentada en `docs/architecture/money-representation-analysis.md`. Este punto la revierte por instrucción de la dirección de tesis, que pidió manejar el monto como texto y usar un tipo decimal exacto en caso de que en alguna parte del código se hicieran operaciones.
+
+Conviene registrar con precisión **qué motivó la reversión y qué no**, porque el documento del issue #28 no estaba equivocado en sus cálculos:
+
+1. **Razón funcional (Rapyd).** `number` no puede representar `19.90`: en JavaScript `(19.90).toString()` devuelve `"19.9"` y el cero final es irrecuperable. Rapyd calcula la firma HMAC sobre el cuerpo serializado de la petición, de modo que necesita el monto como string decimal de escala fija; el propio análisis del issue #28 ya lo recomendaba en su tabla por adaptador, sin advertir que con `number` esa recomendación era imposible de cumplir.
+2. **Razón funcional (Kushki).** Kushki exige el monto descompuesto en `subtotalIva0`, `subtotalIva`, `iva` e `ice`. Descomponer implica dividir: `100000 / 1.19` da `84033.61344537816`, once decimales que el constructor de `Amount` rechaza. Sin un tipo decimal con escala y modo de redondeo explícitos, no hay forma de producir un desglose válido.
+3. **Lo que NO motivó la reversión.** `toMinorUnits()` **no** estaba devolviendo resultados incorrectos. Se verificó `Math.round(v * 100)` contra montos COP realistas (`19.99`, `150000.50`, `99999999.99`, `12345678.91`) y el entero resultante era correcto en todos los casos, porque el error del producto intermedio queda muy por debajo de 0.5 y el redondeo lo absorbe. El problema no era un cálculo mal hecho, era la imposibilidad de representar la escala. Presentarlo como un defecto de cálculo sería incorrecto y verificable en contra.
+
+**Corrección de hecho encontrada durante la implementación:** el lenguaje ubicuo afirmaba que *"COP es una divisa de cero decimales según ISO 4217"*. Es **falso**: ISO 4217 asigna a COP (numérico 170) un exponente de unidad menor de **2**. Lo cierto es que el centavo colombiano no circula en la práctica, no que el estándar lo desconozca, y Wompi lo confirma al exigir el monto en `amount_in_cents`. De esa premisa falsa derivaba la conclusión de que Rapyd espera un entero de pesos para Colombia, que por lo tanto queda como inferencia sin respaldo y pendiente de confirmar contra sandbox real.
+
+**Decisión:**
+1. **`Amount` guarda un string decimal canónico** (`sdk/src/domain/value-objects/Amount.ts`). El constructor recibe `string` y valida con expresión regular; rechaza `number` incluso en tiempo de ejecución, porque el SDK también se consume desde JavaScript plano donde el tipo no protege nada. Se conserva el máximo de dos decimales que fija la sección 15.1 del SAD.
+2. **No se guarda un `Big`,** aunque se use big.js para operar. `new Big("19.90").toString()` también devuelve `"19.9"`, así que almacenar el objeto de la librería perdería justo la escala que se busca proteger. El string es la representación; `Big` es solo el motor de cálculo.
+3. **Las conversiones de unidad no usan aritmética.** `toMinorUnits(currency)` y `fromMinorUnits(minor, currency)` corren el punto decimal sobre el string. `fromMinorUnits` reemplaza la división entre 100 que hacía `ResponseNormalizer`, de modo que 1990 centavos ahora vuelven como `"19.90"` y no como `"19.9"`.
+4. **El exponente ISO 4217 vive en `Currency`,** que gana `getMinorUnitExponent()`. Se registra como tabla de **excepciones** (exponente 0 y 3) con retorno por defecto de 2, que es el valor que ISO asigna a la mayoría. La alternativa era que cada adaptador llevara su propia constante, lo que habría dejado cuatro copias del mismo hecho listas para divergir. `toMinorUnits(currency)` **lanza** si el monto tiene más decimales de los que la divisa admite, en vez de truncar en silencio.
+5. **Se incorpora `big.js` 7.0.1 como dependencia de runtime,** la primera del SDK, que hasta ahora no tenía ninguna. Pesa 59 KB y no arrastra dependencias transitivas. La justifica el criterio de la dirección de tesis: BigDecimal cuando haya operaciones, y con el desglose de IVA las hay. Sus constantes de redondeo **no se exponen** en la superficie pública: `Amount` declara su propio enum `RoundingMode`, de modo que cambiar de librería decimal no rompe a ningún consumidor.
+6. **Nuevo objeto de valor `TaxBreakdown`** (`sdk/src/domain/value-objects/TaxBreakdown.ts`) para el monto descompuesto que exige Kushki, con constructores `exempt()`, `fromTaxIncluded()`, `fromTaxExcluded()` y `fromComponents()`. Vive en el dominio y no en el `KushkiAdapter` porque descomponer un precio en base e impuesto es una regla de dinero, no un detalle de una pasarela; Kushki solo es la única de las cuatro que la necesita explícita. Su invariante es que los cuatro componentes sumen exactamente el total, garantizada calculando un lado y derivando el otro **por resta**. Se agregó como campo opcional `taxBreakdown` en `CreatePaymentRequest`.
+7. **La conversión a `number` queda visible en el Adapter.** `WompiAdapter` hace `Number(request.amount.toMinorUnits(request.currency))` con un comentario que explica por qué: JSON solo tiene el tipo `number`, así que la frontera de cable es inevitable, y es segura porque el valor ya es un entero de centavos muy por debajo de `Number.MAX_SAFE_INTEGER`. Lo que el dominio garantiza es que ese entero se calculó sin punto flotante.
+
+**Estado:** Resuelto en código y pruebas (`Amount.ts`, `Currency.ts`, `TaxBreakdown.ts`, `ResponseNormalizer.ts`, `WompiAdapter.ts`, `PaymentGatewayPort.ts`, `index.ts` y el ejemplo de `examples/`). **Pendiente en el SAD:**
+1. Sección 15.1: documentar que `Amount` encapsula un string decimal y no un atributo numérico, y describir `toMinorUnits(currency)`, `fromMinorUnits()`, `toFixedScale()` y las operaciones aritméticas con escala explícita.
+2. Sección 15.1 y sección 3: agregar `TaxBreakdown` y `RoundingMode` al modelo de dominio, y `getMinorUnitExponent()` a `Currency`.
+3. `Domain Class Diagram.png`: reflejar el tipo `string` de `Amount` y la nueva relación `Amount` → `Currency`.
+4. Corregir en la documentación toda afirmación de que COP es divisa de cero decimales según ISO 4217.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd

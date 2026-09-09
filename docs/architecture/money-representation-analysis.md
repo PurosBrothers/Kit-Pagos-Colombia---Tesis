@@ -4,6 +4,8 @@
 > **Responsable:** Joan
 > **Alcance:** auditoría retrospectiva de una decisión ya tomada (`Amount` usa `number`), no un rediseño. El objetivo es confirmar con evidencia real de las 4 pasarelas si la decisión es defendible, documentar cualquier caso borde encontrado, y dejar registrada la justificación citable para el capítulo de diseño de la tesis.
 
+> ⚠️ **La conclusión de este documento fue revertida.** `Amount` ya **no** usa `number`: guarda un string decimal y opera con `big.js`. El análisis se conserva completo y sin editar porque su evidencia sigue siendo válida y la trazabilidad de la decisión importa para la tesis, pero **no describe el código actual**. Lo que cambió, por qué, y qué parte de este análisis resultó incompleta está en [Reversión de la conclusión (issue #63)](#reversión-de-la-conclusión-issue-63) al final del documento.
+
 ## Origen de la revisión
 
 El director de tesis pidió revisar el tipo numérico usado para dinero en TypeScript, porque el tipo `number` nativo puede dar problemas de precisión de punto flotante. `Amount` (`sdk/src/domain/value-objects/Amount.ts`) ya existía antes de este análisis: usa `number`, valida un máximo de dos decimales significativos en el constructor, y expone `toMinorUnits()` para convertir a enteros cuando la pasarela lo exige. Esta auditoría revisa esa decisión contra evidencia real de las cuatro pasarelas contempladas en el proyecto (Wompi, Rapyd, Mercado Pago y Kushki) y contra la literatura técnica sobre representación de dinero en software financiero.
@@ -126,6 +128,51 @@ La solución con tolerancia numérica esconde el error en vez de exponerlo, lo c
 ## Conclusión
 
 `Amount` usa `number` en unidad mayor, con hasta dos decimales, y esa decisión se mantiene sin cambios: coincide con tres de las cuatro pasarelas contempladas, coincide con cómo el dominio del problema (montos en pesos colombianos) se expresa naturalmente, y ninguna alternativa evaluada (`BigInt`, enteros forzados, librerías de precisión decimal) resuelve un problema que `Amount` realmente tenga, porque `Amount` no encadena operaciones aritméticas sobre el monto. El riesgo real identificado no estaba en el tipo de dato sino en la validación de entrada del constructor, que comparaba una multiplicación de punto flotante contra sí misma sin tolerancia, rechazando por error una fracción significativa de montos válidos de dos decimales (incluyendo el patrón de precio más común, `X.99`). La corrección aplicada elimina la aritmética de la validación por completo, sin introducir ninguna dependencia nueva ni cambiar la forma en que el SDK expone el dinero a sus consumidores.
+
+## Reversión de la conclusión (issue #63)
+
+> **Issue relacionado:** [#63 — sdk: migrar el tipo de dato de `Amount`](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/issues/63)
+> **Registrada también en:** `architecture-log.md`, punto 25.
+
+La conclusión de arriba se revirtió por instrucción de la dirección de tesis, que pidió manejar el monto como texto y usar un tipo decimal exacto si en alguna parte del código se hacían operaciones. Esta sección deja constancia de qué parte del análisis original se sostiene, qué parte resultó incompleta, y qué **no** hay que afirmar sobre él.
+
+### Lo que el análisis original acertó
+
+La evidencia por pasarela de la tabla inicial es correcta y sigue siendo la base del diseño actual: Wompi exige entero en unidad menor, Rapyd decimal en unidad mayor, Mercado Pago `number` en unidad mayor, Kushki un objeto descompuesto. El rechazo de `BigInt` y de los enteros forzados en unidad menor también se sostiene. Y el defecto real que este análisis encontró —una validación de constructor que comparaba una multiplicación de punto flotante contra sí misma, rechazando por error montos válidos como `19.99`— era genuino, y su corrección (eliminar la aritmética de la validación) es justamente la línea de diseño que la nueva implementación lleva hasta el final.
+
+### Lo que el análisis original no vio
+
+El argumento central era que `Amount` no necesita precisión decimal porque no encadena operaciones aritméticas. Eso es cierto sobre el código que existía, pero omite dos cosas:
+
+1. **La escala es parte del dato, no solo del cálculo.** `number` no puede representar `19.90`: `(19.90).toString()` devuelve `"19.9"` y el cero final es irrecuperable, porque nunca estuvo ahí. El propio análisis recomienda en su tabla por adaptador que Rapyd reciba el monto como string con la escala de la divisa, dado que la firma HMAC se calcula sobre el cuerpo serializado. Lo que no advierte es que **con `number` esa recomendación es imposible de cumplir**: el dato ya llegó sin el cero, y ningún formateo posterior puede distinguir un `19.9` que era `19.9` de uno que era `19.90`. El análisis identificó correctamente el requisito de Rapyd y aun así concluyó que el tipo que no puede satisfacerlo era adecuado.
+2. **"No hay aritmética" era una foto, no una propiedad.** Kushki exige el monto descompuesto por IVA, y descomponer es dividir. En cuanto ese requisito entra al alcance, la premisa del análisis deja de valer. `100000 / 1.19` da `84033.61344537816`: once decimales que el constructor de `Amount` rechaza. Ahí es donde `big.js` gana su lugar, y no antes.
+
+### Lo que NO hay que afirmar sobre el análisis original
+
+Es tentador justificar la reversión diciendo que la implementación anterior calculaba mal. **No lo hacía, y afirmarlo es verificable en contra.** Se probó `Math.round(v * 100)` contra montos COP realistas (`19.99`, `4.65`, `0.29`, `150000.50`, `99999999.99`) y el entero resultante era correcto en todos los casos: el error del producto intermedio en IEEE 754 queda muy por debajo de 0.5 y el redondeo lo absorbe por completo.
+
+Del mismo modo, se verificó por fuerza bruta que descomponer un total en base e IVA redondeando un componente y derivando el otro por resta cuadra exactamente en todo el rango probado, con exponente 2 y con exponente 0. **No hay pérdida silenciosa de pesos en la aritmética anterior.**
+
+El argumento correcto para el cambio es de **representación**, no de exactitud del cálculo: el tipo `number` no puede expresar la escala que dos de las cuatro pasarelas necesitan.
+
+### Corrección de hecho: COP tiene 2 decimales en ISO 4217, no 0
+
+Durante la implementación se detectó que `ubiquitous-language.md` afirmaba que *"COP es una divisa de cero decimales según ISO 4217"*. Es falso: el estándar asigna a COP (numérico 170) un exponente de unidad menor de **2**. Lo cierto es que el centavo colombiano no circula en la práctica, no que el estándar lo desconozca; Wompi lo confirma al exigir el monto en `amount_in_cents`.
+
+La distinción no es cosmética, porque decide dónde vive cada dato: **el exponente ISO va en `Currency`, y la convención práctica de cada pasarela va en su adaptador.** De la premisa falsa derivaba además la conclusión de que Rapyd espera un entero de pesos para Colombia, que queda como inferencia sin respaldo y pendiente de confirmar contra sandbox real.
+
+### Cómo quedó el diseño
+
+- **`Amount` guarda un string decimal canónico.** No guarda un `Big`, porque `new Big("19.90").toString()` también devuelve `"19.9"` y almacenar el objeto de la librería perdería justo la escala que se busca proteger. `Big` es el motor de cálculo; el string es la representación.
+- **Las conversiones de unidad no usan aritmética.** `toMinorUnits(currency)` y `fromMinorUnits(minor, currency)` corren el punto decimal sobre el string, lo que es exacto por construcción y no depende de ninguna librería.
+- **El exponente ISO 4217 vive en `Currency.getMinorUnitExponent()`,** como tabla de excepciones con retorno por defecto de 2. Ninguno de los cuatro adaptadores duplica ese conocimiento.
+- **`TaxBreakdown` es un objeto de valor nuevo del dominio,** no un detalle del `KushkiAdapter`, y su invariante (los cuatro componentes suman el total exacto) se garantiza derivando un componente por resta.
+- **`big.js` 7.0.1 es la primera dependencia de runtime del SDK.** 59 KB, sin dependencias transitivas. Sus constantes de redondeo no se exponen: `Amount` declara su propio enum `RoundingMode`.
+- **La única conversión a `number` que queda está en los adaptadores,** en la frontera con el formato de cable, comentada y acotada: JSON solo tiene el tipo `number`, y el valor que se convierte ya es un entero.
+
+### Sobre el límite de notación científica declarado más arriba
+
+El análisis original declaraba como límite conocido que `toString()` cambia a notación científica para números muy grandes (`(1e21).toString()` da `"1e+21"`), lo que rompería el conteo de decimales. Ese límite **desaparece** con la representación en string: el constructor valida con una expresión regular que rechaza explícitamente la notación exponencial, de modo que un monto ambiguo no se construye en vez de contarse mal.
 
 ## Fuentes consultadas
 
