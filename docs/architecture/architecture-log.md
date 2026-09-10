@@ -48,7 +48,7 @@ Antes de empezar a implementar nada de la primera iteración de código, cada co
 | 7 | Contexto y Alcance | Joshua | **Punto 15:** en 7.1.3, reemplazar el párrafo completo sobre "PayU Latam" (autenticación por body, firma MD5/SHA-256) por uno equivalente sobre Rapyd (autenticación `access_key`/`secret_key`, firma de webhook `Base64(HMAC-SHA256(url_path + salt + timestamp + access_key + secret_key + body_string))`); en 7.2.4, cambiar "Wompi, PayU, Mercado Pago y Kushki" por "Wompi, Rapyd, Mercado Pago y Kushki". |
 | 8 | Vista de contenedores | Joshua | Punto 5: en 8.1 y 8.2, cambiar toda mención de "Railway" por "Render" (el diagrama ya quedó corregido en el punto 17, solo falta el texto). **Punto 15:** en 8.1.1, cambiar "Wompi, PayU, Mercado Pago y Kushki" y "Adaptador Wompi, Adaptador PayU, Adaptador Mercado Pago y Adaptador Kushki" por sus equivalentes con Rapyd. **Punto 17:** reemplazar las figuras de `Container Diagram - C4.png` (SDK y API de Simulación) y `Context Diagram - C4.png` (SDK y API de Simulación) por las versiones regeneradas. |
 | 9 | Vista de componentes | Joshua | **Punto 15:** en 9.1.3, cambiar los valores del enum `Gateway` de "WOMPI, PAYU, MERCADOPAGO o KUSHKI" a "WOMPI, RAPYD, MERCADOPAGO o KUSHKI"; renombrar el título 9.1.5 y su contenido ("PayU Adapter" → "Rapyd Adapter"); en 9.1.7 y 9.2.4, actualizar la mención "Para PayU, Mercado Pago y Kushki se implementa..." con el algoritmo real de Rapyd; en 9.2.3, renombrar "PayUMockFactory" a "RapydMockFactory". En `Component Diagram - C4.png` **del SDK**, corregir las etiquetas "PayU Adapter", "Traduce a PayU (Body auth, MD5/SHA)" y "PayU API — Latam Sandbox". Esta imagen no tiene fuente PlantUML en el repo, se corrige manualmente. **Punto 17:** reemplazar `Component Diagram - C4.png` **de la API de Simulación** por la versión regenerada (esta sí tiene fuente PlantUML nueva). **Punto 24:** actualizar descripción de `ErrorHandler` con clasificación `ErrorFamily` y sanitización. |
-| 10 | Vista de procesos | David | Punto 7 (reemplazar las Figuras 8, 9 y 10 por los diagramas de secuencia regenerados, y corregir el texto de 10.1.1 que menciona `KitPagosFacade`). **Punto 17:** si esta sección también embebe los 4 diagramas de secuencia de la API de Simulación (pago exitoso, pago denegado, error de red, notificación webhook), reemplazarlos por las versiones regeneradas; corrigen contenido técnico obsoleto de PayU, no solo el nombre. **Punto 26:** aclarar la obligatoriedad del paso de consulta en la conciliación en dos pasos (Mercado Pago). |
+| 10 | Vista de procesos | David | Punto 7 (reemplazar las Figuras 8, 9 y 10 por los diagramas de secuencia regenerados, y corregir el texto de 10.1.1 que menciona `KitPagosFacade`). **Punto 17:** si esta sección también embebe los 4 diagramas de secuencia de la API de Simulación (pago exitoso, pago denegado, error de red, notificación webhook), reemplazarlos por las versiones regeneradas; corrigen contenido técnico obsoleto de PayU, no solo el nombre. **Punto 26:** aclarar la obligatoriedad del paso de consulta en la conciliación en dos pasos (Mercado Pago). **Punto 27:** incorporar el diagrama de proceso detallado a nivel de código (KitPagos → SdkConfigurator → GatewayFactory → Adapter → ErrorHandler / ResponseNormalizer / WebhookVerifier). |
 | 11 | Vista física | Joan | Ninguna encontrada (ya quedó correcta con Render). |
 | 12 | Modelo de datos | Henao | Ninguna encontrada. |
 | 13 | ADR | Joan | Punto 7: la sección 13.1 sí referencia el `Hexagonal architecture class diagram.png` por nombre ("el Diagrama de Clases de la Arquitectura Hexagonal"), confirmado por el propio texto. Reemplazar la imagen embebida por la versión regenerada, y agregarle un número de figura ("Figura N"), ya que hoy es el único diagrama del documento sin ese rótulo, a diferencia del resto de figuras citadas en la sección 13. **Punto 15:** revisar si algún ADR de esta sección documenta el vocabulario nativo de PayU (`state_pol`, la particularidad de que PayU siempre devuelve HTTP 200) y corregirlo o marcarlo como pendiente de la investigación de Rapyd. |
@@ -263,6 +263,105 @@ La implementación inicial de `WebhookVerifier.parse()` para `Gateway.MERCADOPAG
 1. **Sección 2 (Requisitos Funcionales, RF-04):** Aclarar que en pasarelas con notificaciones asíncronas de solo identificador (Mercado Pago), el `WebhookEvent` normalizado devuelto por la validación criptográfica tiene estado `PENDING` para indicar que requiere la posterior invocación de RF-03 (`getPaymentStatus`).
 2. **Sección 10 (Vista de Procesos, Proceso C — Conciliación por Webhook / Figura `sequence-webhook-conciliation.puml`):** Aclarar en el texto descriptivo del diagrama que el paso 22 (`Comercio -> Facade : getPaymentStatus(gatewayTransactionId)`) es mandatorio para pasarelas que emiten webhooks livianos como Mercado Pago, mientras que para Wompi es opcional si el comercio solo necesita los datos provistos en el payload.
 3. **Sección 15.2:** Documentar que `WebhookVerifier.parse` mapea la ausencia de `status` a `TransactionStatus.PENDING` para respetar la semántica de dos pasos de Mercado Pago.
+
+### 27. Diagrama de Proceso de Ejecución de Código y Orquestación del Facade (flujo real KitPagos → GatewayFactory → Adapter → Webhook)
+
+**Responsable de incorporarlo en el SAD:** David (sección 10, Vista de Procesos).
+
+**Contexto:**
+Los diagramas de secuencia actuales del SAD (sección 10, Figuras 8, 9 y 10: `sequence-payment-creation.puml`, `sequence-synchronous-payment.puml`, `sequence-webhook-conciliation.puml`) modelan la interacción desde una perspectiva conceptual abstracta de alto nivel (`Comercio -> Facade -> Adapter -> Pasarela`).
+Sin embargo, no reflejan con precisión la secuencia real de ejecución en términos del código TypeScript implementado en el SDK. Al no mostrar la colaboración detallada entre `KitPagos`, `SDKConfigurator`, `GatewayFactory`, los adaptadores concretos (`WompiAdapter`, `MercadoPagoAdapter`), `ErrorHandler`, `ResponseNormalizer` y `WebhookVerifier`, se dificulta entender:
+1. En qué momento exacto se resuelven las credenciales y se instancia el adaptador.
+2. Cómo y dónde se delega el manejo de errores técnicos para mantener la métrica de acoplamiento CBO <= 5.
+3. Dónde y cómo entran los webhooks, cómo se valida la firma criptográfica sin acoplar el dominio a infraestructura, y cómo se articula la conciliación asíncrona de dos pasos.
+
+**Decisión:**
+Se define la necesidad de incorporar en la Sección 10 del SAD un **Diagrama de Proceso de Código Unificado** que capture la traza real de ejecución de las operaciones clave:
+
+1. **Flujo de Creación / Consulta de Pago (`createPayment` / `getPaymentStatus`):**
+   - El `Comercio` llama a `kitPagos.createPayment(request)`.
+   - `KitPagos` invoca a su método privado `resolveAdapter()`:
+     - Consulta a `SDKConfigurator.getActiveGateway()` y `getCredentials(gateway)`.
+     - Invoca a `GatewayFactory.create(gateway, credentials, baseUrl)` para instanciar el adaptador correspondiente (`MercadoPagoAdapter` o `WompiAdapter`).
+   - `KitPagos` despacha la llamada `adapter.createPayment(request)` o `adapter.getStatus(id)`.
+   - El Adapter prepara la petición con headers de autenticación (`Authorization: Bearer <privateKey>`), serializa el body hacia el formato nativo de la pasarela y ejecuta `global.fetch(url, options)`.
+   - Si `fetch` falla a nivel de red o responde con status HTTP != 2xx: el Adapter instancia `new ErrorHandler().handle(...)` dentro del método (manteniendo CBO <= 5) y lanza `KitPagosError` con credenciales sanitizadas.
+   - Si responde exitoso: el Adapter delega a `ResponseNormalizer.normalize(rawResponse, gateway)`, el cual traduce los datos nativos a la entidad inmutable `Transaction` con `TransactionStatus.APPROVED`.
+   - La entidad `Transaction` retorna a `KitPagos` y finalmente al `Comercio`.
+
+2. **Flujo de Webhook y Conciliación en Dos Pasos (`validateWebhook` + `getPaymentStatus`):**
+   - La `Pasarela` (Mercado Pago) envía un HTTP POST al endpoint propio del `Comercio`.
+   - El `Comercio` extrae el `payload` y los `headers` HTTP y llama a `kitPagos.validateWebhook(payload, headers)`.
+   - `KitPagos` obtiene las credenciales activas y llama al servicio puro de dominio `WebhookVerifier.verify(payload, headers, secret, gateway)` (validación HMAC-SHA256 sobre el manifest `id:...;request-id:...;ts:...;`).
+   - Si la firma es inválida: `KitPagos` lanza `KitPagosError(WEBHOOK_SIGNATURE_INVALID)`.
+   - Si la firma es válida: `KitPagos` llama a `WebhookVerifier.parse(payload, gateway)`.
+     - Para Mercado Pago (notificación liviana sin campo `status`), `WebhookVerifier` retorna un `WebhookEvent` con `gatewayTransactionId: "1234567890"` y `newStatus: PENDING`.
+   - El `Comercio` recibe el `WebhookEvent` y, al notar que está en `PENDING`, ejecuta el **segundo paso**: `kitPagos.getPaymentStatus(event.gatewayTransactionId)`.
+   - `KitPagos` resuelve `MercadoPagoAdapter`, quien ejecuta `GET /v1/payments/:id` autenticado a la pasarela (o al simulador).
+   - `ResponseNormalizer` procesa la respuesta completa y entrega al comercio la `Transaction` inmutable con el estado real consolidado (`APPROVED`, `DECLINED`).
+
+```puml
+@startuml
+title Diagrama de Proceso de Código - Orquestación del SDK Kit Pagos
+autonumber
+actor Comercio
+participant "KitPagos\n(Facade)" as Facade
+participant "SDKConfigurator\n(Config)" as Config
+participant "GatewayFactory\n(Factory)" as Factory
+participant "MercadoPagoAdapter\n(Adapter)" as Adapter
+participant "ErrorHandler\n(Application)" as ErrorH
+participant "ResponseNormalizer\n(Application)" as Normalizer
+participant "WebhookVerifier\n(Domain Service)" as Verifier
+actor "Mercado Pago\n(API / Simulator)" as MP
+
+== 1. Creación de Pago ==
+Comercio -> Facade : createPayment(request)
+Facade -> Config : getActiveGateway(), getCredentials(gw), getBaseUrl()
+Config --> Facade : gateway, credentials, baseUrl
+Facade -> Factory : create(gateway, credentials, baseUrl)
+Factory --> Facade : MercadoPagoAdapter
+Facade -> Adapter : createPayment(request)
+Adapter -> MP : POST /v1/payments (Bearer token)
+alt Fallo HTTP / Red
+  MP --> Adapter : 4xx/5xx o Error de Red
+  Adapter -> ErrorH : new ErrorHandler().handle(error, gateway)
+  ErrorH --> Adapter : KitPagosError (sanitizado)
+  Adapter --> Facade : throw KitPagosError
+  Facade --> Comercio : throw KitPagosError
+else Éxito
+  MP --> Adapter : 201 Created (JSON nativo)
+  Adapter -> Normalizer : normalize(rawResponse, gateway)
+  Normalizer --> Adapter : Transaction (inmutable)
+  Adapter --> Facade : Transaction
+  Facade --> Comercio : Transaction
+end
+
+== 2. Conciliación de Webhook (2 Pasos) ==
+MP -> Comercio : POST /webhook (payload con id, x-signature)
+Comercio -> Facade : validateWebhook(payload, headers)
+Facade -> Config : getActiveGateway(), getCredentials(gw)
+Config --> Facade : gateway, credentials
+Facade -> Verifier : verify(payload, headers, secret, gateway)
+Verifier --> Facade : true
+Facade -> Verifier : parse(payload, gateway)
+Verifier --> Facade : WebhookEvent (id: 123456, newStatus: PENDING)
+Facade --> Comercio : WebhookEvent
+note over Comercio : Detecta PENDING -> dispara Paso 2
+Comercio -> Facade : getPaymentStatus(event.gatewayTransactionId)
+Facade -> Factory : create(...)
+Factory --> Facade : MercadoPagoAdapter
+Facade -> Adapter : getStatus("123456")
+Adapter -> MP : GET /v1/payments/123456 (Bearer token)
+MP --> Adapter : 200 OK (JSON con status: "approved")
+Adapter -> Normalizer : normalize(rawResponse, gateway)
+Normalizer --> Adapter : Transaction (estado APPROVED)
+Adapter --> Facade : Transaction
+Facade --> Comercio : Transaction
+@enduml
+```
+
+**Estado:** Documentado como requerimiento de diseño en `architecture-log.md`.
+**Pendiente en el SAD:** David debe incluir este diagrama de interacción detallado en la sección 10 (Vista de Procesos) del documento `.docx`, complementando los diagramas conceptuales de alto nivel ya existentes.
 
 ---
 
