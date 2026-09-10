@@ -51,9 +51,9 @@ Antes de empezar a implementar nada de la primera iteración de código, cada co
 | 10 | Vista de procesos | David | Punto 7 (reemplazar las Figuras 8, 9 y 10 por los diagramas de secuencia regenerados, y corregir el texto de 10.1.1 que menciona `KitPagosFacade`). **Punto 17:** si esta sección también embebe los 4 diagramas de secuencia de la API de Simulación (pago exitoso, pago denegado, error de red, notificación webhook), reemplazarlos por las versiones regeneradas; corrigen contenido técnico obsoleto de PayU, no solo el nombre. **Punto 26:** aclarar la obligatoriedad del paso de consulta en la conciliación en dos pasos (Mercado Pago). **Punto 27:** incorporar el diagrama de proceso detallado a nivel de código (KitPagos → SdkConfigurator → GatewayFactory → Adapter → ErrorHandler / ResponseNormalizer / WebhookVerifier). |
 | 11 | Vista física | Joan | Ninguna encontrada (ya quedó correcta con Render). |
 | 12 | Modelo de datos | Henao | Ninguna encontrada. |
-| 13 | ADR | Joan | Punto 7: la sección 13.1 sí referencia el `Hexagonal architecture class diagram.png` por nombre ("el Diagrama de Clases de la Arquitectura Hexagonal"), confirmado por el propio texto. Reemplazar la imagen embebida por la versión regenerada, y agregarle un número de figura ("Figura N"), ya que hoy es el único diagrama del documento sin ese rótulo, a diferencia del resto de figuras citadas en la sección 13. **Punto 15:** revisar si algún ADR de esta sección documenta el vocabulario nativo de PayU (`state_pol`, la particularidad de que PayU siempre devuelve HTTP 200) y corregirlo o marcarlo como pendiente de la investigación de Rapyd. |
+| 13 | ADR | Joan | Punto 7: la sección 13.1 sí referencia el `Hexagonal architecture class diagram.png` por nombre ("el Diagrama de Clases de la Arquitectura Hexagonal"), confirmado por el propio texto. Reemplazar la imagen embebida por la versión regenerada, y agregarle un número de figura ("Figura N"), ya que hoy es el único diagrama del documento sin ese rótulo, a diferencia del resto de figuras citadas en la sección 13. **Punto 15:** revisar si algún ADR de esta sección documenta el vocabulario nativo de PayU (`state_pol`, la particularidad de que PayU siempre devuelve HTTP 200) y corregirlo o marcarlo como pendiente de la investigación de Rapyd. **Punto 28:** incorporar el apartado conceptual de Arquitectura de Puertos y Adaptadores (Hexagonal) mapeada a Kit Pagos Colombia en ADR-01. |
 | 14 | Riesgo técnico | David | Punto 10 (falta framework de pruebas en `simulator-api`, ya resuelto vía issue #6) es un riesgo de calidad que vale la pena registrar ahí, aunque no sea una inconsistencia de redacción. **Punto 15:** registrar la transición de PayU a Rapyd como un riesgo ya materializado (cambio de proveedor externo fuera de control del equipo, que invalidó documentación e implementación ya hecha del algoritmo de firma). |
-| 15 | Estructura del Sistema | David | Punto 1 (corregir nombres de métodos en 15.2 a `getPaymentStatus`/`validateWebhook`), punto 3 (aclarar que la reconciliación reconstruye la entidad), punto 6 (aclarar que `WebhookVerifier` tiene dos métodos públicos, no uno). **Punto 22:** validateWebhook retorna `WebhookEvent` y lanza `KitPagosError`. **Punto 23:** actualizar sección 15.1 con `KitPagosError` y `KitPagosErrorCode`. **Punto 24:** documentar responsabilidades de `ErrorHandler` en 15.2. **Punto 26:** documentar normalización de `WebhookVerifier.parse` a `PENDING` ante webhooks de solo identificador. |
+| 15 | Estructura del Sistema | David | Punto 1 (corregir nombres de métodos en 15.2 a `getPaymentStatus`/`validateWebhook`), punto 3 (aclarar que la reconciliación reconstruye la entidad), punto 6 (aclarar que `WebhookVerifier` tiene dos métodos públicos, no uno). **Punto 22:** validateWebhook retorna `WebhookEvent` y lanza `KitPagosError`. **Punto 23:** actualizar sección 15.1 con `KitPagosError` y `KitPagosErrorCode`. **Punto 24:** documentar responsabilidades de `ErrorHandler` en 15.2. **Punto 26:** documentar normalización de `WebhookVerifier.parse` a `PENDING` ante webhooks de solo identificador. **Punto 28:** detallar el desglose de capas (domain, application, infrastructure) y sus responsabilidades específicas en 15.1 y 15.2. |
 | 16 | Glosario | David | **Punto 15:** si la definición de `Gateway`/`Adapter` usa a PayU como ejemplo, reemplazarlo por Rapyd, y agregar una nota breve sobre la adquisición de PayU por Rapyd para que el lector entienda por qué cambió el nombre. |
 
 Los puntos 4, 8, 9, 11 y 12 de la Sección B, y toda la Sección E, no corresponden a ninguna de las 16 secciones del SAD (son documentos de repositorio o decisiones de código ya resueltas), así que no tienen un responsable de esta lista; se dejan como tareas de ingeniería general para la primera iteración.
@@ -362,6 +362,53 @@ Facade --> Comercio : Transaction
 
 **Estado:** Documentado como requerimiento de diseño en `architecture-log.md`.
 **Pendiente en el SAD:** David debe incluir este diagrama de interacción detallado en la sección 10 (Vista de Procesos) del documento `.docx`, complementando los diagramas conceptuales de alto nivel ya existentes.
+
+### 28. Recomendación de apartado explicativo de la Arquitectura de Puertos y Adaptadores (Hexagonal) en el SAD
+
+**Responsable de incorporarlo en el SAD:** Joan (sección 13, ADR-01) y David (sección 15, Estructura del Sistema).
+
+**Contexto:**
+El SAD declara en ADR-01 que el SDK adopta la **Arquitectura Hexagonal (Puertos y Adaptadores)** formulada por Alistair Cockburn. Sin embargo, en el documento `.docx` actual falta un apartado pedagógico y explícito que desglose qué representa cada capa en la teoría de software y **qué elementos concretos viven en cada una de ellas dentro de Kit Pagos Colombia**.
+
+Sin este desglose, quien lee la tesis o la documentación técnica puede confundir el rol de servicios de aplicación como `ResponseNormalizer` o `ErrorHandler`, o no entender por qué `WebhookVerifier` vive en el dominio mientras que los adaptadores concretos viven en infraestructura.
+
+**Recomendación de contenido para el SAD:**
+Se recomienda redactar en la Sección 13 (ADR-01) o en la Sección 15 (Estructura del Sistema) un apartado dedicado con el siguiente desglose:
+
+1. **Capa de Dominio (`sdk/src/domain/`): El Núcleo Puro**
+   - **Qué representa:** Contiene la lógica del negocio pura, las reglas invariantes de dinero y el vocabulario unificado independiente de cualquier tecnología externa o pasarela de pago.
+   - **Regla de dependencia:** **Regla del Cero Absoluto**: nunca importa nada de `application/` ni de `infrastructure/`.
+   - **Qué contiene en nuestro proyecto:**
+     - **Entidad principal:** `Transaction` (inmutable, representa el estado consolidado de un cobro).
+     - **Objetos de Valor (Value Objects):** `Amount` (string decimal exacto con escala y redondeo seguro), `Currency` (con exponente ISO 4217), `Gateway` (`WOMPI`, `RAPYD`, `MERCADOPAGO`, `KUSHKI`), `GatewayTransactionId`, `OrderReference`, `Payer`, `ReturnUrlConfig`, `TaxBreakdown` (descomposición tributaria requerida por Kushki), `TransactionStatus`, `RejectionReason` y `WebhookEvent`.
+     - **Excepción de dominio unificada:** `KitPagosError` y `KitPagosErrorCode`.
+     - **Servicio de Dominio Puro:** `WebhookVerifier` (sin estado ni dependencias externas; realiza operaciones criptográficas puras de validación de firmas y parsing de eventos).
+
+2. **Capa de Aplicación (`sdk/src/application/`): Puertos y Servicios de Orquestación**
+   - **Qué representa:** Define los contratos neutrales para interactuar con el mundo exterior y los servicios que orquestan la traducción entre el dominio y los agentes externos.
+   - **Regla de dependencia:** Depende exclusivamente de `domain/`; **nunca** importa nada de `infrastructure/`.
+   - **Qué contiene en nuestro proyecto:**
+     - **Puerto de Salida (Driven Port):** `PaymentGatewayPort` (interfaz TypeScript que define `createPayment()`, `getStatus()` y `verifySignature()`) junto con su DTO de entrada `CreatePaymentRequest`.
+     - **Servicios de Aplicación:**
+       - `ResponseNormalizer`: Traduce los payloads heterogéneos y respuestas nativas de cada pasarela hacia las entidades `Transaction` del dominio.
+       - `ErrorHandler`: Clasifica fallos técnicos (`ErrorFamily.RETRIABLE` vs `FINAL`), sanitiza credenciales (RF-08) y los traduce a `KitPagosError`.
+       - `RetryHandler`: Orquesta la política de tolerancia a fallos transitorios con backoff exponencial.
+
+3. **Capa de Infraestructura (`sdk/src/infrastructure/`): El Mundo Exterior**
+   - **Qué representa:** Contiene los detalles tecnológicos concretos: llamadas HTTP (`fetch`), parseo de JSON, configuración del entorno, y la interfaz pública para el desarrollador consumidor.
+   - **Regla de dependencia:** Apunta hacia adentro: puede importar libremente de `application/` y `domain/`.
+   - **Qué contiene en nuestro proyecto:**
+     - **Adaptadores Secundarios (Driven Adapters):** `WompiAdapter`, `MercadoPagoAdapter`, etc., que implementan `PaymentGatewayPort` comunicándose con los endpoints REST reales o simulados.
+     - **Factoría:** `GatewayFactory` (resuelve e instancia dinámicamente el adaptador solicitado según la pasarela activa).
+     - **Configuración:** `SDKConfigurator` (gestiona llaves públicas, privadas y URLs sin exponer secretos).
+     - **Fachada Primaria (Driving Adapter / Facade):** `KitPagos` (única clase instanciada por los comercios; expone `createPayment()`, `getPaymentStatus()` y `validateWebhook()`).
+
+4. **Justificación en el contexto de Kit Pagos Colombia:**
+   - Permite agregar nuevas pasarelas de pago (como Rapyd o Kushki) creando únicamente un nuevo adaptador en `infrastructure/adapters/`, sin modificar una sola línea del dominio ni de la fachada.
+   - Facilita pruebas automatizadas 100% aisladas mediante mocks e inyección sin levantar servidores web reales.
+
+**Estado:** Registrado como recomendación arquitectónica en `architecture-log.md`.
+**Pendiente en el SAD:** Joan (sección 13) y David (sección 15) deben incorporar esta sección explicativa en el documento `.docx`.
 
 ---
 
