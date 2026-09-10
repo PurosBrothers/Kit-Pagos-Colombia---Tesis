@@ -173,17 +173,6 @@ describe("ResponseNormalizer", () => {
       }
     });
 
-    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for MERCADOPAGO", () => {
-      expect(() => normalizer.normalize({}, Gateway.MERCADOPAGO)).toThrow(KitPagosError);
-      try {
-        normalizer.normalize({}, Gateway.MERCADOPAGO);
-      } catch (error) {
-        const sdkError = error as KitPagosError;
-        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
-        expect(sdkError.gateway).toBe(Gateway.MERCADOPAGO);
-      }
-    });
-
     it("should throw KitPagosError(UNSUPPORTED_OPERATION) for KUSHKI", () => {
       expect(() => normalizer.normalize({}, Gateway.KUSHKI)).toThrow(KitPagosError);
       try {
@@ -207,4 +196,93 @@ describe("ResponseNormalizer", () => {
       }
     });
   });
+    describe("normalize() with Mercado Pago", () => {
+    const validMpResponse = {
+      id: 1234567890,
+      status: "approved",
+      status_detail: "accredited",
+      transaction_amount: 50000,
+      currency_id: "COP",
+      description: "ORDER-MP-123",
+      external_reference: "ORDER-MP-123",
+      payer: {
+        email: "cliente.mp@example.com",
+      },
+    };
+
+    it("normaliza un pago aprobado de Mercado Pago reflejando monto en pesos y estados nativos", () => {
+      const transaction = normalizer.normalize(validMpResponse, Gateway.MERCADOPAGO);
+
+      expect(transaction).toBeDefined();
+      expect(transaction.isApproved()).toBe(true);
+      expect(transaction.getStatus()).toBe("APPROVED");
+      expect(transaction.rawStatus).toBe("approved"); // Conserva minúsculas nativas
+      expect(transaction.gatewayTransactionId.value).toBe("1234567890");
+      expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.MERCADOPAGO);
+      expect(transaction.amount.getValue()).toBe("50000");
+      expect(transaction.currency.getCode()).toBe("COP");
+      expect(transaction.orderReference.getValue()).toBe("ORDER-MP-123");
+      expect(transaction.payer.email).toBe("cliente.mp@example.com");
+    });
+
+    it("normaliza cuando el payload viene como string JSON", () => {
+      const jsonString = JSON.stringify(validMpResponse);
+      const transaction = normalizer.normalize(jsonString, Gateway.MERCADOPAGO);
+
+      expect(transaction.gatewayTransactionId.value).toBe("1234567890");
+      expect(transaction.amount.getValue()).toBe("50000");
+    });
+
+    it("mapea correctamente todos los estados nativos en minúsculas", () => {
+      const testCases: Array<{ raw: string; expected: string }> = [
+        { raw: "approved", expected: "APPROVED" },
+        { raw: "rejected", expected: "DECLINED" },
+        { raw: "pending", expected: "PENDING" },
+        { raw: "in_process", expected: "PENDING" },
+        { raw: "cancelled", expected: "VOIDED" },
+        { raw: "other_unknown", expected: "ERROR" },
+      ];
+
+      for (const { raw, expected } of testCases) {
+        const payload = { ...validMpResponse, status: raw };
+        const transaction = normalizer.normalize(payload, Gateway.MERCADOPAGO);
+        expect(transaction.getStatus()).toBe(expected);
+        expect(transaction.rawStatus).toBe(raw);
+      }
+    });
+
+    it("usa valores por defecto cuando faltan payer.email o external_reference", () => {
+      const minimalPayload = {
+        id: "mp-tx-999",
+        status: "approved",
+        transaction_amount: 25000,
+        currency_id: "COP",
+      };
+
+      const transaction = normalizer.normalize(minimalPayload, Gateway.MERCADOPAGO);
+      expect(transaction.orderReference.getValue()).toBe("mp-tx-999");
+      expect(transaction.payer.email).toBe("customer@mercadopago.com");
+    });
+
+    it("lanza MALFORMED_RESPONSE si el JSON es inválido", () => {
+      expect(() => {
+        normalizer.normalize("not-a-valid-json", Gateway.MERCADOPAGO);
+      }).toThrow(KitPagosError);
+    });
+
+    it("lanza MALFORMED_RESPONSE si falta el id", () => {
+      const invalid = { status: "approved", transaction_amount: 10000 };
+      expect(() => {
+        normalizer.normalize(invalid, Gateway.MERCADOPAGO);
+      }).toThrow(KitPagosError);
+    });
+
+    it("lanza MALFORMED_RESPONSE si el monto es inválido", () => {
+      const invalid = { ...validMpResponse, transaction_amount: "monto-invalido" };
+      expect(() => {
+        normalizer.normalize(invalid, Gateway.MERCADOPAGO);
+      }).toThrow(KitPagosError);
+    });
+  });
+
 });

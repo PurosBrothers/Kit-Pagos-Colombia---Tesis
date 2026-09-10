@@ -121,10 +121,110 @@ export class ResponseNormalizer {
           authorizationCode
         );
       }
+      case Gateway.MERCADOPAGO: {
+        // Paso 1: Parsear el payload si viene como string JSON
+        let payload: Record<string, unknown>;
+        try {
+          payload =
+            typeof rawResponse === "string"
+              ? JSON.parse(rawResponse)
+              : (rawResponse as Record<string, unknown>);
+        } catch {
+          throw new KitPagosError(
+            KitPagosErrorCode.MALFORMED_RESPONSE,
+            Gateway.MERCADOPAGO,
+            rawResponse,
+            "Failed to parse JSON response from Mercado Pago"
+          );
+        }
 
-      // Los adaptadores para RAPYD, MERCADOPAGO y KUSHKI se incorporan en la Iteración 2
+        // Paso 2: Mercado Pago devuelve un objeto plano en la raíz (o en data si fuera un mock)
+        const data = (payload?.data ?? payload) as Record<string, unknown> | undefined;
+        if (!data || typeof data !== "object" || !data.id) {
+          throw new KitPagosError(
+            KitPagosErrorCode.MALFORMED_RESPONSE,
+            Gateway.MERCADOPAGO,
+            rawResponse,
+            "Malformed response from Mercado Pago gateway: missing id"
+          );
+        }
+
+        // Paso 3: Normalizar el estado nativo (en minúsculas) al enum unificado TransactionStatus.
+        // Se preserva rawStatus exactamente como llegó para auditoría.
+        const rawStatus = String(data.status ?? "");
+        let status: TransactionStatus;
+        switch (rawStatus.toLowerCase()) {
+          case "approved":
+            status = "APPROVED";
+            break;
+          case "rejected":
+            status = "DECLINED";
+            break;
+          case "pending":
+          case "in_process":
+            status = "PENDING";
+            break;
+          case "cancelled":
+            status = "VOIDED";
+            break;
+          default:
+            status = "ERROR";
+            break;
+        }
+
+        // Paso 4: Normalizar la divisa ISO 4217 (Mercado Pago usa 'currency_id', ej. 'COP')
+        const currency = new Currency(String(data.currency_id ?? "COP"));
+
+        // Paso 5: Normalizar el monto. Mercado Pago entrega 'transaction_amount' en pesos
+        // con decimales, no en centavos. Se construye Amount directamente sin toMinorUnits.
+        let amount: Amount;
+        try {
+          const rawAmount = data.transaction_amount;
+          const amountStr =
+            typeof rawAmount === "number"
+              ? rawAmount.toString()
+              : String(rawAmount ?? "");
+          amount = new Amount(amountStr);
+        } catch (amountError) {
+          throw new KitPagosError(
+            KitPagosErrorCode.MALFORMED_RESPONSE,
+            Gateway.MERCADOPAGO,
+            rawResponse,
+            `Malformed amount in Mercado Pago response: ${(amountError as Error).message}`
+          );
+        }
+
+        // Paso 6: Normalizar la referencia de orden (external_reference o description)
+        const orderReference = new OrderReference(
+          String(data.external_reference ?? data.description ?? data.id)
+        );
+
+        // Paso 7: Normalizar los datos del pagador
+        const payerData = data.payer as Record<string, unknown> | undefined;
+        const customerEmail = payerData?.email ?? "customer@mercadopago.com";
+        const payer = new Payer({ email: String(customerEmail) });
+
+        // Paso 8: Normalizar el identificador nativo combinándolo con Gateway.MERCADOPAGO
+        const gatewayTransactionId = new GatewayTransactionId(
+          String(data.id),
+          Gateway.MERCADOPAGO
+        );
+
+        // Paso 9: Construir y retornar la entidad inmutable Transaction
+        return new Transaction(
+          gatewayTransactionId,
+          orderReference,
+          amount,
+          currency,
+          payer,
+          status,
+          rawStatus,
+          undefined,
+          undefined
+        );
+      }
+      // Los adaptadores para RAPYD y KUSHKI se incorporan en la Iteración 2
       case Gateway.RAPYD:
-      case Gateway.MERCADOPAGO:
       case Gateway.KUSHKI:
       default:
         throw new KitPagosError(
