@@ -4,11 +4,14 @@ Esta carpeta es un paquete npm independiente que **no forma parte del SDK**. Exi
 
 Esa separación es deliberada. Si el ejemplo viviera dentro de `sdk/src` e importara por rutas relativas, probaría el código interno pero no demostraría nada sobre lo que el paquete publicado realmente expone. Al consumirlo como dependencia, cualquier tipo o clase que falte en la superficie pública rompe la compilación del ejemplo de inmediato.
 
-## Cómo correr el ejemplo
+---
 
-Necesitas tres terminales, o correr los dos primeros pasos una sola vez.
+## Prerrequisitos
 
-**1. Compilar el SDK.** El paquete apunta a `dist/index.js` y `dist/index.d.ts`, así que hay que construirlo antes de consumirlo.
+Necesitas dos terminales previas (o haber corrido los pasos una vez):
+
+### 1. Compilar el SDK
+El paquete de ejemplos apunta a `dist/index.js` y `dist/index.d.ts`, así que el SDK debe estar construido antes de consumirlo:
 
 ```bash
 cd sdk
@@ -16,7 +19,8 @@ npm install
 npm run build
 ```
 
-**2. Levantar la API de Simulación.** El ejemplo hace peticiones HTTP reales contra el mock de Wompi en el puerto 3000. Dejala corriendo.
+### 2. Levantar la API de Simulación
+Los ejemplos realizan peticiones HTTP reales contra los mocks locales en el puerto 3000. Déjala corriendo en una terminal:
 
 ```bash
 cd simulator-api
@@ -24,28 +28,76 @@ npm install
 npm run dev
 ```
 
-**3. Instalar y correr el ejemplo.**
+---
+
+## Comandos disponibles
+
+Desde la carpeta `examples/`:
 
 ```bash
 cd examples
 npm install
+```
+
+Puedes ejecutar cualquiera de los siguientes scripts definidos en `package.json`:
+
+### 1. Simulación de pago con Wompi
+
+```bash
+npm run simulate:wompi
+# O también:
 npm start
 ```
 
-## Qué deberías ver
+* **Archivo:** `simulate-wompi-payment.ts`
+* **Descripción:** Construye una solicitud de pago unificada utilizando objetos de valor del dominio (`Amount`, `Currency`, `OrderReference`, `Payer`) y procesa el pago a través de Wompi.
+* **Qué esperar:** 
+  1. Imprime la solicitud de pago.
+  2. Muestra la `Transaction` creada con estado `APPROVED`.
+  3. Muestra un error tipado con código `UNSUPPORTED_OPERATION` al intentar consultar el estado por ID (diseñado intencionalmente para ilustrar cómo el comercio gestiona códigos de error tipados con `KitPagosError`).
 
-El script imprime la solicitud de pago construida con objetos de valor del dominio, la `Transaction` que devuelve el SDK con estado `APPROVED`, y luego un error tipado con código `UNSUPPORTED_OPERATION` al intentar consultar el estado, porque la API de Simulación todavía no expone ese endpoint. Ese último bloque está en el ejemplo a propósito: muestra cómo el comercio distingue por código qué fue lo que pasó, en lugar de leer un mensaje de texto.
+---
 
-Si la API de Simulación no está arriba, el ejemplo lo detecta por el código `CONNECTION_FAILED` y te dice qué comando correr.
+### 2. Simulación de pago con Mercado Pago
 
-## Verificar los tipos sin ejecutar
+```bash
+npm run simulate:mercadopago
+```
+
+* **Archivo:** `simulate-mercadopago-payment.ts`
+* **Descripción:** Demuestra el flujo completo end-to-end con Mercado Pago:
+  * Creación de pago con montos en pesos decimales directos (a diferencia de Wompi, no requiere centavos).
+  * Autenticación mediante token Bearer.
+  * Normalización de respuestas manteniendo el estado nativo (`approved` en minúsculas en `rawStatus`) y el estado unificado (`TransactionStatus.APPROVED`).
+  * Consulta del estado de la transacción (`kitPagos.getPaymentStatus(...)`) contra el endpoint HTTP `GET /v1/sim/mercadopago/payments/:id`.
+* **Qué esperar:** Verás en consola tanto la creación de la transacción como la consulta posterior con estado acreditado/aprobado.
+
+---
+
+### 3. Verificar tipos sin ejecutar
 
 ```bash
 npm run typecheck
 ```
 
-Esto compila el ejemplo contra los `.d.ts` del SDK ya construido, así que sirve para detectar si un cambio en el SDK rompió su superficie pública sin necesidad de levantar el simulador.
+* **Descripción:** Ejecuta `tsc --noEmit` para verificar que el código de los ejemplos compila perfectamente contra las definiciones de tipos (`.d.ts`) generadas por el SDK.
+* **Utilidad:** Detecta al instante si algún cambio en el SDK rompió la superficie pública expuesta a los comercios, sin necesidad de levantar la API de simulación.
 
-## Nota sobre el pipeline
+---
 
-El CI del repositorio solo tiene trabajos para `sdk` y `simulator-api`, así que esta carpeta no se verifica automáticamente. Si cambias la superficie pública del SDK, corré `npm run typecheck` acá a mano antes de abrir el pull request.
+## Manejo de errores de conexión
+
+Si ejecutas cualquiera de los ejemplos sin haber levantado previamente la `simulator-api`, el SDK capturará el fallo de red y arrojará un `KitPagosError` con código `KitPagosErrorCode.CONNECTION_FAILED`, imprimiendo una advertencia amigable en consola que te recordará iniciar el simulador:
+
+```text
+❌ No se pudo conectar con la API de Simulación.
+Asegúrate de haberla iniciado en otra terminal:
+
+  cd simulator-api && npm run dev
+```
+
+---
+
+## Nota sobre el pipeline (CI)
+
+El CI del repositorio ejecuta pruebas y verificaciones en `sdk` y `simulator-api`. Por lo tanto, si realizas cambios que afecten la API pública del SDK, ejecuta `npm run typecheck` en esta carpeta localmente antes de crear un pull request.
