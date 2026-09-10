@@ -202,23 +202,35 @@ export class WebhookVerifier {
       }
       case Gateway.MERCADOPAGO: {
         const body = JSON.parse(payload);
-        const eventType = body.action ?? "payment.updated";
+        const eventType = body.action ?? body.type ?? "payment.updated";
         const gatewayTransactionId = String(body.data?.id ?? "");
-        const rawStatus = (body.status ?? "").toLowerCase();
+        const rawStatus = body.status ? String(body.status).toLowerCase() : undefined;
 
         let newStatus: TransactionStatus;
-        switch (rawStatus) {
-          case "approved":
-            newStatus = "APPROVED";
-            break;
-          case "rejected":
-            newStatus = "DECLINED";
-            break;
-          case "pending":
-            newStatus = "PENDING";
-            break;
-          default:
-            newStatus = "ERROR";
+        if (rawStatus === undefined) {
+          // En la notificación nativa de 2 pasos de Mercado Pago, la pasarela solo envía
+          // el identificador de la transacción (data.id), sin incluir el estado financiero.
+          // El WebhookEvent se inicializa en PENDING a la espera de la conciliación
+          // mediante getPaymentStatus(gatewayTransactionId).
+          newStatus = "PENDING";
+        } else {
+          switch (rawStatus) {
+            case "approved":
+              newStatus = "APPROVED";
+              break;
+            case "rejected":
+              newStatus = "DECLINED";
+              break;
+            case "pending":
+            case "in_process":
+              newStatus = "PENDING";
+              break;
+            case "cancelled":
+              newStatus = "VOIDED";
+              break;
+            default:
+              newStatus = "ERROR";
+          }
         }
 
         return new WebhookEvent({

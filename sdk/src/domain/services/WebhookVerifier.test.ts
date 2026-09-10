@@ -269,6 +269,50 @@ describe("WebhookVerifier", () => {
       expect(event.gateway).toBe(Gateway.MERCADOPAGO);
     });
 
+    it("normaliza notificaciones nativas de Mercado Pago sin status a PENDING (flujo de 2 pasos)", () => {
+      const payload = JSON.stringify({
+        action: "payment.created",
+        data: { id: "mp-native-999" },
+      });
+
+      const event = verifier.parse(payload, Gateway.MERCADOPAGO);
+      expect(event.eventType).toBe("payment.created");
+      expect(event.gatewayTransactionId).toBe("mp-native-999");
+      expect(event.newStatus).toBe("PENDING");
+      expect(event.gateway).toBe(Gateway.MERCADOPAGO);
+    });
+
+    it("extrae eventType desde type en Mercado Pago cuando action no está presente", () => {
+      const payload = JSON.stringify({
+        type: "payment",
+        data: { id: "mp-type-888" },
+      });
+
+      const event = verifier.parse(payload, Gateway.MERCADOPAGO);
+      expect(event.eventType).toBe("payment");
+      expect(event.gatewayTransactionId).toBe("mp-type-888");
+      expect(event.newStatus).toBe("PENDING");
+      expect(event.gateway).toBe(Gateway.MERCADOPAGO);
+    });
+
+    it("normaliza eventos de Mercado Pago con in_process a PENDING y cancelled a VOIDED", () => {
+      const payloadInProcess = JSON.stringify({
+        action: "payment.updated",
+        data: { id: "mp-proc-1" },
+        status: "in_process",
+      });
+      const eventProc = verifier.parse(payloadInProcess, Gateway.MERCADOPAGO);
+      expect(eventProc.newStatus).toBe("PENDING");
+
+      const payloadCancelled = JSON.stringify({
+        action: "payment.updated",
+        data: { id: "mp-canc-2" },
+        status: "cancelled",
+      });
+      const eventCanc = verifier.parse(payloadCancelled, Gateway.MERCADOPAGO);
+      expect(eventCanc.newStatus).toBe("VOIDED");
+    });
+
     it("normaliza eventos de Kushki con APPROVAL a APPROVED", () => {
       const payload = JSON.stringify({
         transaction_id: "kushki-tx-789",

@@ -417,5 +417,114 @@ describe("KitPagos", () => {
         }
       });
     });
+
+    describe("two-step webhook conciliation (Mercado Pago)", () => {
+      const mpSecret = "mp_secret_key_789";
+      const mpPublicKey = "mp_public_key_123";
+      const dataId = "1234567890";
+      const requestId = "req-mp-uuid-step";
+      const ts = "1702500000";
+
+      const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
+      const v1 = crypto.createHmac("sha256", mpSecret).update(manifest).digest("hex");
+
+      // Payload nativo de Mercado Pago: solo incluye action y data.id (sin campo status)
+      const nativePayload = JSON.stringify({
+        action: "payment.created",
+        data: { id: dataId },
+      });
+
+      const headers = {
+        "x-signature": `ts=${ts},v1=${v1}`,
+        "x-request-id": requestId,
+      };
+
+      function buildMercadoPagoSdk(baseUrl?: string): KitPagos {
+        return new KitPagos({
+          gateway: Gateway.MERCADOPAGO,
+          credentials: {
+            [Gateway.MERCADOPAGO]: { publicKey: mpPublicKey, privateKey: mpSecret },
+          },
+          baseUrl,
+        });
+      }
+
+      it("should validate native notification (step 1) and retrieve full transaction via getPaymentStatus (step 2)", async () => {
+        const sdk = buildMercadoPagoSdk("http://localhost:3000/v1/sim/mercadopago/payments");
+
+        // Paso 1: Validar firma y parsear la notificación entrante
+        const event = sdk.validateWebhook(nativePayload, headers);
+
+        expect(event.gateway).toBe(Gateway.MERCADOPAGO);
+        expect(event.gatewayTransactionId).toBe(dataId);
+        expect(event.newStatus).toBe("PENDING");
+        expect(event.eventType).toBe("payment.created");
+
+        // Paso 2: Conciliación transparente mediante getPaymentStatus(event.gatewayTransactionId)
+        const mockFetch = jest.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            id: Number(dataId),
+            status: "approved",
+            status_detail: "accredited",
+            transaction_amount: 150000.0,
+            currency_id: "COP",
+            external_reference: "ORDER-MP-99",
+            payer: { email: "cliente@example.com" },
+          }),
+        });
+        global.fetch = mockFetch;
+
+        const transaction = await sdk.getPaymentStatus(event.gatewayTransactionId);
+
+        expect(mockFetch).toHaveBeenCalledWith(
+          "http://localhost:3000/v1/sim/mercadopago/payments/1234567890",
+          expect.objectContaining({
+            method: "GET",
+            headers: expect.objectContaining({
+              Authorization: `Bearer ${mpSecret}`,
+            }),
+          })
+        );
+
+        expect(transaction.gatewayTransactionId.value).toBe(dataId);
+        expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.MERCADOPAGO);
+        expect(transaction.isApproved()).toBe(true);
+        expect(transaction.getStatus()).toBe("APPROVED");
+        expect(transaction.rawStatus).toBe("approved");
+        expect(transaction.amount.getValue()).toBe("150000");
+        expect(transaction.currency.getCode()).toBe("COP");
+        expect(transaction.orderReference.getValue()).toBe("ORDER-MP-99");
+        expect(transaction.payer.email).toBe("cliente@example.com");
+      });
+
+      it("should reconcile a rejected payment in step 2 correctly", async () => {
+        const sdk = buildMercadoPagoSdk("http://localhost:3000/v1/sim/mercadopago/payments");
+
+        const event = sdk.validateWebhook(nativePayload, headers);
+        expect(event.newStatus).toBe("PENDING");
+
+        global.fetch = jest.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            id: Number(dataId),
+            status: "rejected",
+            status_detail: "cc_rejected_other_reason",
+            transaction_amount: 150000.0,
+            currency_id: "COP",
+            external_reference: "ORDER-MP-99",
+            payer: { email: "cliente@example.com" },
+          }),
+        });
+
+        const transaction = await sdk.getPaymentStatus(event.gatewayTransactionId);
+
+        expect(transaction.isApproved()).toBe(false);
+        expect(transaction.getStatus()).toBe("DECLINED");
+        expect(transaction.rawStatus).toBe("rejected");
+      });
+    });
   });
 });
