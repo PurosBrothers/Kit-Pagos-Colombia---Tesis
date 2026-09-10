@@ -303,6 +303,10 @@ Para resolver esta disparidad sin romper la uniformidad de la interfaz pública,
 - **Paso 1:** El comercio llama a `validateWebhook(payload, headers)`. El SDK verifica la firma criptográfica HMAC-SHA256 (`x-signature` con `ts` y `v1`) y parsea la notificación a un `WebhookEvent`. Como la pasarela no incluye el estado en el webhook, el normalizador le asigna explícitamente `newStatus: TransactionStatus.PENDING` en lugar de fallar, indicando que la notificación es auténtica y está a la espera de conciliación.
 - **Paso 2:** El comercio toma `event.gatewayTransactionId` e invoca `kitPagos.getPaymentStatus(id)`. El adaptador ejecuta `GET /v1/payments/:id` con autenticación Bearer hacia Mercado Pago (o la API de Simulación), y el `ResponseNormalizer` reconstruye de forma inmutable la entidad `Transaction` con su estado definitivo (`APPROVED`, `DECLINED`, etc.), el monto en pesos decimales y los datos del pagador.
 
+> [!IMPORTANT]
+> **Responsabilidad del desarrollador que consume el SDK:**
+> El SDK es una biblioteca desacoplada (no un framework ni un servidor HTTP). Por ende, es el programador que integra el SDK en su backend (Express, Fastify, NestJS, etc.) quien debe crear el endpoint que recibe el webhook (`POST /webhooks/...`) y orquestar el flujo: validar la firma con `validateWebhook()` y, al recibir un evento de Mercado Pago con estado `PENDING`, ejecutar de inmediato `getPaymentStatus()` (o encolarlo a un worker en background) para obtener el estado definitivo antes de responder `200 OK` a la pasarela. Este patrón de integración debe documentarse con claridad y snippets de ejemplo en el `README.md` y la documentación pública del SDK.
+
 Gracias a la Arquitectura Hexagonal, el comercio programa contra un contrato unificado y predecible: no necesita bifurcar su lógica de dominio para cada pasarela, y la inmutabilidad de la entidad `Transaction` garantiza que no existan mutaciones ocultas o efectos colaterales durante la reconciliación.
 
 ### 12. Cómo verificar la regla de dependencia con tus propias manos

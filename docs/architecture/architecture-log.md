@@ -56,7 +56,7 @@ Antes de empezar a implementar nada de la primera iteración de código, cada co
 | 15 | Estructura del Sistema | David | Punto 1 (corregir nombres de métodos en 15.2 a `getPaymentStatus`/`validateWebhook`), punto 3 (aclarar que la reconciliación reconstruye la entidad), punto 6 (aclarar que `WebhookVerifier` tiene dos métodos públicos, no uno). **Punto 22:** validateWebhook retorna `WebhookEvent` y lanza `KitPagosError`. **Punto 23:** actualizar sección 15.1 con `KitPagosError` y `KitPagosErrorCode`. **Punto 24:** documentar responsabilidades de `ErrorHandler` en 15.2. **Punto 26:** documentar normalización de `WebhookVerifier.parse` a `PENDING` ante webhooks de solo identificador. **Punto 28:** detallar el desglose de capas (domain, application, infrastructure) y sus responsabilidades específicas en 15.1 y 15.2. |
 | 16 | Glosario | David | **Punto 15:** si la definición de `Gateway`/`Adapter` usa a PayU como ejemplo, reemplazarlo por Rapyd, y agregar una nota breve sobre la adquisición de PayU por Rapyd para que el lector entienda por qué cambió el nombre. |
 
-Los puntos 4, 8, 9, 11 y 12 de la Sección B, y toda la Sección E, no corresponden a ninguna de las 16 secciones del SAD (son documentos de repositorio o decisiones de código ya resueltas), así que no tienen un responsable de esta lista; se dejan como tareas de ingeniería general para la primera iteración.
+Los puntos 4, 8, 9, 11, 12 y 29 de la Sección B, y toda la Sección E, no corresponden a ninguna de las 16 secciones del SAD (son documentos de repositorio, directrices para el README del SDK o decisiones de código ya resueltas), así que no tienen un responsable de esta lista; se dejan como tareas de ingeniería general para la primera iteración.
 
 ---
 
@@ -409,6 +409,29 @@ Se recomienda redactar en la Sección 13 (ADR-01) o en la Sección 15 (Estructur
 
 **Estado:** Registrado como recomendación arquitectónica en `architecture-log.md`.
 **Pendiente en el SAD:** Joan (sección 13) y David (sección 15) deben incorporar esta sección explicativa en el documento `.docx`.
+
+### 29. Directriz para el README y la Documentación del SDK: Orquestación de Webhooks por parte del desarrollador del comercio
+
+**Responsable:** Joshua / Equipo SDK (para el `README.md` del SDK, guías de integración y ejemplos de código).
+
+**Contexto:**
+El SDK de Kit Pagos es una **biblioteca de integración desacoplada**, no un framework web ni un servidor HTTP. Por definición arquitectónica, el SDK no abre puertos de red ni registra controladores o rutas HTTP de forma mágica en la aplicación anfitriona.
+
+Por ende, **el programador que integra nuestro SDK en su comercio es el responsable absoluto de:**
+1. Crear el endpoint HTTP en su propio backend (usando Express, Fastify, NestJS, Next.js API Routes, Spring Boot, etc.) que recibirá las peticiones `POST` de las pasarelas.
+2. Extraer el body crudo y los headers HTTP de la petición entrante y suministrárselos a `kitPagos.validateWebhook(payload, headers)`.
+3. Gestionar la **conciliación en dos pasos** según el resultado del `WebhookEvent`:
+   - **Caso Wompi (notificación completa):** `validateWebhook` verifica la firma y retorna de inmediato el `WebhookEvent` con el estado final consolidado (`APPROVED`, `DECLINED`). El desarrollador puede actualizar su base de datos directamente.
+   - **Caso Mercado Pago (notificación liviana):** Por diseño de Mercado Pago, la notificación no incluye monto ni estado (viene como `newStatus: PENDING` y con `gatewayTransactionId`). **El desarrollador del comercio debe ejecutar explícitamente el segundo paso** en su backend invocando `await kitPagos.getPaymentStatus(event.gatewayTransactionId)` para obtener la entidad `Transaction` con los datos consolidados definitivos.
+4. Responder un código de estado `HTTP 200 OK` a la pasarela en un tiempo inferior a 2-3 segundos para evitar que la pasarela considere fallida la entrega y sature el servidor con reintentos agresivos.
+
+**Directriz obligatoria para el README y la documentación pública del SDK:**
+Para evitar confusiones o integraciones incompletas por parte de los desarrolladores externos, el `README.md` del SDK y la documentación técnica deben incluir obligatoriamente:
+- Un apartado explícito titulado **"Recepción y Conciliación de Webhooks"**.
+- Un snippet de ejemplo completo y listo para producción usando Express/Fastify que muestre cómo recibir el webhook, validar la firma, chequear si el estado requiere el segundo paso (`getPaymentStatus`), y actualizar el pedido.
+- Una advertencia arquitectónica sobre el manejo asíncrono en sistemas de alto tráfico: invocar el paso 1 en el controlador HTTP, responder `200 OK`, y despachar el paso 2 (`getPaymentStatus`) a una cola de tareas en segundo plano (BullMQ, Celery, RabbitMQ).
+
+**Estado:** Registrado como directriz de documentación en `architecture-log.md`.
 
 ---
 
