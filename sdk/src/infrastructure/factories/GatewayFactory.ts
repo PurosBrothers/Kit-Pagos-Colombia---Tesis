@@ -2,6 +2,7 @@ import { Gateway } from "../../domain/value-objects/Gateway";
 import { Credentials } from "../../domain/value-objects/Credentials";
 import { PaymentGatewayPort } from "../../application/ports/PaymentGatewayPort";
 import { WompiAdapter } from "../adapters/WompiAdapter";
+import { MercadoPagoAdapter } from "../adapters/MercadoPagoAdapter";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 
@@ -23,9 +24,10 @@ export class GatewayFactory {
       case Gateway.WOMPI:
         return new WompiAdapter(baseUrl, credentials);
 
-      // Los adaptadores para RAPYD, MERCADOPAGO y KUSHKI se incorporan en la Iteración 2
-      case Gateway.RAPYD:
+      // Los adaptadores para RAPYD y KUSHKI se incorporan en la Iteración 2
       case Gateway.MERCADOPAGO:
+        return new MercadoPagoAdapter(baseUrl, credentials);
+      case Gateway.RAPYD:
       case Gateway.KUSHKI:
       default:
         throw new KitPagosError(

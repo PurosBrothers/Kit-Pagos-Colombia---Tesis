@@ -7,6 +7,8 @@ import { Amount } from "../../domain/value-objects/Amount";
 import { Currency } from "../../domain/value-objects/Currency";
 import { OrderReference } from "../../domain/value-objects/OrderReference";
 import { Payer } from "../../domain/value-objects/Payer";
+import { MercadoPagoAdapter } from "../adapters/MercadoPagoAdapter";
+
 
 describe("GatewayFactory", () => {
   let factory: GatewayFactory;
@@ -68,6 +70,16 @@ describe("GatewayFactory", () => {
 
       global.fetch = originalFetch;
     });
+        it("should return an instance of MercadoPagoAdapter when gateway is MERCADOPAGO", () => {
+      const adapter = factory.create(Gateway.MERCADOPAGO);
+
+      expect(adapter).toBeDefined();
+      expect(adapter).toBeInstanceOf(MercadoPagoAdapter);
+      expect(typeof adapter.createPayment).toBe("function");
+      expect(typeof adapter.getStatus).toBe("function");
+      expect(typeof adapter.verifySignature).toBe("function");
+    });
+
 
     it("should throw KitPagosError(UNSUPPORTED_OPERATION) for RAPYD", () => {
       expect(() => factory.create(Gateway.RAPYD)).toThrow(KitPagosError);
@@ -81,21 +93,6 @@ describe("GatewayFactory", () => {
         expect(sdkError.gateway).toBe(Gateway.RAPYD);
         expect(sdkError.originalPayload).toBeNull();
         expect(sdkError.message).toContain("Gateway not supported in this iteration: RAPYD");
-      }
-    });
-
-    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for MERCADOPAGO", () => {
-      expect(() => factory.create(Gateway.MERCADOPAGO)).toThrow(KitPagosError);
-
-      try {
-        factory.create(Gateway.MERCADOPAGO);
-      } catch (error) {
-        expect(error).toBeInstanceOf(KitPagosError);
-        const sdkError = error as KitPagosError;
-        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
-        expect(sdkError.gateway).toBe(Gateway.MERCADOPAGO);
-        expect(sdkError.originalPayload).toBeNull();
-        expect(sdkError.message).toContain("Gateway not supported in this iteration: MERCADOPAGO");
       }
     });
 
