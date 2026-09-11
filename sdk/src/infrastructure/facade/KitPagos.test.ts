@@ -137,9 +137,11 @@ describe("KitPagos", () => {
     });
 
     it("should throw KitPagosError(UNSUPPORTED_OPERATION) for a gateway without an Adapter yet", async () => {
+      // Rapyd ya tiene Adapter (issue #52), asi que el caso sin implementar se
+      // ejerce ahora con Kushki.
       const kitPagos = new KitPagos({
-        gateway: Gateway.RAPYD,
-        credentials: { [Gateway.RAPYD]: wompiCredentials },
+        gateway: Gateway.KUSHKI,
+        credentials: { [Gateway.KUSHKI]: wompiCredentials },
       });
 
       try {
@@ -148,7 +150,7 @@ describe("KitPagos", () => {
       } catch (error) {
         const sdkError = error as KitPagosError;
         expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
-        expect(sdkError.gateway).toBe(Gateway.RAPYD);
+        expect(sdkError.gateway).toBe(Gateway.KUSHKI);
       }
     });
 
