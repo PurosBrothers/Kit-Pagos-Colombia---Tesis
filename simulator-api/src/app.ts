@@ -2,6 +2,7 @@ import Fastify, { FastifyInstance } from "fastify";
 import { healthRoute } from "./routes/health";
 import { wompiRoutes } from "./routes/wompi";
 import { mercadopagoRoutes } from "./routes/mercadopago";
+import { rapydRoutes } from "./routes/rapyd";
 
 /**
  * Construye y configura la instancia de Fastify de la API de Simulacion,
@@ -21,6 +22,7 @@ export function buildApp(): FastifyInstance {
   app.register(healthRoute);
   app.register(wompiRoutes);
   app.register(mercadopagoRoutes);
+  app.register(rapydRoutes);
 
   return app;
 }

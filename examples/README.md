@@ -74,7 +74,24 @@ npm run simulate:mercadopago
 
 ---
 
-### 3. Verificar tipos sin ejecutar
+### 3. Simulación de pago con Rapyd
+
+```bash
+npm run simulate:rapyd
+```
+
+* **Archivo:** `simulate-rapyd-payment.ts`
+* **Por qué existe uno por pasarela:** Cada pasarela necesita su propio `baseUrl` y su propio juego de credenciales, así que un único ejemplo parametrizable tendría que resolver configuración antes de poder mostrar el pago. Con un archivo por pasarela, la comparación es directa: los pasos 2, 3 y 4 son idénticos en el código del comercio, y lo único que cambia es la configuración inicial.
+* **Qué demuestra:** Rapyd recalcula una firma HMAC en cada petición (no un Bearer fijo), recibe el monto en pesos con decimales (no en centavos), y usa un catálogo de estados propio de tres letras (`CLO`, `ACT`, `ERR`, `EXP`, `REV`).
+* **Qué esperar:** La transacción se crea con estado normalizado `APPROVED` y estado nativo `CLO`, el monto vuelve como `150000.00 COP` con la escala intacta, y la consulta posterior por identificador también funciona.
+
+Dos detalles que se ven en la salida y vale la pena entender:
+1. El estado nativo `CLO` significa "cerrado", no "pagado": el SDK solo lo traduce a `APPROVED` porque la respuesta además trae `paid: true`.
+2. El monto imprime `150000.00`, con el cero final: confirma la representación de `Amount` como string exacto para cumplir con el hash firmado requerido por Rapyd.
+
+---
+
+### 4. Verificar tipos sin ejecutar
 
 ```bash
 npm run typecheck

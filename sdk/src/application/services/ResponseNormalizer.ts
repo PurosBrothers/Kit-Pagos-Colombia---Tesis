@@ -223,8 +223,142 @@ export class ResponseNormalizer {
           undefined
         );
       }
-      // Los adaptadores para RAPYD y KUSHKI se incorporan en la Iteración 2
-      case Gateway.RAPYD:
+      case Gateway.RAPYD: {
+        // Paso 1: Parsear el payload crudo si viene como string JSON
+        let payload: Record<string, unknown>;
+        try {
+          payload =
+            typeof rawResponse === "string"
+              ? (JSON.parse(rawResponse) as Record<string, unknown>)
+              : (rawResponse as Record<string, unknown>);
+        } catch {
+          throw new KitPagosError(
+            KitPagosErrorCode.MALFORMED_RESPONSE,
+            Gateway.RAPYD,
+            rawResponse,
+            "Failed to parse JSON response from Rapyd"
+          );
+        }
+
+        // Paso 2: Rapyd envuelve todas sus respuestas en `{ status, data }`,
+        // donde `status` es el resultado de la llamada de API y `data` el objeto
+        // de negocio. El envoltorio siempre está presente, a diferencia de
+        // Mercado Pago, que devuelve el pago en la raíz.
+        const data = payload?.data as Record<string, unknown> | undefined;
+        if (!data || typeof data !== "object" || !data.id) {
+          throw new KitPagosError(
+            KitPagosErrorCode.MALFORMED_RESPONSE,
+            Gateway.RAPYD,
+            rawResponse,
+            "Malformed response from Rapyd gateway: missing data.id"
+          );
+        }
+
+        // Paso 3: Normalizar el estado nativo de Rapyd al enum unificado.
+        const rawStatus = String(data.status ?? "");
+        const failureCode = String(data.failure_code ?? "");
+        let status: TransactionStatus;
+        switch (rawStatus.toUpperCase()) {
+          case "CLO":
+            // "CLO" es "cerrado", no "pagado": son dos campos distintos y hay
+            // que leer los dos. Un pago cerrado sin `paid` no autoriza a decirle
+            // al comercio que cobró, y por eso no se normaliza a APPROVED.
+            // La combinación no está documentada, así que se degrada a ERROR en
+            // vez de a DECLINED: afirmar un rechazo sería afirmar que el banco
+            // respondió, y eso no se sabe.
+            status = data.paid === true ? "APPROVED" : "ERROR";
+            break;
+          case "ACT":
+            // Activo: creado y esperando que el pagador lo complete. Es el
+            // estado en el que el comercio debe reintentar el polling.
+            status = "PENDING";
+            break;
+          case "ERR":
+            // Rapyd no distingue el rechazo de negocio del fallo técnico por
+            // `status` (es "ERR" en ambos casos). Se aplica el mismo criterio de
+            // desambiguación por prefijo de `failure_code` que ya usa
+            // WebhookVerifier para el evento PAYMENT_FAILED, para que el mismo
+            // pago no se normalice distinto según si llegó por webhook o por
+            // consulta. Ver docs.rapyd.net/en/card-network-errors.html.
+            status = failureCode.startsWith("ERROR_PROCESSING_CARD")
+              ? "DECLINED"
+              : "ERROR";
+            break;
+          case "EXP":
+            status = "EXPIRED";
+            break;
+          case "REV":
+            // Revertido por Rapyd, con el motivo en `cancel_reason`. Este código
+            // resuelve el pendiente que ubiquitous-language.md dejaba abierto
+            // conjeturando "CAN": el valor real que documenta Rapyd es "REV".
+            status = "VOIDED";
+            break;
+          default:
+            status = "ERROR";
+            break;
+        }
+
+        // Paso 4: Normalizar la divisa. En la respuesta el campo es
+        // `currency_code`, aunque en la petición de creación se llame
+        // `currency`. Son nombres distintos en el contrato real de Rapyd.
+        const currency = new Currency(String(data.currency_code ?? "COP"));
+
+        // Paso 5: Normalizar el monto. Rapyd trabaja en la unidad mayor (pesos
+        // con decimales), no en centavos, así que NO se usa `fromMinorUnits()`:
+        // hacerlo dividiría el monto entre cien.
+        //
+        // Rapyd puede devolver el monto como número JSON, y en ese caso la
+        // escala ya se perdió antes de llegar acá: `150000.00` es
+        // indistinguible de `150000` en el parseo de JSON. No es algo que el SDK
+        // pueda arreglar del lado entrante; es exactamente la razón por la que
+        // sí se envía como string en la petición, donde la escala importa porque
+        // participa del cálculo de la firma.
+        let amount: Amount;
+        try {
+          const rawAmount = data.amount;
+          amount = new Amount(
+            typeof rawAmount === "number" ? rawAmount.toString() : String(rawAmount ?? "")
+          );
+        } catch (amountError) {
+          throw new KitPagosError(
+            KitPagosErrorCode.MALFORMED_RESPONSE,
+            Gateway.RAPYD,
+            rawResponse,
+            `Malformed amount in Rapyd response: ${(amountError as Error).message}`
+          );
+        }
+
+        // Paso 6: Normalizar la referencia de orden del comercio
+        const orderReference = new OrderReference(
+          String(data.merchant_reference_id || data.id)
+        );
+
+        // Paso 7: Normalizar los datos del pagador. Rapyd no expone un email de
+        // pagador obligatorio como las otras tres pasarelas: lo más cercano es
+        // `receipt_email`, que es opcional. Cuando viene vacío se cae a un valor
+        // de relleno, igual que en la rama de Wompi.
+        const receiptEmail = data.receipt_email || "customer@rapyd.net";
+        const payer = new Payer({ email: String(receiptEmail) });
+
+        // Paso 8: Normalizar el identificador nativo junto con su pasarela
+        const gatewayTransactionId = new GatewayTransactionId(
+          String(data.id),
+          Gateway.RAPYD
+        );
+
+        // Paso 9: Construir la entidad inmutable Transaction
+        return new Transaction(
+          gatewayTransactionId,
+          orderReference,
+          amount,
+          currency,
+          payer,
+          status,
+          rawStatus
+        );
+      }
+
+      // El adaptador para KUSHKI se incorpora en la Iteración 2
       case Gateway.KUSHKI:
       default:
         throw new KitPagosError(

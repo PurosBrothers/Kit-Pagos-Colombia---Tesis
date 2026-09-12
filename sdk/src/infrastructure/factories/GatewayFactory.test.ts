@@ -1,6 +1,7 @@
 import { GatewayFactory } from "./GatewayFactory";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { WompiAdapter } from "../adapters/WompiAdapter";
+import { RapydAdapter } from "../adapters/RapydAdapter";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import { Amount } from "../../domain/value-objects/Amount";
@@ -81,19 +82,58 @@ describe("GatewayFactory", () => {
     });
 
 
-    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for RAPYD", () => {
-      expect(() => factory.create(Gateway.RAPYD)).toThrow(KitPagosError);
+    it("should build a RapydAdapter for RAPYD", () => {
+      expect(factory.create(Gateway.RAPYD)).toBeInstanceOf(RapydAdapter);
+    });
 
-      try {
-        factory.create(Gateway.RAPYD);
-      } catch (error) {
-        expect(error).toBeInstanceOf(KitPagosError);
-        const sdkError = error as KitPagosError;
-        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
-        expect(sdkError.gateway).toBe(Gateway.RAPYD);
-        expect(sdkError.originalPayload).toBeNull();
-        expect(sdkError.message).toContain("Gateway not supported in this iteration: RAPYD");
-      }
+    it("should pass credentials and baseUrl through to the RapydAdapter", async () => {
+      // La Factory decide QUE clase instanciar, no de donde sale la
+      // configuracion: se verifica que lo recibido llegue al adaptador
+      // observando la peticion que este produce.
+      const credentials = {
+        publicKey: "rapyd_access_key",
+        privateKey: "rapyd_secret_key",
+      };
+      const originalFetch = global.fetch;
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => ({
+          status: { status: "SUCCESS" },
+          data: {
+            id: "payment_abc",
+            status: "CLO",
+            paid: true,
+            amount: "1000.00",
+            currency_code: "COP",
+            merchant_reference_id: "ord-1",
+            receipt_email: "cliente@example.com",
+          },
+        }),
+      });
+      global.fetch = mockFetch;
+
+      const adapter = factory.create(
+        Gateway.RAPYD,
+        credentials,
+        "https://sandboxapi.rapyd.net/v1/payments"
+      );
+
+      await adapter.createPayment({
+        amount: new Amount("1000"),
+        currency: new Currency("COP"),
+        orderReference: new OrderReference("ord-1"),
+        payer: new Payer({ email: "cliente@example.com" }),
+      });
+
+      const [url, init] = mockFetch.mock.calls[0];
+      expect(url).toBe("https://sandboxapi.rapyd.net/v1/payments");
+      // Rapyd no usa Bearer: identifica al comercio con el header access_key y
+      // una firma por peticion.
+      expect(init.headers.access_key).toBe(credentials.publicKey);
+      expect(init.headers.signature).toBeDefined();
+
+      global.fetch = originalFetch;
     });
 
     it("should throw KitPagosError(UNSUPPORTED_OPERATION) for KUSHKI", () => {

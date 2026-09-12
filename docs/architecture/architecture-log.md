@@ -53,10 +53,10 @@ Antes de empezar a implementar nada de la primera iteración de código, cada co
 | 12 | Modelo de datos | Henao | Ninguna encontrada. |
 | 13 | ADR | Joan | Punto 7: la sección 13.1 sí referencia el `Hexagonal architecture class diagram.png` por nombre ("el Diagrama de Clases de la Arquitectura Hexagonal"), confirmado por el propio texto. Reemplazar la imagen embebida por la versión regenerada, y agregarle un número de figura ("Figura N"), ya que hoy es el único diagrama del documento sin ese rótulo, a diferencia del resto de figuras citadas en la sección 13. **Punto 15:** revisar si algún ADR de esta sección documenta el vocabulario nativo de PayU (`state_pol`, la particularidad de que PayU siempre devuelve HTTP 200) y corregirlo o marcarlo como pendiente de la investigación de Rapyd. **Punto 28:** incorporar el apartado conceptual de Arquitectura de Puertos y Adaptadores (Hexagonal) mapeada a Kit Pagos Colombia en ADR-01. |
 | 14 | Riesgo técnico | David | Punto 10 (falta framework de pruebas en `simulator-api`, ya resuelto vía issue #6) es un riesgo de calidad que vale la pena registrar ahí, aunque no sea una inconsistencia de redacción. **Punto 15:** registrar la transición de PayU a Rapyd como un riesgo ya materializado (cambio de proveedor externo fuera de control del equipo, que invalidó documentación e implementación ya hecha del algoritmo de firma). |
-| 15 | Estructura del Sistema | David | Punto 1 (corregir nombres de métodos en 15.2 a `getPaymentStatus`/`validateWebhook`), punto 3 (aclarar que la reconciliación reconstruye la entidad), punto 6 (aclarar que `WebhookVerifier` tiene dos métodos públicos, no uno). **Punto 22:** validateWebhook retorna `WebhookEvent` y lanza `KitPagosError`. **Punto 23:** actualizar sección 15.1 con `KitPagosError` y `KitPagosErrorCode`. **Punto 24:** documentar responsabilidades de `ErrorHandler` en 15.2. **Punto 26:** documentar normalización de `WebhookVerifier.parse` a `PENDING` ante webhooks de solo identificador. **Punto 28:** detallar el desglose de capas (domain, application, infrastructure) y sus responsabilidades específicas en 15.1 y 15.2. |
+| 15 | Estructura del Sistema | David | Punto 1 (corregir nombres de métodos en 15.2 a `getPaymentStatus`/`validateWebhook`), punto 3 (aclarar que la reconciliación reconstruye la entidad), punto 6 (aclarar que `WebhookVerifier` tiene dos métodos públicos, no uno). **Punto 22:** validateWebhook retorna `WebhookEvent` y lanza `KitPagosError`. **Punto 23:** actualizar sección 15.1 con `KitPagosError` y `KitPagosErrorCode`. **Punto 24:** documentar responsabilidades de `ErrorHandler` en 15.2. **Punto 26:** documentar normalización de `WebhookVerifier.parse` a `PENDING` ante webhooks de solo identificador. **Punto 28:** detallar el desglose de capas (domain, application, infrastructure) y sus responsabilidades específicas en 15.1 y 15.2. **Punto 31:** registrar en la sección 15 la fórmula oficial de firma de requests salientes de Rapyd. |
 | 16 | Glosario | David | **Punto 15:** si la definición de `Gateway`/`Adapter` usa a PayU como ejemplo, reemplazarlo por Rapyd, y agregar una nota breve sobre la adquisición de PayU por Rapyd para que el lector entienda por qué cambió el nombre. |
 
-Los puntos 4, 8, 9, 11, 12 y 29 de la Sección B, y toda la Sección E, no corresponden a ninguna de las 16 secciones del SAD (son documentos de repositorio, directrices para el README del SDK o decisiones de código ya resueltas), así que no tienen un responsable de esta lista; se dejan como tareas de ingeniería general para la primera iteración.
+Los puntos 4, 8, 9, 11, 12, 29, 30 y 31 de la Sección B, y toda la Sección E, no corresponden a ninguna de las 16 secciones del SAD (son documentos de repositorio, directrices para el README del SDK o decisiones de código ya resueltas), así que no tienen un responsable de esta lista; se dejan como tareas de ingeniería general para la primera iteración.
 
 ---
 
@@ -432,6 +432,53 @@ Para evitar confusiones o integraciones incompletas por parte de los desarrollad
 - Una advertencia arquitectónica sobre el manejo asíncrono en sistemas de alto tráfico: invocar el paso 1 en el controlador HTTP, responder `200 OK`, y despachar el paso 2 (`getPaymentStatus`) a una cola de tareas en segundo plano (BullMQ, Celery, RabbitMQ).
 
 **Estado:** Registrado como directriz de documentación en `architecture-log.md`.
+
+---
+
+### 30. `PaymentGatewayPort` aguantó a Rapyd sin cambios; lo que no aguantó fue el ejemplo (issue #52)
+
+**Contexto:** el issue #52 planteaba una prueba de diseño explícita: Rapyd es la más exigente de las cuatro pasarelas, así que si el puerto la soportaba sin modificarse, soportaría las otras tres; y si no, ese hallazgo había que registrarlo acá en vez de deformar el adaptador para que cupiera.
+
+**Resultado: el puerto aguantó.** `RapydAdapter` implementa `PaymentGatewayPort` tal como está definido, sin agregar ni cambiar un método ni un campo, pese a que Rapyd se separa de Wompi en los tres puntos más costosos:
+
+1. **Autenticación por firma en cada petición** en vez de un Bearer fijo. Cabe entera dentro del adaptador, en un método privado `sign()`. El puerto nunca supo que existía.
+2. **Monto en unidad mayor** (pesos con decimales) en vez de centavos. Se resuelve con `Amount.toFixedScale(currency.getMinorUnitExponent())`, que el dominio ya ofrecía tras el punto 25. Sin la migración de `Amount` a string este adaptador no habría podido enviar `"150000.00"`, porque el cero final se perdía antes de llegar a infraestructura.
+3. **Catálogo de estados propio** (`ACT`, `CLO`, `ERR`, `EXP`, `REV`). Se traduce en la rama `Gateway.RAPYD` de `ResponseNormalizer`, sin tocar el enum `TransactionStatus`.
+
+**El objeto de valor `Credentials` también aguantó**, aunque Rapyd nombre sus llaves de otra forma: `publicKey` corresponde a `access_key` (identifica a la organización y viaja en claro en un header) y `privateKey` a `secret_key` (nunca se transmite solo, únicamente como parte de la firma). La correspondencia semántica es exacta, así que no hizo falta un objeto de valor por pasarela.
+
+**Matiz sobre el resultado esperado del issue.** El issue afirmaba que cambiar `gateway: Gateway.RAPYD` "sin tocar ninguna otra línea" del ejemplo produciría una `Transaction` aprobada. Medido sobre el ejemplo de Wompi, hicieron falta **6 líneas**, y ninguna por culpa del puerto: el ejemplo declara la URL del mock como constante y la pasa en `baseUrl`, de modo que el endpoint está acoplado a la pasarela elegida. Cada pasarela necesita además su propio juego de credenciales.
+
+La convención que resolvió esto no fue parametrizar un ejemplo único, sino **un archivo de ejemplo por pasarela**, establecida por el PR #77 con `examples/simulate-mercadopago-payment.ts` y su script `simulate:mercadopago`. Es la decisión correcta y por eso se siguió acá con `examples/simulate-rapyd-payment.ts` y `simulate:rapyd`: un ejemplo parametrizable tendría que resolver configuración antes de poder mostrar el pago, que es justo lo que se quiere enseñar. Con un archivo por pasarela la comparación entre ellos es directa y verificable a ojo — se abren dos y se comprueba que los pasos de construir el pago, crearlo y consultarlo son idénticos línea por línea, y que lo único que cambia es el bloque de configuración. La afirmación fuerte del issue ("una sola línea") no se cumple literalmente, pero la propiedad que buscaba demostrar (que el código de integración no cambia entre pasarelas) queda demostrada mejor así.
+
+**Convención de `baseUrl` unificada.** Al escribir el ejemplo se detectó que `RapydAdapter` había quedado recibiendo un prefijo (`/v1/sim/rapyd`) al que le agregaba `/payments`, mientras `WompiAdapter` y `MercadoPagoAdapter` reciben la URL completa del recurso. Se alineó Rapyd a la convención de los otros dos: `baseUrl` es el endpoint de la colección de pagos y la consulta de estado le agrega `/{id}`. Sin ese ajuste, un comercio que copiara la configuración de un ejemplo a otro habría terminado pidiendo `/payments/payments`, y el SDK habría tenido tres pasarelas con tres semánticas distintas para el mismo campo de configuración.
+
+Verificado de punta a punta contra la API de Simulación con `npm run simulate:rapyd`: la respuesta nativa `CLO` con `paid: true` se normaliza a `APPROVED`, el monto vuelve como `150000.00 COP` con la escala intacta, y la consulta posterior por identificador también resuelve.
+
+**Estado:** resuelto y registrado, sin pendientes.
+
+---
+
+### 31. La firma de requests salientes de Rapyd no quedó documentada en #23
+
+**Encontrado:** el issue #23 (investigación del contrato de Rapyd, cerrado) declaraba como primer entregable documentar la "autenticación de requests salientes (headers exactos, forma de la firma de request, no solo la de webhook)". `ubiquitous-language.md` quedó con la fórmula del **webhook** documentada y verificada, y con una nota que menciona de pasada que la fórmula de requests salientes es distinta porque incluye el método HTTP — pero **la fórmula misma nunca se escribió**, y no existe ninguna fila de la tabla que cubra la autenticación de salida. Se detectó al implementar `RapydAdapter` en #52, que es justamente el consumidor para el que esa documentación existía.
+
+**Resuelto en #52** contra la fuente oficial (`docs.rapyd.net/en/request-signatures.html` y `header-parameters.html`), agregando la fila correspondiente a la sección 1 de `ubiquitous-language.md`. La fórmula es:
+
+```
+signature = Base64( hex( HMAC-SHA256_secret_key( http_method + url_path + salt + timestamp + access_key + secret_key + body_string ) ) )
+```
+
+Cuatro detalles que la vuelven fácil de implementar mal, y que motivaron aislarla en un método privado con pruebas contra un vector independiente:
+
+1. El resultado del HMAC se serializa primero a **hexadecimal**, y ese texto hex es lo que se codifica en Base64. No es `digest("base64")`: eso produce una firma distinta que Rapyd rechaza. Es el error más común y está confirmado en el propio ejemplo de código Node.js de la documentación.
+2. El método HTTP va en **minúsculas**.
+3. La `secret_key` aparece **dos veces**: dentro de la cadena que se firma y como llave del HMAC.
+4. Un cuerpo vacío se firma como string vacío, **no** como `"{}"`.
+
+**Hallazgo adicional:** el catálogo de estados de `ubiquitous-language.md` dejaba pendiente el código de cancelación, conjeturando `CAN` a falta de credenciales de sandbox. La documentación de `create-payment.html` lo lista: es **`REV`** ("Reversed by Rapyd", con el motivo en `cancel_reason`), y se normaliza a `VOIDED`. No hizo falta sandbox real, solo la página correcta.
+
+**Estado:** resuelto. **Pendiente:** el mock de Rapyd de la API de Simulación no verifica la firma de las peticiones entrantes, porque la clase `SignatureGenerator` sigue sin existir en `simulator-api/src` (ver punto correspondiente en `layers-and-components.md`). Mientras eso siga así, un adaptador que calcule mal la firma pasaría igual contra el mock; por eso la corrección de la firma se cubre con pruebas unitarias del adaptador contra el algoritmo publicado, y no confiando en el simulador.
 
 ---
 
