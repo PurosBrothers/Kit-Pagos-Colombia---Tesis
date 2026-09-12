@@ -270,9 +270,44 @@ export class KitPagos {
 }
 ```
 
-Este archivo ilustra con mucha claridad la diferencia entre "diseñar la arquitectura" y "construir el sistema": la firma pública del SDK, es decir, exactamente los tres métodos que un desarrollador externo va a poder llamar, sus parámetros y sus tipos de retorno, ya está decidida y fijada en código, incluso antes de que exista una sola línea de lógica real detrás. Esto tiene una ventaja práctica concreta: cualquier código de ejemplo, cualquier prueba de integración, o incluso la documentación pública del SDK, se puede empezar a escribir contra esta interfaz ahora mismo, sin esperar a que `WompiAdapter` exista, porque el contrato con el que interactúa el mundo exterior no va a cambiar cuando se implemente la lógica interna.
+Este archivo ilustra con mucha claridad la diferencia entre "diseñar la arquitectura" y "construir el sistema": la firma pública del SDK, es decir, exactamente los tres métodos que un desarrollador externo va a poder llamar, sus parámetros y sus tipos de retorno, ya está decidida y fijada en código. Cualquier código de ejemplo, cualquier prueba de integración, o incluso la documentación pública del SDK, se consume contra esta interfaz, porque el contrato con el que interactúa el mundo exterior no cambia cuando se implementa la lógica interna.
 
-Lo que falta dentro de cada método, conforme a la Parte I, es la orquestación descrita para el patrón Facade: consultar al `SDKConfigurator` (todavía no implementado) para saber cuál es la pasarela activa y sus credenciales, pedirle al `GatewayFactory` (todavía no implementado) la instancia del adaptador correspondiente a esa pasarela, envolver la llamada al adaptador con el `RetryHandler` (todavía no implementado) para tolerar fallas transitorias de red, y finalmente devolver la `Transaction` o `WebhookEvent` resultante, o convertir cualquier fallo en un `SdkError` a través del `ErrorHandler` (todavía no implementado).
+Hoy en día, la orquestación interna del Facade está completamente conectada: consulta al `SDKConfigurator` para determinar la pasarela activa y sus credenciales, solicita al `GatewayFactory` la instancia del adaptador correspondiente (`WompiAdapter`, `MercadoPagoAdapter`), delega la verificación criptográfica a `WebhookVerifier`, y traduce cualquier fallo en `KitPagosError` a través de `ErrorHandler`.
+
+#### 11.1. La conciliación de webhooks en dos pasos (Mercado Pago vs. Wompi)
+
+Una de las diferencias arquitectónicas más profundas entre pasarelas de pago colombianas radica en la semántica de sus notificaciones asíncronas (webhooks):
+
+1. **Notificación completa (Wompi):** Cuando Wompi notifica un cambio (`transaction.updated`), envía en el mismo payload HTTP todos los datos financieros consolidados: estado (`APPROVED`, `DECLINED`), monto en centavos, identificador y correo del pagador. El método `validateWebhook(payload, headers)` verifica la firma SHA-256 y extrae de inmediato el estado final de la transacción en el `WebhookEvent`.
+2. **Notificación liviana en dos pasos (Mercado Pago):** Por motivos de seguridad y diseño de API, Mercado Pago **no envía datos financieros ni el estado de la transacción** en la notificación HTTP. Su webhook únicamente informa que un recurso fue modificado (`{"action": "payment.created", "data": {"id": "1234567890"}}`).
+
+Para resolver esta disparidad sin romper la uniformidad de la interfaz pública, el SDK implementa el patrón de **Conciliación en Dos Pasos** formalizado en el proceso C del SAD (`sequence-webhook-conciliation.puml`):
+
+```text
+[Mercado Pago] ---> POST /webhook ---> [Comercio: validateWebhook()]
+                                            │
+                                            ▼ (Paso 1: Valida HMAC-SHA256 y parsea)
+                                       WebhookEvent (id: 1234567890, newStatus: PENDING)
+                                            │
+                                            ▼ (Paso 2: Conciliación activa)
+                                    [Comercio: getPaymentStatus("1234567890")]
+                                            │
+[Mercado Pago] <--- GET /payments/1234567890 ─┘ (Bearer Token)
+      │
+      └───> Payload completo (status: "approved", transaction_amount: 150000)
+                  │
+                  ▼ (ResponseNormalizer)
+            Transaction (inmutable, estado consolidado APPROVED)
+```
+
+- **Paso 1:** El comercio llama a `validateWebhook(payload, headers)`. El SDK verifica la firma criptográfica HMAC-SHA256 (`x-signature` con `ts` y `v1`) y parsea la notificación a un `WebhookEvent`. Como la pasarela no incluye el estado en el webhook, el normalizador le asigna explícitamente `newStatus: TransactionStatus.PENDING` en lugar de fallar, indicando que la notificación es auténtica y está a la espera de conciliación.
+- **Paso 2:** El comercio toma `event.gatewayTransactionId` e invoca `kitPagos.getPaymentStatus(id)`. El adaptador ejecuta `GET /v1/payments/:id` con autenticación Bearer hacia Mercado Pago (o la API de Simulación), y el `ResponseNormalizer` reconstruye de forma inmutable la entidad `Transaction` con su estado definitivo (`APPROVED`, `DECLINED`, etc.), el monto en pesos decimales y los datos del pagador.
+
+> [!IMPORTANT]
+> **Responsabilidad del desarrollador que consume el SDK:**
+> El SDK es una biblioteca desacoplada (no un framework ni un servidor HTTP). Por ende, es el programador que integra el SDK en su backend (Express, Fastify, NestJS, etc.) quien debe crear el endpoint que recibe el webhook (`POST /webhooks/...`) y orquestar el flujo: validar la firma con `validateWebhook()` y, al recibir un evento de Mercado Pago con estado `PENDING`, ejecutar de inmediato `getPaymentStatus()` (o encolarlo a un worker en background) para obtener el estado definitivo antes de responder `200 OK` a la pasarela. Este patrón de integración debe documentarse con claridad y snippets de ejemplo en el `README.md` y la documentación pública del SDK.
+
+Gracias a la Arquitectura Hexagonal, el comercio programa contra un contrato unificado y predecible: no necesita bifurcar su lógica de dominio para cada pasarela, y la inmutabilidad de la entidad `Transaction` garantiza que no existan mutaciones ocultas o efectos colaterales durante la reconciliación.
 
 ### 12. Cómo verificar la regla de dependencia con tus propias manos
 

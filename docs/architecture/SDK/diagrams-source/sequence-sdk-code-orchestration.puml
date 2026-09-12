@@ -1,0 +1,113 @@
+@startuml Sequence Diagram - SDK Code Orchestration
+title Diagrama de Proceso de Codigo - Orquestacion Real del SDK Kit Pagos
+skinparam backgroundColor white
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #666666
+skinparam LifeLineBorderColor #666666
+
+actor "Comercio" as Comercio
+participant "KitPagos\n(Facade)" as Facade
+participant "SDKConfigurator\n(Config)" as Config
+participant "GatewayFactory\n(Factory)" as Factory
+participant "Adapter\n(MercadoPago/Wompi)" as Adapter
+participant "ErrorHandler\n(Application)" as ErrorH
+participant "ResponseNormalizer\n(Application)" as Normalizer
+participant "WebhookVerifier\n(Domain Service)" as Verifier
+actor "Pasarela\n(API / Simulador)" as GatewayAPI
+
+== 1. Flujo de Creacion / Consulta de Pago ==
+Comercio -> Facade : createPayment(request)
+activate Facade
+
+Facade -> Config : getActiveGateway()
+Config --> Facade : gateway
+Facade -> Config : getCredentials(gateway)
+Config --> Facade : credentials
+Facade -> Config : getBaseUrl()
+Config --> Facade : baseUrl
+
+Facade -> Factory : create(gateway, credentials, baseUrl)
+activate Factory
+Factory --> Facade : Adapter instance
+deactivate Factory
+
+Facade -> Adapter : createPayment(request)
+activate Adapter
+
+Adapter -> GatewayAPI : POST /v1/payments (Headers + Bearer/Pubkey)
+
+alt Fallo de Red o HTTP no exitoso (!response.ok)
+  GatewayAPI --> Adapter : HTTP 4xx / 5xx o Network Error
+  Adapter -> ErrorH : new ErrorHandler().handle(error, gateway)
+  activate ErrorH
+  ErrorH --> Adapter : KitPagosError (sanitizado, CBO <= 5)
+  deactivate ErrorH
+  Adapter --> Facade : throw KitPagosError
+  Facade --> Comercio : throw KitPagosError
+else Respuesta Exitosa (200 / 201)
+  GatewayAPI --> Adapter : JSON nativo
+  Adapter -> Normalizer : normalize(rawResponse, gateway)
+  activate Normalizer
+  Normalizer --> Adapter : Transaction (entidad inmutable)
+  deactivate Normalizer
+  Adapter --> Facade : Transaction
+  deactivate Adapter
+  Facade --> Comercio : Transaction
+  deactivate Facade
+end
+
+== 2. Flujo de Webhook y Conciliacion en Dos Pasos ==
+GatewayAPI -> Comercio : POST /webhook (payload, headers)
+activate Comercio
+
+Comercio -> Facade : validateWebhook(payload, headers)
+activate Facade
+
+Facade -> Config : getActiveGateway()
+Config --> Facade : gateway
+Facade -> Config : getCredentials(gateway)
+Config --> Facade : credentials (privateKey)
+
+Facade -> Verifier : verify(payload, headers, secret, gateway)
+activate Verifier
+
+alt Firma Criptografica Invalida
+  Verifier --> Facade : false
+  Facade --> Comercio : throw KitPagosError(WEBHOOK_SIGNATURE_INVALID)
+else Firma Criptografica Valida
+  Verifier --> Facade : true
+  Facade -> Verifier : parse(payload, gateway)
+  Verifier --> Facade : WebhookEvent (id, newStatus: PENDING)
+  deactivate Verifier
+  Facade --> Comercio : WebhookEvent
+  deactivate Facade
+
+  note over Comercio
+    En pasarelas con webhooks livianos (Mercado Pago),
+    el evento llega en PENDING porque solo incluye el ID.
+    El comercio activa el segundo paso de conciliacion.
+  end note
+
+  Comercio -> Facade : getPaymentStatus(event.gatewayTransactionId)
+  activate Facade
+  Facade -> Config : getActiveGateway(), getCredentials(gw), getBaseUrl()
+  Config --> Facade : gateway, credentials, baseUrl
+  Facade -> Factory : create(gateway, credentials, baseUrl)
+  Factory --> Facade : Adapter
+  Facade -> Adapter : getStatus(gatewayTransactionId)
+  activate Adapter
+  Adapter -> GatewayAPI : GET /v1/payments/:id (Bearer token)
+  GatewayAPI --> Adapter : JSON nativo (status: "approved", amount, etc.)
+  Adapter -> Normalizer : normalize(rawResponse, gateway)
+  activate Normalizer
+  Normalizer --> Adapter : Transaction (estado consolidado APPROVED)
+  deactivate Normalizer
+  Adapter --> Facade : Transaction
+  deactivate Adapter
+  Facade --> Comercio : Transaction
+  deactivate Facade
+end
+
+deactivate Comercio
+
+@enduml

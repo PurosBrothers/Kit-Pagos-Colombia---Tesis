@@ -5,6 +5,8 @@
   "description": "Ejemplos ejecutables de integración del SDK Kit Pagos Colombia, consumido como un paquete externo.",
   "scripts": {
     "start": "tsx simulate-wompi-payment.ts",
+    "simulate:wompi": "tsx simulate-wompi-payment.ts",
+    "simulate:mercadopago": "tsx simulate-mercadopago-payment.ts",
     "typecheck": "tsc --noEmit"
   },
   "author": "Andres Henao, Joan Orduz, Joshua Prieto, David Rodriguez",
