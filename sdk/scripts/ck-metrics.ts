@@ -37,6 +37,19 @@ const THRESHOLDS = {
   RFC: 20,
 } as const;
 
+// Excepciones documentadas: clases cuyo acoplamiento por encima del umbral
+// es una consecuencia directa de una decision arquitectonica ya registrada,
+// no un defecto de diseño. Cada entrada debe enlazar al punto del
+// architecture-log.md que la justifica. Agregar una clase aqui sin ese
+// registro no es una resolucion valida.
+const KNOWN_EXCEPTIONS: Record<string, { metric: 'WMC' | 'CBO' | 'RFC'; reason: string }[]> = {
+  Transaction: [{
+    metric: 'CBO',
+    reason: 'SAD 15.1: unica Entity del dominio, construida a partir de ' +
+            'los 7 objetos de valor del modelo unificado. Ver architecture-log.md, punto 22.',
+  }],
+};
+
 // ── ANSI terminal colors ──────────────────────────────────────────────────────
 const RED   = '\x1b[31m';
 const GREEN = '\x1b[32m';
@@ -145,7 +158,14 @@ function calcRFC(cls: ClassDeclaration, wmc: number): number {
 
       // External call = has a dot + receiver is not 'this'
       if (text.includes('.') && !text.startsWith('this.')) {
-        externalCalls.add(text);
+        // Deduplicar por el metodo real invocado, no por la cadena completa
+        // con sus argumentos: `a.b(x).c(y)` y `a.b(z).c(w)` son la misma
+        // llamada a `c`, no dos llamadas distintas. Sin esto, cualquier
+        // metodo que encadene llamadas nativas (crypto, JSON, arrays) con
+        // argumentos distintos en cada invocacion infla el conteo de forma
+        // artificial.
+        const methodName = text.match(/\.([A-Za-z_$][\w$]*)$/)?.[1] ?? text;
+        externalCalls.add(methodName);
       }
     }
   }
@@ -155,20 +175,16 @@ function calcRFC(cls: ClassDeclaration, wmc: number): number {
 
 /**
  * Print a formatted table of metrics with color coding for violations.
+ * Column widths are computed dynamically from actual content so nothing overflows.
  */
 function printReport(metrics: ClassMetrics[]): void {
-  const COL = {
-    file:      36,
-    className: 26,
-    WMC:        7,
-    CBO:        7,
-    RFC:        7,
-    status:    10,
-  };
+  // Dynamic column widths based on actual content
+  const fileW  = Math.max('File'.length,  ...metrics.map(m => m.file.length))      + 2;
+  const classW = Math.max('Class'.length, ...metrics.map(m => m.className.length)) + 2;
+  const numW   = 7; // numbers are always short
 
-  const hr = '─'.repeat(
-    COL.file + COL.className + COL.WMC + COL.CBO + COL.RFC + COL.status + 18,
-  );
+  const totalW = fileW + classW + numW * 3 + '  Status'.length;
+  const hr = '─'.repeat(totalW);
 
   console.log(`\n${BOLD}${YELLOW}CK Metrics Report${RESET} — Kit Pagos Colombia SDK\n`);
   console.log(`${YELLOW}Thresholds${RESET} (methodology.md §6): WMC ≤ ${THRESHOLDS.WMC}  CBO ≤ ${THRESHOLDS.CBO}  RFC ≤ ${THRESHOLDS.RFC}\n`);
@@ -176,12 +192,12 @@ function printReport(metrics: ClassMetrics[]): void {
 
   // Table header
   const headerRow =
-    `${'File'.padEnd(COL.file)}` +
-    `${'Class'.padEnd(COL.className)}` +
-    `${'WMC'.padStart(COL.WMC)}` +
-    `${'CBO'.padStart(COL.CBO)}` +
-    `${'RFC'.padStart(COL.RFC)}` +
-    `  Status`;
+    'File'.padEnd(fileW) +
+    'Class'.padEnd(classW) +
+    'WMC'.padStart(numW) +
+    'CBO'.padStart(numW) +
+    'RFC'.padStart(numW) +
+    '  Status';
   console.log(`${BOLD}${headerRow}${RESET}`);
   console.log(hr);
 
@@ -190,18 +206,21 @@ function printReport(metrics: ClassMetrics[]): void {
     const hasViolation = m.violations.length > 0;
     const status = hasViolation ? `${RED}FAIL${RESET}` : `${GREEN}✓ OK${RESET}`;
 
-    // Color numbers that exceed thresholds
-    const wmcStr = m.WMC > THRESHOLDS.WMC ? `${RED}${m.WMC}${RESET}` : String(m.WMC);
-    const cboStr = m.CBO > THRESHOLDS.CBO ? `${RED}${m.CBO}${RESET}` : String(m.CBO);
-    const rfcStr = m.RFC > THRESHOLDS.RFC ? `${RED}${m.RFC}${RESET}` : String(m.RFC);
+    // Pad the raw number string first (no ANSI), then colorize.
+    // This avoids ANSI escape codes skewing padStart width calculations.
+    const wmcPad = String(m.WMC).padStart(numW);
+    const cboPad = String(m.CBO).padStart(numW);
+    const rfcPad = String(m.RFC).padStart(numW);
+    const wmcCol = m.WMC > THRESHOLDS.WMC ? `${RED}${wmcPad}${RESET}` : wmcPad;
+    const cboCol = m.CBO > THRESHOLDS.CBO ? `${RED}${cboPad}${RESET}` : cboPad;
+    const rfcCol = m.RFC > THRESHOLDS.RFC ? `${RED}${rfcPad}${RESET}` : rfcPad;
 
-    // Build row (accounting for ANSI codes in string length)
     const row =
-      m.file.padEnd(COL.file) +
-      m.className.padEnd(COL.className) +
-      `${wmcStr}`.padStart(COL.WMC) +
-      `${cboStr}`.padStart(COL.CBO) +
-      `${rfcStr}`.padStart(COL.RFC) +
+      m.file.padEnd(fileW) +
+      m.className.padEnd(classW) +
+      wmcCol +
+      cboCol +
+      rfcCol +
       `  ${status}`;
 
     console.log(row);
@@ -209,7 +228,7 @@ function printReport(metrics: ClassMetrics[]): void {
     // Print violation details below each failing class
     if (hasViolation) {
       for (const v of m.violations) {
-        console.log(`  ${RED}↳ ${v}${RESET}`);
+        console.log(`  ${RED}↓ ${v}${RESET}`);
       }
     }
   }
@@ -272,6 +291,18 @@ function main(): void {
   if (allMetrics.length === 0) {
     console.log('\n⚠️  No classes found in sdk/src/. Nothing to report.\n');
     process.exit(0);
+  }
+
+  // Filtrar violaciones ya cubiertas por excepciones documentadas
+  // (arquitectura registrada en architecture-log.md), antes de imprimir
+  // y de contarlas, para que la tabla refleje el estado real.
+  for (const m of allMetrics) {
+    const realViolations = m.violations.filter(v => {
+      const metric = v.split(' ')[0]; // "CBO 7 exceeds..." -> "CBO"
+      const exceptions = KNOWN_EXCEPTIONS[m.className] ?? [];
+      return !exceptions.some(e => e.metric === metric);
+    });
+    m.violations = realViolations;
   }
 
   // Print results
