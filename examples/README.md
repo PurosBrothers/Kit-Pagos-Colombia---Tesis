@@ -54,7 +54,7 @@ npm start
 * **Qué esperar:** 
   1. Imprime la solicitud de pago.
   2. Muestra la `Transaction` creada con estado `APPROVED`.
-  3. Muestra un error tipado con código `UNSUPPORTED_OPERATION` al intentar consultar el estado por ID (diseñado intencionalmente para ilustrar cómo el comercio gestiona códigos de error tipados con `KitPagosError`).
+  3. Consulta exitosamente el estado por ID a través de `kitPagos.getPaymentStatus(...)` obteniendo la transacción con estado `APPROVED`.
 
 ---
 

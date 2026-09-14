@@ -290,7 +290,7 @@ function main(): void {
 
   // Handle case where no classes are found
   if (allMetrics.length === 0) {
-    console.log('\n⚠️  No classes found in sdk/src/. Nothing to report.\n');
+    console.log('\nNo classes found in sdk/src/. Nothing to report.\n');
     process.exit(0);
   }
 

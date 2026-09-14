@@ -1,15 +1,15 @@
 /**
- * Ejemplo end-to-end de un pago simulado con Wompi (issue #31).
+ * End-to-end example of a simulated Wompi payment (issue #31, updated in issue #55).
  *
- * Este archivo esta escrito desde la perspectiva de un desarrollador externo:
- * vive fuera del paquete del SDK y lo importa por su nombre publico, igual que
- * si lo hubiera instalado con `npm install kit-pagos-colombia`. No usa rutas
- * relativas hacia `sdk/src` a proposito, porque el objetivo no es probar el
- * codigo interno sino demostrar que la superficie publica del paquete alcanza
- * para integrar un pago completo.
+ * This file is written from the perspective of an external developer:
+ * it lives outside the SDK package and imports it by its public name, just as
+ * if it had been installed with `npm install kit-pagos-colombia`. It does not
+ * use relative paths into `sdk/src` on purpose, because the goal is not to
+ * test internal code but to demonstrate that the public surface of the package
+ * is sufficient to integrate a complete payment.
  *
- * Requisito para correrlo: la API de Simulacion tiene que estar arriba en el
- * puerto 3000. Ver el README de esta carpeta.
+ * Prerequisite to run it: the Simulation API must be up on port 3000.
+ * See the README in this folder.
  */
 import {
   KitPagos,
@@ -23,18 +23,18 @@ import {
   type SDKOptions,
 } from "kit-pagos-colombia";
 
-/** Endpoint del mock de Wompi que expone la API de Simulacion. Esto al igual que las keys, debería ir en 
- * un archivo de configuración externo como un .env.*/
+/** Base URL of the Wompi mock exposed by the Simulation API. This, along with
+ * the keys, should live in an external configuration file such as a .env. */
 const SIMULATOR_WOMPI_URL = "http://localhost:3000/v1/sim/wompi/transactions";
 
 /**
- * Paso 1: configurar el SDK.
+ * Step 1: configure the SDK.
  *
- * Es lo unico que un comercio necesita decidir: con cual pasarela trabaja y con
- * que credenciales. `baseUrl` apunta al simulador; en produccion se omite y
- * cada Adapter usa el endpoint real de su pasarela. Las credenciales de este
- * ejemplo son ficticias porque el mock no autentica, pero viajan por el mismo
- * camino que las reales.
+ * This is the only decision a merchant needs to make: which gateway to use and
+ * with which credentials. `baseUrl` points to the simulator; in production it
+ * is omitted and each Adapter uses its gateway's real endpoint. The credentials
+ * in this example are fictional because the mock does not authenticate, but
+ * they travel the same path as real ones.
  */
 const options: SDKOptions = {
   gateway: Gateway.WOMPI,
@@ -50,23 +50,23 @@ const options: SDKOptions = {
 async function main(): Promise<void> {
   const kitPagos = new KitPagos(options);
 
-  console.log("=== Kit Pagos Colombia — ejemplo de pago simulado con Wompi ===\n");
-  console.log(`Pasarela activa: ${Gateway.WOMPI}`);
+  console.log("=== Kit Pagos Colombia — simulated Wompi payment example ===\n");
+  console.log(`Active gateway: ${Gateway.WOMPI}`);
   console.log(`Endpoint: ${SIMULATOR_WOMPI_URL}\n`);
 
   /**
-   * Paso 2: describir el pago con el vocabulario del dominio.
+   * Step 2: describe the payment using domain vocabulary.
    *
-   * No se escriben campos nativos de Wompi como `amount_in_cents`. Se usan
-   * objetos de valor que validan en su propio constructor: un monto con mas de
-   * dos decimales, una divisa que no sea ISO 4217 o un pagador sin correo
-   * fallan aca mismo, antes de que exista cualquier peticion de red.
+   * No native Wompi fields like `amount_in_cents` are written here. Value
+   * objects that validate in their own constructor are used instead: an amount
+   * with more than two decimals, a non-ISO 4217 currency or a payer without
+   * an email will fail here, before any network request exists.
    *
-   * El monto se escribe como texto y no como numero. Es el unico tipo que
-   * conserva la escala: `new Amount("150000.00")` sigue valiendo "150000.00" al
-   * leerlo, mientras `150000.00` en JavaScript es indistinguible de `150000`.
-   * Esa diferencia importa porque Rapyd calcula la firma de la peticion sobre el
-   * cuerpo serializado, donde "19.90" y "19.9" no son lo mismo.
+   * The amount is written as a string, not a number. It is the only type that
+   * preserves scale: `new Amount("150000.00")` still reads as "150000.00",
+   * while `150000.00` in JavaScript is indistinguishable from `150000`. That
+   * difference matters because Rapyd computes the request signature over the
+   * serialized body, where "19.90" and "19.9" are not the same.
    */
   const request = {
     amount: new Amount("150000.00"),
@@ -78,73 +78,73 @@ async function main(): Promise<void> {
     }),
   };
 
-  console.log("Solicitud de pago:");
-  console.log(`  Monto:      ${request.amount.getValue()} ${request.currency.getCode()}`);
-  // Lo que el Adapter le va a mandar a Wompi. Se imprime para dejar ver que la
-  // traduccion a centavos ocurre en la infraestructura y no la escribe el comercio.
-  console.log(`  En centavos: ${request.amount.toMinorUnits(request.currency)} (lo que recibe Wompi)`);
-  console.log(`  Referencia: ${request.orderReference.getValue()}`);
-  console.log(`  Pagador:    ${request.payer.email}\n`);
+  console.log("Payment request:");
+  console.log(`  Amount:      ${request.amount.getValue()} ${request.currency.getCode()}`);
+  // What the Adapter will send to Wompi. Printed to show that the conversion
+  // to cents happens in the infrastructure layer, not written by the merchant.
+  console.log(`  In cents:    ${request.amount.toMinorUnits(request.currency)} (what Wompi receives)`);
+  console.log(`  Reference:   ${request.orderReference.getValue()}`);
+  console.log(`  Payer:       ${request.payer.email}\n`);
 
   /**
-   * Paso 3: crear el pago.
+   * Step 3: create the payment.
    *
-   * Una sola llamada. Por dentro el SDK resuelve la pasarela activa, obtiene
-   * sus credenciales, construye el Adapter de Wompi, traduce los objetos de
-   * valor al formato nativo, hace la peticion HTTP y normaliza la respuesta.
-   * Nada de eso se filtra hacia aca.
+   * A single call. Internally the SDK resolves the active gateway, obtains its
+   * credentials, builds the Wompi Adapter, translates the value objects to the
+   * native format, makes the HTTP request and normalizes the response. None of
+   * that leaks out here.
    */
   const transaction = await kitPagos.createPayment(request);
 
-  console.log("Transaccion recibida:");
-  console.log(`  ID en la pasarela:  ${transaction.gatewayTransactionId.value}`);
-  console.log(`  Pasarela de origen: ${transaction.gatewayTransactionId.gateway}`);
-  console.log(`  Estado normalizado: ${transaction.getStatus()}`);
-  console.log(`  Estado nativo:      ${transaction.rawStatus}`);
-  console.log(`  Monto:              ${transaction.amount.getValue()} ${transaction.currency.getCode()}`);
-  console.log(`  Referencia:         ${transaction.orderReference.getValue()}`);
-  console.log(`  Pagador:            ${transaction.payer.email}`);
-  console.log(`  Aprobada:           ${transaction.isApproved()}`);
-  console.log(`  Estado final:       ${transaction.isFinal()}\n`);
+  console.log("Transaction created:");
+  console.log(`  Gateway ID:         ${transaction.gatewayTransactionId.value}`);
+  console.log(`  Source gateway:     ${transaction.gatewayTransactionId.gateway}`);
+  console.log(`  Normalized status:  ${transaction.getStatus()}`);
+  console.log(`  Native status:      ${transaction.rawStatus}`);
+  console.log(`  Amount:             ${transaction.amount.getValue()} ${transaction.currency.getCode()}`);
+  console.log(`  Reference:          ${transaction.orderReference.getValue()}`);
+  console.log(`  Payer:              ${transaction.payer.email}`);
+  console.log(`  Approved:           ${transaction.isApproved()}`);
+  console.log(`  Final state:        ${transaction.isFinal()}\n`);
 
   /**
-   * Paso 4: consultar el estado del pago.
+   * Step 4: query the payment status.
    *
-   * Esta parte todavia no funciona, y se deja en el ejemplo justamente por eso:
-   * la API de Simulacion solo implementa creacion de pagos, asi que el SDK
-   * responde con un error tipado en vez de un fallo silencioso o un texto
-   * suelto. Es la demostracion de como un comercio distingue por codigo que
-   * fue lo que paso.
+   * Now that the simulator remembers created transactions (issue #55), this
+   * query returns the same normalized transaction. The id passed is the native
+   * identifier returned by Wompi when the payment was created.
    */
-  /* console.log("Consultando el estado de la transaccion...");
+  console.log("Querying transaction status...");
   try {
     const consulted = await kitPagos.getPaymentStatus(
       transaction.gatewayTransactionId.value,
     );
-    console.log(`  Estado consultado: ${consulted.getStatus()}\n`);
+    console.log(`  Queried ID:      ${consulted.gatewayTransactionId.value}`);
+    console.log(`  Queried status:  ${consulted.getStatus()}`);
+    console.log(`  Approved:        ${consulted.isApproved()}\n`);
   } catch (error) {
-    if (error instanceof KitPagosError && error.code === KitPagosErrorCode.UNSUPPORTED_OPERATION) {
-      console.log(`  No disponible todavia. Codigo de error: ${error.code}`);
-      console.log(`  Detalle: ${error.message}`);
+    if (error instanceof KitPagosError && error.code === KitPagosErrorCode.RESOURCE_NOT_FOUND) {
+      console.log(`  Transaction not found. Error code: ${error.code}`);
+      console.log(`  Detail: ${error.message}`);
     } else {
       throw error;
     }
-  } */
+  }
 
-  console.log("=== Fin del ejemplo ===");
+  console.log("=== End of example ===");
 }
 
 main().catch((error: unknown) => {
-  // El unico fallo esperable al correr esto es que la API de Simulacion no este
-  // arriba. Se traduce a una instruccion concreta en vez de una traza cruda.
+  // The only expected failure when running this is that the Simulation API is
+  // not up. Translated to a concrete instruction instead of a raw stack trace.
   if (error instanceof KitPagosError && error.code === KitPagosErrorCode.CONNECTION_FAILED) {
-    console.error("\nNo se pudo conectar con la API de Simulacion.");
-    console.error("Arrancala en otra terminal y vuelve a correr el ejemplo:\n");
+    console.error("\nCould not connect to the Simulation API.");
+    console.error("Start it in another terminal and run the example again:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }
 
-  console.error("\nEl ejemplo fallo de forma inesperada:");
+  console.error("\nThe example failed unexpectedly:");
   console.error(error);
   process.exit(1);
 });
