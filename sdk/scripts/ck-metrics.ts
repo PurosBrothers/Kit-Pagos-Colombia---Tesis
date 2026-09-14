@@ -121,6 +121,7 @@ function calcCBO(cls: ClassDeclaration, sourceFile: SourceFile): number {
 
     // Return type (for methods only)
     if (sig.getKind && sig.getKind() !== SyntaxKind.Constructor) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const returnType = (sig as any).getReturnTypeNode?.();
       if (returnType) {
         const returnText = returnType.getText();
