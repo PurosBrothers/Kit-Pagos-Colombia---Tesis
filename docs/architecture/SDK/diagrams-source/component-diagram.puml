@@ -17,10 +17,10 @@ rectangle "SDK Kit Pagos Colombia (Paquete npm / TypeScript)\n[container]" as Sy
   rectangle "**Gateway Factory**\n<i>[Factory Pattern]\nTypeScript</i>\n\nInstancia adaptador segun\nel enum Gateway\nconfigurado" as Factory #2E75B6
   rectangle "**Payment Gateway Port**\n<i>[Interfaz / Puerto]\nTypeScript</i>\n\nContrato abstracto con las\noperaciones que debe\nimplementar cada adaptador" as Port #90CAF9
 
-  rectangle "**Response Normalizer**\n<i>[Domain Service]\nTypeScript</i>\n\nMapea estados nativos a\nTransactionStatus y\nconstruye la entidad\nTransaction" as Normalizer #2E75B6
+  rectangle "**Response Normalizer**\n<i>[Application Service]\nTypeScript</i>\n\nDespacha en un normalizador\npor pasarela, que mapea\nestados nativos a\nTransactionStatus y construye\nla entidad Transaction" as Normalizer #2E75B6
   rectangle "**Retry Handler**\n<i>[Resilience Utility]\nTypeScript</i>\n\nReintentos con backoff\nexponencial ante errores\ntransitorios" as Retry #2E75B6
-  rectangle "**Error Handler**\n<i>[Domain Service]\nTypeScript</i>\n\nConvierte errores nativos\nen SdkError tipado con\nSdkErrorCode" as ErrorHandler #2E75B6
-  rectangle "**Webhook Verifier**\n<i>[Domain Service]\nTypeScript</i>\n\nVerifica firmas\ncriptograficas\n(SHA-256, HMAC)" as Webhook #2E75B6
+  rectangle "**Error Handler**\n<i>[Application Service]\nTypeScript</i>\n\nConvierte errores nativos\nen SdkError tipado con\nSdkErrorCode. Se divide por\nforma del error, no por\npasarela" as ErrorHandler #2E75B6
+  rectangle "**Webhook Verifier**\n<i>[Domain Service]\nTypeScript</i>\n\nDespacha en un manejador\npor pasarela, que verifica la\nfirma criptografica\n(SHA-256, HMAC) y construye\nel WebhookEvent" as Webhook #2E75B6
   rectangle "**Transaction Entity**\n<i>[Domain Entity]\nTypeScript</i>\n\nEncapsula estado unificado,\nmontos, autorizacion y\ndatos del pagador" as Transaction #FFE0B2
 
   rectangle "**Wompi Adapter**\n<i>[Adapter Pattern]</i>\n\nTraduce a Wompi\n(Bearer, status)" as WompiAdapter #5B9BD5
@@ -65,6 +65,19 @@ KushkiAdapter ..> SimAPI : Modo sandbox UAT
 note bottom of RapydAdapter
   Reemplaza a "PayU Adapter" tras la adquisicion
   (ver architecture-log.md, punto 15).
+end note
+
+note right of Normalizer
+  Response Normalizer y Webhook Verifier son
+  despachadores: cada pasarela tiene su propia
+  implementacion detras de una interfaz
+  (GatewayResponseNormalizer y
+  GatewayWebhookHandler). No se dibujan como
+  componentes aparte porque, a diferencia de los
+  adaptadores, no hablan con ningun sistema
+  externo; el detalle de clases esta en el
+  Diagrama de Clases de la Arquitectura Hexagonal.
+  Ver architecture-log.md, punto 34.
 end note
 
 @enduml
