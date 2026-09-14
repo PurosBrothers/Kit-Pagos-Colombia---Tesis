@@ -1,5 +1,6 @@
 import { buildApp } from "../src/app";
 import { ScenarioEngine } from "../src/scenarios/ScenarioEngine";
+import { transactionStore } from "../src/store/TransactionStore";
 
 describe("POST /v1/sim/wompi/transactions", () => {
   const validRequestBody = {
@@ -88,6 +89,72 @@ describe("POST /v1/sim/wompi/transactions", () => {
     expect(response.json().error).not.toMatch(/escenario aún no soportado/i);
 
     executeSpy.mockRestore();
+    await app.close();
+  });
+});
+
+describe("GET /v1/sim/wompi/transactions/:id", () => {
+  const validRequestBody = {
+    amount_in_cents: 5000000,
+    currency: "COP",
+    reference: "orden-123",
+    customer_email: "cliente@example.com",
+    payment_method: { type: "CARD", token: "tok_test_fake" },
+  };
+
+  beforeEach(() => {
+    transactionStore.clear();
+  });
+
+  afterEach(() => {
+    transactionStore.clear();
+  });
+
+  it("devuelve 200 con { data: transaction } cuando la transacción fue creada previamente", async () => {
+    const app = buildApp();
+
+    // 1. Crear la transacción vía POST para que se guarde en TransactionStore
+    const postResponse = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/transactions",
+      payload: validRequestBody,
+    });
+    expect(postResponse.statusCode).toBe(201);
+    const createdId = postResponse.json().data.id;
+
+    // 2. Consultar por el ID generado vía GET
+    const getResponse = await app.inject({
+      method: "GET",
+      url: `/v1/sim/wompi/transactions/${createdId}`,
+    });
+
+    expect(getResponse.statusCode).toBe(200);
+    const body = getResponse.json();
+    expect(body.data).toBeDefined();
+    expect(body.data.id).toBe(createdId);
+    expect(body.data.status).toBe("APPROVED");
+    expect(body.data.amount_in_cents).toBe(validRequestBody.amount_in_cents);
+    expect(body.data.reference).toBe(validRequestBody.reference);
+    expect(body.data.customer_email).toBe(validRequestBody.customer_email);
+
+    await app.close();
+  });
+
+  it("devuelve 404 con la forma nativa de error de Wompi cuando el id no existe", async () => {
+    const app = buildApp();
+    const nonExistentId = "non-existent-wompi-id-999";
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/sim/wompi/transactions/${nonExistentId}`,
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = response.json();
+    expect(body.error).toBeDefined();
+    expect(body.error.type).toBe("NOT_FOUND");
+    expect(body.error.reason).toContain(nonExistentId);
+
     await app.close();
   });
 });
