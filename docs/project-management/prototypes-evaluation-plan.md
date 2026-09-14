@@ -80,12 +80,14 @@ Todas contables por script, ninguna por apreciación.
 |---|---|---|---|
 | 1 | **Líneas de código de integración** | Conteo sobre el módulo de pagos de cada prototipo, excluyendo el esqueleto común | El costo de la integración inicial |
 | 2 | **Diff de migración** | `git diff --stat` entre el commit de Wompi y el de Mercado Pago | El costo del *vendor lock-in*, que es el problema de la tesis |
-| 3 | **Métricas CK (WMC, CBO, RFC)** | El script de `ts-morph` del issue #19, corrido sobre las clases de pago de cada prototipo | Lo que exige literalmente el Hito H5 |
+| 3 | **Métricas CK (WMC, CBO, RFC, MAX_CC)** | El script de `ts-morph` del issue #19 (`npm run metrics`), corrido sobre las clases de pago de cada prototipo. Fórmulas fijadas en `methodology.md` §6.1 | Lo que exige literalmente el Hito H5 |
 | 4 | **Conceptos nativos expuestos** | Conteo de identificadores propios de pasarela (`amount_in_cents`, `transaction_amount`, `APPROVAL`, `CLO`...) presentes en el código del prototipo | Cuánta documentación de pasarela tiene que leer el desarrollador |
 | 5 | **Pasarelas alcanzables** | Cuántas de las cuatro puede usar el prototipo sin escribir código nuevo | La capacidad que el framework agrega |
 | 6 | **Cobertura de pruebas** | Jest, con el mismo esfuerzo de pruebas en ambos | Si la abstracción hace el código más fácil de probar |
 
 La variable 4 es más interesante de lo que parece. En el prototipo B el conteo debería ser **cero**: si aparece un solo `amount_in_cents` en el código del comercio, significa que la abstracción tiene una fuga, y eso sería un hallazgo negativo que hay que reportar igual.
+
+La variable 3 depende de que la fórmula de WMC sea la canónica, y no es un detalle menor para la validez de esta comparación. Mientras el script calculó WMC como conteo de métodos, un método único de 360 líneas con un `switch` de cuatro ramas puntuaba WMC 1 (ver `architecture-log.md`, punto 34). Ese es precisamente el patrón que se espera encontrar en el prototipo A, donde la integración directa concentra el mapeo de cada pasarela en el código del comercio: con la fórmula vieja, el prototipo más complejo habría reportado el mejor WMC, y la comparación habría dicho lo contrario de lo que ocurre en el código. La corrección de la fórmula es lo que vuelve interpretable esta variable, y `MAX_CC` es la que hace visible ese patrón concreto.
 
 ### Lo que no se va a medir como evidencia principal
 
