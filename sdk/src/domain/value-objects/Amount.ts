@@ -1,5 +1,19 @@
-import Big from "big.js";
 import { Currency } from "./Currency";
+import {
+  BigRoundingCode,
+  bigFixed,
+  bigAdd,
+  bigSubtract,
+  bigMultiply,
+  bigDivide,
+  bigEquals,
+} from "./big-arithmetic";
+import {
+  isCanonicalAmount,
+  isAllDigits,
+  shiftFromMinorUnits,
+  shiftToMinorUnits,
+} from "./minor-units";
 
 /**
  * Modo de redondeo a aplicar cuando una operacion produce mas decimales de los
@@ -20,6 +34,18 @@ export enum RoundingMode {
   /** Se aleja de cero siempre que haya resto. */
   UP = "UP",
 }
+
+/**
+ * Traduccion del modo de redondeo del dominio al codigo numerico de big.js.
+ * Vive en el modulo y no como campo estatico porque es una tabla de constantes
+ * sin relacion con el estado de ninguna instancia.
+ */
+const ROUNDING_CODES: Readonly<Record<RoundingMode, BigRoundingCode>> = {
+  [RoundingMode.DOWN]: 0,
+  [RoundingMode.HALF_UP]: 1,
+  [RoundingMode.HALF_EVEN]: 2,
+  [RoundingMode.UP]: 3,
+};
 
 /**
  * Objeto de valor inmutable que encapsula el monto de una transaccion.
@@ -58,12 +84,16 @@ export enum RoundingMode {
  * La forma canonica de entrada se guarda tal cual en un string, porque es lo
  * unico que conserva la escala: `new Big("19.90").toString()` tambien devuelve
  * `"19.9"`, asi que guardar un `Big` perderia justo lo que se quiere proteger.
- * `Big` se usa solamente para operar, y el resultado vuelve a string con una
- * escala explicita.
  *
- * Las conversiones de unidad (`toMinorUnits`, `fromMinorUnits`) no usan `Big`
- * ni aritmetica: corren el punto decimal sobre el string, que es exacto por
- * construccion y no depende de ninguna libreria.
+ * La clase se queda con lo que es propio del objeto de valor (validar la forma
+ * canonica, comparar, exponer el valor y la escala) y delega las dos mecanicas
+ * que no necesitan saber de dinero:
+ *
+ * - `big-arithmetic.ts` concentra todas las llamadas a big.js. Es lo que hace
+ *   cierta la promesa del parrafo de RoundingMode: cambiar de libreria decimal
+ *   es reescribir ese archivo y nada mas.
+ * - `minor-units.ts` corre el punto decimal entre pesos y centavos, sin
+ *   aritmetica de ningun tipo, que es exacto por construccion.
  */
 export class Amount {
   /**
@@ -78,16 +108,6 @@ export class Amount {
    */
   private static readonly MAX_SCALE = 2;
 
-  /** Solo digitos, con punto y hasta MAX_SCALE decimales. Sin signo, sin notacion exponencial. */
-  private static readonly CANONICAL_PATTERN = /^\d+(\.\d{1,2})?$/;
-
-  private static readonly ROUNDING_MODES: Readonly<Record<RoundingMode, 0 | 1 | 2 | 3>> = {
-    [RoundingMode.DOWN]: 0,
-    [RoundingMode.HALF_UP]: 1,
-    [RoundingMode.HALF_EVEN]: 2,
-    [RoundingMode.UP]: 3,
-  };
-
   private readonly value: string;
 
   /**
@@ -95,11 +115,6 @@ export class Amount {
    * centavos). Se rechaza `number` en la firma a proposito: aceptarlo "por
    * comodidad" reabriria por esa puerta el problema del cero final que motiva
    * toda esta clase.
-   *
-   * La validacion es puramente sintactica sobre el string recibido. No se
-   * delega a big.js porque big.js es mas permisivo de lo que conviene aca:
-   * acepta notacion exponencial (`"1e3"`), signo, y cualquier cantidad de
-   * decimales.
    */
   constructor(value: string) {
     if (typeof value !== "string") {
@@ -108,7 +123,7 @@ export class Amount {
     if (value.startsWith("-")) {
       throw new Error("Amount no puede ser negativo");
     }
-    if (!Amount.CANONICAL_PATTERN.test(value)) {
+    if (!isCanonicalAmount(value)) {
       throw new Error(
         `Amount solo admite digitos con hasta ${Amount.MAX_SCALE} decimales, sin signo ni notacion exponencial (recibido: "${value}")`,
       );
@@ -120,28 +135,17 @@ export class Amount {
    * Construye un monto a partir de su representacion en la unidad menor de la
    * divisa, que es como responden varias pasarelas (Wompi devuelve
    * `amount_in_cents`).
-   *
-   * Inserta el punto decimal sobre los digitos en vez de dividir, de modo que
-   * 1990 centavos devuelven `"19.90"` con el cero final intacto. Dividir entre
-   * 100 daria `19.9` y el comercio veria un monto distinto del que cobro.
    */
   static fromMinorUnits(minor: string | number, currency: Currency): Amount {
     const digits = typeof minor === "number" ? String(minor) : minor;
-    if (!/^\d+$/.test(digits)) {
+    if (!isAllDigits(digits)) {
       throw new Error(
         `Amount.fromMinorUnits espera un entero no negativo de unidades menores (recibido: "${digits}")`,
       );
     }
-
-    const exponent = currency.getMinorUnitExponent();
-    if (exponent === 0) {
-      return new Amount(Amount.stripLeadingZeros(digits));
-    }
-
-    const padded = digits.padStart(exponent + 1, "0");
-    const cut = padded.length - exponent;
-    const integerPart = Amount.stripLeadingZeros(padded.slice(0, cut));
-    return new Amount(`${integerPart}.${padded.slice(cut)}`);
+    return new Amount(
+      shiftFromMinorUnits(digits, currency.getMinorUnitExponent()),
+    );
   }
 
   /** Valor en la unidad mayor de la divisa, conservando la escala con la que se construyo. */
@@ -157,10 +161,8 @@ export class Amount {
   /**
    * Traduccion a la unidad menor de la divisa, como string de digitos.
    *
-   * Corre el punto decimal usando el exponente que Currency conoce por ISO
-   * 4217, sin multiplicar. Devuelve string y no `number` para que la conversion
-   * a numero, cuando el formato de cable la exija, quede visible en el Adapter
-   * y no escondida aca.
+   * Devuelve string y no `number` para que la conversion a numero, cuando el
+   * formato de cable la exija, quede visible en el Adapter y no escondida aca.
    *
    * Lanza si el monto tiene mas decimales de los que la divisa admite, en vez
    * de truncarlos: un monto de `"19.99"` en una divisa de cero decimales es un
@@ -175,10 +177,7 @@ export class Amount {
         `Amount de ${scale} decimales no cabe en ${currency.getCode()}, que admite ${exponent} segun ISO 4217`,
       );
     }
-
-    const [integerPart, decimalPart = ""] = this.value.split(".");
-    const shifted = integerPart + decimalPart.padEnd(exponent, "0");
-    return Amount.stripLeadingZeros(shifted);
+    return shiftToMinorUnits(this.value, exponent);
   }
 
   /**
@@ -199,16 +198,12 @@ export class Amount {
         `No se puede representar un monto de ${this.getScale()} decimales con escala ${scale} sin perder informacion`,
       );
     }
-    return new Big(this.value).toFixed(scale);
+    return bigFixed(this.value, scale);
   }
 
   /** Suma exacta: no necesita escala porque el resultado no gana decimales. */
   add(other: Amount): Amount {
-    return new Amount(
-      new Big(this.value).plus(new Big(other.value)).toFixed(
-        Math.max(this.getScale(), other.getScale()),
-      ),
-    );
+    return new Amount(bigAdd(this.value, other.value, this.widestScale(other)));
   }
 
   /**
@@ -216,15 +211,17 @@ export class Amount {
    * negativo no es un concepto valido del dominio.
    */
   subtract(other: Amount): Amount {
-    const result = new Big(this.value).minus(new Big(other.value));
-    if (result.lt(0)) {
+    const { value: result, isNegative } = bigSubtract(
+      this.value,
+      other.value,
+      this.widestScale(other),
+    );
+    if (isNegative) {
       throw new Error(
-        `Restar ${other.getValue()} de ${this.value} daria un monto negativo`,
+        `Restar ${other.value} de ${this.value} daria un monto negativo`,
       );
     }
-    return new Amount(
-      result.toFixed(Math.max(this.getScale(), other.getScale())),
-    );
+    return new Amount(result);
   }
 
   /**
@@ -235,10 +232,7 @@ export class Amount {
    */
   multiply(factor: string, scale: number, rounding: RoundingMode = RoundingMode.HALF_UP): Amount {
     return new Amount(
-      new Big(this.value)
-        .times(new Big(factor))
-        .round(scale, Amount.ROUNDING_MODES[rounding])
-        .toFixed(scale),
+      bigMultiply(this.value, factor, scale, ROUNDING_CODES[rounding]),
     );
   }
 
@@ -249,15 +243,8 @@ export class Amount {
    * en un monto valido.
    */
   divide(divisor: string, scale: number, rounding: RoundingMode = RoundingMode.HALF_UP): Amount {
-    const divisorBig = new Big(divisor);
-    if (divisorBig.eq(0)) {
-      throw new Error("No se puede dividir un monto entre cero");
-    }
     return new Amount(
-      new Big(this.value)
-        .div(divisorBig)
-        .round(scale, Amount.ROUNDING_MODES[rounding])
-        .toFixed(scale),
+      bigDivide(this.value, divisor, scale, ROUNDING_CODES[rounding]),
     );
   }
 
@@ -266,11 +253,14 @@ export class Amount {
    * monto aunque se hayan escrito distinto.
    */
   equals(other: Amount): boolean {
-    return new Big(this.value).eq(new Big(other.value));
+    return bigEquals(this.value, other.value);
   }
 
-  /** Quita ceros a la izquierda dejando al menos un digito. `"007"` da `"7"`, `"000"` da `"0"`. */
-  private static stripLeadingZeros(digits: string): string {
-    return digits.replace(/^0+(?=\d)/, "");
+  /**
+   * La mayor de las dos escalas, que es la que conserva toda la informacion de
+   * ambos operandos en una suma o una resta.
+   */
+  private widestScale(other: Amount): number {
+    return Math.max(this.getScale(), other.getScale());
   }
 }

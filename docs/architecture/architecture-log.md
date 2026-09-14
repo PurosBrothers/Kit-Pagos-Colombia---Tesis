@@ -41,7 +41,7 @@ Antes de empezar a implementar nada de la primera iteración de código, cada co
 |---|---|---|---|
 | 1 | Introducción | Joshua | La sección 1.2 ya dice Apache 2.0 correctamente (ver punto 12, que era un error solo en el código). **Punto 15:** en 1.2, cambiar "Wompi, PayU, Mercado Pago y Kushki" por "Wompi, Rapyd, Mercado Pago y Kushki". |
 | 2 | Requisitos funcionales | Joan | Punto 14: corregir RF-03 para que use los mismos seis valores que el enum `TransactionStatus` implementado (`APPROVED`, `DECLINED`, `PENDING`, `EXPIRED`, `VOIDED`, `ERROR`), en vez de la lista en español que tiene hoy. RF-04 no requiere ningún cambio de texto. **Punto 15:** ninguna RF nombra "PayU" explícitamente, no requiere corrección por este punto. **Punto 26:** aclarar en RF-04 el retorno de `PENDING` para webhooks de 2 pasos de Mercado Pago. |
-| 3 | Modelo de dominio | Henao | Punto 2 (`SdkError` del diagrama de clases), punto 3 (quitar `updateStatus()` del diagrama, es inmutable), punto 6 (agregar `WebhookEvent` a la tabla de conceptos), **y punto 13 (falta por completo el modelo de dominio de la API de Simulación)**. **Punto 15:** en `Domain Class Diagram.png`, el enum `Gateway` lista "WOMPI, PAYU, MERCADOPAGO, KUSHKI"; cambiar "PAYU" por "RAPYD". Esta imagen no tiene fuente PlantUML en el repo, se corrige manualmente con la herramienta original. **Punto 23:** renombrar `SdkError` a `KitPagosError` y `SdkErrorCode` a `KitPagosErrorCode` en `Domain Class Diagram.png` y tabla de conceptos. |
+| 3 | Modelo de dominio | Henao | Punto 2 (`SdkError` del diagrama de clases), punto 3 (quitar `updateStatus()` del diagrama, es inmutable), punto 6 (agregar `WebhookEvent` a la tabla de conceptos), **y punto 13 (falta por completo el modelo de dominio de la API de Simulación)**. **Punto 15:** en `Domain Class Diagram.png`, el enum `Gateway` lista "WOMPI, PAYU, MERCADOPAGO, KUSHKI"; cambiar "PAYU" por "RAPYD". Esta imagen no tiene fuente PlantUML en el repo, se corrige manualmente con la herramienta original. **Punto 23:** renombrar `SdkError` a `KitPagosError` y `SdkErrorCode` a `KitPagosErrorCode` en `Domain Class Diagram.png` y tabla de conceptos. **Punto 33:** si el `Domain Class Diagram.png` lista miembros privados, actualizar `Amount` (pierde `stripLeadingZeros`, gana `widestScale`) y `TaxBreakdown` (pierde sus cuatro `private static`). |
 | 4 | Stakeholders | Henao | Ninguna encontrada. |
 | 5 | ASR | Joan | Ninguna encontrada. |
 | 6 | Restricciones | David | **Punto 15:** revisar si esta sección menciona términos específicos de la API de PayU (`apiLogin`/`apiKey`, MD5) como restricción técnica; de ser así, actualizar a los términos de Rapyd (`access_key`/`secret_key`) o señalar explícitamente que el contrato de Rapyd está pendiente de investigación (ver punto 19 para el detalle de qué sigue pendiente). |
@@ -51,9 +51,9 @@ Antes de empezar a implementar nada de la primera iteración de código, cada co
 | 10 | Vista de procesos | David | Punto 7 (reemplazar las Figuras 8, 9 y 10 por los diagramas de secuencia regenerados, y corregir el texto de 10.1.1 que menciona `KitPagosFacade`). **Punto 17:** si esta sección también embebe los 4 diagramas de secuencia de la API de Simulación (pago exitoso, pago denegado, error de red, notificación webhook), reemplazarlos por las versiones regeneradas; corrigen contenido técnico obsoleto de PayU, no solo el nombre. **Punto 26:** aclarar la obligatoriedad del paso de consulta en la conciliación en dos pasos (Mercado Pago). **Punto 27:** incorporar el diagrama de proceso detallado a nivel de código (KitPagos → SdkConfigurator → GatewayFactory → Adapter → ErrorHandler / ResponseNormalizer / WebhookVerifier). |
 | 11 | Vista física | Joan | Ninguna encontrada (ya quedó correcta con Render). |
 | 12 | Modelo de datos | Henao | Ninguna encontrada. |
-| 13 | ADR | Joan | Punto 7: la sección 13.1 sí referencia el `Hexagonal architecture class diagram.png` por nombre ("el Diagrama de Clases de la Arquitectura Hexagonal"), confirmado por el propio texto. Reemplazar la imagen embebida por la versión regenerada, y agregarle un número de figura ("Figura N"), ya que hoy es el único diagrama del documento sin ese rótulo, a diferencia del resto de figuras citadas en la sección 13. **Punto 15:** revisar si algún ADR de esta sección documenta el vocabulario nativo de PayU (`state_pol`, la particularidad de que PayU siempre devuelve HTTP 200) y corregirlo o marcarlo como pendiente de la investigación de Rapyd. **Punto 28:** incorporar el apartado conceptual de Arquitectura de Puertos y Adaptadores (Hexagonal) mapeada a Kit Pagos Colombia en ADR-01. |
+| 13 | ADR | Joan | Punto 7: la sección 13.1 sí referencia el `Hexagonal architecture class diagram.png` por nombre ("el Diagrama de Clases de la Arquitectura Hexagonal"), confirmado por el propio texto. Reemplazar la imagen embebida por la versión regenerada, y agregarle un número de figura ("Figura N"), ya que hoy es el único diagrama del documento sin ese rótulo, a diferencia del resto de figuras citadas en la sección 13. **Punto 15:** revisar si algún ADR de esta sección documenta el vocabulario nativo de PayU (`state_pol`, la particularidad de que PayU siempre devuelve HTTP 200) y corregirlo o marcarlo como pendiente de la investigación de Rapyd. **Punto 28:** incorporar el apartado conceptual de Arquitectura de Puertos y Adaptadores (Hexagonal) mapeada a Kit Pagos Colombia en ADR-01. **Punto 33:** actualizar el `Hexagonal architecture class diagram.png` tras la extracción de `big-arithmetic.ts`, `minor-units.ts` y `rapyd-signature.ts`, y evaluar si el patrón de módulo de funciones puras como seam sobre dependencias externas merece un ADR propio. |
 | 14 | Riesgo técnico | David | Punto 10 (falta framework de pruebas en `simulator-api`, ya resuelto vía issue #6) es un riesgo de calidad que vale la pena registrar ahí, aunque no sea una inconsistencia de redacción. **Punto 15:** registrar la transición de PayU a Rapyd como un riesgo ya materializado (cambio de proveedor externo fuera de control del equipo, que invalidó documentación e implementación ya hecha del algoritmo de firma). |
-| 15 | Estructura del Sistema | David | Punto 1 (corregir nombres de métodos en 15.2 a `getPaymentStatus`/`validateWebhook`), punto 3 (aclarar que la reconciliación reconstruye la entidad), punto 6 (aclarar que `WebhookVerifier` tiene dos métodos públicos, no uno). **Punto 22:** validateWebhook retorna `WebhookEvent` y lanza `KitPagosError`. **Punto 23:** actualizar sección 15.1 con `KitPagosError` y `KitPagosErrorCode`. **Punto 24:** documentar responsabilidades de `ErrorHandler` en 15.2. **Punto 26:** documentar normalización de `WebhookVerifier.parse` a `PENDING` ante webhooks de solo identificador. **Punto 28:** detallar el desglose de capas (domain, application, infrastructure) y sus responsabilidades específicas en 15.1 y 15.2. **Punto 31:** registrar en la sección 15 la fórmula oficial de firma de requests salientes de Rapyd. |
+| 15 | Estructura del Sistema | David | Punto 1 (corregir nombres de métodos en 15.2 a `getPaymentStatus`/`validateWebhook`), punto 3 (aclarar que la reconciliación reconstruye la entidad), punto 6 (aclarar que `WebhookVerifier` tiene dos métodos públicos, no uno). **Punto 22:** validateWebhook retorna `WebhookEvent` y lanza `KitPagosError`. **Punto 23:** actualizar sección 15.1 con `KitPagosError` y `KitPagosErrorCode`. **Punto 24:** documentar responsabilidades de `ErrorHandler` en 15.2. **Punto 26:** documentar normalización de `WebhookVerifier.parse` a `PENDING` ante webhooks de solo identificador. **Punto 28:** detallar el desglose de capas (domain, application, infrastructure) y sus responsabilidades específicas en 15.1 y 15.2. **Punto 31:** registrar en la sección 15 la fórmula oficial de firma de requests salientes de Rapyd. **Punto 33:** el desglose de capas del punto 28 debe reflejar que `domain/value-objects/` e `infrastructure/adapters/` contienen módulos de funciones puras además de clases, y la fórmula del punto 31 debe apuntar a `rapyd-signature.ts`, no a un método privado de `RapydAdapter` que ya no existe. |
 | 16 | Glosario | David | **Punto 15:** si la definición de `Gateway`/`Adapter` usa a PayU como ejemplo, reemplazarlo por Rapyd, y agregar una nota breve sobre la adquisición de PayU por Rapyd para que el lector entienda por qué cambió el nombre. |
 
 Los puntos 4, 8, 9, 11, 12, 29, 30 y 31 de la Sección B, y toda la Sección E, no corresponden a ninguna de las 16 secciones del SAD (son documentos de repositorio, directrices para el README del SDK o decisiones de código ya resueltas), así que no tienen un responsable de esta lista; se dejan como tareas de ingeniería general para la primera iteración.
@@ -813,6 +813,68 @@ correspondiente por el PNG regenerado.
 
 ---
 
+## Sección F — Decisiones técnicas: métricas CK y deuda de RFC
+
+### 33. RFC excedido en `Amount`, `TaxBreakdown` y `RapydAdapter`: seams reales en vez de excepciones documentadas
+
+**Responsable de corregirlo en el SAD:** David (sección 15, Estructura del Sistema) para el desglose de módulos y la reubicación de la fórmula de firma de Rapyd; Henao (sección 3, Modelo de dominio) para el `Domain Class Diagram.png`; Joan (sección 13, ADR) para el `Hexagonal architecture class diagram.png` y el ADR que registre el patrón.
+
+**Encontrado:** Tras el merge del [PR #41](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/pull/41) (issue #19, script de métricas CK), `npm run metrics` reportaba tres clases fuera del umbral de RFC ≤ 20 que fija `methodology.md` §6 en la Definition of Done:
+
+| Clase | WMC | RFC | Composición del RFC |
+|---|---|---|---|
+| `Amount` | 12 | **33** | 8 métodos de big.js (`plus`, `minus`, `times`, `div`, `round`, `toFixed`, `lt`, `eq`) + 5 de String (`padStart`, `padEnd`, `slice`, `replace`, `startsWith`) + `test`, `isInteger`, `max`, y los auxiliares propios invocados como `Amount.X()` |
+| `TaxBreakdown` | 10 | **25** | 4 `private static` propios invocados como `TaxBreakdown.X()` + 2 de big.js + 7 métodos de `Amount` + `getMinorUnitExponent` |
+| `RapydAdapter` | 8 | **25** | Pipeline HMAC (`update`, `digest`, `Buffer.from`, `toString`, `toLowerCase`) + `Date.now`, `Math.floor`, `JSON.stringify`, `extractUrlPath` + 5 accesores del dominio + `json`, `text`, `handle` |
+
+El script cuenta RFC como `WMC + |{nombres de método únicos invocados con notación de punto cuyo receptor no empieza por this.}|`. Dos consecuencias de esa definición pesan aquí: los `private static` propios invocados como `Clase.metodo()` cuentan como externos (porque no empiezan por `this.`), y las funciones importadas por nombre e invocadas sin punto no cuentan.
+
+**Decisión:** Se evaluaron dos caminos y se eligió el primero.
+
+*Opción A — extraer seams reales.* Reorganizar el código para que las dependencias que inflan el RFC queden detrás de una frontera con sentido propio.
+
+*Opción B — declarar `KNOWN_EXCEPTIONS`.* Añadir las tres clases al registro de excepciones del script, como ya se hizo con el CBO de `Transaction` (punto 22).
+
+Se descartó la Opción B porque el criterio de admisión de ese registro, escrito en el propio script, es que la violación sea "consecuencia directa de una decisión arquitectónica ya registrada, no un defecto de diseño". El CBO 7 de `Transaction` lo cumple: el SAD 15.1 la define como la única Entity construida a partir de los siete objetos de valor del modelo, así que su acoplamiento es el modelo mismo. Estas tres no lo cumplían: su RFC era acumulación de llamadas dispersas, reorganizable sin tocar ninguna API pública. Meterlas ahí habría dejado el umbral verde en el reporte y rojo en la realidad.
+
+**Criterio aplicado en la Opción A:** solo se extrajo lo que tiene valor de diseño con independencia del umbral. Durante la primera pasada de implementación se envolvieron también llamadas nativas triviales (`value.startsWith("-")` a `value[0] === "-"`, `Number.isInteger(scale)` a `scale % 1 !== 0`, y envoltorios de una línea sobre `padStart`/`padEnd`/`slice`) que bajaban el RFC de `Amount` hasta 13 a costa de volver el código menos legible. Se revirtieron: son maquillaje de métrica, exactamente lo que la Opción A pretendía evitar. `Amount` quedó en RFC 18 con código idiomático en vez de 13 con código contorsionado, y esos 2 puntos de margen son suficientes.
+
+**Implementación:** tres módulos de funciones puras. Son funciones de módulo y no clases de métodos estáticos porque son transformaciones sin estado, y en TypeScript el lugar natural de una función pura es el módulo.
+
+1. `sdk/src/domain/value-objects/big-arithmetic.ts` — único punto del SDK que importa `big.js`. Expone `bigAdd`, `bigSubtract`, `bigMultiply`, `bigDivide`, `bigEquals`, `bigFixed`, `bigOnePlus` y el tipo `BigRoundingCode`, todas sobre `string` y nunca sobre `Big`, para que el tipo de la librería no se filtre. Esto vuelve verificable la promesa que el docblock de `Amount` ya hacía ("cambiar de librería decimal no rompe a nadie"): antes esa promesa era teórica, porque sustituir la librería obligaba a reescribir seis métodos de la clase.
+
+2. `sdk/src/domain/value-objects/minor-units.ts` — conversión entre unidad mayor y menor corriendo el punto decimal (`shiftToMinorUnits`, `shiftFromMinorUnits`) y los tres predicados de validación de forma (`isCanonicalAmount`, `isAllDigits`, `isValidRate`). Es la responsabilidad de `Amount` que no necesita saber de dinero: manipulación de dígitos guiada por el exponente ISO 4217, razonable y probable sin `Amount` de por medio.
+
+3. `sdk/src/infrastructure/adapters/rapyd-signature.ts` — algoritmo de firma de peticiones salientes de Rapyd (`computeRapydSignature`, `generateSalt`, `currentUnixTimestamp`, `extractRapydUrlPath`, `buildRapydHeaders`, `serializeBody`). Tiene especificación externa publicada y vector de prueba oficial propios, y no es un concern de "ser un adaptador de pasarela". `buildRapydHeaders()` recibe las credenciales como argumento en vez de leer `this.credentials`, con lo que pasa a ser una función pura verificable sin instanciar el adaptador.
+
+Además, los cuatro `private static` de `TaxBreakdown` (`zero`, `onePlus`, `assertValidRate`, `assertSumsTo`) pasaron a funciones de módulo no exportadas en el mismo archivo. Ninguna toca estado de instancia; `private static` era la forma que tomarían en Java.
+
+`RapydAdapter` perdió sus tres métodos privados de infraestructura (`sign`, `buildHeaders`, `extractUrlPath`), que ahora viven en el módulo de firma.
+
+**Resultado:**
+
+| Clase | WMC antes → después | RFC antes → después | Estado |
+|---|---|---|---|
+| `Amount` | 12 → 12 | 33 → **18** | ✓ OK |
+| `TaxBreakdown` | 10 → 6 | 25 → **10** | ✓ OK |
+| `RapydAdapter` | 8 → 5 | 25 → **13** | ✓ OK |
+
+`npm run metrics`: `✓ All 21 class(es) within thresholds.` (exit 0)
+`npm test -- --coverage`: 299 passed / 299 total, cobertura global 99.85%, `Amount.ts` al 100% de ramas.
+`npm run lint`: exit 0.
+
+**Impacto fuera de las clases:** ninguno. La API pública de las tres es idéntica antes y después, y los 299 tests existentes pasaron sin ninguna modificación, lo que es la evidencia de que fue una reorganización interna. Los callers (`ResponseNormalizer`, `WompiAdapter`, `MercadoPagoAdapter`, `GatewayFactory`) no se tocaron.
+
+**Cambios que esto obliga en el SAD:**
+
+- **Sección 15 (David).** El desglose de capas que el punto 28 pide detallar debe incluir ahora que `domain/value-objects/` e `infrastructure/adapters/` contienen módulos de funciones puras además de clases, y por qué (seam sobre librería de terceros, algoritmo con especificación externa). Y el punto 31, que pedía registrar en la sección 15 la fórmula oficial de firma de requests salientes de Rapyd, debe apuntar a `rapyd-signature.ts` y no a un método privado de `RapydAdapter`, que ya no existe.
+- **Sección 3 (Henao).** El `Domain Class Diagram.png` muestra los miembros de `Amount` y `TaxBreakdown`. `Amount` perdió el `private static stripLeadingZeros` y ganó el `private widestScale`; `TaxBreakdown` perdió sus cuatro `private static`. Si el diagrama lista miembros privados, quedó desactualizado.
+- **Sección 13 (Joan).** El `Hexagonal architecture class diagram.png` refleja la estructura de clases del SDK. Conviene además evaluar si este patrón (módulo de funciones puras como seam sobre dependencias externas, en vez de clase envolvente) merece un ADR propio, dado que ya se aplicó tres veces y es una decisión de diseño repetible, no un ajuste puntual.
+
+**Estado:** Resuelto en el código. Pendiente en el SAD, según el reparto de arriba.
+
+---
+
 ## Nota sobre el renombrado de este archivo (de `sad-inconsistencies.md` a `architecture-log.md`)
 
 Este archivo se llamó `sad-inconsistencies.md` desde su creación hasta que su contenido creció
@@ -824,3 +886,10 @@ secciones temáticas (A-E) para que el nombre y la estructura reflejen con preci
 contiene, sin cambiar la numeración de ningún punto individual, ya que esos números están
 citados directamente en comentarios de código (`WebhookVerifier.ts`), pruebas
 (`WebhookVerifier.test.ts`) y notas de diagramas PlantUML.
+
+La Sección F se agregó después, cuando el script de métricas CK (issue #19) empezó a producir
+decisiones de diseño con trazabilidad propia: no son inconsistencias con el SAD ni deuda de
+documentación, sino cambios de código motivados por un umbral de la Definition of Done, que a su
+vez obligan correcciones en el SAD. Sigue la misma convención que las secciones anteriores:
+cada punto nombra a su responsable de corregirlo en el documento y queda referenciado en la
+tabla de la Sección A.
