@@ -1,6 +1,56 @@
-import Big from "big.js";
 import { Amount } from "./Amount";
 import { Currency } from "./Currency";
+import { bigOnePlus } from "./big-arithmetic";
+import { isValidRate } from "./minor-units";
+
+// ── Funciones auxiliares de modulo ────────────────────────────────────────
+//
+// Las cuatro son transformaciones puras: ninguna toca el estado de una
+// instancia, todas dependen solo de sus argumentos. En TypeScript el lugar
+// natural de una funcion pura es el modulo, no un `private static` de la
+// clase, que es la forma que tomarian en Java.
+//
+// Quedan fuera del `export` a proposito: son detalle de implementacion de
+// TaxBreakdown y nada de fuera del archivo tiene por que verlas.
+// Ver architecture-log.md, punto 33.
+
+/** Crea un Amount de cero con la escala de la divisa. */
+function zero(currency: Currency): Amount {
+  return Amount.fromMinorUnits(0, currency);
+}
+
+/** Lanza si `rate` no es un decimal no negativo sin signo. */
+function assertValidRate(rate: string): void {
+  if (!isValidRate(rate)) {
+    throw new Error(
+      `La tasa de impuesto debe ser un decimal no negativo sin signo (recibido: "${rate}")`,
+    );
+  }
+}
+
+/**
+ * Calcula el divisor para descomponer precios con IVA incluido.
+ * `"0.19"` → `"1.19"`.
+ */
+function onePlus(rate: string): string {
+  assertValidRate(rate);
+  return bigOnePlus(rate);
+}
+
+/**
+ * Verifica que los cuatro componentes sumen exactamente al total esperado.
+ * Red de seguridad de la invariante; si se dispara, el cálculo fue alterado.
+ */
+function assertSumsTo(breakdown: TaxBreakdown, total: Amount): void {
+  const sum = breakdown.getTotal();
+  if (!sum.equals(total)) {
+    throw new Error(
+      `La descomposicion suma ${sum.getValue()} y no cuadra con el total ${total.getValue()}`,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 
 /**
  * Descomposicion de un monto en su base gravable y sus impuestos.
@@ -63,8 +113,8 @@ export class TaxBreakdown {
    * IVA que el comercio no pidio seria peor que no descomponer.
    */
   static exempt(total: Amount, currency: Currency): TaxBreakdown {
-    const zero = TaxBreakdown.zero(currency);
-    return new TaxBreakdown(total, zero, zero, zero);
+    const z = zero(currency);
+    return new TaxBreakdown(total, z, z, z);
   }
 
   /**
@@ -83,15 +133,15 @@ export class TaxBreakdown {
     currency: Currency,
   ): TaxBreakdown {
     const scale = currency.getMinorUnitExponent();
-    const base = total.divide(TaxBreakdown.onePlus(rate), scale);
+    const base = total.divide(onePlus(rate), scale);
     const iva = total.subtract(base);
     const breakdown = new TaxBreakdown(
-      TaxBreakdown.zero(currency),
+      zero(currency),
       base,
       iva,
-      TaxBreakdown.zero(currency),
+      zero(currency),
     );
-    TaxBreakdown.assertSumsTo(breakdown, total);
+    assertSumsTo(breakdown, total);
     return breakdown;
   }
 
@@ -107,14 +157,14 @@ export class TaxBreakdown {
     rate: string,
     currency: Currency,
   ): TaxBreakdown {
-    TaxBreakdown.assertValidRate(rate);
+    assertValidRate(rate);
     const scale = currency.getMinorUnitExponent();
     const iva = base.multiply(rate, scale);
     return new TaxBreakdown(
-      TaxBreakdown.zero(currency),
+      zero(currency),
       base,
       iva,
-      TaxBreakdown.zero(currency),
+      zero(currency),
     );
   }
 
@@ -134,49 +184,7 @@ export class TaxBreakdown {
       components.subtotalIva0,
       components.subtotalIva,
       components.iva,
-      components.ice ?? TaxBreakdown.zero(components.currency),
+      components.ice ?? zero(components.currency),
     );
-  }
-
-  /** Cero con la escala de la divisa, para que todos los componentes sean homogeneos. */
-  private static zero(currency: Currency): Amount {
-    return Amount.fromMinorUnits(0, currency);
-  }
-
-  /**
-   * Convierte una tasa (`"0.19"`) en el divisor de un precio con impuesto
-   * incluido (`"1.19"`).
-   *
-   * No usa `Amount` para esta cuenta aunque `"0.19"` sea un string valido de
-   * monto: una tasa no es dinero, y pasarla por `Amount` la limitaria a dos
-   * decimales sin ninguna razon (una tasa de `"0.195"` es perfectamente
-   * posible). Es el unico lugar del dominio, fuera de `Amount`, que toca big.js
-   * directamente, y es por eso.
-   */
-  private static onePlus(rate: string): string {
-    TaxBreakdown.assertValidRate(rate);
-    return new Big(1).plus(new Big(rate)).toString();
-  }
-
-  /** Una tasa es un decimal no negativo sin signo ni notacion exponencial: `"0.19"`, `"0"`, `"0.195"`. */
-  private static assertValidRate(rate: string): void {
-    if (typeof rate !== "string" || !/^\d+(\.\d+)?$/.test(rate)) {
-      throw new Error(
-        `La tasa de impuesto debe ser un decimal no negativo sin signo (recibido: "${rate}")`,
-      );
-    }
-  }
-
-  /**
-   * Red de seguridad de la invariante. No deberia dispararse nunca, porque el
-   * impuesto se deriva por resta; si se dispara, es que alguien cambio la forma
-   * de calcularlo y rompio la garantia.
-   */
-  private static assertSumsTo(breakdown: TaxBreakdown, total: Amount): void {
-    if (!breakdown.getTotal().equals(total)) {
-      throw new Error(
-        `La descomposicion suma ${breakdown.getTotal().getValue()} y no cuadra con el total ${total.getValue()}`,
-      );
-    }
   }
 }
