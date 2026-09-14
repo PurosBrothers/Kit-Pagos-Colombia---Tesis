@@ -4,33 +4,43 @@ import {
   ScenarioEngine,
   UnsupportedScenarioError,
 } from "../scenarios/ScenarioEngine";
-import { WompiCreateTransactionRequestBody } from "../gateways/wompi/types";
+import { WompiCreateTransactionRequestBody, WompiTransaction } from "../gateways/wompi/types";
+import { transactionStore } from "../store/TransactionStore";
 
 const SCENARIO_HEADER = "x-simulate-scenario";
 
 /**
- * Router HTTP de Wompi (alcance mínimo, RF-09 / RF-10, issue #27).
+ * Wompi HTTP router (issue #55).
  *
- * Expone POST /v1/sim/wompi/transactions replicando el endpoint real de
- * creación de transacciones de Wompi. No contiene lógica de decisión de
- * escenario ni de construcción de payload: extrae el header de control y
- * el body, y delega todo el trabajo al ScenarioEngine.
+ * Exposes two endpoints that replicate the real Wompi API contract:
  *
- * La Iteración 3 extenderá este archivo (o lo generalizará en un
- * HTTPRouter común) para cubrir el resto de pasarelas bajo el patrón
- * /v1/sim/{pasarela}/*, tal como lo describe layers-and-components.md.
+ *   POST /v1/sim/wompi/transactions
+ *     Creates a transaction under the scenario indicated by the
+ *     `x-simulate-scenario` header (defaults to APPROVED) and saves it
+ *     in the shared TransactionStore.
+ *
+ *   GET /v1/sim/wompi/transactions/:id
+ *     Retrieves a saved transaction by its native identifier.
+ *     Returns 404 in Wompi's native error shape if the id does not exist,
+ *     because that case must also be testable from the SDK.
+ *
+ * Contains no scenario decision logic or payload construction logic:
+ * it extracts the control header and body, and delegates all work to the
+ * ScenarioEngine for POST. The GET reads directly from the TransactionStore
+ * because there is no business logic involved — it is a pure read.
  */
 export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   const scenarioEngine = new ScenarioEngine();
 
+  // ── POST /v1/sim/wompi/transactions ──────────────────────────────────────
   app.post(
     "/v1/sim/wompi/transactions",
     async (request: FastifyRequest, reply: FastifyReply) => {
-      // Fastify tipa las cabeceras como string | string[] | undefined, de ahí
-      // la comprobación del arreglo. En la práctica esa rama no se alcanza por
-      // HTTP: el parser de Node colapsa una cabecera repetida en un único
-      // string separado por comas y solo devuelve arreglo para set-cookie. Se
-      // conserva para satisfacer el tipo, no porque describa un caso real.
+      // Fastify types headers as string | string[] | undefined, hence the
+      // array check. In practice that branch is never reached over HTTP: the
+      // Node parser collapses a repeated header into a single comma-separated
+      // string and only returns an array for set-cookie. Kept to satisfy the
+      // type, not because it describes a real case.
       const scenarioHeader = request.headers[SCENARIO_HEADER];
       const scenario = Array.isArray(scenarioHeader)
         ? scenarioHeader[0]
@@ -45,9 +55,34 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         if (error instanceof UnsupportedScenarioError) {
           return reply.code(501).send({ error: error.message });
         }
-
         throw error;
       }
+    },
+  );
+
+  // ── GET /v1/sim/wompi/transactions/:id ───────────────────────────────────
+  app.get(
+    "/v1/sim/wompi/transactions/:id",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { id } = request.params as { id: string };
+      const transaction = transactionStore.findById(id) as WompiTransaction | undefined;
+
+      if (!transaction) {
+        // Respond with Wompi's native error shape so the SDK can map it to
+        // KitPagosError(RESOURCE_NOT_FOUND) through ErrorHandler, exactly as
+        // the real API would for an unknown id.
+        return reply.code(404).send({
+          error: {
+            type: "NOT_FOUND",
+            reason: `Transaction with id '${id}' does not exist`,
+          },
+        });
+      }
+
+      // Wompi wraps the transaction in { data: ... } for both creation and
+      // status queries. The same shape is preserved here so ResponseNormalizer
+      // does not need a separate branch for status query responses.
+      return reply.code(200).send({ data: transaction });
     },
   );
 }

@@ -1,41 +1,59 @@
 import { randomUUID } from "node:crypto";
 import {
   WompiCreateTransactionRequestBody,
+  WompiTransaction,
   WompiTransactionResponse,
 } from "./types";
+import { TransactionStore, transactionStore } from "../../store/TransactionStore";
 
 /**
- * Gateway Mock Factory — Wompi (alcance mínimo, issue #27).
+ * Gateway Mock Factory — Wompi (issue #55).
  *
- * Responsabilidad única: construir el payload de respuesta que replica la
- * estructura nativa de Wompi para un escenario dado. No conoce headers, no
- * decide qué escenario ejecutar (eso es responsabilidad del ScenarioEngine)
- * y no valida el body de la solicitud (eso es responsabilidad del router).
+ * Single responsibility: build the response payload that replicates the
+ * native Wompi structure for a given scenario, and persist it in the
+ * TransactionStore so the status query endpoint can retrieve it later.
  *
- * La Iteración 3 ampliará este archivo con los demás escenarios
- * (RECHAZADO, FONDOS_INSUFICIENTES) y con las fábricas del resto de
- * pasarelas, tal como lo describe layers-and-components.md. Este issue
- * solo cubre APROBADO.
+ * Does not know about headers, does not decide which scenario to execute
+ * (that is the ScenarioEngine's responsibility), and does not validate the
+ * request body (that is the router's responsibility).
+ *
+ * The TransactionStore is received in the constructor to allow substitution
+ * in tests without altering the shared singleton, defaulting to the shared
+ * singleton instance.
+ *
+ * Iteration 3 will extend this file with the remaining scenarios
+ * (DECLINED, INSUFFICIENT_FUNDS) and with factories for the other
+ * gateways, as described in layers-and-components.md.
  */
 export class GatewayMockFactory {
+  constructor(private readonly store: TransactionStore = transactionStore) {}
+
   /**
-   * Construye la respuesta de una transacción aprobada, con la misma forma
-   * que retornaría la API real de Wompi: el objeto `transaction` envuelto
-   * en `data`, con un `id` generado y reflejando el monto, la referencia y el
-   * correo del pagador recibidos en la solicitud original.
+   * Builds an approved transaction response with the same shape that the
+   * real Wompi API would return: the `transaction` object wrapped in `data`,
+   * with a generated `id` and reflecting the amount, reference and payer
+   * email received in the original request.
+   *
+   * The transaction is saved in the store before returning, indexed by its
+   * `id`, so that GET /v1/sim/wompi/transactions/:id can retrieve it without
+   * having to rebuild it.
    */
   buildApprovedResponse(
     requestBody: WompiCreateTransactionRequestBody,
   ): WompiTransactionResponse {
-    return {
-      data: {
-        id: randomUUID(),
-        status: "APPROVED",
-        amount_in_cents: requestBody.amount_in_cents,
-        currency: requestBody.currency,
-        reference: requestBody.reference,
-        customer_email: requestBody.customer_email,
-      },
+    const transaction: WompiTransaction = {
+      id: randomUUID(),
+      status: "APPROVED",
+      amount_in_cents: requestBody.amount_in_cents,
+      currency: requestBody.currency,
+      reference: requestBody.reference,
+      customer_email: requestBody.customer_email,
     };
+
+    // Persist in the shared store before responding, so that
+    // getPaymentStatus() in the SDK can query the state afterwards.
+    this.store.save(transaction.id, transaction);
+
+    return { data: transaction };
   }
 }

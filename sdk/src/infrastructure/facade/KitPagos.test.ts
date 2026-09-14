@@ -169,15 +169,50 @@ describe("KitPagos", () => {
   });
 
   describe("getPaymentStatus()", () => {
-    it("should propagate KitPagosError(UNSUPPORTED_OPERATION), since the Wompi mock has no status endpoint", async () => {
+    it("should return the normalized Transaction when status query succeeds", async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => approvedWompiResponse,
+      });
+      global.fetch = mockFetch;
+
+      const transaction = await buildConfiguredSdk().getPaymentStatus("wompi-tx-abc-123");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3000/v1/sim/wompi/transactions/wompi-tx-abc-123",
+        expect.objectContaining({
+          method: "GET",
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${wompiCredentials.publicKey}`,
+          }),
+        })
+      );
+      expect(transaction.isApproved()).toBe(true);
+      expect(transaction.getStatus()).toBe("APPROVED");
+      expect(transaction.gatewayTransactionId.value).toBe("wompi-tx-abc-123");
+    });
+
+    it("should propagate KitPagosError(RESOURCE_NOT_FOUND) when transaction is not found", async () => {
+      const notFoundPayload = {
+        error: {
+          type: "NOT_FOUND",
+          reason: "Transaction not found",
+        },
+      };
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: async () => notFoundPayload,
+      });
+
       try {
-        await buildConfiguredSdk().getPaymentStatus("wompi-tx-abc-123");
+        await buildConfiguredSdk().getPaymentStatus("non-existent-id");
         fail("Should have thrown KitPagosError");
       } catch (error) {
         const sdkError = error as KitPagosError;
-        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
+        expect(sdkError.code).toBe(KitPagosErrorCode.RESOURCE_NOT_FOUND);
         expect(sdkError.gateway).toBe(Gateway.WOMPI);
-        expect(sdkError.message).toContain("status query is not supported");
       }
     });
   });

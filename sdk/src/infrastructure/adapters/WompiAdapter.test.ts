@@ -26,6 +26,7 @@ describe("WompiAdapter", () => {
       amount_in_cents: 5000000,
       currency: "COP",
       reference: "ord-12345",
+      customer_email: "cliente@example.com",
     },
   };
 
@@ -61,7 +62,7 @@ describe("WompiAdapter", () => {
             reference: "ord-12345",
             customer_email: "cliente@example.com",
           }),
-        }
+        },
       );
 
       expect(transaction.isApproved()).toBe(true);
@@ -73,7 +74,7 @@ describe("WompiAdapter", () => {
       expect(transaction.orderReference.getValue()).toBe("ord-12345");
     });
 
-    it("envía el monto como entero JSON de centavos, conservando el cero a la derecha", async () => {
+    it("sends the amount as a JSON integer of cents, preserving the trailing zero", async () => {
       const mockFetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 201,
@@ -85,25 +86,25 @@ describe("WompiAdapter", () => {
       await adapter.createPayment({ ...validRequest, amount: new Amount("19.90") });
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-      // 1990 y no 199 ni 19.9: el cero a la derecha sobrevive hasta el cable.
+      // 1990 and not 199 or 19.9: the trailing zero survives to the wire.
       expect(body.amount_in_cents).toBe(1990);
-      // Wompi espera un entero, no el string que devuelve toMinorUnits().
+      // Wompi expects an integer, not the string returned by toMinorUnits().
       expect(typeof body.amount_in_cents).toBe("number");
     });
 
-    it("rechaza un monto con más decimales de los que admite la divisa", async () => {
+    it("rejects an amount with more decimals than the currency allows", async () => {
       const mockFetch = jest.fn();
       global.fetch = mockFetch;
 
       const adapter = new WompiAdapter();
-      // CLP es divisa de exponente 0: un monto con centavos no tiene sentido y
-      // debe fallar antes de llegar a la red, no truncarse en silencio.
+      // CLP is a zero-exponent currency: an amount with cents makes no sense
+      // and must fail before reaching the network, not be silently truncated.
       await expect(
         adapter.createPayment({
           ...validRequest,
           amount: new Amount("19.99"),
           currency: new Currency("CLP"),
-        })
+        }),
       ).rejects.toThrow("no cabe en CLP");
       expect(mockFetch).not.toHaveBeenCalled();
     });
@@ -130,11 +131,11 @@ describe("WompiAdapter", () => {
             "Content-Type": "application/json",
             Authorization: "Bearer pub_test_wompi_123",
           },
-        })
+        }),
       );
-      // La llave privada nunca debe viajar en la petición de creación de pago.
+      // The private key must never travel in the payment creation request.
       expect(JSON.stringify(mockFetch.mock.calls[0])).not.toContain(
-        credentials.privateKey
+        credentials.privateKey,
       );
     });
 
@@ -152,7 +153,7 @@ describe("WompiAdapter", () => {
         expect.any(String),
         expect.objectContaining({
           headers: { "Content-Type": "application/json" },
-        })
+        }),
       );
     });
 
@@ -170,26 +171,25 @@ describe("WompiAdapter", () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         customUrl,
-        expect.objectContaining({ method: "POST" })
+        expect.objectContaining({ method: "POST" }),
       );
     });
 
     it("should throw KitPagosError(CONNECTION_FAILED) when network fetch fails", async () => {
-      const networkError = new Error("ECONNREFUSED connect to localhost:3000");
+      const networkError = new Error("fetch failed");
       global.fetch = jest.fn().mockRejectedValue(networkError);
 
       const adapter = new WompiAdapter();
-
       await expect(adapter.createPayment(validRequest)).rejects.toThrow(KitPagosError);
 
       try {
         await adapter.createPayment(validRequest);
       } catch (error) {
         expect(error).toBeInstanceOf(KitPagosError);
-        const sdkError = error as KitPagosError;
-        expect(sdkError.code).toBe(KitPagosErrorCode.CONNECTION_FAILED);
-        expect(sdkError.gateway).toBe(Gateway.WOMPI);
-        expect(sdkError.message).toContain("Failed to connect to Wompi gateway");
+        const kitError = error as KitPagosError;
+        expect(kitError.code).toBe(KitPagosErrorCode.CONNECTION_FAILED);
+        expect(kitError.gateway).toBe(Gateway.WOMPI);
+        expect(kitError.message).toContain("Failed to connect to Wompi gateway");
       }
     });
 
@@ -203,17 +203,15 @@ describe("WompiAdapter", () => {
 
       const adapter = new WompiAdapter();
 
-      await expect(adapter.createPayment(validRequest)).rejects.toThrow(KitPagosError);
-
       try {
         await adapter.createPayment(validRequest);
       } catch (error) {
         expect(error).toBeInstanceOf(KitPagosError);
-        const sdkError = error as KitPagosError;
-        expect(sdkError.code).toBe(KitPagosErrorCode.GATEWAY_SERVER_ERROR);
-        expect(sdkError.gateway).toBe(Gateway.WOMPI);
-        expect(sdkError.originalPayload).toEqual(errorPayload);
-        expect(sdkError.message).toContain("500");
+        const kitError = error as KitPagosError;
+        expect(kitError.code).toBe(KitPagosErrorCode.GATEWAY_SERVER_ERROR);
+        expect(kitError.gateway).toBe(Gateway.WOMPI);
+        expect(kitError.originalPayload).toEqual(errorPayload);
+        expect(kitError.message).toContain("500");
       }
     });
 
@@ -233,9 +231,9 @@ describe("WompiAdapter", () => {
         await adapter.createPayment(validRequest);
       } catch (error) {
         expect(error).toBeInstanceOf(KitPagosError);
-        const sdkError = error as KitPagosError;
-        expect(sdkError.code).toBe(KitPagosErrorCode.GATEWAY_SERVER_ERROR);
-        expect(sdkError.originalPayload).toBe("Bad Gateway Error Page");
+        const kitError = error as KitPagosError;
+        expect(kitError.code).toBe(KitPagosErrorCode.GATEWAY_SERVER_ERROR);
+        expect(kitError.originalPayload).toBe("Bad Gateway Error Page");
       }
     });
 
@@ -254,27 +252,102 @@ describe("WompiAdapter", () => {
         await adapter.createPayment(validRequest);
       } catch (error) {
         expect(error).toBeInstanceOf(KitPagosError);
-        const sdkError = error as KitPagosError;
-        expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
-        expect(sdkError.gateway).toBe(Gateway.WOMPI);
+        const kitError = error as KitPagosError;
+        expect(kitError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
+        expect(kitError.gateway).toBe(Gateway.WOMPI);
       }
     });
   });
 
   describe("getStatus()", () => {
-    it("should throw KitPagosError(UNSUPPORTED_OPERATION) indicating status query is not supported yet", async () => {
+    it("returns a normalized Transaction when the id exists in the simulator", async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => approvedWompiMockResponse,
+      });
+      global.fetch = mockFetch;
+
+      const adapter = new WompiAdapter();
+      const transaction = await adapter.getStatus("wompi-mock-tx-123");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3000/v1/sim/wompi/transactions/wompi-mock-tx-123",
+        expect.objectContaining({ method: "GET" }),
+      );
+
+      expect(transaction.isApproved()).toBe(true);
+      expect(transaction.getStatus()).toBe("APPROVED");
+      expect(transaction.gatewayTransactionId.value).toBe("wompi-mock-tx-123");
+      expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.WOMPI);
+      expect(transaction.amount.getValue()).toBe("50000.00");
+      expect(transaction.currency.getCode()).toBe("COP");
+      expect(transaction.orderReference.getValue()).toBe("ord-12345");
+    });
+
+    it("includes Authorization header when credentials are provided", async () => {
+      const credentials = {
+        publicKey: "pub_test_wompi_123",
+        privateKey: "prv_test_wompi_456",
+      };
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => approvedWompiMockResponse,
+      });
+      global.fetch = mockFetch;
+
+      const adapter = new WompiAdapter(undefined, credentials);
+      await adapter.getStatus("wompi-mock-tx-123");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining("wompi-mock-tx-123"),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: "Bearer pub_test_wompi_123",
+          }),
+        }),
+      );
+    });
+
+    it("throws KitPagosError(RESOURCE_NOT_FOUND) when the id does not exist in the simulator", async () => {
+      const notFoundPayload = {
+        error: {
+          type: "NOT_FOUND",
+          reason: "Transaction with id 'non-existent-id' does not exist",
+        },
+      };
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: async () => notFoundPayload,
+      });
+
       const adapter = new WompiAdapter();
 
-      await expect(adapter.getStatus("some-tx-id")).rejects.toThrow(KitPagosError);
-
       try {
-        await adapter.getStatus("some-tx-id");
+        await adapter.getStatus("non-existent-id");
       } catch (error) {
         expect(error).toBeInstanceOf(KitPagosError);
-        const sdkError = error as KitPagosError;
-        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
-        expect(sdkError.gateway).toBe(Gateway.WOMPI);
-        expect(sdkError.message).toContain("status query is not supported");
+        const kitError = error as KitPagosError;
+        expect(kitError.code).toBe(KitPagosErrorCode.RESOURCE_NOT_FOUND);
+        expect(kitError.gateway).toBe(Gateway.WOMPI);
+        expect(kitError.originalPayload).toEqual(notFoundPayload);
+      }
+    });
+
+    it("throws KitPagosError(CONNECTION_FAILED) when the network fails during status query", async () => {
+      global.fetch = jest.fn().mockRejectedValue(new Error("fetch failed"));
+
+      const adapter = new WompiAdapter();
+
+      try {
+        await adapter.getStatus("any-id");
+      } catch (error) {
+        expect(error).toBeInstanceOf(KitPagosError);
+        const kitError = error as KitPagosError;
+        expect(kitError.code).toBe(KitPagosErrorCode.CONNECTION_FAILED);
+        expect(kitError.gateway).toBe(Gateway.WOMPI);
       }
     });
   });

@@ -56,7 +56,7 @@ Antes de empezar a implementar nada de la primera iteración de código, cada co
 | 15 | Estructura del Sistema | David | Punto 1 (corregir nombres de métodos en 15.2 a `getPaymentStatus`/`validateWebhook`), punto 3 (aclarar que la reconciliación reconstruye la entidad), punto 6 (aclarar que `WebhookVerifier` tiene dos métodos públicos, no uno). **Punto 22:** validateWebhook retorna `WebhookEvent` y lanza `KitPagosError`. **Punto 23:** actualizar sección 15.1 con `KitPagosError` y `KitPagosErrorCode`. **Punto 24:** documentar responsabilidades de `ErrorHandler` en 15.2. **Punto 26:** documentar normalización de `WebhookVerifier.parse` a `PENDING` ante webhooks de solo identificador. **Punto 28:** detallar el desglose de capas (domain, application, infrastructure) y sus responsabilidades específicas en 15.1 y 15.2. **Punto 31:** registrar en la sección 15 la fórmula oficial de firma de requests salientes de Rapyd. |
 | 16 | Glosario | David | **Punto 15:** si la definición de `Gateway`/`Adapter` usa a PayU como ejemplo, reemplazarlo por Rapyd, y agregar una nota breve sobre la adquisición de PayU por Rapyd para que el lector entienda por qué cambió el nombre. |
 
-Los puntos 4, 8, 9, 11, 12, 29, 30 y 31 de la Sección B, y toda la Sección E, no corresponden a ninguna de las 16 secciones del SAD (son documentos de repositorio, directrices para el README del SDK o decisiones de código ya resueltas), así que no tienen un responsable de esta lista; se dejan como tareas de ingeniería general para la primera iteración.
+Los puntos 4, 8, 9, 11, 12, 29, 30, 31 y 32 de la Sección B, y toda la Sección E, no corresponden a ninguna de las 16 secciones del SAD (son documentos de repositorio, directrices para el README del SDK o decisiones de código ya resueltas), así que no tienen un responsable de esta lista; se dejan como tareas de ingeniería general para la primera iteración.
 
 ---
 
@@ -479,6 +479,40 @@ Cuatro detalles que la vuelven fácil de implementar mal, y que motivaron aislar
 **Hallazgo adicional:** el catálogo de estados de `ubiquitous-language.md` dejaba pendiente el código de cancelación, conjeturando `CAN` a falta de credenciales de sandbox. La documentación de `create-payment.html` lo lista: es **`REV`** ("Reversed by Rapyd", con el motivo en `cancel_reason`), y se normaliza a `VOIDED`. No hizo falta sandbox real, solo la página correcta.
 
 **Estado:** resuelto. **Pendiente:** el mock de Rapyd de la API de Simulación no verifica la firma de las peticiones entrantes, porque la clase `SignatureGenerator` sigue sin existir en `simulator-api/src` (ver punto correspondiente en `layers-and-components.md`). Mientras eso siga así, un adaptador que calcule mal la firma pasaría igual contra el mock; por eso la corrección de la firma se cubre con pruebas unitarias del adaptador contra el algoritmo publicado, y no confiando en el simulador.
+
+---
+
+### 32. Estado en la API de Simulación (`TransactionStore`) y desacoplamiento del SDK sin estado (issue #55)
+
+**Contexto:**
+Al término de la Iteración 1, la consulta de estado con Wompi (`kitPagos.getPaymentStatus(id)`) arrojaba `KitPagosError(UNSUPPORTED_OPERATION)`. La causa raíz no radicaba en el SDK sino en la API de Simulación: el simulador carecía de memoria. `GatewayMockFactory` generaba una respuesta sintética y la descartaba, impidiendo cualquier consulta posterior.
+
+El issue #55 resolvió esta carencia introduciendo memoria en el simulador y cerrando el flujo de consulta de estado para Wompi, sirviendo además de base para las demás pasarelas.
+
+**Decisiones y principios arquitectónicos aplicados:**
+
+1. **El SDK permanece estrictamente sin estado (Stateless):**
+   - La fuente única de verdad del estado de un pago es **siempre la pasarela** (o su simulador).
+   - El SDK no almacena ni cachea transacciones. Si el SDK almacenara estados localmente en memoria o base de datos, podría reportar como aprobado un pago que la pasarela ya reversó, expiró o canceló de forma asíncrona.
+   - `WompiAdapter.getStatus(id)` realiza una petición HTTP `GET /v1/sim/wompi/transactions/:id` y delega la traducción en `ResponseNormalizer`, preservando la inmutabilidad de la entidad `Transaction`.
+
+2. **Ubicación del almacén: `simulator-api/src/store/TransactionStore.ts`:**
+   - Pertenece exclusivamente a la infraestructura del simulador (`simulator-api`), nunca al SDK.
+   - **Implementación efímera en memoria (`Map<string, unknown>`):** El simulador es un arnés de pruebas para desarrollo e integración continua, **no** un sistema transaccional en producción. No debe arrastrar bases de datos relacionales, archivos ni Redis. La volatilidad del estado al reiniciar el proceso es una propiedad deseada para asegurar aislamiento entre ejecuciones de pruebas.
+   - **Singleton compartido:** Se exporta una única instancia `transactionStore` que indexa transacciones por su identificador nativo. Es compartida por todas las pasarelas (Wompi, Rapyd, Mercado Pago, Kushki) para evitar que cada adaptador o mock improvise su propio mecanismo de retención.
+   - **Inyección por defecto en fábricas:** `GatewayMockFactory` recibe opcionalmente una instancia de `TransactionStore` en su constructor con fallback a `transactionStore`, permitiendo sustituirlo o aislarlo en pruebas unitarias.
+
+3. **Mapeo fiel del contrato HTTP y errores nativos:**
+   - El simulador expone `GET /v1/sim/wompi/transactions/:id`.
+   - Si la transacción existe, responde HTTP 200 con `{ data: transaction }` (reproduciendo la estructura envolvente de la API real de Wompi).
+   - Si no existe, responde HTTP 404 con el esquema nativo de error de Wompi (`{ error: { type: "NOT_FOUND", reason: "..." } }`). Esto permite que el `ErrorHandler` del SDK traduzca el fallo deterministamente a `KitPagosError(RESOURCE_NOT_FOUND)`, cubriendo el caso de prueba negativo en el cliente.
+
+4. **Impacto en ejemplos y pruebas:**
+   - Se actualizó el ejemplo `examples/simulate-wompi-payment.ts` para que realice la consulta de estado completa y exitosa sin excepciones.
+   - Se removió la advertencia de `UNSUPPORTED_OPERATION` en `examples/README.md`.
+   - Se actualizaron las suites de pruebas (`KitPagos.test.ts` y `WompiAdapter.test.ts`) para validar tanto la consulta exitosa como el manejo de error ante un 404.
+
+**Estado:** Resuelto en código y verificado end-to-end con `npm run simulate:wompi`.
 
 ---
 

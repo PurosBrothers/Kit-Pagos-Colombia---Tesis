@@ -10,25 +10,25 @@ import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
 
 /**
- * URL base por defecto del endpoint mock de Wompi (simulator-api, issue #27).
- * Es configurable a través del constructor para permitir testing y ambientes diversos.
+ * Default base URL for the Wompi mock endpoint (simulator-api, issue #27).
+ * Configurable through the constructor to support testing and different environments.
  */
-const DEFAULT_WOMPI_URL = "http://localhost:3000/v1/sim/wompi/transactions";
+const DEFAULT_WOMPI_BASE_URL = "http://localhost:3000/v1/sim/wompi/transactions";
 
 /**
- * Adapter concreto de Wompi. Traduce las llamadas genéricas de
- * PaymentGatewayPort a peticiones HTTP contra la API de Wompi
- * (o su simulador local). Cumple con la arquitectura hexagonal (ADR-01):
- * ningún detalle nativo de Wompi se escapa hacia el dominio; las respuestas
- * son traducidas a Transaction a través de ResponseNormalizer.
+ * Concrete Wompi adapter. Translates generic PaymentGatewayPort calls into
+ * HTTP requests against the Wompi API (or its local simulator). Complies with
+ * the hexagonal architecture (ADR-01): no native Wompi detail leaks into the
+ * domain; responses are translated to Transaction through ResponseNormalizer.
  *
- * PATRÓN DE REFERENCIA PARA ADAPTADORES (Iteración 2):
- * Todos los adaptadores de pasarela (RapydAdapter, KushkiAdapter, MercadoPagoAdapter)
- * deben seguir este mismo patrón de manejo de errores:
- * 1. NUNCA construir KitPagosError directamente ni inline en el adaptador.
- * 2. Delegar la traducción, clasificación y sanitización al servicio de aplicación ErrorHandler.
- * 3. Instanciar ErrorHandler dentro del cuerpo de los métodos en vez de recibirlo en el constructor,
- *    respetando el umbral de Acoplamiento entre Objetos (CBO <= 5) exigido por el Definition of Done.
+ * REFERENCE PATTERN FOR ADAPTERS (Iteration 2):
+ * All gateway adapters (RapydAdapter, KushkiAdapter, MercadoPagoAdapter)
+ * must follow this same error handling pattern:
+ * 1. NEVER build KitPagosError directly or inline inside the adapter.
+ * 2. Delegate translation, classification and sanitization to ErrorHandler.
+ * 3. Instantiate ErrorHandler inside the method body instead of receiving it
+ *    in the constructor, respecting the Coupling Between Objects threshold
+ *    (CBO <= 5) required by the Definition of Done.
  */
 export class WompiAdapter implements PaymentGatewayPort {
   private readonly baseUrl: string;
@@ -37,16 +37,16 @@ export class WompiAdapter implements PaymentGatewayPort {
   private readonly webhookVerifier: WebhookVerifier;
 
   /**
-   * Las credenciales llegan resueltas desde el SdkConfigurator via
-   * GatewayFactory; el Adapter nunca las lee del entorno. Son opcionales
-   * porque el endpoint mock de la API de Simulacion no autentica, de modo que
-   * el Adapter siga siendo instanciable sin configuracion en pruebas.
+   * Credentials are resolved by SdkConfigurator via GatewayFactory; the
+   * adapter never reads them from the environment. They are optional because
+   * the simulation API mock endpoint does not authenticate, so the adapter
+   * remains instantiable without configuration in tests.
    */
   constructor(
-    baseUrl: string = DEFAULT_WOMPI_URL,
+    baseUrl: string = DEFAULT_WOMPI_BASE_URL,
     credentials?: Credentials,
     normalizer: ResponseNormalizer = new ResponseNormalizer(),
-    webhookVerifier: WebhookVerifier = new WebhookVerifier()
+    webhookVerifier: WebhookVerifier = new WebhookVerifier(),
   ) {
     this.baseUrl = baseUrl;
     this.credentials = credentials;
@@ -55,16 +55,16 @@ export class WompiAdapter implements PaymentGatewayPort {
   }
 
   async createPayment(request: CreatePaymentRequest): Promise<Transaction> {
-    // 1. Mapeo de objetos de valor del dominio a campos nativos de Wompi.
+    // 1. Map domain value objects to native Wompi fields.
     //
-    //    `toMinorUnits()` devuelve un string de dígitos, y Wompi espera un
-    //    entero JSON en `amount_in_cents`. La conversión a `number` se hace acá,
-    //    a la vista, porque esta es la frontera del SDK con el formato de cable:
-    //    JSON solo tiene el tipo `number` (un double IEEE 754) y no hay manera
-    //    de evitarlo. Es segura porque el valor ya es un entero de centavos, muy
-    //    por debajo de Number.MAX_SAFE_INTEGER, así que la conversión no pierde
-    //    precisión. Lo que el dominio garantiza es que ese entero se calculó sin
-    //    aritmética de punto flotante.
+    //    `toMinorUnits()` returns a digit string, and Wompi expects a JSON
+    //    integer in `amount_in_cents`. The conversion to `number` happens here,
+    //    at the boundary between the SDK and the wire format: JSON only has the
+    //    `number` type (an IEEE 754 double) and there is no way around it. It
+    //    is safe because the value is already an integer of cents, well below
+    //    Number.MAX_SAFE_INTEGER, so the conversion loses no precision. What the
+    //    domain guarantees is that the integer was computed without floating-point
+    //    arithmetic.
     const payload = {
       amount_in_cents: Number(request.amount.toMinorUnits(request.currency)),
       currency: request.currency.getCode(),
@@ -72,9 +72,10 @@ export class WompiAdapter implements PaymentGatewayPort {
       customer_email: request.payer.email,
     };
 
-    // 2. Autenticación: Wompi identifica al comercio con su llave pública como
-    //    Bearer token. Se omite el header cuando no hay credenciales para que el
-    //    endpoint mock, que no autentica, siga siendo consumible sin configurar.
+    // 2. Authentication: Wompi identifies the merchant with its public key as a
+    //    Bearer token. The header is omitted when there are no credentials so
+    //    the mock endpoint, which does not authenticate, remains consumable
+    //    without configuration.
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
@@ -84,7 +85,7 @@ export class WompiAdapter implements PaymentGatewayPort {
 
     let response: Response;
 
-    // 3. Realizar petición HTTP con fetch nativo de Node.js
+    // 3. Perform HTTP request with Node.js native fetch.
     try {
       response = await fetch(this.baseUrl, {
         method: "POST",
@@ -92,12 +93,11 @@ export class WompiAdapter implements PaymentGatewayPort {
         body: JSON.stringify(payload),
       });
     } catch (networkError) {
-      // Captura y traduce fallos de red delegando a ErrorHandler
       const errorHandler = new ErrorHandler();
       throw errorHandler.handle(networkError, Gateway.WOMPI);
     }
 
-    // 4. Verificación de código de estado HTTP exitoso
+    // 4. Verify successful HTTP status code.
     if (!response.ok) {
       let errorBody: unknown;
       try {
@@ -105,13 +105,11 @@ export class WompiAdapter implements PaymentGatewayPort {
       } catch {
         errorBody = await response.text();
       }
-
-      // Delegar error HTTP a ErrorHandler pasando { status, body }
       const errorHandler = new ErrorHandler();
       throw errorHandler.handle({ status: response.status, body: errorBody }, Gateway.WOMPI);
     }
 
-    // 5. Parseo de la respuesta JSON cruda
+    // 5. Parse raw JSON response.
     let rawResponse: unknown;
     try {
       rawResponse = await response.json();
@@ -120,29 +118,74 @@ export class WompiAdapter implements PaymentGatewayPort {
       throw errorHandler.handle(parseError, Gateway.WOMPI);
     }
 
-    // 6. Normalización hacia la entidad Transaction del dominio
+    // 6. Normalize to the domain Transaction entity.
     return this.normalizer.normalize(rawResponse, Gateway.WOMPI);
   }
 
   /**
-   * El mock de Wompi (simulator-api) todavía no expone un endpoint de consulta
-   * de estado; solo soporta la creación de transacciones.
+   * Queries the status of a transaction by its native Wompi identifier.
+   *
+   * Calls GET /v1/sim/wompi/transactions/:id on the simulator, normalizes the
+   * response with ResponseNormalizer and returns the updated Transaction.
+   * A non-existent id produces an HTTP 404 that ErrorHandler translates to
+   * KitPagosError(RESOURCE_NOT_FOUND).
    */
-  async getStatus(_gatewayTransactionId: string): Promise<Transaction> {
-    const errorHandler = new ErrorHandler();
-    throw errorHandler.handle(
-      new Error("status query is not supported by the Wompi mock endpoint"),
-      Gateway.WOMPI
-    );
+  async getStatus(gatewayTransactionId: string): Promise<Transaction> {
+    const statusUrl = `${this.baseUrl}/${gatewayTransactionId}`;
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (this.credentials) {
+      headers["Authorization"] = `Bearer ${this.credentials.publicKey}`;
+    }
+
+    let response: Response;
+
+    // 1. Perform GET request to the status endpoint.
+    try {
+      response = await fetch(statusUrl, {
+        method: "GET",
+        headers,
+      });
+    } catch (networkError) {
+      const errorHandler = new ErrorHandler();
+      throw errorHandler.handle(networkError, Gateway.WOMPI);
+    }
+
+    // 2. A 404 from the simulator means the id does not exist in the store.
+    //    ErrorHandler maps it to KitPagosError(RESOURCE_NOT_FOUND).
+    if (!response.ok) {
+      let errorBody: unknown;
+      try {
+        errorBody = await response.json();
+      } catch {
+        errorBody = await response.text();
+      }
+      const errorHandler = new ErrorHandler();
+      throw errorHandler.handle({ status: response.status, body: errorBody }, Gateway.WOMPI);
+    }
+
+    // 3. Parse raw JSON response.
+    let rawResponse: unknown;
+    try {
+      rawResponse = await response.json();
+    } catch (parseError) {
+      const errorHandler = new ErrorHandler();
+      throw errorHandler.handle(parseError, Gateway.WOMPI);
+    }
+
+    // 4. Normalize to the domain Transaction entity.
+    return this.normalizer.normalize(rawResponse, Gateway.WOMPI);
   }
 
   /**
-   * Valida la firma del webhook delegando al servicio de dominio WebhookVerifier.
+   * Validates a webhook signature by delegating to the WebhookVerifier domain service.
    */
   verifySignature(
     payload: string,
     headers: Record<string, string>,
-    secret: string
+    secret: string,
   ): boolean {
     return this.webhookVerifier.verify(payload, headers, secret, Gateway.WOMPI);
   }
