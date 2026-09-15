@@ -3,6 +3,10 @@ import {
   CreatePaymentRequest,
 } from "../../application/ports/PaymentGatewayPort";
 import { Transaction } from "../../domain/entities/Transaction";
+import {
+  PaymentResult,
+  transactionResult,
+} from "../../domain/value-objects/PaymentResult";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { Credentials } from "../../domain/value-objects/Credentials";
 import { ResponseNormalizer } from "../../application/services/ResponseNormalizer";
@@ -29,22 +33,27 @@ const DEFAULT_MERCADOPAGO_URL =
 export class MercadoPagoAdapter implements PaymentGatewayPort {
   private readonly baseUrl: string;
   private readonly credentials?: Credentials;
-  private readonly normalizer: ResponseNormalizer;
+  /** Ver la nota de WompiAdapter: fuera del constructor para no inflar el CBO. */
+  private readonly normalizer = new ResponseNormalizer();
   private readonly webhookVerifier: WebhookVerifier;
 
   constructor(
     baseUrl: string = DEFAULT_MERCADOPAGO_URL,
     credentials?: Credentials,
-    normalizer: ResponseNormalizer = new ResponseNormalizer(),
     webhookVerifier: WebhookVerifier = new WebhookVerifier()
   ) {
     this.baseUrl = baseUrl;
     this.credentials = credentials;
-    this.normalizer = normalizer;
     this.webhookVerifier = webhookVerifier;
   }
 
-  async createPayment(request: CreatePaymentRequest): Promise<Transaction> {
+  /**
+   * Devuelve PaymentResult en vez de Transaction desde el issue #64. El flujo de
+   * tarjeta de Checkout API resuelve en la misma respuesta, así que este
+   * adaptador siempre toma la rama TRANSACTION; Checkout Pro y PSE, que sí
+   * redirigen, entran en el PR siguiente de #64.
+   */
+  async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
     // 1. Mapeo de objetos de valor del dominio a campos nativos de Mercado Pago.
     //    A diferencia de Wompi, el monto viaja en pesos en `transaction_amount`,
     //    por lo que se usa getValue() en lugar de toMinorUnits().
@@ -105,7 +114,9 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
     }
 
     // 6. Normalización hacia Transaction
-    return this.normalizer.normalize(rawResponse, Gateway.MERCADOPAGO);
+    return transactionResult(
+      this.normalizer.normalize(rawResponse, Gateway.MERCADOPAGO),
+    );
   }
 
   /**

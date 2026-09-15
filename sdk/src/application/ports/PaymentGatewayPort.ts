@@ -5,6 +5,8 @@ import { OrderReference } from "../../domain/value-objects/OrderReference";
 import { Payer } from "../../domain/value-objects/Payer";
 import { ReturnUrlConfig } from "../../domain/value-objects/ReturnUrlConfig";
 import { TaxBreakdown } from "../../domain/value-objects/TaxBreakdown";
+import { PaymentMethod } from "../../domain/value-objects/PaymentMethod";
+import { PaymentResult } from "../../domain/value-objects/PaymentResult";
 
 /**
  * Datos de entrada para crear un pago a traves de un Adapter concreto.
@@ -32,6 +34,20 @@ export interface CreatePaymentRequest {
    * que lo consuma es responsable de verificarlo.
    */
   taxBreakdown?: TaxBreakdown;
+
+  /**
+   * Con qué se paga. Opcional: cuando se omite, cada pasarela aplica su método
+   * por defecto, que en las cuatro es tarjeta. Se dejó opcional a propósito para
+   * que el contrato anterior siga siendo válido — un pago con tarjeta no tiene
+   * por qué declarar que es con tarjeta.
+   *
+   * Cuando `paymentMethod.requiresPayerDocument()` es verdadero, `payer` debe
+   * traer `documentType` y `documentNumber`. Es responsabilidad del adaptador
+   * verificarlo antes de la llamada de red: un documento faltante es un error de
+   * validación local, no un rechazo de la pasarela, y descubrirlo por un HTTP 400
+   * gasta una ida y vuelta para nada.
+   */
+  paymentMethod?: PaymentMethod;
 }
 
 /**
@@ -43,7 +59,16 @@ export interface CreatePaymentRequest {
  * getStatus() y verifySignature()."
  */
 export interface PaymentGatewayPort {
-  createPayment(request: CreatePaymentRequest): Promise<Transaction>;
+  /**
+   * Crea un pago.
+   *
+   * Devuelve `PaymentResult` y no `Transaction` desde el issue #64: hay métodos
+   * de pago que no terminan en la respuesta, sino que exigen mandar al pagador a
+   * una URL (PSE, 3DS, checkout hospedado). La unión obliga al llamante a
+   * distinguir los dos casos; con un campo opcional en `Transaction`, olvidar la
+   * redirección compilaba igual.
+   */
+  createPayment(request: CreatePaymentRequest): Promise<PaymentResult>;
 
   getStatus(gatewayTransactionId: string): Promise<Transaction>;
 

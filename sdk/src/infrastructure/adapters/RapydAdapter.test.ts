@@ -9,6 +9,10 @@ import { ReturnUrlConfig } from "../../domain/value-objects/ReturnUrlConfig";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { Credentials } from "../../domain/value-objects/Credentials";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
+import {
+  expectRedirect,
+  expectTransaction,
+} from "../../test-support/payment-result";
 
 describe("RapydAdapter", () => {
   const originalFetch = global.fetch;
@@ -324,7 +328,7 @@ describe("RapydAdapter", () => {
     it("devuelve una Transaction aprobada normalizada", async () => {
       global.fetch = mockOk();
 
-      const transaction = await new RapydAdapter().createPayment(validRequest);
+      const transaction = expectTransaction(await new RapydAdapter().createPayment(validRequest));
 
       expect(transaction.isApproved()).toBe(true);
       expect(transaction.getStatus()).toBe("APPROVED");
@@ -335,6 +339,46 @@ describe("RapydAdapter", () => {
       expect(transaction.amount.getValue()).toBe("150000.00");
       expect(transaction.currency.getCode()).toBe("COP");
       expect(transaction.orderReference.getValue()).toBe("ord-12345");
+    });
+
+    it("reporta redirección pendiente cuando Rapyd dispara 3DS, en vez de descartar la URL", async () => {
+      // Prueba de regresión del issue #64. Antes de ese cambio, este mismo pago
+      // devolvía una Transaction PENDING y el `redirect_url` se perdía: el
+      // normalizador traduce "ACT" a PENDING y Transaction no tenía dónde
+      // guardar la URL. El comercio hacía polling de un pago que nunca iba a
+      // avanzar, porque el paso que faltaba era una redirección que él no sabía
+      // que debía hacer.
+      global.fetch = mockOk({
+        status: { status: "SUCCESS", error_code: "" },
+        data: {
+          id: "payment_3ds_abc123",
+          status: "ACT",
+          paid: false,
+          amount: "150000.00",
+          currency_code: "COP",
+          merchant_reference_id: "ord-12345",
+          next_action: "3d_verification",
+          redirect_url: "https://sandbox.rapyd.net/v1/checkout/3ds/payment_3ds_abc123",
+        },
+      });
+
+      const result = await new RapydAdapter().createPayment(validRequest);
+
+      expect(result.outcome).toBe("REDIRECT_REQUIRED");
+      const redirect = expectRedirect(result);
+      expect(redirect.redirectUrl).toBe(
+        "https://sandbox.rapyd.net/v1/checkout/3ds/payment_3ds_abc123",
+      );
+      expect(redirect.gatewayTransactionId.value).toBe("payment_3ds_abc123");
+      expect(redirect.rawStatus).toBe("ACT");
+    });
+
+    it("sigue reportando transacción cuando el pago resuelve sin redirección", async () => {
+      global.fetch = mockOk();
+
+      const result = await new RapydAdapter().createPayment(validRequest);
+
+      expect(result.outcome).toBe("TRANSACTION");
     });
 
     it("mapea las URLs de retorno a los campos de Rapyd cuando se configuran", async () => {
@@ -477,7 +521,7 @@ describe("RapydAdapter", () => {
   describe("verifySignature()", () => {
     it("delega en WebhookVerifier con Gateway.RAPYD", () => {
       const verify = jest.fn().mockReturnValue(true);
-      const adapter = new RapydAdapter(undefined, undefined, undefined, {
+      const adapter = new RapydAdapter(undefined, undefined, {
         verify,
       } as never);
 

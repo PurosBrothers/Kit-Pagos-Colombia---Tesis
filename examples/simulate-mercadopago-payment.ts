@@ -72,7 +72,18 @@ async function main(): Promise<void> {
    * Una sola llamada a través de la fachada.
    */
   console.log("Creando el pago...");
-  const transaction = await kitPagos.createPayment(request);
+  const result = await kitPagos.createPayment(request);
+
+  // createPayment() devuelve o una transacción o una redirección pendiente, y el
+  // compilador obliga a distinguirlas: `result.transaction` no existe hasta haber
+  // descartado la redirección. El flujo de tarjeta de Checkout API resuelve en la
+  // respuesta, así que acá esta rama no se alcanza; sí se alcanza con Checkout Pro.
+  if (result.outcome === "REDIRECT_REQUIRED") {
+    console.log(`El pago requiere redirigir a: ${result.redirect.redirectUrl}`);
+    return;
+  }
+
+  const transaction = result.transaction;
 
   console.log("Transacción creada exitosamente:");
   console.log(`  ID en la pasarela:  ${transaction.gatewayTransactionId.value}`);

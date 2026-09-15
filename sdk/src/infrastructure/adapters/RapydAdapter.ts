@@ -9,6 +9,12 @@ import { ResponseNormalizer } from "../../application/services/ResponseNormalize
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
 import { buildRapydHeaders, serializeBody } from "./rapyd-signature";
+import {
+  PaymentResult,
+  transactionResult,
+  redirectRequired,
+} from "../../domain/value-objects/PaymentResult";
+import { extractRapydRedirect } from "../../application/services/normalizers/rapyd-redirect";
 
 /**
  * URL del endpoint de pagos del mock de Rapyd (simulator-api, issue #52).
@@ -41,7 +47,8 @@ const DEFAULT_RAPYD_URL = "http://localhost:3000/v1/sim/rapyd/payments";
 export class RapydAdapter implements PaymentGatewayPort {
   private readonly baseUrl: string;
   private readonly credentials?: Credentials;
-  private readonly normalizer: ResponseNormalizer;
+  /** Ver la nota de WompiAdapter: fuera del constructor para no inflar el CBO. */
+  private readonly normalizer = new ResponseNormalizer();
   private readonly webhookVerifier: WebhookVerifier;
 
   /**
@@ -60,16 +67,19 @@ export class RapydAdapter implements PaymentGatewayPort {
   constructor(
     baseUrl: string = DEFAULT_RAPYD_URL,
     credentials?: Credentials,
-    normalizer: ResponseNormalizer = new ResponseNormalizer(),
     webhookVerifier: WebhookVerifier = new WebhookVerifier()
   ) {
     this.baseUrl = baseUrl;
     this.credentials = credentials;
-    this.normalizer = normalizer;
     this.webhookVerifier = webhookVerifier;
   }
 
-  async createPayment(request: CreatePaymentRequest): Promise<Transaction> {
+  /**
+   * Devuelve PaymentResult en vez de Transaction desde el issue #64. Es el único
+   * de los tres adaptadores existentes que puede tomar la rama REDIRECT_REQUIRED
+   * hoy, porque su flujo 3DS ya devuelve `redirect_url`.
+   */
+  async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
     // 1. Mapeo del dominio a campos nativos de Rapyd.
     //
     //    El monto va en pesos, NO en centavos: `toMinorUnits()` no se usa acá, y
@@ -120,7 +130,21 @@ export class RapydAdapter implements PaymentGatewayPort {
       throw errorHandler.handle(networkError, Gateway.RAPYD);
     }
 
-    return this.readTransaction(response);
+    // 4. Rapyd puede exigir un paso del pagador por fuera del SDK: 3DS devuelve
+    //    `status: "ACT"` con `next_action: "3d_verification"` y un `redirect_url`.
+    //    Antes del issue #64 ese `redirect_url` se descartaba en silencio, porque
+    //    el normalizador traduce "ACT" a PENDING y `Transaction` no tenía dónde
+    //    guardar la URL. El comercio recibía una transacción pendiente sin señal
+    //    de que faltaba redirigir, y el pago se quedaba colgado hasta expirar.
+    const rawResponse = await this.readRawResponse(response);
+    const redirect = extractRapydRedirect(rawResponse);
+    if (redirect) {
+      return redirectRequired(redirect);
+    }
+
+    return transactionResult(
+      this.normalizer.normalize(rawResponse, Gateway.RAPYD),
+    );
   }
 
   /**
@@ -154,6 +178,20 @@ export class RapydAdapter implements PaymentGatewayPort {
    * donde arreglar el mismo error.
    */
   private async readTransaction(response: Response): Promise<Transaction> {
+    const rawResponse = await this.readRawResponse(response);
+    return this.normalizer.normalize(rawResponse, Gateway.RAPYD);
+  }
+
+  /**
+   * Valida el código HTTP y devuelve el cuerpo crudo, sin normalizar.
+   *
+   * Se separó de `readTransaction` en el issue #64 porque la creación de pago ya
+   * no siempre produce una `Transaction`: cuando Rapyd exige redirección, hay que
+   * mirar el cuerpo crudo antes de normalizar. La consulta de estado sigue
+   * normalizando siempre, así que las dos comparten esta parte y difieren en la
+   * siguiente.
+   */
+  private async readRawResponse(response: Response): Promise<unknown> {
     if (!response.ok) {
       let errorBody: unknown;
       try {
@@ -169,15 +207,12 @@ export class RapydAdapter implements PaymentGatewayPort {
       );
     }
 
-    let rawResponse: unknown;
     try {
-      rawResponse = await response.json();
+      return await response.json();
     } catch (parseError) {
       const errorHandler = new ErrorHandler();
       throw errorHandler.handle(parseError, Gateway.RAPYD);
     }
-
-    return this.normalizer.normalize(rawResponse, Gateway.RAPYD);
   }
 
   /**
