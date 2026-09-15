@@ -20,6 +20,14 @@ separados en secciones:
   regeneraron.
 - **Sección E:** deuda de documentación y configuración del repositorio que no corresponde a
   ninguna sección específica del SAD.
+- **Sección F:** decisiones sobre las métricas CK (Chidamber & Kemerer) y la deuda de RFC y WMC
+  que salió de medirlas bien.
+- **Sección G:** referencia técnica sobre los tres temas que atraviesan todo el SDK y que la
+  revisión de cierre de iteración necesita poder consultar en un solo lugar: seguridad de firmas
+  y hashes, qué cambia exactamente al conmutar de pasarela, y extensibilidad hacia pasarelas
+  nuevas. A diferencia de las demás secciones, sus puntos no registran un hallazgo puntual sino
+  que documentan el estado del sistema, separando de forma explícita lo que ya está garantizado
+  de lo que todavía no.
 
 El SAD en sí (el archivo `.docx` en Google Drive) sigue siendo la fuente única de verdad del
 proyecto, pero varios de sus artefactos se redactaron en momentos distintos y no se sincronizaron
@@ -1101,6 +1109,437 @@ Cobertura: statements 99.85 % (idéntica), ramas 93.7 % → 93.13 %. La baja de 
 **Deriva de documentación detectada al pasar, que este punto no corrige:** `layers-and-components.md` y `component-diagram.puml` siguen nombrando `SdkError` y `SdkErrorCode`, renombrados a `KitPagosError` y `KitPagosErrorCode` desde el punto 23. No se tocó acá para no mezclar dos puntos con responsables distintos; corresponde al issue #66 (deriva entre documentación y código).
 
 **Estado:** Resuelto en el código, en la documentación del repositorio y en los dos diagramas con fuente PlantUML. Pendiente únicamente el traslado al documento del SAD y el ADR de la sección 13, según el reparto de arriba.
+
+---
+
+## Sección G — Referencia técnica: criptografía, intercambio de pasarela y extensibilidad
+
+Los puntos de esta sección no registran un hallazgo puntual como los de las secciones B a F. Son documentación de referencia sobre tres temas que atraviesan todo el SDK y que hoy están dispersos entre docblocks del código, y que la revisión de cierre de iteración y la defensa del trabajo de grado necesitan poder consultar en un solo lugar. Cada uno separa explícitamente **lo que el SDK ya garantiza** de **lo que todavía no**, porque confundir las dos cosas es lo que hace que una demostración se caiga en la sustentación.
+
+### 36. Seguridad de firmas y hashes: qué garantiza cada pasarela, qué garantiza el SDK y qué falta
+
+**Responsable de corregirlo en el SAD:** Joshua (sección 9, apartados 9.1.7 y 9.2.4, donde se describe la verificación de firmas) y David (sección 15.1, `WebhookVerifier`, y sección 6, Restricciones, para las carencias de credenciales). Los cuatro huecos de seguridad que se listan al final requieren además issues propios; hasta ahora ninguno está trackeado.
+
+#### 36.1. Las cuatro pasarelas firman de forma distinta, y una de ellas no usa HMAC
+
+El SDK trata con dos operaciones criptográficas que no hay que confundir: **autenticar la petición saliente** (el SDK le prueba a la pasarela quién es) y **verificar el webhook entrante** (la pasarela le prueba al SDK que el mensaje es suyo). Son mecanismos independientes y en tres de las cuatro pasarelas usan secretos distintos.
+
+| Pasarela | Autenticación saliente | Cabecera de firma entrante | Algoritmo del webhook | Cadena que se firma | Codificación |
+|---|---|---|---|---|---|
+| **Wompi** | `Authorization: Bearer {publicKey}` | `x-event-checksum` | **SHA-256 sin clave** | concatenación de los valores que el propio cuerpo declara en `signature.properties`, más `body.timestamp`, más el secreto de eventos | hex |
+| **Rapyd** | `access_key` en claro + cabecera `signature` con HMAC-SHA256 de la petición | `signature` | HMAC-SHA256 | `url_path + salt + timestamp + access_key + secret_key + body_string` | base64 |
+| **Mercado Pago** | `Authorization: Bearer {privateKey}` (access token) | `x-signature`, con formato `ts={timestamp},v1={hash}` | HMAC-SHA256 | `id:{data.id};request-id:{x-request-id};ts:{ts};` | hex |
+| **Kushki** | `Private-Merchant-ID` (pendiente: el adaptador no existe, ver punto 36.5) | `x-kushki-signature`, con el timestamp en `x-kushki-id` | HMAC-SHA256 | `body + "." + x-kushki-id` | hex |
+
+Tres diferencias de fondo que conviene entender antes de leer el código:
+
+**Wompi no usa un MAC, usa un hash con el secreto concatenado.** Las otras tres calculan `HMAC-SHA256(secreto, mensaje)`, que es una construcción diseñada para autenticar. Wompi calcula `SHA-256(mensaje + secreto)`, que no lo es. La diferencia es relevante porque SHA-256 es una función de construcción Merkle–Damgård, y en ese tipo de construcción `hash(mensaje + secreto)` es susceptible en general a ataques de extensión de longitud: quien conoce un `mensaje` y su hash puede calcular el hash de `mensaje + relleno + extensión` sin conocer el secreto. En el caso concreto de Wompi el secreto va **al final**, lo que sitúa el riesgo en el escenario inverso al clásico y lo vuelve mucho menos explotable, pero la propiedad de seguridad no es la misma que la de un HMAC y **no es algo que el SDK pueda mejorar**: la fórmula la fija Wompi y cambiarla haría que las firmas dejaran de coincidir. Se documenta para que quede claro que la garantía que ofrece el SDK está acotada por la que ofrece cada pasarela.
+
+**Wompi decide en cada evento qué campos entran en la firma.** La lista viaja en el propio cuerpo, en `signature.properties`, como rutas con notación de puntos (`"transaction.amount_in_cents"`). El SDK las resuelve contra el cuerpo en `WompiWebhookHandler.resolvePath()`. Eso significa que la lista de campos firmados **no se puede fijar en el SDK**, y que un atacante que controle el cuerpo controla también qué se firma. La protección real es que sin el secreto no puede producir un checksum válido para *ninguna* lista.
+
+**Rapyd firma la URL completa del webhook, que el SDK no puede conocer.** En la firma de peticiones salientes, `url_path` es la ruta relativa. En la firma de webhooks entrantes es la **URL completa** (protocolo + dominio + ruta) que el comercio configuró en el panel de Rapyd. El SDK no puede derivarla de la petición entrante, así que el middleware del comercio debe inyectarla en la cabecera sintética `x-webhook-url` antes de llamar a `verify()`. Es un requisito de integración que el comercio puede incumplir en silencio: si no la inyecta, la cabecera queda en cadena vacía, la firma no coincide, y todos los webhooks de Rapyd se rechazan como inválidos. Ver también el punto 16.
+
+#### 36.2. Lo que el SDK sí hace bien hoy
+
+**Comparación en tiempo constante, en un solo lugar.** `signature-utils.ts` es el único importador de `crypto` en la verificación de webhooks, y expone `safeCompare()`:
+
+```ts
+export function safeCompare(a?: string, b?: string): boolean {
+  if (!a || !b) return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
+```
+
+Comparar firmas con `===` filtra información por el tiempo de respuesta: el operador corta en el primer byte distinto, así que medir la latencia permite reconstruir la firma byte a byte. `crypto.timingSafeEqual` recorre siempre la longitud completa. Que exista **una sola** implementación y que los cuatro manejadores la usen es la parte que importa: la vulnerabilidad típica no es no saber esto, es que uno de cuatro manejadores use `===` porque lo escribió otra persona otro día. Antes del punto 34 esa función era local al archivo de `WebhookVerifier`; ahora es un módulo compartido y explícito.
+
+La función devuelve `false` ante ausencia o diferencia de longitud en vez de lanzar, porque `timingSafeEqual` exige buffers del mismo tamaño y una firma ausente es un webhook no auténtico, no un error de programación. La comparación de longitud previa filtra la longitud de la firma esperada, que es un dato público derivable del algoritmo, así que no aporta nada a un atacante.
+
+**El cuerpo nunca se reserializa.** Los cuatro manejadores reciben `payload: string` y lo usan tal como llegó. Reserializarlo (`JSON.stringify(JSON.parse(payload))`) reordena las claves y cambia el espaciado, y cualquiera de las dos cosas invalida la firma. Es el error más común al integrar webhooks y está evitado por construcción: el tipo del parámetro es `string` y no un objeto.
+
+**Las credenciales se sanitizan en los mensajes de error (RF-08).** `ErrorHandler.sanitize()` redacta cabeceras `Authorization: Bearer`, llaves con prefijo `prv_`/`pub_` propias de Wompi y Kushki, y los patrones `privateKey`/`secretKey`/`publicKey`/`apiKey`/`access_key`/`secret_key` cuando aparecen en JSON o en texto. Esto cubre el caso en que la pasarela devuelve en su cuerpo de error la petición que recibió, incluidas sus cabeceras. La prueba de `RapydAdapter` verifica explícitamente que el `secret_key` no aparece en el error serializado.
+
+**El secreto de Rapyd no viaja nunca por la red.** Participa del cálculo de la firma pero no se envía; lo que viaja es `access_key` en claro y la firma. Eso es diseño de Rapyd, y el SDK lo respeta: `buildRapydHeaders()` pone `access_key` en la cabecera y nunca `secret_key`.
+
+#### 36.3. Hueco 1 — No hay protección contra reenvío (replay) en ninguna de las cuatro
+
+Las cuatro pasarelas incluyen un timestamp en la cadena firmada, y el SDK lo usa **solo como insumo del cálculo**. Ninguno de los cuatro manejadores compara ese timestamp contra la hora actual.
+
+La consecuencia es concreta: un webhook capturado una vez se puede reenviar indefinidamente y su firma seguirá siendo válida, porque la firma cubre el timestamp pero nadie verifica que el timestamp sea reciente. Un atacante que logre observar un webhook de pago aprobado (por ejemplo en un log, en un proxy mal configurado, o en un entorno de pruebas compartido) puede reinyectarlo contra el endpoint del comercio tantas veces como quiera. Si la lógica del comercio no es idempotente por `gatewayTransactionId` —y nada en el SDK le exige que lo sea— eso puede traducirse en despachar un pedido varias veces por un solo pago.
+
+La corrección es acotada y conocida: aceptar una ventana de tolerancia (el valor habitual en la industria es de cinco minutos) y rechazar lo que caiga fuera. Requiere decidir dos cosas que no son obvias: qué hacer cuando el reloj del servidor del comercio está desfasado, y si la ventana debe ser configurable por el comercio. **No está trackeado en ningún issue.** Es el hueco de seguridad más serio que tiene el SDK hoy.
+
+#### 36.4. Hueco 2 — `Credentials` tiene dos campos y el secreto de webhook no es la llave de API
+
+El objeto de valor completo es este:
+
+```ts
+export interface Credentials {
+  publicKey: string;
+  privateKey: string;
+}
+```
+
+Y `KitPagos.validateWebhook()` usa el segundo campo como secreto de firma:
+
+```ts
+const credentials = this.configurator.getCredentials(gateway);
+const secret = credentials.privateKey;
+```
+
+El problema es que en tres de las cuatro pasarelas el secreto del webhook es un valor **distinto** de la llave de API:
+
+| Pasarela | Llave de API | Secreto de webhook | ¿Coinciden? |
+|---|---|---|---|
+| Wompi | `prv_test_...` | "secreto de eventos", generado aparte en el panel | **No** |
+| Mercado Pago | access token `APP_USR-...` | clave secreta de webhooks, generada aparte | **No** |
+| Kushki | Private Merchant ID | "Webhook signature ID" de la consola | **No** |
+| Rapyd | `secret_key` | el mismo `secret_key` | Sí |
+
+Es decir: **con el contrato de credenciales actual, el SDK no puede verificar un webhook real de Wompi, Mercado Pago ni Kushki.** Solo funciona con Rapyd, que es la única que reutiliza el secreto, y con el simulador, que es quien firma y verifica con el mismo valor porque nosotros lo escribimos así. El comercio tendría que poner el secreto de eventos en `privateKey`, lo que rompería la autenticación de la API, o al revés.
+
+Esto no es un detalle de configuración: afecta a RF-04 ("validar firma de webhook y retornar evento normalizado") en producción, y es invisible en las pruebas actuales precisamente porque el simulador no reproduce la separación de secretos. La corrección natural es ensanchar `Credentials` con un campo opcional `webhookSecret` y que `validateWebhook` lo prefiera cuando esté presente, cayendo a `privateKey` para no romper a Rapyd ni al simulador. **No está trackeado en ningún issue.**
+
+#### 36.5. Hueco 3 — `validateWebhook` solo puede verificar la pasarela activa
+
+La firma pública no recibe la pasarela; la deduce de la configuración:
+
+```ts
+validateWebhook(payload: string, headers: Record<string, string>): WebhookEvent {
+  const gateway = this.configurator.getActiveGateway();
+  // ...
+}
+```
+
+Eso choca de frente con el caso de uso central de la tesis. Durante una migración de pasarela —que es exactamente el problema que el framework dice resolver— el comercio va a recibir webhooks de la pasarela vieja (pagos ya iniciados, conciliaciones pendientes, reembolsos) mientras cobra por la nueva. Con la firma actual no puede validar los de la pasarela que no esté activa, y no hay forma de sortearlo sin instanciar un segundo `KitPagos` con otra configuración, que es justo el tipo de contorsión que el SDK debería evitarle.
+
+Hay un agravante en la asimetría de lo implementado: `WebhookVerifier` **ya soporta las cuatro pasarelas**, Kushki incluida, mientras `GatewayFactory` y `ResponseNormalizer` lanzan `UNSUPPORTED_OPERATION` para Kushki. Si alguien configura `Gateway.KUSHKI` hoy, `validateWebhook()` funciona y `createPayment()` falla. La capacidad existe en el dominio y está inalcanzable desde la fachada.
+
+#### 36.6. Hueco 4 — Un cuerpo malformado y una firma falsificada producen el mismo error
+
+```ts
+try {
+  isValid = this.verifier.verify(payload, headers, secret, gateway);
+} catch {
+  isValid = false;
+}
+```
+
+El `catch` sin filtro convierte cualquier excepción en "firma inválida". Eso incluye los fallos legítimos (un cuerpo que no es JSON, un webhook de Wompi sin `signature.properties`, un `x-signature` de Mercado Pago con formato inesperado) y también un error de programación dentro del manejador. Para el comercio, un webhook malformado y un webhook falsificado son indistinguibles: los dos llegan como `WEBHOOK_SIGNATURE_INVALID`.
+
+Desde el punto de vista de seguridad, fallar cerrado es la decisión correcta y hay que conservarla. Lo que falta es distinguir en el diagnóstico: `MALFORMED_RESPONSE` para lo que no se pudo interpretar y `WEBHOOK_SIGNATURE_INVALID` para lo que se interpretó y no coincidió. Sin esa distinción, un comercio que despliegue mal el middleware de Rapyd (sin inyectar `x-webhook-url`, ver 36.1) va a ver "firma inválida" en todos sus webhooks y no tiene ninguna pista de que el problema es su integración y no un ataque.
+
+#### 36.7. Resumen del estado de seguridad
+
+| Aspecto | Estado |
+|---|---|
+| Comparación en tiempo constante | ✓ Implementado, en un solo lugar compartido |
+| Cuerpo sin reserializar | ✓ Garantizado por el tipo del parámetro |
+| Sanitización de credenciales en errores (RF-08) | ✓ Implementado y probado |
+| Secreto de Rapyd nunca viaja por la red | ✓ Correcto |
+| Los cuatro algoritmos de firma implementados | ✓ Las cuatro pasarelas verifican |
+| Protección contra replay | ✗ **Ausente en las cuatro** (36.3) |
+| Secreto de webhook separado de la llave de API | ✗ **Imposible con el contrato actual** (36.4) |
+| Verificar webhooks de una pasarela no activa | ✗ **No soportado** (36.5) |
+| Distinguir cuerpo malformado de firma falsificada | ✗ **No se distingue** (36.6) |
+
+**Estado:** documentado. Los cuatro huecos requieren issues propios que todavía no existen; el de replay (36.3) y el de credenciales (36.4) son los que bloquean un uso en producción.
+
+---
+
+### 37. Cambio de pasarela: exactamente qué línea de código cambia y qué no
+
+**Responsable de corregirlo en el SAD:** David (sección 15.2, contrato de `SDKOptions`) y Joan (este punto es el insumo directo del issue #58; la falencia de 37.4 hay que resolverla antes de escribir el ejemplo).
+
+Este es el punto que sustenta el argumento central del trabajo de grado, así que conviene ser literal y no aspiracional. Se separa en tres capas: lo que escribe el comercio, lo que configura el comercio, y lo que pasa dentro del SDK.
+
+#### 37.1. Capa 1 — Código de negocio del comercio: no cambia nada
+
+Un pago se describe con objetos de dominio, y ninguno de ellos menciona una pasarela:
+
+```ts
+const request = {
+  amount: new Amount("150000.00"),
+  currency: new Currency("COP"),
+  orderReference: new OrderReference(`ORDER-${Date.now()}`),
+  payer: new Payer({ email: "...", fullName: "..." }),
+};
+
+const transaction = await kitPagos.createPayment(request);
+```
+
+Ese bloque es idéntico para las cuatro pasarelas. No aparece `amount_in_cents` (Wompi), ni `subtotalIva0` (Kushki), ni `payment_method_type` (Rapyd). Tampoco aparecen en la respuesta: `transaction.getStatus()` devuelve `APPROVED` para las cuatro, aunque Wompi diga `APPROVED`, Kushki diga `APPROVAL`, Rapyd diga `CLO` y Mercado Pago diga `approved`. El valor nativo se conserva en `transaction.rawStatus` para auditoría, disponible pero no necesario.
+
+Esta es la parte que sí está demostrada hoy y es la que se mide en la Fase 5 como "conceptos nativos expuestos".
+
+#### 37.2. Capa 2 — Configuración: cambian dos valores, y debería cambiar uno
+
+En teoría el cambio de pasarela es el valor de un enum:
+
+```ts
+const options: SDKOptions = {
+  gateway: Gateway.WOMPI,        // ← esto es lo único que debería cambiar
+  credentials: { ... },
+  baseUrl: SIMULATOR_WOMPI_URL,
+};
+```
+
+En la práctica hay que cambiar también `baseUrl`, y ese es el problema descrito en 37.4.
+
+Las credenciales **no** hay que cambiarlas al conmutar, y eso es deliberado: `credentials` es un mapa `Partial<Record<Gateway, Credentials>>`, no un par suelto. El comercio declara de una vez las credenciales de todas las pasarelas con las que trabaja y `SdkConfigurator.getCredentials()` resuelve las de la activa. Conmutar no obliga a rearmar el objeto de credenciales.
+
+#### 37.3. Capa 3 — Dentro del SDK: la cadena completa de resolución
+
+Vale la pena seguirla entera porque es donde se ve que la pasarela se resuelve en **un solo punto** y no se propaga.
+
+1. **`KitPagos.createPayment(request)`** llama a `resolveAdapter()`, su único método privado.
+2. **`resolveAdapter()`** hace tres cosas y ninguna sabe de pasarelas concretas:
+   ```ts
+   const gateway = this.configurator.getActiveGateway();
+   const credentials = this.configurator.getCredentials(gateway);
+   return this.factory.create(gateway, credentials, this.configurator.getBaseUrl());
+   ```
+3. **`GatewayFactory.create()`** es el **único `switch` por pasarela en toda la ruta de creación de pagos**. Devuelve `PaymentGatewayPort`, no el tipo concreto, así que el tipo de la pasarela muere ahí: quien recibe el valor no puede saber cuál es.
+4. **El adaptador concreto** traduce los objetos de valor a campos nativos, autentica a su manera, hace el `fetch` y entrega el cuerpo crudo.
+5. **`ResponseNormalizer.normalize(raw, gateway)`** despacha al normalizador de esa pasarela (punto 34), que devuelve `Transaction`.
+6. **`Transaction`** vuelve a la fachada y de ahí al comercio, sin rastro del origen salvo `rawStatus` y `gatewayTransactionId.gateway`.
+
+El dato importante de esta cadena es **cuántos `switch` por pasarela hay y dónde están**. Son tres, y los tres son despachadores de una línea por caso:
+
+| Punto de despacho | Archivo | Qué decide |
+|---|---|---|
+| `GatewayFactory.create()` | `infrastructure/factories/GatewayFactory.ts` | qué adaptador instanciar |
+| `ResponseNormalizer.normalize()` | `application/services/ResponseNormalizer.ts` | qué normalizador usa la respuesta |
+| `WebhookVerifier.verify()` / `.parse()` | `domain/services/WebhookVerifier.ts` | qué manejador de webhook aplica |
+
+Antes del punto 34 el segundo y el tercero no eran despachadores sino métodos de 360 y 200 líneas con la lógica de las cuatro pasarelas entrelazada dentro. Que hoy sean tres puntos de una línea por caso es lo que hace que el punto 38 (extensibilidad) sea un procedimiento y no una cirugía.
+
+#### 37.4. Falencia — `baseUrl` es un solo valor y cada pasarela necesita una ruta distinta
+
+Este es el hallazgo que amenaza directamente al issue #58, cuyo objetivo textual es "cobre el mismo pago por las cuatro pasarelas cambiando **únicamente un valor de configuración**". Hoy eso no se puede cumplir.
+
+`SDKOptions` declara un `baseUrl` escalar:
+
+```ts
+export interface SDKOptions {
+  gateway: Gateway;
+  credentials: Partial<Record<Gateway, Credentials>>;
+  baseUrl?: string;      // ← uno solo, para la pasarela activa
+  maxRetries?: number;   // política de reintento, global (punto 35)
+}
+```
+
+Pero la ruta del endpoint es distinta en cada pasarela, y **lleva el nombre de la pasarela dentro**:
+
+```
+http://localhost:3000/v1/sim/wompi/transactions
+http://localhost:3000/v1/sim/rapyd/payments
+http://localhost:3000/v1/sim/mercadopago/payments
+```
+
+Entonces conmutar exige cambiar **dos** valores, y el segundo contiene literalmente el nombre de la pasarela. Un ejemplo de intercambiabilidad escrito contra este contrato necesitaría un mapa `Gateway → string` en el código del ejemplo, es decir exactamente el `if` por pasarela que el issue #58 dice que, si aparece, significa que el ejemplo ya falló en lo que pretende demostrar.
+
+Hay un segundo problema en el mismo sitio, y es peor: **las tres URL por defecto de los adaptadores apuntan al simulador en `localhost:3000`**, no a las pasarelas reales. No existe ni una sola URL de producción en el SDK. El docblock del ejemplo de Wompi afirma lo contrario ("en produccion se omite y cada Adapter usa el endpoint real de su pasarela"); omitir `baseUrl` hoy apunta a `localhost`. Con un `baseUrl` escalar, además, un comercio que quisiera producción tendría que pasar la URL completa de una sola pasarela, y no podría configurar las cuatro.
+
+La corrección que resuelve las dos cosas a la vez es cambiar el significado de `baseUrl`: que sea el **origen** (`http://localhost:3000`) y que cada adaptador conozca su propio sufijo de ruta. Con eso, un único `baseUrl` sirve para las cuatro pasarelas contra el simulador, omitirlo hace que cada adaptador use el origen real de su pasarela, y conmutar vuelve a ser un solo valor. Es un cambio contenido —tres constantes en los adaptadores y la concatenación de la ruta— pero **es prerrequisito de #58** y hoy no está trackeado en ningún issue. La alternativa de convertir `baseUrl` en un mapa por pasarela, simétrico a `credentials`, también funciona pero deja al comercio repitiendo el origen cuatro veces y no arregla la ausencia de endpoints de producción.
+
+#### 37.5. Lo que sí se filtra hoy al cambiar de pasarela
+
+Además de `baseUrl`, hay tres puntos donde la pasarela todavía asoma al código del comercio. Conviene tenerlos listados porque son la respuesta honesta a "¿de verdad no cambia nada?".
+
+**El desglose de impuestos, solo para Kushki.** `CreatePaymentRequest.taxBreakdown` es opcional y las otras tres pasarelas lo ignoran. Un comercio que quiera declarar IVA correctamente en Kushki tiene que informarlo; si no lo hace, el adaptador asume el caso exento (`TaxBreakdown.exempt`). Es una filtración consciente y documentada: es preferible a inventar un IVA que el comercio no declaró. El campo es opcional, así que el código escrito para las otras tres sigue compilando y corriendo contra Kushki.
+
+**El método de pago, que todavía no existe (#64).** `returnUrlConfig` está en `CreatePaymentRequest` y **ningún adaptador lo lee**. No hay concepto de método de pago, y `createPayment()` devuelve `Promise<Transaction>`, lo que asume que un POST produce un resultado final. Eso solo es cierto para tarjeta sin autenticación. Para PSE, 3DS y checkout hospedado la pasarela devuelve una URL a la que hay que redirigir al comprador, y **`Transaction` no tiene ningún campo donde ponerla**. Es el hueco funcional más grande del SDK y es el objeto del issue #64.
+
+**El secreto del webhook y la pasarela del webhook.** Descritos en 36.4 y 36.5.
+
+**Estado:** documentado. La falencia de 37.4 necesita un issue y hay que resolverla antes de #58, no durante.
+
+---
+
+### 38. Extensibilidad hacia pasarelas nuevas: procedimiento, costo medido y límites reales
+
+**Responsable de corregirlo en el SAD:** Joan (sección 13; este punto es el cuerpo del ADR de Strategy que quedó pendiente del punto 34) y Joshua (sección 9, para el procedimiento de registro).
+
+El framework se defiende sobre la premisa de que agregar una pasarela es barato y no rompe las existentes. Este punto convierte esa premisa en un procedimiento verificable, con el costo medido sobre el código que ya existe, y con la lista honesta de lo que el diseño **no** absorbe.
+
+#### 38.1. El procedimiento, archivo por archivo
+
+Supongamos que se agrega una quinta pasarela, `NEQUI`. Son cuatro archivos nuevos y cuatro líneas en archivos existentes.
+
+**Paso 1 — Agregar el valor al enum** (`domain/value-objects/Gateway.ts`, 1 línea):
+
+```ts
+export enum Gateway {
+  WOMPI = "WOMPI",
+  RAPYD = "RAPYD",
+  MERCADOPAGO = "MERCADOPAGO",
+  KUSHKI = "KUSHKI",
+  NEQUI = "NEQUI",        // ← nuevo
+}
+```
+
+En cuanto se agrega esta línea, **el proyecto deja de compilar** y eso es intencional: `WebhookVerifier.handlers` está tipado como `Record<Gateway, GatewayWebhookHandler>` completo, así que TypeScript exige el manejador de la pasarela nueva. Ver 38.4.
+
+**Paso 2 — Manejador de webhook** (`domain/services/webhooks/NequiWebhookHandler.ts`, nuevo, ~60–95 líneas):
+
+```ts
+export class NequiWebhookHandler implements GatewayWebhookHandler {
+  verify(payload: string, headers: Record<string, string>, secret: string): boolean {
+    // Usar hmacSha256() o sha256Hex() de signature-utils.ts,
+    // y comparar SIEMPRE con safeCompare(). Nunca con ===.
+  }
+  parse(payload: string): WebhookEvent { /* ... */ }
+}
+```
+
+La regla dura de este paso: no importar `crypto` directamente. Las primitivas viven en `signature-utils.ts` y la comparación en tiempo constante es la de `safeCompare()`. Ese módulo es la costura (*seam*) que garantiza que las cinco pasarelas comparen firmas igual.
+
+**Paso 3 — Normalizador de respuesta** (`application/services/normalizers/NequiResponseNormalizer.ts`, nuevo, ~90–125 líneas):
+
+```ts
+export class NequiResponseNormalizer implements GatewayResponseNormalizer {
+  normalize(rawResponse: unknown): Transaction { /* ... */ }
+}
+```
+
+Reutilizando de `payload-utils.ts` lo que ya está resuelto: `parsePayload()`, `requireData()`, `mapValueObjectError()` y `amountToString()`. Esas cuatro funciones son el ~50% de lo que era la complejidad del `normalize()` monolítico y no hay que reescribirlas.
+
+**Paso 4 — Adaptador** (`infrastructure/adapters/NequiAdapter.ts`, nuevo, ~150–195 líneas):
+
+```ts
+export class NequiAdapter implements PaymentGatewayPort {
+  async createPayment(request: CreatePaymentRequest): Promise<Transaction> { /* ... */ }
+  async getStatus(id: string): Promise<Transaction> { /* ... */ }
+  verifySignature(payload: string, headers: Record<string, string>, secret: string): boolean { /* ... */ }
+}
+```
+
+Dos convenciones que hay que respetar y que no son obvias, las dos documentadas en el docblock de `WompiAdapter` como patrón de referencia:
+
+- **Nunca construir `KitPagosError` dentro del adaptador.** Se delega en `ErrorHandler.handle()`, que clasifica y sanitiza. Un adaptador que arme el error a mano se salta la sanitización de credenciales de RF-08.
+- **Instanciar `ErrorHandler` dentro del cuerpo de los métodos, no recibirlo en el constructor.** Es para respetar el umbral CBO ≤ 5 del Definition of Done; recibirlo por constructor lo cuenta como acoplamiento en la firma.
+
+Si el algoritmo de autenticación saliente es no trivial, extraerlo a un módulo de funciones puras al lado del adaptador, como `rapyd-signature.ts`. Eso mantiene el `MAX_CC` del adaptador bajo el umbral de 10 y hace la firma probable en aislamiento.
+
+**Paso 5 — Registrar en los tres despachadores** (3 líneas + 3 imports):
+
+```ts
+// GatewayFactory.create()
+case Gateway.NEQUI:
+  return new NequiAdapter(baseUrl, credentials);
+
+// ResponseNormalizer.normalizers
+[Gateway.NEQUI]: new NequiResponseNormalizer(),
+
+// WebhookVerifier.handlers
+[Gateway.NEQUI]: new NequiWebhookHandler(),
+```
+
+**Paso 6 — Credenciales.** Si la pasarela nueva encaja en `{ publicKey, privateKey }`, nada que hacer. Si necesita un tercer valor, hay que ensanchar `Credentials`, y eso ya es necesario por el hueco 36.4.
+
+**Paso 7 — Pruebas.** Una suite por pieza nueva, siguiendo las existentes: `NequiAdapter.test.ts` (mapeo, autenticación, traducción de errores, no filtración de credenciales), y los casos de la pasarela nueva en las suites de normalizador y de webhook.
+
+**Paso 8 — Mock en `simulator-api`** y ejemplo en `examples/`, si se quiere ejercitar de punta a punta sin credenciales reales.
+
+#### 38.2. El costo, medido sobre el código que ya existe
+
+No es una estimación: son las líneas de las tres pasarelas implementadas.
+
+| Pieza | Wompi | Rapyd | Mercado Pago | Rango |
+|---|---|---|---|---|
+| Adaptador | 149 | 195 | 175 | 149–195 |
+| Normalizador de respuesta | 88 | 125 | 92 | 88–125 |
+| Manejador de webhook | 78 | 94 | 83 | 60–94¹ |
+| **Total por pasarela** | **315** | **414** | **350** | **~300–420** |
+
+¹ El rango baja a 60 porque el manejador de Kushki, la más simple de las cuatro, ocupa 60 líneas.
+
+A eso se suman **4 líneas en archivos existentes** (1 en el enum, 3 en los despachadores) más sus imports. Es decir: **entre 300 y 420 líneas nuevas y 4 líneas modificadas**. Rapyd es el techo del rango porque tiene el caso más difícil de las cuatro (firma HMAC de cada petición y estados ambiguos que exigen leer campos secundarios); una pasarela convencional se parece más a Wompi.
+
+Vale contrastarlo con el costo **antes** del punto 34: el `normalize()` monolítico crecía ~120 líneas por pasarela dentro de un método que ya tenía 360 y complejidad ciclomática 62, y `WebhookVerifier.parse()` crecía dentro de un método de complejidad 36. El costo en líneas era parecido; lo que cambió es **dónde** caen y qué riesgo traen. Hoy caen en archivos nuevos y el código de las cuatro pasarelas existentes no se toca. Antes caían dentro de métodos compartidos, donde un `case` mal cerrado o un `switch` con caída implícita podía romper una pasarela distinta de la que se estaba agregando.
+
+#### 38.3. Lo que NO hay que tocar, y por qué eso es lo importante
+
+Al agregar la quinta pasarela, estos archivos no se modifican:
+
+- Los tres adaptadores existentes.
+- Los tres normalizadores existentes y `payload-utils.ts`.
+- Los cuatro manejadores de webhook existentes y `signature-utils.ts`.
+- `KitPagos` (la fachada), `SdkConfigurator`, `PaymentGatewayPort`.
+- Todo el dominio: `Transaction`, `Amount`, `Currency`, `TaxBreakdown`, y el resto de objetos de valor.
+- `ErrorHandler`, cuya división es por **forma del error** (estado HTTP / `Error` nativo / string) y no por pasarela, así que una pasarela nueva no le agrega ramas.
+
+Que `ErrorHandler` no se toque merece una nota, porque es el único de los tres servicios refactorizados en el punto 34 que **no** se dividió por pasarela. La razón es que los modos de fallo no son propios de cada pasarela: un timeout es un timeout en las cinco. Dividirlo por pasarela habría multiplicado por cinco un código idéntico. Es el contraejemplo útil de que "una clase por pasarela" no es la respuesta a todo, sino la respuesta cuando el eje de variación real es la pasarela.
+
+En términos de principios, el diseño cumple Open/Closed **sobre el eje de la pasarela**: está abierto a pasarelas nuevas y cerrado a modificación de las existentes. La limitación de esa afirmación está en 38.6.
+
+#### 38.4. El compilador ayuda en un despachador y no en el otro, y eso hay que igualar
+
+Hay una asimetría en cómo están tipados los dos mapas de despacho:
+
+```ts
+// WebhookVerifier — Record completo: el compilador EXIGE la pasarela nueva
+private readonly handlers: Record<Gateway, GatewayWebhookHandler> = { ... };
+
+// ResponseNormalizer — Partial: el compilador NO dice nada
+private readonly normalizers: Partial<Record<Gateway, GatewayResponseNormalizer>> = { ... };
+```
+
+Con el `Record` completo, agregar `NEQUI` al enum rompe la compilación hasta que se registre el manejador. Es el mejor momento posible para enterarse. Con el `Partial`, agregar `NEQUI` compila sin problema y el olvido se manifiesta en tiempo de ejecución como `UNSUPPORTED_OPERATION`, posiblemente en producción y posiblemente después de haber cobrado.
+
+El `Partial` está ahí por una razón legítima —Kushki todavía no tiene normalizador (#53)— pero el efecto secundario es perder la verificación. Cuando #53 cierre y las cuatro estén registradas, conviene cambiarlo a `Record<Gateway, GatewayResponseNormalizer>` completo para que el registro quede exigido por el compilador en las dos partes. Es una línea y compra una garantía real.
+
+#### 38.5. Los ocho ejes de variación que el diseño ya absorbió
+
+Esto es lo que respalda que el diseño generalice y no solo funcione para las cuatro elegidas: las cuatro pasarelas implementadas difieren entre sí en ocho dimensiones independientes, y para cada una hay un lugar definido donde se absorbe.
+
+| # | Eje de variación | Cómo difieren | Dónde se absorbe |
+|---|---|---|---|
+| 1 | **Escala del monto** | Wompi cobra en centavos; Rapyd y Mercado Pago en unidad principal; Kushki exige el monto descompuesto por impuesto | `Amount.toMinorUnits(currency)` + `minor-units.ts`; el adaptador elige |
+| 2 | **Envoltorio de la respuesta** | Wompi y Rapyd envuelven el pago en `{ data: ... }`; Mercado Pago lo devuelve en la raíz | Normalizador de la pasarela, que elige qué le entrega al validador compartido `requireData()` (`payload?.data` frente a `payload?.data ?? payload`) |
+| 3 | **Vocabulario de estado** | `APPROVED` / `approved` / `CLO` / `APPROVAL` | Normalizador, que mapea a `TransactionStatus` |
+| 4 | **Estados ambiguos** | En Rapyd `CLO` y `ERR` no bastan: hay que leer campos secundarios para saber el resultado | Normalizador; la interfaz no obliga a un mapeo 1:1 |
+| 5 | **Señal de éxito o fallo** | Tres usan el código HTTP; **Kushki responde 200 incluso cuando rechaza** y hay que mirar el cuerpo | Adaptador, que decide cuándo invocar `ErrorHandler` |
+| 6 | **Autenticación saliente** | Bearer con llave pública / Bearer con access token / HMAC por petición / cabecera de merchant ID | Adaptador, con módulo de costura si es no trivial (`rapyd-signature.ts`) |
+| 7 | **Algoritmo de firma de webhook** | SHA-256 sin clave / HMAC base64 / HMAC hex, sobre cuatro cadenas distintas | Manejador de la pasarela + primitivas de `signature-utils.ts` |
+| 8 | **Forma de la notificación** | Notificación única con los datos vs. Mercado Pago, que notifica un ID y obliga a consultar | Manejador para el evento; la consulta posterior queda en el adaptador |
+
+Los ejes 1, 5 y 8 son los que hacen el argumento fuerte, porque son los que un diseño ingenuo no anticipa. Una pasarela que responde HTTP 200 al rechazar un pago rompe cualquier adaptador que decida el resultado mirando el código de estado; que el diseño lo absorba en el adaptador y no en el dominio es lo que evita que ese detalle se propague.
+
+#### 38.6. Los límites reales: lo que el diseño NO absorbería
+
+Afirmar extensibilidad sin acotarla es lo que hace que una defensa se caiga. Estos son los casos en que agregar una pasarela **sí** obligaría a tocar código compartido.
+
+**Límite 1 — Flujos con redirección (hoy, no hipotético).** Ninguna pasarela cuyo flujo principal sea checkout hospedado, PSE o 3DS se puede integrar de forma útil hoy, porque `PaymentGatewayPort.createPayment()` devuelve `Promise<Transaction>` y **`Transaction` no tiene campo para la URL de redirección ni para la acción siguiente**. Este es el issue #64 y no es un límite del patrón: es trabajo pendiente. Pero mientras no se cierre, la extensibilidad demostrada cubre solo tarjeta sin autenticación.
+
+**Límite 2 — Operaciones nuevas, no pasarelas nuevas.** Este es el límite estructural de verdad. `PaymentGatewayPort` tiene tres métodos: `createPayment`, `getStatus`, `verifySignature`. Agregar reembolsos, anulaciones, capturas parciales o pagos recurrentes significa ensanchar el puerto, y ensanchar el puerto **obliga a las cinco pasarelas a implementar el método nuevo**, incluidas las que no soportan la operación. Dicho con precisión: **el diseño es Open/Closed sobre el eje de la pasarela, y no sobre el eje de la operación.** La salida habitual es segregar la interfaz (un puerto opcional `RefundablePort` que solo implementen las que puedan) y que la fachada informe `UNSUPPORTED_OPERATION` cuando la pasarela activa no lo implemente. No está decidido y no hay issue.
+
+**Límite 3 — Protocolos de varios pasos con estado.** Una pasarela que exija tokenizar la tarjeta, luego crear el pago, luego confirmar el 3DS y luego capturar, no encaja en tres métodos sin estado. El puerto tendría que crecer o aparecer el concepto de una máquina de estados de pago, que hoy no existe. Se solapa con #64.
+
+**Límite 4 — Sin política de HTTP compartida.** Los tres adaptadores llaman `fetch` directamente. No hay un cliente HTTP común, así que timeouts, trazas y límites de tasa se resolverían cinco veces o no se resolverían.
+
+El reintento es la excepción y conviene precisarla, porque el punto 35 la resolvió a medias: `RetryHandler` ya es una política real con retroceso exponencial y jitter, y la fachada envuelve `getPaymentStatus()` con ella. Pero la política es **global, no por pasarela**: `maxRetries` se configura una vez en `SDKOptions` y aplica a la pasarela que esté activa. Una pasarela nueva con requisitos propios de reintento —por ejemplo una que exija respetar el `Retry-After` de sus 429, que hoy el SDK ignora— no tiene dónde declararlos sin ensanchar `SDKOptions` o hacer que `RetryHandler` consulte la pasarela, y ninguna de las dos cosas está prevista. Lo mismo aplica al plazo total de la operación, que no existe: no hay `AbortController` ni deadline, así que una pasarela lenta puede colgar `getPaymentStatus()` durante minutos.
+
+**Límite 5 — El contrato de credenciales.** Cualquier pasarela que necesite más de dos secretos obliga a ensanchar `Credentials`, que es tipo público exportado. Es el hueco 36.4 y afecta a tres de las cuatro actuales.
+
+**Lo que sí está absorbido y podría parecer un límite:** monedas distintas de COP con otra cantidad de decimales. `minor-units.ts` deriva la escala de la divisa ISO 4217, así que una pasarela que opere en USD o en CLP (cero decimales) funciona sin cambios en el dominio.
+
+#### 38.7. Resumen
+
+| Pregunta | Respuesta |
+|---|---|
+| Archivos nuevos por pasarela | 3 (adaptador, normalizador, manejador de webhook) + pruebas |
+| Líneas nuevas por pasarela | ~300–420, medido sobre las tres implementadas |
+| Líneas modificadas en código existente | 4 (enum + tres registros en despachadores) |
+| Pasarelas existentes que se tocan | **Ninguna** |
+| Dominio que se toca | **Nada** |
+| ¿El compilador exige el registro? | En `WebhookVerifier` sí; en `ResponseNormalizer` no, hasta que se cierre #53 (38.4) |
+| ¿Open/Closed? | Sí sobre el eje de la pasarela; **no** sobre el eje de la operación (38.6, límite 2) |
+| Bloqueante hoy para pasarelas con redirección | Sí, hasta que cierre #64 (38.6, límite 1) |
+
+**Estado:** documentado. Es el cuerpo del ADR de Strategy que quedó pendiente del punto 34 para la sección 13 del SAD. De los cinco límites, el 1 es el issue #64 y el 5 es el hueco 36.4; los límites 2 (operaciones nuevas frente a pasarelas nuevas), 3 (protocolos de varios pasos) y 4 (política de HTTP y de reintento por pasarela, más la ausencia de plazo total) no tienen issue.
 
 ---
 
