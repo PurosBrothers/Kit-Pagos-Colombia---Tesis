@@ -564,4 +564,80 @@ describe("KitPagos", () => {
       });
     });
   });
+
+  describe("Retry policy on operations (RetryHandler integration)", () => {
+    it("getPaymentStatus() reintenta ante un fallo transitorio de red y se recupera en el siguiente intento", async () => {
+      jest.useFakeTimers();
+      const sdk = new KitPagos({
+        gateway: Gateway.WOMPI,
+        credentials: { [Gateway.WOMPI]: wompiCredentials },
+        baseUrl: "http://localhost:3000/v1/sim/wompi/transactions",
+        maxRetries: 2,
+      });
+
+      let callCount = 0;
+      global.fetch = jest.fn().mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error("fetch failed");
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => approvedWompiResponse,
+        };
+      });
+
+      const promise = sdk.getPaymentStatus("wompi-tx-abc-123");
+      await jest.advanceTimersByTimeAsync(2000);
+      const transaction = await promise;
+
+      expect(callCount).toBe(2);
+      expect(transaction.isApproved()).toBe(true);
+      expect(transaction.gatewayTransactionId.value).toBe("wompi-tx-abc-123");
+
+      jest.useRealTimers();
+    });
+
+    it("getPaymentStatus() NO reintenta ante un error no transitorio (ej. 404 / RESOURCE_NOT_FOUND)", async () => {
+      const sdk = new KitPagos({
+        gateway: Gateway.WOMPI,
+        credentials: { [Gateway.WOMPI]: wompiCredentials },
+        baseUrl: "http://localhost:3000/v1/sim/wompi/transactions",
+      });
+
+      let callCount = 0;
+      global.fetch = jest.fn().mockImplementation(async () => {
+        callCount++;
+        return {
+          ok: false,
+          status: 404,
+          json: async () => ({
+            error: { type: "NOT_FOUND", reason: "Transaction not found" },
+          }),
+        };
+      });
+
+      await expect(sdk.getPaymentStatus("non-existent-id")).rejects.toThrow(KitPagosError);
+      expect(callCount).toBe(1); // Exactamente 1 intento, 0 reintentos
+    });
+
+    it("createPayment() NO se reintenta automaticamente ante un error de red por seguridad e idempotencia", async () => {
+      const sdk = new KitPagos({
+        gateway: Gateway.WOMPI,
+        credentials: { [Gateway.WOMPI]: wompiCredentials },
+        baseUrl: "http://localhost:3000/v1/sim/wompi/transactions",
+      });
+
+      let callCount = 0;
+      global.fetch = jest.fn().mockImplementation(async () => {
+        callCount++;
+        throw new Error("fetch failed");
+      });
+
+      await expect(sdk.createPayment(validRequest)).rejects.toThrow(KitPagosError);
+      expect(callCount).toBe(1); // No reintenta: previene doble cobro
+    });
+  });
 });
+

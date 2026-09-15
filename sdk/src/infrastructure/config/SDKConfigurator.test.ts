@@ -55,6 +55,25 @@ describe("SDKConfigurator", () => {
     });
   });
 
+  describe("getMaxRetries()", () => {
+    it("should return undefined when maxRetries is not specified", () => {
+      configurator.configure({
+        gateway: Gateway.WOMPI,
+        credentials: { [Gateway.WOMPI]: wompiCredentials },
+      });
+      expect(configurator.getMaxRetries()).toBeUndefined();
+    });
+
+    it("should return the configured maxRetries value", () => {
+      configurator.configure({
+        gateway: Gateway.WOMPI,
+        credentials: { [Gateway.WOMPI]: wompiCredentials },
+        maxRetries: 5,
+      });
+      expect(configurator.getMaxRetries()).toBe(5);
+    });
+  });
+
   describe("configure()", () => {
     it("should throw KitPagosError if gateway or credentials are missing", () => {
       const invalidOptions = {
