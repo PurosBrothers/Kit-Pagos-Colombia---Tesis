@@ -101,9 +101,69 @@ Para probar flujos únicos y recurrentes con 3DS, utiliza cualquier CVV, cualqui
 
 ---
 
-## 5. Transferencias Bancarias (Transfer In)
+## 5. Transferencias Bancarias (Transfer In) — **este es PSE en Kushki**
 
-Al solicitar el token de `transfer in`, la simulación se controla mediante el número de identificación del usuario. El estado final se consulta llamando al endpoint de consulta de estado:
+> **Respuesta a la pregunta que abrió el issue #68.** Sí: en Kushki, PSE **es** Transfer In, no es
+> un método aparte. La documentación oficial lo dice sin rodeos en
+> `docs.kushki.com/co/en/transfer-payments/overview/`: *"With Kushki your users can make payments
+> with wire transfers through PSE"*. No existe un método llamado `pse` en su API; el mecanismo se
+> llama `transfer`. Verificado el **15 de septiembre de 2026**.
+
+### 5.1. Kushki tiene dos versiones de PSE, y cambian la redirección
+
+Esta es la diferencia que hay que tener en cuenta antes de implementar, porque altera el flujo del
+usuario y no solo un nombre de campo:
+
+| Versión | Qué pasa tras crear la transacción |
+| --- | --- |
+| **PSE (1.0)** | La `redirectUrl` lleva al **portal de PSE**. Ahí el usuario llena campos y todavía debe pulsar "Ir al banco" |
+| **PSE Avanza (2.0)** | La `redirectUrl` lleva **directo al portal del banco** ya elegido, sin página intermedia |
+
+La documentación advierte que *"la URL de redirección dependerá de la versión de PSE que se esté
+usando"*. En PSE Avanza, además, si Kushki detecta que faltan datos del pagador, **inserta un
+formulario propio y una página de autorización de tratamiento de datos** antes de mandar al banco.
+Consecuencia para el SDK: el destino de la redirección **no es predecible desde el código**, depende
+de la configuración del comercio en Kushki. No se puede aseverar en la documentación del SDK que la
+redirección lleva al banco.
+
+### 5.2. Flujo completo (cinco pasos)
+
+A diferencia de la tarjeta, PSE en Kushki **exige pedir la lista de bancos antes de poder cobrar**:
+
+1. **Lista de bancos.** `GET /transfer/v1/bankList`, autenticando con el header
+   `Public-Merchant-Id`. La referencia de Kushki es explícita: *"This endpoint is required only for
+   Transfer In payment method in Colombia. In Chile, it is optional."* La lista se actualiza del
+   lado de Kushki, no se cachea a mano.
+2. **Token.** Se pide con `bankId` (de la lista del paso 1), `callbackUrl`, `userType`,
+   `documentType`, `documentNumber`, `email`, `currency` (`COP`) y el objeto `amount` descompuesto.
+3. **Iniciar.** `POST /transfer/v1/init` con el token, autenticando con `Private-Merchant-Id`.
+   Devuelve `redirectUrl`.
+4. **Redirigir** al pagador a esa `redirectUrl`.
+5. **Resultado.** `GET /transfer/v1/status/{token}` con `Private-Merchant-Id`, o por webhook. El
+   banco confirma a PSE, PSE notifica a Kushki y Kushki al comercio.
+
+**Verificación de las rutas contra la API UAT real.** Las tres se probaron sin credencial válida
+para confirmar que existen. El truco fue comparar contra una ruta inventada, porque AWS API Gateway
+responde distinto en cada caso:
+
+| Ruta | Respuesta sin credencial | Lectura |
+| --- | --- | --- |
+| `GET /transfer/v1/bankList` | `403` — `no identity-based policy allows...` | **Existe** |
+| `POST /transfer/v1/init` | `403` — `no identity-based policy allows...` | **Existe** |
+| `GET /transfer/v1/status/{token}` | `403` — `no identity-based policy allows...` | **Existe** |
+| `GET /transfer/v1/rutaQueNoExiste` (control) | `403` — `Missing Authentication Token` | **No existe** |
+
+### 5.3. Tipos de documento válidos en Colombia
+
+`CC` (cédula de ciudadanía), `NIT`, `CE` (cédula de extranjería), `TI` (tarjeta de identidad) y
+`PP` (pasaporte). El enum completo de la API incluye valores de otros países
+(`RUC`, `CURP`, `RFC`, `RUT`, `DNI`, `PAS`, `CI`, `DE`) que **no aplican a Colombia**: el adaptador
+no debe aceptarlos para una transacción colombiana solo porque la API los liste.
+
+### 5.4. Datos de prueba en Sandbox
+
+Al solicitar el token de `transfer in`, la simulación se controla mediante el número de
+identificación del usuario. El estado final se consulta llamando al endpoint de consulta de estado:
 
 | Estado Final / Escenario | Número de Identificación | Respuesta en Consulta de Estado |
 | --- | --- | --- |
@@ -111,6 +171,37 @@ Al solicitar el token de `transfer in`, la simulación se controla mediante el n
 | **Inicializada (Pendiente)** | `999999990` | `Pending` |
 | **Declinada** | `100000002` | `Not Authorized` |
 | **Fallida** | Cualquier otro número no especificado | `Failed` |
+
+> **Nota:** el estado `expiredTransaction` **solo aplica a México** según la referencia de Kushki, así
+> que para Colombia no debe esperarse por esta vía.
+
+### 5.5. Códigos de error de la red PSE
+
+Estos códigos no los genera Kushki: vienen de la red PSE y llegan tal cual en la consulta de estado
+o en el webhook. Son la razón por la que un `DECLINED` genérico pierde información útil:
+
+| Código | Causa |
+| --- | --- |
+| `00001` | Cancelación del pago por parte del cliente |
+| `00002` | Cuenta embargada |
+| `00003` | Cuenta inactiva |
+| `00004` | Cuenta no existe |
+| `00005` | Cuenta no habilitada |
+| `00006` | Cuenta no ha sido asignada |
+| `00007` | Cuenta saldada |
+| `00008` | El monto excede el límite autorizado |
+| `00009` | Entidad financiera no disponible |
+| `00010` | Fallas técnicas en la entidad financiera |
+| `00011` | Fondos insuficientes |
+| `00012` | Inconsistencia en datos de la transferencia |
+| `00018` | Cambio en estado de la transacción |
+| `00025` | Cancelada por PSE — Credibanco no confirmó el estado de la transacción |
+| `00026` | OTP no informado |
+| `00027` | OTP inválido |
+
+Vale notar `00001` y `00009`: el primero es **abandono del usuario**, no un rechazo del banco, y el
+segundo es **indisponibilidad de la entidad**, que es reintentable. Colapsarlos a `DECLINED` borra
+esa diferencia. El valor nativo debe preservarse en `rawStatus`.
 
 ---
 
