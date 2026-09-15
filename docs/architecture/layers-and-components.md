@@ -24,6 +24,9 @@ kit-pagos-colombia/
 │   │   │   └── Transaction.ts                  <-- Transaction Entity (única entidad con identidad propia)
 │   │   ├── value-objects/
 │   │   │   ├── Amount.ts                       <-- Value Object: monto, toMinorUnits(), equals()
+│   │   │   ├── big-arithmetic.ts               <-- Único importador de `big.js`; opera solo sobre string (punto 33)
+│   │   │   ├── minor-units.ts                  <-- Conversión unidad mayor/menor por exponente ISO 4217 (punto 33)
+│   │   │   ├── TaxBreakdown.ts                 <-- Value Object: desglose de impuestos (IVA, base gravable)
 │   │   │   ├── Currency.ts                     <-- Value Object: código ISO 4217, "COP" por defecto
 │   │   │   ├── OrderReference.ts               <-- Value Object: referencia de orden del comercio
 │   │   │   ├── Payer.ts                        <-- Value Object: datos del pagador (email obligatorio)
@@ -38,15 +41,28 @@ kit-pagos-colombia/
 │   │   ├── errors/
 │   │   │   └── SdkError.ts                     <-- Excepción tipada unificada (code, gateway, originalPayload)
 │   │   └── services/
-│   │       └── WebhookVerifier.ts              <-- Webhook Verifier (servicio de dominio sin estado propio)
+│   │       ├── WebhookVerifier.ts              <-- Webhook Verifier (despachador por pasarela, sin estado propio)
+│   │       └── webhooks/                       <-- Una implementación por pasarela (punto 34)
+│   │           ├── GatewayWebhookHandler.ts    <-- Interfaz: verify() + parse() por pasarela
+│   │           ├── WompiWebhookHandler.ts      <-- SHA-256 sin clave, propiedades declaradas en el cuerpo
+│   │           ├── RapydWebhookHandler.ts      <-- HMAC-SHA256 base64, un tipo de evento por resultado
+│   │           ├── MercadoPagoWebhookHandler.ts <-- HMAC-SHA256 hex, notificación de 2 pasos
+│   │           ├── KushkiWebhookHandler.ts     <-- HMAC-SHA256 hex sobre cuerpo + x-kushki-id
+│   │           └── signature-utils.ts          <-- Único importador de `crypto`; comparación en tiempo constante
 │   │
 │   ├── application/                            <-- Capa de Aplicación (Puertos y Servicios)
 │   │   ├── ports/
 │   │   │   └── PaymentGatewayPort.ts           <-- Payment Gateway Port (Contrato hexagonal)
 │   │   └── services/
-│   │       ├── ResponseNormalizer.ts           <-- Response Normalizer
+│   │       ├── ResponseNormalizer.ts           <-- Response Normalizer (despachador por pasarela)
+│   │       ├── normalizers/                    <-- Una implementación por pasarela (punto 34)
+│   │       │   ├── GatewayResponseNormalizer.ts <-- Interfaz: normalize(rawResponse) : Transaction
+│   │       │   ├── WompiResponseNormalizer.ts  <-- Monto en centavos, datos envueltos en `data`
+│   │       │   ├── MercadoPagoResponseNormalizer.ts <-- Monto en pesos, pago en la raíz
+│   │       │   ├── RapydResponseNormalizer.ts  <-- Monto en pesos, estados ambiguos (CLO/ERR)
+│   │       │   └── payload-utils.ts            <-- Parseo y validación compartidos por las tres
 │   │       ├── RetryHandler.ts                 <-- Retry Handler (Resiliencia & Backoff)
-│   │       └── ErrorHandler.ts                 <-- Error Handler (Mapeo de excepciones)
+│   │       └── ErrorHandler.ts                 <-- Error Handler (dividido por forma del error, no por pasarela)
 │   │
 │   └── infrastructure/                         <-- Capa de Infraestructura (Adaptadores y Facade)
 │       ├── config/
@@ -56,6 +72,7 @@ kit-pagos-colombia/
 │       ├── adapters/
 │       │   ├── WompiAdapter.ts                 <-- Wompi Adapter
 │       │   ├── RapydAdapter.ts                 <-- Rapyd Adapter
+│       │   ├── rapyd-signature.ts              <-- Firma de requests salientes de Rapyd (punto 33)
 │       │   ├── MercadoPagoAdapter.ts           <-- Mercado Pago Adapter
 │       │   └── KushkiAdapter.ts                <-- Kushki Adapter
 │       └── facade/
@@ -179,7 +196,15 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 ### 2.9. Response Normalizer (`src/application/services/ResponseNormalizer.ts`)
 
 - **Responsabilidad:** Recibe la respuesta nativa de cualquier adaptador y la transforma al modelo de dominio unificado del SDK.
-- **Mapeo de estados:** Traduce los estados crudos de cada proveedor al enum `TransactionStatus` con valores `APPROVED`, `DECLINED`, `PENDING`, `EXPIRED`, `VOIDED` y `ERROR`. Gestiona explícitamente el caso `APPROVAL` de Kushki como equivalente a `APPROVED`.
+- **Estructura — despachador con una implementación por pasarela:** `ResponseNormalizer` no traduce nada por sí mismo. Conserva su única firma pública `normalize(rawResponse, gateway): Transaction` y delega en el normalizador registrado para la pasarela recibida, bajo `src/application/services/normalizers/`:
+  - `GatewayResponseNormalizer` — interfaz con `normalize(rawResponse): Transaction`.
+  - `WompiResponseNormalizer` — monto en centavos (`amount_in_cents`), datos envueltos en `data`, divisa en `currency`.
+  - `MercadoPagoResponseNormalizer` — monto en pesos (`transaction_amount`), pago en la raíz del payload, divisa en `currency_id`.
+  - `RapydResponseNormalizer` — monto en pesos, datos envueltos en `data`, divisa en `currency_code`, y dos estados que exigen leer un segundo campo para desambiguarse (`CLO` necesita `paid`, `ERR` necesita `failure_code`).
+  - `payload-utils.ts` — parseo del payload, validación del objeto de datos y mapeo de errores de objeto de valor, que las tres ramas repetían textualmente.
+  
+  Hasta el punto 34 las tres traducciones vivían como ramas de un `switch` dentro de `normalize()`, que medía 360 de las 371 líneas del archivo y tenía complejidad ciclomática 62. Agregar una pasarela significaba editar ese método; ahora significa agregar una clase y registrarla, sin tocar las otras traducciones.
+- **Mapeo de estados:** Cada normalizador traduce los estados crudos de su proveedor al enum `TransactionStatus` con valores `APPROVED`, `DECLINED`, `PENDING`, `EXPIRED`, `VOIDED` y `ERROR`. El caso `APPROVAL` de Kushki (que no es `APPROVED`) se gestiona en su manejador de webhook, ya que el normalizador de respuestas de Kushki se incorpora en la Iteración 2.
 - **Construcción de entidad:** Una vez normalizado el estado, construye y retorna la entidad `Transaction` con todos los campos del dominio.
 - **Impacto en métricas CK:** Al centralizar la normalización, el código cliente no necesita referenciar los tipos de respuesta de ninguna pasarela, lo que reduce directamente su CBO (Coupling Between Object Classes) — indicador clave de la evaluación del framework.
 
@@ -189,6 +214,9 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 
 - **Patrón Arquitectónico:** Servicio de Dominio (DDD) sin estado propio.
 - **Responsabilidad:** Verifica la autenticidad de los webhooks entrantes de cada pasarela mediante `verify(payload, headers, secret, gateway): boolean`, delegando internamente en la lógica de verificación de firma correspondiente al Gateway recibido.
+- **Estructura — despachador con un manejador por pasarela:** desde el punto 34, esa delegación interna es explícita y no una descripción aproximada. Cada pasarela implementa la interfaz `GatewayWebhookHandler` bajo `src/domain/services/webhooks/`, que agrupa `verify(payload, headers, secret)` y `parse(payload)` en la misma clase. Están juntos a propósito: es como se leen y se corrigen, porque al ajustar la firma de una pasarela no hay que saltar a otro archivo para ver cómo interpreta sus eventos. `signature-utils.ts` es el único importador de `crypto` y concentra la comparación en tiempo constante, que es el detalle donde un error silencioso se vuelve una vulnerabilidad.
+
+  Antes del punto 34, `verify()` y `parse()` tenían cada uno un `switch` de cuatro ramas; `parse()` estaba en complejidad ciclomática 36 y la clase en WMC 47.
 - **Implementación por pasarela:**
   - **Wompi:** SHA-256 sobre cadena de propiedades + timestamp + secreto. Implementación completa y validada.
   - **Rapyd:** `Base64(HMAC-SHA256(url_path + salt + timestamp + access_key + secret_key + body_string))`. **Implementado y validado** (`Gateway.RAPYD`), incluyendo el método `parse()` con el mapeo completo de estados (`PAYMENT_COMPLETED`, `PAYMENT_SUCCEEDED`, `PAYMENT_FAILED` con desambiguación `DECLINED`/`ERROR` por `failure_code`, `PAYMENT_EXPIRED`, `PAYMENT_CANCELED`). Ver `architecture-log.md`, puntos 16 y 18, para el detalle de la migración desde la fórmula previa de PayU.
@@ -228,6 +256,13 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 ### 2.14. Error Handler (`src/application/services/ErrorHandler.ts`)
 
 - **Responsabilidad:** Convierte cualquier error no recuperable en una excepción `SdkError` tipada.
+- **Estructura — división por forma del error, no por pasarela:** a diferencia de `ResponseNormalizer` y `WebhookVerifier`, este componente **no** se divide por pasarela. Los fallos que traduce son de red y de protocolo HTTP, iguales para las cuatro; lo que varía es la **forma** del fallo entrante, y es por esa forma que reparte el trabajo:
+  - `fromHttpStatus` — respuesta HTTP con status, de la forma `{ status, body? }`.
+  - `fromNativeError` — instancia de `Error` de Node.js o JavaScript.
+  - String suelto y cualquier otro valor, resueltos en el propio despachador.
+  
+  Las funciones puras (`sanitize`, `formatGatewayName`, `mapHttpStatus`) viven a nivel de módulo, y los predicados `hasConnectionSignal` y `hasTimeoutSignal` quedaron compartidos con `classifyError`, que duplicaba esas mismas cadenas de condiciones. Antes del punto 34, `handle()` concentraba todo en complejidad ciclomática 35.
+- **Asimetría conocida entre `classifyError` y `handle()`:** un `Error` cuyo mensaje contenga `"network"` se clasifica como reintentable en `classifyError`, pero `handle()` no reconoce esa señal y lo traduce a `UNKNOWN_ERROR`, que vuelve a clasificarse como final. El mismo error es reintentable antes de pasar por `handle()` y final después. Es preexistente y no intencional; está registrada en `architecture-log.md`, punto 34, pendiente de decidir si se corrige.
 - **Estructura de SdkError:** extiende la clase `Error` nativa de JavaScript y añade tres atributos:
   - `code`: código normalizado del enum `SdkErrorCode` (valores: `INVALID_CREDENTIALS`, `GATEWAY_TIMEOUT`, `CONNECTION_FAILED`, `RATE_LIMIT_EXCEEDED`, `RESOURCE_NOT_FOUND`, `WEBHOOK_SIGNATURE_INVALID`, `MAX_RETRIES_EXCEEDED`, `MALFORMED_RESPONSE`, `UNSUPPORTED_OPERATION`, `UNKNOWN_ERROR`).
   - `gateway`: la pasarela (`Gateway`) que originó el error.

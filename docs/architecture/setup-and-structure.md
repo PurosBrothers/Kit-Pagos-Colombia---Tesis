@@ -199,9 +199,12 @@ La evaluación del proyecto requiere obtener evidencia sobre el impacto del SDK 
 
 Para esto se utilizarán métricas relacionadas con la calidad y complejidad del código, incluyendo:
 
-* **WMC (Weighted Methods per Class):** permite analizar la complejidad asociada a los métodos de una clase.
+* **WMC (Weighted Methods per Class):** suma de la complejidad ciclomática de todos los métodos y constructores de la clase. Acota cuánto hace la clase en total.
+* **MAX_CC:** la complejidad ciclomática más alta entre los métodos de la clase. Acota cuánto hace un método, que es la unidad en la que se lee y se corrige el código. Hace falta además de WMC porque una clase puede tener un total aceptable y esconder un método ilegible.
 * **CBO (Coupling Between Objects):** mide el nivel de acoplamiento entre las clases.
 * **RFC (Response For a Class):** representa la cantidad de métodos que pueden ser ejecutados como respuesta a una interacción con una clase.
+
+Las fórmulas exactas, sus umbrales y el registro de excepciones documentadas están en `docs/project-management/methodology.md` §6.1 y §6.2. Se fijaron ahí porque una misma métrica admite definiciones que dan números incomparables, y esa ambigüedad ya dejó pasar un método de 360 líneas con WMC 1 (ver `docs/architecture/architecture-log.md`, punto 34).
 
 La herramienta `ts-morph` permitirá analizar la estructura del código TypeScript y obtener información necesaria para calcular o apoyar la recolección de estas métricas.
 

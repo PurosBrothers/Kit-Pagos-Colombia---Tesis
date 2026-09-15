@@ -62,6 +62,18 @@ package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
     parse(payload, gateway) : WebhookEvent
   }
 
+  interface GatewayWebhookHandler <<Strategy>> #90CAF9 {
+    verify(payload, headers, secret) : boolean
+    parse(payload) : WebhookEvent
+  }
+
+  together {
+    class WompiWebhookHandler #BBDEFB
+    class RapydWebhookHandler #BBDEFB
+    class MercadoPagoWebhookHandler #BBDEFB
+    class KushkiWebhookHandler #BBDEFB
+  }
+
   class SdkError <<Error>> #F8BBD0 {
     code : SdkErrorCode
     gateway : Gateway
@@ -91,14 +103,52 @@ package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
   Transaction "0..1" *-- RejectionReason
   Transaction --> TransactionStatus : estado
   GatewayTransactionId --> Gateway
+
+  WebhookVerifier o--> GatewayWebhookHandler : despacha por Gateway
+  WompiWebhookHandler ..|> GatewayWebhookHandler
+  RapydWebhookHandler ..|> GatewayWebhookHandler
+  MercadoPagoWebhookHandler ..|> GatewayWebhookHandler
+  KushkiWebhookHandler ..|> GatewayWebhookHandler
 }
 
-package "APLICACION (Puertos)" #FFFFFF {
+package "APLICACION (Puertos y Servicios)" #FFFFFF {
   interface PaymentGatewayPort <<Puerto>> #90CAF9 {
     createPayment(request) : Promise<Transaction>
     getStatus(gatewayTransactionId) : Promise<Transaction>
     verifySignature(payload, headers, secret) : boolean
   }
+
+  class ResponseNormalizer <<Servicio de Aplicacion>> #2E75B6 {
+    normalize(rawResponse, gateway) : Transaction
+  }
+
+  interface GatewayResponseNormalizer <<Strategy>> #90CAF9 {
+    normalize(rawResponse) : Transaction
+  }
+
+  together {
+    class WompiResponseNormalizer #5B9BD5
+    class RapydResponseNormalizer #5B9BD5
+    class MercadoPagoResponseNormalizer #5B9BD5
+  }
+
+  class RetryHandler <<Resilience Utility>> #2E75B6 {
+    execute(operation) : Promise<T>
+    isTransient(error) : boolean
+  }
+
+  class ErrorHandler <<Servicio de Aplicacion>> #2E75B6 {
+    handle(rawError, gateway) : SdkError
+    --
+    <i>divide por forma del error,</i>
+    <i>no por pasarela</i>
+  }
+
+  RetryHandler --> ErrorHandler : MAX_RETRIES_EXCEEDED
+  ResponseNormalizer o--> GatewayResponseNormalizer : despacha por Gateway
+  WompiResponseNormalizer ..|> GatewayResponseNormalizer
+  RapydResponseNormalizer ..|> GatewayResponseNormalizer
+  MercadoPagoResponseNormalizer ..|> GatewayResponseNormalizer
 }
 
 package "INFRAESTRUCTURA (Facade, Factory y Adapters)" #FFFFFF {
@@ -118,37 +168,26 @@ package "INFRAESTRUCTURA (Facade, Factory y Adapters)" #FFFFFF {
     create(gateway) : PaymentGatewayPort
   }
 
-  class WompiAdapter <<Adapter Pattern>> #5B9BD5
-  class RapydAdapter <<Adapter Pattern>> #5B9BD5
-  class MercadoPagoAdapter <<Adapter Pattern>> #5B9BD5
-  class KushkiAdapter <<Adapter Pattern>> #5B9BD5
-
-  class ResponseNormalizer <<Domain Service>> #2E75B6 {
-    normalize(rawResponse, gateway) : Transaction
-  }
-
-  class RetryHandler <<Resilience Utility>> #2E75B6 {
-    execute(operation) : Promise<T>
-    isTransient(error) : boolean
-  }
-
-  class ErrorHandler <<Domain Service>> #2E75B6 {
-    handle(rawError, gateway) : SdkError
+  together {
+    class WompiAdapter <<Adapter Pattern>> #5B9BD5
+    class RapydAdapter <<Adapter Pattern>> #5B9BD5
+    class MercadoPagoAdapter <<Adapter Pattern>> #5B9BD5
+    class KushkiAdapter <<Adapter Pattern>> #5B9BD5
   }
 
   KitPagos --> SDKConfigurator : consulta
   KitPagos --> GatewayFactory : solicita adapter
   KitPagos --> RetryHandler : envuelve llamada
   KitPagos ..> WebhookVerifier : valida webhook
+  KitPagos --> ResponseNormalizer : normaliza respuesta
   GatewayFactory ..> PaymentGatewayPort : instancia
   WompiAdapter ..|> PaymentGatewayPort
   RapydAdapter ..|> PaymentGatewayPort
   MercadoPagoAdapter ..|> PaymentGatewayPort
   KushkiAdapter ..|> PaymentGatewayPort
-  RetryHandler --> ErrorHandler : MAX_RETRIES_EXCEEDED
-  ResponseNormalizer --> Transaction : construye
-  KitPagos --> ResponseNormalizer : normaliza respuesta
 }
+
+GatewayResponseNormalizer --> Transaction : construye
 
 note bottom of KitPagos
   Diseno "facade directo": sin capa
@@ -156,6 +195,16 @@ note bottom of KitPagos
   Reemplaza al diagrama anterior con
   CrearPagoUseCase / WebhookController
   (ver architecture-log.md, punto 7).
+end note
+
+note right of GatewayResponseNormalizer
+  Patron Strategy: el eje de variacion
+  del SDK es la pasarela, y se expresa
+  con una implementacion por pasarela
+  detras de una interfaz, no con ramas
+  de un condicional. Agregar Kushki es
+  agregar una clase, sin tocar las otras.
+  (ver architecture-log.md, punto 34).
 end note
 
 @enduml

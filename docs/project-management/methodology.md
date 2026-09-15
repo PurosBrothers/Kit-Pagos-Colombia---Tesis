@@ -111,10 +111,38 @@ Un requerimiento se considera implementado exitosamente solo cuando se cumplen *
 1. El pull request asociado fue aprobado por al menos un integrante distinto al autor.
 2. Las pruebas automatizadas relevantes pasan en el pipeline de CI con cobertura igual o superior al 80%.
 3. El ítem en el tablero de seguimiento está en estado completado.
-4. Los valores de WMC, CBO y RFC de las clases modificadas están dentro de los umbrales definidos (WMC ≤ 15, CBO ≤ 5, RFC ≤ 20).
+4. Los valores de WMC, CBO, RFC y MAX_CC de las clases modificadas están dentro de los umbrales definidos (WMC ≤ 20, CBO ≤ 5, RFC ≤ 20, MAX_CC ≤ 10).
 5. La Matriz de Trazabilidad ha sido actualizada para reflejar el requerimiento como implementado.
 
-Si un valor de WMC, CBO o RFC supera su umbral durante la revisión de un pull request, se registra como defecto y el código no se aprueba hasta resolver la violación. Si la violación persiste dos iteraciones consecutivas sobre la misma clase, se convoca una sesión técnica de refactorización.
+### 6.1. Cómo se calcula cada métrica
+
+Los umbrales de la condición 4 solo son verificables si la fórmula está fijada, porque una misma métrica admite definiciones que dan números incomparables. Esta ambigüedad ya costó una vez: mientras la condición 4 decía "WMC ≤ 15" sin definir el cálculo, el script lo implementó como conteo de métodos, y así una clase con un único método de 360 líneas —un `switch` de cuatro ramas con tres `switch` anidados dentro— puntuaba WMC 1, el mejor valor de todo el SDK. La métrica de complejidad era ciega a la complejidad, y premiaba concentrar código en un solo método. El detalle completo está en `docs/architecture/architecture-log.md`, punto 34.
+
+Las cuatro métricas se calculan sobre `sdk/src/**/*.ts` (excluyendo pruebas) con `npm run metrics`, implementado en `sdk/scripts/ck-metrics.ts` mediante análisis del AST con `ts-morph`:
+
+| Métrica | Fórmula | Umbral | Qué acota |
+|---|---|---|---|
+| **WMC** (Weighted Methods per Class) | Suma de la complejidad ciclomática de todos los métodos y constructores de la clase. Es la definición de Chidamber & Kemerer. | ≤ 20 | Cuánto hace la clase en total |
+| **CC** (complejidad ciclomática de un método) | `1 + puntos de decisión`. Cuentan `if`, `case`, `for`, `for-in`, `for-of`, `while`, `do`, `catch`, el operador ternario, y los operadores de cortocircuito `&&`, `\|\|` y `??`. No cuentan `default` (es el camino que ya existía si ningún `case` coincide) ni el encadenamiento opcional `?.` (cortocircuita un acceso a propiedad, no una rama que el lector deba seguir). | — | Insumo de WMC y MAX_CC |
+| **MAX_CC** | La CC más alta entre los métodos de la clase. | ≤ 10 | Cuánto hace un método |
+| **CBO** (Coupling Between Objects) | Número de clases externas distintas, importadas en el archivo, que aparecen en las firmas de métodos y constructores (tipos de parámetro y de retorno). | ≤ 5 | Con cuántas clases habla |
+| **RFC** (Response For a Class) | Número de métodos y constructores, más el número de nombres de método distintos invocados con notación de punto cuyo receptor no empieza por `this.`. | ≤ 20 | Tamaño del conjunto de respuesta |
+
+Tres consecuencias de estas definiciones que conviene tener presentes al leer un reporte:
+
+- **WMC no baja al extraer métodos.** La CC de un método es `1 + D`; al partirlo en *k* métodos los puntos de decisión se reparten pero cada método nuevo aporta su propio `1`, así que el total pasa de `1 + D` a `k + D`. Bajar el WMC de una clase exige **eliminar lógica duplicada o dividir la clase**, no reorganizar sus métodos.
+- **WMC y MAX_CC responden preguntas distintas y las dos hacen falta.** Una clase puede tener un total aceptable y esconder un método ilegible; y una clase cohesiva puede tener un total alto compuesto enteramente de métodos triviales. `Amount` es el segundo caso: WMC 23 formado por 12 métodos cuyo máximo es CC 4.
+- **RFC usa el conteo de métodos, no el WMC.** Alimentarlo con el WMC ponderado lo haría crecer con cada `if` agregado dentro de un método existente, que no es lo que mide el tamaño de un conjunto de respuesta.
+
+**Umbrales:** el WMC subió de 15 a 20 al pasar de conteo de métodos a suma de complejidad ciclomática. No es un relajamiento del criterio: son escalas distintas y el 15 original no era comparable, y el cambio viene acompañado de `MAX_CC ≤ 10`, una restricción nueva que antes no existía y que es más estricta en lo que importa. El 20 es el valor que reporta el SATC de NASA para WMC canónico; el 10 de MAX_CC es el umbral clásico de McCabe.
+
+### 6.2. Excepciones documentadas
+
+Una violación de umbral puede ser consecuencia directa de una decisión arquitectónica ya registrada y no un defecto de diseño. Para esos casos el script mantiene un registro de excepciones (`KNOWN_EXCEPTIONS` en `ck-metrics.ts`), y cada entrada debe enlazar al punto del `architecture-log.md` que la justifica. **Agregar una clase a ese registro sin ese registro previo no es una resolución válida:** deja el umbral verde en el reporte y rojo en la realidad.
+
+El criterio de admisión es que la violación no sea reorganizable sin romper una decisión de diseño deliberada. Las excepciones vigentes son el CBO de `Transaction` (punto 22) y el WMC de `Amount` (punto 34).
+
+Si un valor de WMC, CBO, RFC o MAX_CC supera su umbral durante la revisión de un pull request, y no está cubierto por una excepción documentada, se registra como defecto y el código no se aprueba hasta resolver la violación. Si la violación persiste dos iteraciones consecutivas sobre la misma clase, se convoca una sesión técnica de refactorización.
 
 Si la tasa de completitud al cierre de una semana es inferior al 60% de las tareas planificadas, el coordinador convoca una reunión extraordinaria dentro de las siguientes 24 horas para un análisis de causa raíz.
 
