@@ -13,12 +13,14 @@ export interface SDKOptions {
    * URL por defecto de su pasarela.
    */
   baseUrl?: string;
+  maxRetries?: number;
 }
 
 export class SdkConfigurator {
   private activeGateway?: Gateway;
   private credentialsMap: Map<Gateway, Credentials> = new Map();
   private baseUrl?: string;
+  private maxRetries?: number;
 
   configure(options: SDKOptions): void {
     const gateway = options.gateway;
@@ -34,6 +36,7 @@ export class SdkConfigurator {
     this.activeGateway = gateway;
     this.baseUrl = options.baseUrl;
     this.credentialsMap.clear();
+    this.maxRetries = options.maxRetries;
 
     Object.entries(credentials).forEach(([key, value]) => {
       this.credentialsMap.set(key as Gateway, value as Credentials);
@@ -55,6 +58,10 @@ export class SdkConfigurator {
   /** Endpoint configurado para la pasarela activa, si el comercio lo sobrescribio. */
   getBaseUrl(): string | undefined {
     return this.baseUrl;
+  }
+
+  getMaxRetries(): number | undefined {
+    return this.maxRetries;
   }
 
   getCredentials(gateway: Gateway): Credentials {

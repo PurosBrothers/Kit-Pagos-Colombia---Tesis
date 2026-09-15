@@ -6,6 +6,7 @@ import { GatewayFactory } from "../factories/GatewayFactory";
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
+import { RetryHandler } from "../../application/services/RetryHandler";
 
 /**
  * Unica clase que el desarrollador que consume el SDK instancia directamente.
@@ -20,12 +21,11 @@ import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode"
  * RF-04 ("retornar un evento normalizado si la firma es valida"), ver
  * docs/architecture/architecture-log.md, punto 6.
  *
- * El diagrama de clases hexagonal del SAD muestra que esta fachada envuelve
- * la llamada en RetryHandler. Todavia no lo hace, porque RetryHandler sigue
- * siendo un esqueleto y reintentar contra la API de Simulacion, que responde
- * de forma determinista, no ejercitaria nada. Se integra en la Iteracion 2
- * junto con las pasarelas reales (ver docs/architecture/architecture-log.md,
- * punto 20).
+ * La operacion getPaymentStatus() esta envuelta en RetryHandler con retroceso
+ * exponencial y jitter para tolerar fallos transitorios de red (SAD seccion 2.13).
+ * Por seguridad transaccional e idempotencia, createPayment() NO se envuelve
+ * en RetryHandler para evitar duplicidad de cobros (doble debito) ante timeouts
+ * (ver docs/architecture/architecture-log.md, punto 35).
  */
 
 
@@ -64,13 +64,17 @@ export class KitPagos {
   }
 
   /**
-   * Para Wompi propaga KitPagosError(UNSUPPORTED_OPERATION): la API de Simulacion
-   * todavia no expone consulta de estado, solo creacion (issue #27).
+   * Consulta el estado de una transaccion por su identificador.
+   * Envuelto en RetryHandler para tolerar fallos transitorios de red con retroceso exponencial.
    */
   async getPaymentStatus(id: string): Promise<Transaction> {
     const adapter = this.resolveAdapter();
-    return adapter.getStatus(id);
+    const retryHandler = new RetryHandler({
+      maxRetries: this.configurator.getMaxRetries(),
+    });
+    return retryHandler.execute(() => adapter.getStatus(id));
   }
+
 
   validateWebhook(
     payload: string,
