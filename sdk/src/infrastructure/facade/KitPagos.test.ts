@@ -9,6 +9,7 @@ import { Credentials } from "../../domain/value-objects/Credentials";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
+import { expectTransaction } from "../../test-support/payment-result";
 
 describe("KitPagos", () => {
   const originalFetch = global.fetch;
@@ -61,7 +62,7 @@ describe("KitPagos", () => {
         json: async () => approvedWompiResponse,
       });
 
-      const transaction = await buildConfiguredSdk().createPayment(validRequest);
+      const transaction = expectTransaction(await buildConfiguredSdk().createPayment(validRequest));
 
       expect(transaction.isApproved()).toBe(true);
       expect(transaction.isFinal()).toBe(true);

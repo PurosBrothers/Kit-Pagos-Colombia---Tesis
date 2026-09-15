@@ -1,4 +1,5 @@
 import { Transaction } from "../../domain/entities/Transaction";
+import { PaymentResult } from "../../domain/value-objects/PaymentResult";
 import { WebhookEvent } from "../../domain/value-objects/WebhookEvent";
 import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
 import { SdkConfigurator, SDKOptions } from "../config/SDKConfigurator";
@@ -58,7 +59,24 @@ export class KitPagos {
     return this.factory.create(gateway, credentials, this.configurator.getBaseUrl());
   }
 
-  async createPayment(request: CreatePaymentRequest): Promise<Transaction> {
+  /**
+   * Crea un pago.
+   *
+   * Devuelve `PaymentResult` y no `Transaction` desde el issue #64. Hay que
+   * distinguir los dos casos antes de usar el resultado:
+   *
+   * ```ts
+   * const result = await kit.createPayment(request);
+   * if (result.outcome === "REDIRECT_REQUIRED") {
+   *   return res.redirect(result.redirect.redirectUrl);
+   * }
+   * console.log(result.transaction.getStatus());
+   * ```
+   *
+   * El compilador obliga a esa distinción a propósito: con un campo opcional en
+   * `Transaction`, olvidar la redirección compilaba y dejaba el pago colgado.
+   */
+  async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
     const adapter = this.resolveAdapter();
     return adapter.createPayment(request);
   }

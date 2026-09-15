@@ -620,6 +620,69 @@ El tiempo total de espera acumulado en el peor escenario (3 reintentos antes de 
 
 ---
 
+### 36. `createPayment()` devolvía `Transaction`, y `Transaction` no puede expresar «falta redirigir»
+
+**Responsable de corregirlo en el SAD:** Joan (sección 9.1.1, Payment Facade, y sección 13, ADR) para la firma del método y el ADR del tipo de resultado; Henao (sección 3, Modelo de dominio) para el `Domain Class Diagram.png`, que gana `PaymentMethod` y el tipo `PaymentResult`; David (sección 15.1, Núcleo del dominio) para el inventario de objetos de valor.
+
+**Encontrado:** El SAD, en la sección 9.1.1 y en el `Component Diagram - C4.png`, define `createPayment()` devolviendo `Transaction`. Al implementar PSE (issue #64) se encontró que esa firma no puede expresar el resultado más común de PSE: que el pago arrancó y el pagador tiene que ir a la URL de su banco.
+
+No era un problema teórico ni futuro. Ya estaba causando pérdida de datos en Rapyd, con tarjeta y sin PSE de por medio: un pago que dispara 3DS responde `status: "ACT"` con `next_action: "3d_verification"` y un `redirect_url`, y el pipeline lo trataba así:
+
+1. `RapydResponseNormalizer.mapStatus()` traduce `"ACT"` a `PENDING`, que es correcto.
+2. `Transaction` no tiene ningún campo donde guardar una URL, así que `redirect_url` **se descartaba en silencio**.
+3. El comercio recibía una transacción `PENDING` indistinguible de un pago que simplemente está esperando confirmación, y se ponía a hacer polling.
+4. El pago nunca avanzaba, porque lo que faltaba era una redirección que el comercio no sabía que debía hacer, y expiraba.
+
+**Decisión:** `createPayment()` devuelve `PaymentResult`, una unión etiquetada por el campo `outcome` con dos ramas: `TRANSACTION`, que trae la `Transaction` de siempre, y `REDIRECT_REQUIRED`, que trae un `PendingRedirect` con `redirectUrl`, `gatewayTransactionId` y `rawStatus`.
+
+Se evaluaron dos formas y se eligió la unión.
+
+*Opción A — campo opcional en `Transaction`.* Agregarle `redirectUrl?: string`. Se descartó porque **olvidarlo compila igual**, que es exactamente cómo se llegó al defecto de arriba. El comercio lee `getStatus()`, ve `PENDING`, hace polling y nunca redirige; el compilador no tiene de qué agarrarse. Además le daría a la única Entity del dominio un campo que solo tiene sentido mientras la transacción no existe todavía.
+
+*Opción B — unión etiquetada.* El campo `transaction` **no existe** en el tipo hasta que el llamante descarta la rama de redirección. Olvidar la redirección deja de compilar. El costo es que rompe a todos los llamantes, y ese costo se consideró la característica y no el defecto: son exactamente los sitios que tenían el error latente.
+
+`PendingRedirect` incluye `gatewayTransactionId` a propósito, y no solo la URL: sin él, un pago redirigido sería irrastreable si el pagador nunca vuelve del banco.
+
+**Decisión asociada: el objeto de valor `PaymentMethod`.** `CreatePaymentRequest` gana un campo opcional `paymentMethod`, con constructores nombrados `card(token)`, `pse({ bankCode, payerKind })` y `cash({ network })`. Es opcional porque cuando se omite cada pasarela aplica su método por defecto, que en las cuatro es tarjeta, y un pago con tarjeta no tiene por qué declarar que es con tarjeta.
+
+Dos cosas que este objeto deliberadamente **no** hace:
+
+- **No lleva el documento del pagador.** Ese dato vive en `Payer`, que ya declaraba `documentType` y `documentNumber` sin usar. Duplicarlo daría dos fuentes de verdad para el mismo campo. Lo que sí aporta `PaymentMethod` es `requiresPayerDocument()`, que responde cuándo ese dato pasa de opcional a obligatorio: solo en PSE, y en las cuatro pasarelas, porque es requisito de la red y no de un proveedor.
+- **No valida ni traduce el código de banco.** `bankCode` es un string opaco con alcance de pasarela, y esta es la limitación honesta del modelo. Las cuatro piden el banco de PSE y ninguna usa el mismo identificador: Wompi lo recibe en `financial_institution_code`, Kushki en `bankId` (de `GET /transfer/v1/bankList`), y Rapyd no lo recibe como campo sino que lo concatena en el nombre del método, con el patrón `co_pse_{banco}_bank` (punto 19). **La consecuencia para la tesis es que el código de banco es el único dato del contrato que el comercio no puede reutilizar al cambiar de pasarela**, a diferencia del monto, la divisa, la referencia o el pagador. La abstracción unifica la forma de pedirlo, no el valor.
+
+**Consecuencia en las métricas CK, y cómo se resolvió sin gastar una excepción:** agregar `PaymentResult` a la firma de `createPayment()` subió el CBO de los tres adaptadores de 5 a 6, fuera del umbral de la Definition of Done. El CBO 6 era `{Credentials, ResponseNormalizer, WebhookVerifier, CreatePaymentRequest, PaymentResult, Transaction}`.
+
+Se resolvió sacando `ResponseNormalizer` del constructor: ahora se inicializa como campo (`private readonly normalizer = new ResponseNormalizer()`). Es el mismo patrón que el punto 35 aplicó a `RetryHandler` en `KitPagos` y que el docblock de `WompiAdapter` ya documentaba para `ErrorHandler`, así que no se está inventando una salida para este caso. No se pierde capacidad de prueba: el normalizador no tiene estado ni configuración, y ninguna de las 344 pruebas lo sustituía —la inyección existía sin usarse. La única llamada afectada fue una prueba que pasaba el verificador de webhooks en cuarta posición.
+
+Se descartó declarar una `KNOWN_EXCEPTIONS` para los tres adaptadores. El criterio de admisión de ese registro, fijado en el punto 33, es que la violación sea consecuencia de una decisión arquitectónica registrada y no algo reorganizable; acá era reorganizable, y con un patrón que el proyecto ya usaba dos veces.
+
+**Implementación:**
+
+| Archivo | Qué |
+|---|---|
+| `domain/value-objects/PaymentMethod.ts` | Objeto de valor nuevo. Constructor privado; `card`/`pse`/`cash` como constructores nombrados, para que `new PaymentMethod("PSE")` sin banco sea inexpresable |
+| `domain/value-objects/PaymentResult.ts` | Unión etiquetada, `PendingRedirect`, y las funciones `transactionResult()` y `redirectRequired()` |
+| `application/services/normalizers/rapyd-redirect.ts` | `extractRapydRedirect()`, función pura que detecta la redirección en la respuesta cruda de Rapyd |
+| `application/ports/PaymentGatewayPort.ts` | `createPayment` devuelve `PaymentResult`; `CreatePaymentRequest` gana `paymentMethod?` |
+| Los tres adaptadores y `KitPagos` | Adaptados al contrato. Rapyd es el único que hoy toma la rama `REDIRECT_REQUIRED` |
+| `test-support/payment-result.ts` | `expectTransaction()` y `expectRedirect()` para las pruebas. Se dejaron fuera de la API pública **porque lanzan**: una función de desenvolver en la API sería el atajo para saltarse la distinción que este punto introdujo |
+
+La regla de detección en Rapyd es la presencia de un `redirect_url` no vacío, y no el valor de `next_action`. Se eligió así porque `next_action` es un enum cuyo catálogo completo no se pudo verificar contra el sandbox, y una lista incompleta fallaría hacia el lado peligroso: trataría una redirección real como pago normal, reintroduciendo el defecto.
+
+**Verificación:** `npx tsc --noEmit` 0 errores. `npm test`: 344 passed / 344 total (321 previas sin modificar su intención, más 23 nuevas, entre ellas la prueba de regresión del 3DS de Rapyd). `npm run metrics`: `✓ All 29 class(es) within thresholds.` `npm run lint`: exit 0.
+
+**Alcance que este punto NO cubre:** PSE no está implementado en ningún adaptador todavía. Este punto solo abre el contrato para que se pueda expresar. Falta también el eje que el punto 19 identificó como el verdadero problema de PSE y que este cambio no resuelve: el número de operaciones previas a la redirección varía por pasarela (Wompi y Mercado Pago 1, Rapyd 2 por el `POST /v1/customers`, Kushki 3), y el puerto sigue asumiendo una sola llamada.
+
+**Cambios que esto obliga en el SAD:**
+
+- **Sección 9.1.1 y `Component Diagram - C4.png` (Joan).** La firma de `createPayment()` ya no devuelve `Transaction`. Conviene además un ADR del tipo de resultado: la decisión de expresar «o esto o aquello» con una unión etiquetada en vez de campos opcionales es repetible y va a volver a aparecer.
+- **Sección 3 y `Domain Class Diagram.png` (Henao).** El modelo gana `PaymentMethod` y el tipo `PaymentResult` con `PendingRedirect`. Nota para el issue #53: `KushkiAdapter` debe escribirse contra la firma nueva.
+- **Sección 15.1 (David).** El inventario de objetos de valor del núcleo pasa de siete a ocho con `PaymentMethod`.
+
+**Estado:** Resuelto en el código. Pendiente en el SAD, según el reparto de arriba.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum
