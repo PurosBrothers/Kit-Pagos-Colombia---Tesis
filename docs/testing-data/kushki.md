@@ -1,5 +1,7 @@
 # Credenciales
 
+> Alcance actual: el SDK y la API de Simulación usan datos ficticios y un token simulado para pruebas de contrato. Estas credenciales y tarjetas solo aplican cuando se implemente la integración directa con el sandbox de Kushki.
+
 El primer paso para probar la API es disponer de las credenciales de Sandbox y configurar las keys de entorno necesarias en el archivo `.env`:
 
 * **`KUSHKI_PUBLIC_MERCHANT_ID`**: Identificador público del comercio para entorno de pruebas.

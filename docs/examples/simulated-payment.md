@@ -89,7 +89,7 @@ Detalle: WompiAdapter.getStatus: status query is not supported by the Wompi mock
 
 La API de Simulación solo implementa creación de pagos, no consulta de estado. El valor de dejarlo visible es doble: es honesto sobre el estado del proyecto, y demuestra el diseño de errores del SDK. El comercio no recibe un mensaje de texto que tendría que interpretar, sino un `SdkError` con un `code` del enum `SdkErrorCode`, comparable por código. El ejemplo también captura `CONNECTION_FAILED` para el caso de que el simulador no esté arriba, y en vez de una traza cruda imprime el comando que hay que correr.
 
-Fuera de alcance en este ejemplo: la validación de webhooks, que sigue como esqueleto en la fachada aunque `WebhookVerifier` ya esté implementado y probado para las cuatro pasarelas; el reintento automático, que se integra en la Iteración 2 junto con las pasarelas reales; y las otras tres pasarelas, de las cuales solo Wompi tiene Adapter en esta iteración.
+Fuera de alcance en este ejemplo: la validación de webhooks y el comportamiento específico de cada pasarela. Los cuatro gateways tienen adaptador para el entorno de simulación; la integración directa con sus sandboxes productivos se mantiene fuera del alcance de este recorrido.
 
 ## Sobre la fidelidad del mock
 

@@ -373,17 +373,37 @@ describe("ResponseNormalizer", () => {
     });
   });
 
-  describe("normalize() with other gateways (open for Iteration 2)", () => {
-    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for KUSHKI", () => {
+  describe("normalize() with KUSHKI", () => {
+    const kushkiResponse = {
+      ticketNumber: "kushki-ticket-123",
+      transaction_status: "APPROVAL",
+      amount: { subtotalIva0: 50000, subtotalIva: 0, iva: 0, ice: 0, currency: "COP" },
+      transactionReference: "kushki-reference-123",
+    };
+
+    it("normalizes nominal tax components and the native APPROVAL status", () => {
+      const transaction = normalizer.normalize(kushkiResponse, Gateway.KUSHKI);
+
+      expect(transaction.amount.getValue()).toBe("50000");
+      expect(transaction.getStatus()).toBe("APPROVED");
+      expect(transaction.rawStatus).toBe("APPROVAL");
+      expect(transaction.gatewayTransactionId.value).toBe("kushki-ticket-123");
+    });
+
+    it("throws KitPagosError(MALFORMED_RESPONSE) for an incomplete response", () => {
       expect(() => normalizer.normalize({}, Gateway.KUSHKI)).toThrow(KitPagosError);
       try {
         normalizer.normalize({}, Gateway.KUSHKI);
       } catch (error) {
         const sdkError = error as KitPagosError;
-        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
+        expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
         expect(sdkError.gateway).toBe(Gateway.KUSHKI);
       }
     });
+
+  });
+
+  describe("normalize() with other gateways", () => {
 
     it("should throw KitPagosError(UNSUPPORTED_OPERATION) for unknown gateway (default)", () => {
       const unknown = "UNKNOWN_GATEWAY" as Gateway;
