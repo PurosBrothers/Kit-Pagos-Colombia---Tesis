@@ -620,7 +620,7 @@ El tiempo total de espera acumulado en el peor escenario (3 reintentos antes de 
 
 ---
 
-### 36. `createPayment()` devolvía `Transaction`, y `Transaction` no puede expresar «falta redirigir»
+### 39. `createPayment()` devolvía `Transaction`, y `Transaction` no puede expresar «falta redirigir»
 
 **Responsable de corregirlo en el SAD:** Joan (sección 9.1.1, Payment Facade, y sección 13, ADR) para la firma del método y el ADR del tipo de resultado; Henao (sección 3, Modelo de dominio) para el `Domain Class Diagram.png`, que gana `PaymentMethod` y el tipo `PaymentResult`; David (sección 15.1, Núcleo del dominio) para el inventario de objetos de valor.
 
