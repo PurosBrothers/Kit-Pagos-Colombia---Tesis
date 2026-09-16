@@ -794,14 +794,118 @@ ejemplo puntual es una plantilla genérica reutilizada por error en la documenta
 Rapyd entre distintos tipos de método de pago, así que no debe copiarse como el esquema real de
 campos de este método.
 
-**Estado:** Resuelto en documentación. **Sigue sin poder confirmarse sin sandbox real:** (a) la
-lista completa de bancos colombianos afiliados a PSE dentro de Rapyd, y (b) el esquema exacto de
-campos de identidad del pagador (`payerDocument`) que exige cada uno vía
-`GET /v1/payment_methods/{type}/required_fields`. Ninguno de los dos es un vacío de investigación
-por falta de esfuerzo: es una limitación real de la documentación pública de Rapyd, que delega
-ese descubrimiento a llamadas dinámicas contra la cuenta del comerciante. No se crea un issue de
-seguimiento todavía; se retoma cuando el equipo tenga credenciales de sandbox de Rapyd (mismo
-punto de partida que el `RapydAdapter` en general).
+**Estado original (issue #23):** Resuelto en documentación, con dos huecos que no se podían cerrar
+sin sandbox real: (a) la lista completa de bancos colombianos afiliados a PSE dentro de Rapyd, y
+(b) el esquema exacto de campos de identidad del pagador que exige cada uno.
+
+---
+
+**CERRADO el 15 de septiembre de 2026 (issue #68), contra el sandbox real — y la conclusión de
+arriba era parcialmente incorrecta.**
+
+Con las credenciales `RAPYD_API_ACCESS_KEY` / `RAPYD_API_SECRET_KEY` se llamaron
+`GET /v1/payment_methods/countries/CO` y `GET /v1/payment_methods/{type}/required_fields` contra
+`sandboxapi.rapyd.net`, firmando con la propia función `computeRapydSignature()` del SDK. Los dos
+huecos quedaron cerrados y, en el camino, se refutaron dos afirmaciones de este mismo punto.
+
+**Qué se confirmó.** Rapyd devuelve **97 métodos** para Colombia, **71 de categoría
+`bank_redirect`**, repartidos en **dos familias que no son intercambiables**:
+
+- **`co_pse_{banco}_bank` — 47 métodos.** PSE real. El banco queda fijado por el tipo. Exige
+  documento del pagador y una entidad `customer`. Los 47 son idénticos en todos sus metadatos:
+  `payment_flow_type: redirect_url`, solo `COP`, `is_refundable: false`, `is_cancelable: false`,
+  `is_expirable: true` con `maximum_expiration_seconds: 1209600` (14 días), `is_tokenizable: false`
+  y `supports_subscription: false`.
+- **`co_{banco}_bank` — 24 métodos.** Otro producto: redirección bancaria vía SafetyPay, más el
+  botón Bancolombia, Addi y Bre-B. Mayoría reembolsables.
+
+**Primera refutación: el patrón de nombre.** Este punto concluyó que la familia era
+`co_{banco}_bank`, apoyándose en el ejemplo `co_bbva_colombia_bank` de la documentación pública. La
+conclusión de fondo era correcta —PSE no es un método único, es uno por banco— pero **el patrón
+real lleva el infijo `pse_`**, y el ejemplo en que se apoyó pertenece a la *otra* familia. La
+diferencia no es cosmética: `co_bancolombia_bank` no exige **ningún** campo y por eso redirige a
+SafetyPay a escoger banco, mientras `co_pse_bancolombia_bank` exige documento y trae el banco ya
+fijado. Elegir el tipo equivocado no falla con un error de validación, cambia de producto.
+
+**Segunda refutación: el campo del documento.** `ubiquitous-language.md` afirmaba que el documento
+del pagador viajaba en un campo `identification_value` que se volvía obligatorio *condicionalmente*
+según el monto, derivándolo del mecanismo genérico de "campos condicionales" de Rapyd. Es falso en
+ambos aspectos. Los 47 métodos PSE comparten un único esquema, verificado consultando los
+`required_fields` de los 71 `bank_redirect` y agrupándolos por esquema idéntico (salieron 6 grupos):
+
+| Campo | Obligatorio | Regex |
+| --- | --- | --- |
+| `customer_identification_type` | **Sí** | `^(RC\|TI\|CC\|CE\|PP\|DE\|NIT)$` |
+| `customer_identification_number` | **Sí** | `^[A-Za-z0-9-]{5,20}$` |
+| `merchant_identification_type` | No | `^(CC\|CE\|PP\|NIT\|DE)$` |
+| `merchant_identification_number` | No | `^[A-Za-z0-9-]{5,20}$` |
+
+**Lo que sí se confirmó de la sospecha previa.** Este punto dedujo que el ejemplo
+`number_type: fpan|tpan` / `tavv` era una plantilla de tarjeta mal reutilizada. Correcto, y ahora se
+sabe que **no es un error de una página**: 16 métodos reales del catálogo comparten ese esquema.
+Ninguno de ellos es de PSE.
+
+**El hallazgo que no se buscaba: PSE en Rapyd no es un pago de un paso.** Los 47 métodos declaran en
+`payment_options` un `customer` con `is_required: true`. No es un campo del pago: es una **entidad**
+que hay que crear con `POST /v1/customers` antes, con `name` (`^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]{2,100}$`,
+solo letras y espacios), `email` y `phone_number` (`^([+]?57)?[ ()-]*3[0-9]{9}$`, celular
+colombiano) los tres obligatorios. El adaptador de Rapyd necesita **dos llamadas** para un pago PSE.
+
+**Consecuencia sobre el modelo de dominio, y una validación del diseño.** Esos tres campos, más el
+tipo y número de documento, son **exactamente** los cinco campos del objeto de valor `Payer`
+(`fullName`, `email`, `phone`, `documentType`, `documentNumber`), cuatro de los cuales estaban
+declarados y sin un solo uso en el código. El objeto de valor ya tenía la forma correcta antes de
+que existiera esta evidencia; lo que faltaba era la razón documentada de por qué.
+
+**Respuesta a la pregunta que el issue #68 pedía dejar por escrito: ¿caben las cuatro formas de PSE
+en un mismo objeto de valor `PaymentMethod`?** Sí, pero el eje que hay que abstraer no es el que se
+suponía. Las cuatro pasarelas coinciden en **qué** datos pide PSE (banco, tipo y número de documento
+del pagador, naturaleza natural o jurídica) y difieren en **dónde** ponen el banco:
+
+| Pasarela | Dónde va el banco | Forma |
+| --- | --- | --- |
+| Wompi | `payment_method.financial_institution_code` | Valor de un campo |
+| Mercado Pago | Campo de la preferencia / del pago | Valor de un campo |
+| Kushki | `bankId`, tomado de `GET /transfer/v1/bankList` | Valor de un campo |
+| **Rapyd** | **Dentro del `payment_method_type`** (`co_pse_{banco}_bank`) | **Parte del identificador** |
+
+Tres pasarelas tratan el banco como un dato y Rapyd lo trata como parte del nombre del método. Eso
+**no rompe la abstracción**: es precisamente el trabajo de un adaptador decidir si un valor del
+dominio se serializa como campo o se concatena en un identificador. Un `PaymentMethod` que modele
+PSE como `{ tipo: PSE, banco, documentoPagador, naturalezaPagador }` se puede traducir a las cuatro.
+
+**Dónde sí se rompe, y es un hallazgo sobre el límite de la abstracción, no una derrota.** Lo que no
+cabe en un objeto de valor son los **pasos previos**, porque no son datos sino operaciones, y el
+puerto no tiene dónde declararlas:
+
+1. **Rapyd exige crear un `customer` antes del pago.** Un `POST` extra.
+2. **Kushki exige pedir la lista de bancos antes de poder cobrar**, y su propia referencia dice que
+   ese endpoint *"is required only for Transfer In payment method in Colombia"*. Además su flujo
+   real es lista → token → init, o sea **tres** llamadas antes de la redirección.
+3. **Kushki tiene dos versiones de PSE** (1.0 y PSE Avanza 2.0) y el destino de la redirección
+   cambia según la que el comercio tenga habilitada. El SDK no puede predecirlo desde el código.
+
+Es decir: el eje de variación que PSE expone no es el de los *campos* —ese lo absorbe
+`PaymentMethod` sin problema— sino el del **número y orden de las operaciones previas a la
+redirección**, que va de una llamada en Wompi a tres en Kushki. Ese es el eje que
+`PaymentGatewayPort` no modela hoy, y es el mismo límite que el punto 38 registra como "handshakes
+multi-paso con estado". PSE lo vuelve concreto en vez de hipotético.
+
+**Estado:** **Cerrado.** Los dos huecos originales quedaron confirmados contra el sandbox. El
+catálogo completo de los 47 métodos PSE, los 6 esquemas de campos, el paso a paso de implementación
+y cuatro trampas de nomenclatura reales están en `docs/testing-data/rapyd.md` sección 5; PSE en
+Kushki, en `docs/testing-data/kushki.md` sección 5. Las filas `payerEmail`, `payerDocument` y
+`returnUrl` de `ubiquitous-language.md` quedaron corregidas, junto con su nota de integridad y su
+nota final.
+
+**Lo que deliberadamente no se cerró, y por qué no bloquea nada:** no se ejecutó un pago PSE de
+punta a punta, así que queda sin confirmar qué devuelve exactamente `data.redirect_url` para un
+`co_pse_*` y si el sandbox permite forzar estados finales de PSE como sí lo hace con 3DS. Eso es
+trabajo de implementación, no de diseño, y no bloquea el contrato de `PaymentMethod`, que era lo que
+este issue tenía que desbloquear. Vale además registrar una advertencia de la propia documentación
+de Rapyd: en sandbox, `List Payment Methods by Country` devuelve **todos** los métodos de la
+plataforma, mientras en producción devuelve solo los habilitados para la organización. Los 47
+`co_pse_*` prueban cuál es el contrato, **no** que una cuenta de producción los tenga los 47 activos.
 
 ---
 
