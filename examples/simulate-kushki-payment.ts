@@ -57,7 +57,19 @@ async function main(): Promise<void> {
   console.log(`IVA:             ${taxBreakdown.iva.getValue()} COP\n`);
 
   console.log("Creando el pago...");
-  const transaction = await kitPagos.createPayment(request);
+  const result = await kitPagos.createPayment(request);
+
+  // createPayment() devuelve o una transacción o una redirección pendiente, y el
+  // compilador obliga a distinguirlas: `result.transaction` no existe hasta que se
+  // descarta el caso de redirección. El cobro con tarjeta de Kushki es sincrono, así
+  // que esta rama es inalcanzable acá; se vuelve alcanzable con Transfer In, que es
+  // el PSE de Kushki.
+  if (result.outcome === "REDIRECT_REQUIRED") {
+    console.log(`El pago requiere redirigir a: ${result.redirect.redirectUrl}`);
+    return;
+  }
+
+  const transaction = result.transaction;
 
   console.log("Transacción creada exitosamente:");
   console.log(`  ID en la pasarela:  ${transaction.gatewayTransactionId.value}`);
