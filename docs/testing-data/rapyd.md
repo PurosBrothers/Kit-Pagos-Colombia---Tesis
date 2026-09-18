@@ -2,10 +2,10 @@
 
 El primer paso para probar la API es tener las credenciales y sus keys, estas se encontrarán en el archivo `.env`:
 
-* **`RAPYD_ACCESS_KEY`**: Clave de acceso generada en el Dashboard de Sandbox.
+* **`RAPYD_API_ACCESS_KEY`**: Clave de acceso generada en el Dashboard de Sandbox.
 
 
-* **`RAPYD_SECRET_KEY`**: Clave secreta para la firma de peticiones.
+* **`RAPYD_API_SECRET_KEY`**: Clave secreta para la firma de peticiones.
 
 
 
