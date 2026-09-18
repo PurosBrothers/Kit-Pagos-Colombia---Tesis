@@ -25,7 +25,10 @@ import {
 
 /** Base URL of the Wompi mock exposed by the Simulation API. This, along with
  * the keys, should live in an external configuration file such as a .env. */
-const SIMULATOR_WOMPI_URL = "http://localhost:3000/v1/sim/wompi/transactions";
+// Raíz de la API de Wompi en el simulador. Desde el issue #64 es la raíz y no el
+// endpoint de transacciones: el adaptador le agrega la ruta que necesite, porque
+// PSE además consulta /merchants para el token de aceptación.
+const SIMULATOR_WOMPI_URL = "http://localhost:3000/v1/sim/wompi";
 
 /**
  * Step 1: configure the SDK.

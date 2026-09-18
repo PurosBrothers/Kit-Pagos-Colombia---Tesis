@@ -801,6 +801,67 @@ contra el simulador devuelven la referencia del comercio.
 
 ---
 
+### 43. PSE en Wompi no es un flujo de una sola llamada, y su sandbox no puede validarlo
+
+**Responsable de corregirlo en el SAD:** Joan (sección 9.1.1 y sección 13, ADR) para el flujo de creación de pago con redirección; David (sección 15.3, API de Simulación) para la responsabilidad nueva del simulador.
+
+**Encontrado:** Al implementar PSE (issue #64) se sondeó el sandbox real (`https://sandbox.wompi.co/v1`) el 18 de septiembre de 2026, en vez de trabajar sobre la documentación. Los resultados contradijeron el supuesto con el que se venía diseñando, que era que Wompi resolvía la redirección en una sola llamada.
+
+**1. La respuesta de creación no trae la URL de redirección.**
+
+`POST /transactions` devuelve HTTP 201 con `status: "PENDING"` y un `payment_method.extra` que contiene solo `{is_three_ds, three_ds_auth_type}`. El campo `async_payment_url` **no existe** en ese momento: aparece únicamente en un `GET /transactions/{id}` posterior. El flujo real es crear, consultar hasta que la URL aparezca, y recién entonces redirigir.
+
+**2. En sandbox la URL y el estado final llegan en el mismo instante, así que el orden no se puede verificar ahí.**
+
+Sondeando cada 500 ms:
+
+| Banco | La URL aparece a los | Estado en ese momento |
+|---|---|---|
+| `1` (aprueba) | 1075 ms | `APPROVED` |
+| `2` (declina) | 1650 ms | `DECLINED` |
+
+El sandbox resuelve el pago solo, sin que nadie visite el banco, de modo que cuando la URL existe ya no sirve para nada. **No hay ninguna ventana en la que redirigir tenga sentido.** En producción el comportamiento debe ser el contrario: la transacción se queda `PENDING` hasta que el pagador pague en el banco, y la URL aparece mientras sigue `PENDING`.
+
+La consecuencia es la justificación más concreta que ha aparecido hasta ahora para que la API de Simulación exista. No es una comodidad para no gastar credenciales: es **el único lugar donde el orden del flujo de redirección se puede ejercitar**, porque el sandbox de la propia pasarela colapsa los dos eventos en uno. El simulador reproduce el orden en dos pasos, y no necesita un contador porque la presencia de la URL **es** el estado: primera consulta, sigue `PENDING` pero ya con `async_payment_url`; segunda consulta, estado final. Está cubierto en `simulator-api/test/wompi-pse.test.ts`.
+
+**3. El código de institución financiera no se valida al crear.**
+
+Un código inexistente (`"99"`) devolvió HTTP 201. El SDK no puede delegarle a la pasarela la detección de un banco inválido, y por eso el adaptador pasa `bankCode` opaco sin inventar una lista blanca que la pasarela no aplica.
+
+**4. Campos obligatorios, medidos por omisión y no leídos de la documentación.**
+
+| Campo | ¿Obligatorio? | Evidencia |
+|---|---|---|
+| `payment_description` | Sí | HTTP 422 `"No está presente"` |
+| `user_type` | Sí | HTTP 422, solo admite `0` o `1` |
+| `user_legal_id` y `user_legal_id_type` | Sí | HTTP 422; tipos válidos `RC, TI, CC, TE, CE, NIT, PP, DNI, PPT, PA` |
+| `redirect_url` | No | HTTP 201 sin él |
+| `customer_data` | No | HTTP 201 sin él |
+
+Que `redirect_url` sea opcional es lo que permite que `ReturnUrlConfig` siga siendo opcional para PSE. Y el conjunto de tipos de documento vive en `wompi-pse.ts` y no en `Payer`, porque tiene alcance de pasarela: meterlo en el dominio le daría a Wompi poder de veto sobre las otras tres.
+
+**5. El `WompiAdapter` no podía hablar con Wompi real, y eso incluía el flujo de tarjeta.**
+
+Ni `acceptance_token` ni la firma de integridad existían en el SDK ni en el simulador. O sea que el adaptador solo funcionaba contra el mock, que no valida nada, y el flujo de tarjeta que se daba por terminado habría fallado igual contra la pasarela. Se cerró dentro de este issue. La firma es `SHA256(reference + amount_in_cents + currency + integrity_secret)`, hash plano y **no** un HMAC, a diferencia de la firma de webhooks; el `acceptance_token` es de un solo uso y hay que pedir uno nuevo por transacción.
+
+De paso quedó claro que los dos secretos de Wompi son fáciles de intercambiar, porque el panel los entrega juntos y el único síntoma es un HTTP 422 con `"La firma es inválida"`, que no dice nada sobre rotulado. `Credentials` ahora distingue `integritySecret` del secreto de eventos, y el saneamiento del `ErrorHandler` redacta los dos.
+
+**6. Decisiones de diseño que esto forzó.**
+
+- **`createPayment()` sondea internamente** hasta que la URL aparezca, con límite de 5 s e intervalo de 400 ms (lo medido fue 1075 ms y 1650 ms). Se descartó agregar un tercer caso a `PaymentResult` porque obligaría a todo consumidor a manejar tres ramas para una mecánica que es de una sola pasarela.
+- **No usa `RetryHandler`.** Su `execute()` reintenta sobre excepciones: que la URL todavía no esté es un estado intermedio esperado, no un fallo, y pasarlo por ahí obligaría a lanzar una excepción para señalar normalidad y haría que el pipeline de errores clasificara ese estado como error de pasarela.
+- **Si el sondeo se agota, lanza** `GATEWAY_TIMEOUT` llevando el `gatewayTransactionId`. Devolver la transacción en `PENDING` sin URL reproduciría el defecto del punto 39; perder el identificador sería peor todavía, porque volvería irrastreable un cobro que ya existe.
+- **`payment_description` se deriva de `orderReference`** en vez de agregar un campo al contrato, para no ampliar la superficie pública justo antes de publicar en npm (issue #88). La contrapartida es que el pagador ve una referencia interna del comercio en el banco.
+- **`baseUrl` pasó a ser la raíz de la API** y no el endpoint de transacciones, porque `GET /merchants/{llave}` no tenía dónde vivir. Es un cambio incompatible para quien lo sobrescribiera, y se hizo ahora porque el paquete todavía no está publicado: es el único momento en que no le cuesta nada a nadie. Las URLs finales no cambiaron, solo el valor de configuración.
+
+**Métrica CK:** el `WompiAdapter` estaba en **CBO 5 de 5**, sin margen. Un primer intento con métodos privados que declaraban `WompiPseFields` y `WompiRedirectSnapshot` en sus firmas lo subió a 7, porque el script cuenta los tipos que aparecen en firmas de métodos. Se resolvió moviendo esos métodos a funciones de módulo en `wompi-pse.ts`, y consolidando la plomería HTTP que estaba duplicada entre `createPayment` y `getStatus`. Resultado: WMC 14, CBO 5, RFC 14, MAX_CC 6, es decir el mismo WMC que antes de agregar PSE.
+
+**Verificación:** SDK 374 pruebas / 374. Simulador 37 / 37. `npm run metrics`: `✓ All 31 class(es) within thresholds.` El ejemplo `simulate-wompi-pse.ts` corrido contra el simulador devuelve `REDIRECT_REQUIRED` con estado nativo `PENDING`, y la consulta posterior devuelve `APPROVED`, que es el orden que el sandbox real no permite observar.
+
+**Estado:** Resuelto en el código para Wompi. Mercado Pago queda fuera de este issue porque usa la Orders API en vez de la Payments API, y Rapyd y Kushki siguen necesitando 2 y 3 llamadas antes de la redirección, límite ya registrado en el punto 39.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum

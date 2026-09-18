@@ -6,6 +6,7 @@
   "scripts": {
     "start": "tsx simulate-wompi-payment.ts",
     "simulate:wompi": "tsx simulate-wompi-payment.ts",
+    "simulate:wompi-pse": "tsx simulate-wompi-pse.ts",
     "simulate:mercadopago": "tsx simulate-mercadopago-payment.ts",
     "simulate:rapyd": "tsx simulate-rapyd-payment.ts",
     "simulate:kushki": "tsx simulate-kushki-payment.ts",

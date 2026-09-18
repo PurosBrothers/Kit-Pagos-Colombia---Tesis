@@ -58,6 +58,23 @@ npm start
 
 ---
 
+### 1b. Simulación de pago con PSE (Wompi)
+
+```bash
+npm run simulate:wompi-pse
+```
+
+* **Archivo:** `simulate-wompi-pse.ts`
+* **Descripción:** El mismo pago, pero con PSE en vez de tarjeta. Es el único ejemplo donde `createPayment()` **no** devuelve una transacción: devuelve una redirección pendiente, porque el pago no avanza hasta que el pagador entre al portal de su banco.
+* **Qué esperar:**
+  1. Imprime la solicitud, incluido el documento del pagador (PSE lo exige) y el código de banco elegido.
+  2. Muestra una redirección pendiente con la URL del banco, el id en la pasarela y estado nativo `PENDING`.
+  3. Consulta el estado después de la redirección y obtiene `APPROVED`.
+* **Códigos de banco:** son los mismos del sandbox de Wompi. `1` aprueba, `2` declina y `3` simula un error. Cambiá la constante `BANK_CODE` del archivo para probar cada desenlace.
+* **Por qué corre contra el simulador y no contra el sandbox de Wompi:** no es comodidad. El sandbox real publica la URL de redirección en el mismo instante en que resuelve el pago, o sea que resuelve solo, sin que nadie visite el banco, y cuando la URL existe ya no sirve. Contra ese sandbox no hay ninguna ventana en la que redirigir tenga sentido. La API de Simulación reproduce el orden real, y por eso es el único lugar donde este flujo se puede ejercitar. El detalle medido está en el punto 43 del `architecture-log.md`.
+
+---
+
 ### 2. Simulación de pago con Mercado Pago
 
 ```bash
