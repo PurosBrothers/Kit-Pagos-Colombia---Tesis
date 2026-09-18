@@ -81,7 +81,7 @@ npm run simulate:rapyd
 ```
 
 * **Archivo:** `simulate-rapyd-payment.ts`
-* **Por qué existe uno por pasarela:** Cada pasarela necesita su propio `baseUrl` y su propio juego de credenciales, así que un único ejemplo parametrizable tendría que resolver configuración antes de poder mostrar el pago. Con un archivo por pasarela, la comparación es directa: los pasos 2, 3 y 4 son idénticos en el código del comercio, y lo único que cambia es la configuración inicial.
+* **Por qué existe uno por pasarela:** cada archivo puede detenerse en las particularidades de su pasarela sin distraer del flujo, y la comparación entre archivos es directa, porque los pasos 2, 3 y 4 son idénticos en el código del comercio y lo único que cambia es la configuración inicial. El ejemplo parametrizable que recorre las cuatro en un solo archivo existe aparte, es el número 5.
 * **Qué demuestra:** Rapyd recalcula una firma HMAC en cada petición (no un Bearer fijo), recibe el monto en pesos con decimales (no en centavos), y usa un catálogo de estados propio de tres letras (`CLO`, `ACT`, `ERR`, `EXP`, `REV`).
 * **Qué esperar:** La transacción se crea con estado normalizado `APPROVED` y estado nativo `CLO`, el monto vuelve como `150000.00 COP` con la escala intacta, y la consulta posterior por identificador también funciona.
 
@@ -101,7 +101,23 @@ npm run simulate:kushki
 * **Qué demuestra:** Kushki requiere un monto desglosado en base gravable, IVA, parte exenta e impuesto al consumo. El comercio conserva el mismo `CreatePaymentRequest` unificado y usa `TaxBreakdown.fromTaxIncluded(...)` para generar un desglose que suma exactamente el total. El adaptador lo convierte al formato nativo y traduce `APPROVAL` a `APPROVED`.
 * **Qué esperar:** La creación y la consulta posterior imprimen el mismo identificador nativo (`ticketNumber`) y un estado unificado `APPROVED`; el estado nativo se conserva como `APPROVAL` para auditoría.
 
-### 5. Verificar tipos sin ejecutar
+### 5. Intercambiabilidad de las cuatro pasarelas
+
+```bash
+npm run simulate:interchangeability
+```
+
+* **Archivo:** `gateway-interchangeability.ts`
+* **Qué demuestra:** el mismo pago, descrito **una sola vez**, cobrado por las cuatro pasarelas sin que cambie una línea del código del comercio. Es el cierre de la Iteración 2 y el argumento central de la tesis convertido en código ejecutable. Los cuatro ejemplos anteriores muestran una pasarela cada uno; este muestra lo que ninguno puede mostrar solo, porque la intercambiabilidad es una propiedad de la relación entre las cuatro.
+* **Qué esperar:** una tabla comparativa con el estado normalizado, el estado nativo, el monto y el identificador de cada pasarela. La columna que cambia es la del estado nativo — `APPROVED`, `CLO`, `approved` y `APPROVAL` son la misma cosa dicha de cuatro formas —; la del estado normalizado es una sola.
+* **La verificación no es visual.** El ejemplo compara por código que las cuatro coincidan en estado normalizado, monto y referencia de la orden, y **sale con código distinto de cero** si alguna no coincide. Romper a mano el mapeo de estados de cualquier adaptador lo pone rojo, así que funciona como prueba de regresión ejecutable.
+* **Detalle a tener en cuenta:** el monto se compara con `Amount.equals()` y no con `===` sobre la cadena, porque Wompi y Rapyd devuelven `150000.00` y Mercado Pago y Kushki `150000`. Es el mismo monto con distinta escala, y comparar cadenas daría un fallo que no es un fallo.
+
+Explicación completa, con los límites de la demostración, en [`docs/examples/gateway-interchangeability.md`](../docs/examples/gateway-interchangeability.md).
+
+---
+
+### 6. Verificar tipos sin ejecutar
 
 ```bash
 npm run typecheck

@@ -801,6 +801,65 @@ contra el simulador devuelven la referencia del comercio.
 
 ---
 
+### 42. La intercambiabilidad quedó verificada de forma ejecutable, y dejó dos hallazgos
+
+**Origen:** Issue #58, `examples/gateway-interchangeability.ts`. Cierre de la Iteración 2.
+
+El issue nombraba el archivo `examples/intercambiabilidad.ts`. Se usó el nombre en inglés por la
+convención del proyecto, que pide identificadores y nombres de archivo en inglés y reserva el
+español para comentarios y salida de consola, como en los otros cuatro ejemplos.
+
+Hasta ahora la intercambiabilidad de las cuatro pasarelas era una afirmación sostenida por cuatro
+ejemplos separados, uno por pasarela, que había que leer en paralelo para convencerse. El ejemplo
+nuevo describe el pago **una sola vez** y lo cobra por las cuatro en un ciclo, comparando después
+por código que coincidan en estado normalizado, monto y referencia de la orden, y saliendo con
+código distinto de cero si no coinciden. La diferencia no es de presentación: una afirmación pasó
+a ser una verificación que se rompe sola cuando deja de ser cierta. Se comprobó rompiendo a mano
+el mapeo de `APPROVAL` en `KushkiResponseNormalizer`; el ejemplo salió con código 1 y nombró la
+discrepancia exacta.
+
+El ejemplo **no tiene ningún condicional por pasarela**, que era la condición que el issue puso
+para considerar la demostración válida. Tiene uno solo, y no discrimina pasarelas sino ramas del
+contrato de `createPayment()` (punto 39): estaría igual con una sola pasarela.
+
+**Hallazgo 1: el monto normalizado no vuelve con la misma escala en las cuatro.** Wompi y Rapyd
+devuelven `150000.00`; Mercado Pago y Kushki, `150000`. Es el mismo monto, y `Amount.equals()`
+compara por valor, así que la verificación pasa. Pero significa que **comparar montos como cadena
+en cualquier parte del proyecto es un defecto latente**, y que `Amount.getValue()` no sirve para
+decidir igualdad aunque lo parezca. El ejemplo lo documenta en su propia salida, porque las dos
+escalas se ven una debajo de la otra en la tabla. No amerita cambiar el dominio: la escala
+entrante la fija cada pasarela y `Amount` ya expone el método correcto para no depender de ella.
+
+**Hallazgo 2: `SDKOptions.baseUrl` es un escalar, así que cambiar de pasarela contra el simulador
+obliga a cambiar también el endpoint.** El ejemplo lo resuelve con una tabla de datos indexada por
+`Gateway`, no con condicionales, y en producción esa tabla desaparece porque cada adaptador conoce
+la URL real de su pasarela. Es decir, el ejemplo cambia dos valores de configuración donde el
+issue anticipaba uno, y el segundo es un artefacto del modo simulación (RF-09), no del modelo. Se
+deja anotado y no se cambia: convertir `baseUrl` en un mapa por pasarela le agregaría al comercio
+una estructura que solo sirve para pruebas.
+
+**Lo que este ejemplo todavía no puede demostrar:** PSE. Las cuatro resuelven el cobro con tarjeta
+en la respuesta del `POST`, así que la rama `REDIRECT_REQUIRED` no se alcanza. Extenderlo a un
+segundo recorrido por método de pago es lo que va a poner a prueba de verdad el corte del puerto,
+por el problema que el punto 39 dejó abierto: el número de llamadas previas a la redirección varía
+por pasarela y el puerto asume una sola.
+
+**Verificación:** `npm run typecheck` en `examples`: exit 0. Ejemplo ejecutado contra el simulador:
+las cuatro pasarelas devuelven `APPROVED`, el mismo monto y la misma referencia, con estados
+nativos `APPROVED`, `CLO`, `approved` y `APPROVAL`. Con el mapeo de Kushki roto a propósito:
+código de salida 1.
+
+**Cambios que esto obliga en el SAD:**
+
+- **Sección 13 (Joan).** Vale un ADR corto sobre la comparación de montos por valor y no por
+  representación, con el hallazgo 1 como evidencia de por qué la distinción no es teórica.
+- **`prototypes-evaluation-plan.md` (David).** Este ejemplo es el artefacto sobre el que se mide
+  la variable "conceptos nativos expuestos" de la Fase 5; conviene que el plan lo nombre.
+
+**Estado:** Resuelto en el código. Pendiente en el SAD, según el reparto de arriba.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum
