@@ -4,6 +4,7 @@ import {
   ScenarioEngine,
   UnsupportedScenarioError,
 } from "../scenarios/ScenarioEngine";
+import { GatewayMockFactory } from "../gateways/wompi/GatewayMockFactory";
 import { WompiCreateTransactionRequestBody, WompiTransaction } from "../gateways/wompi/types";
 import { transactionStore } from "../store/TransactionStore";
 
@@ -31,6 +32,7 @@ const SCENARIO_HEADER = "x-simulate-scenario";
  */
 export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   const scenarioEngine = new ScenarioEngine();
+  const mockFactory = new GatewayMockFactory();
 
   // ── POST /v1/sim/wompi/transactions ──────────────────────────────────────
   app.post(
@@ -79,10 +81,30 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      // Un PSE pendiente avanza un paso en cada consulta: primero publica la URL
+      // de redirección sin salir de PENDING, y después resuelve. La decisión de
+      // cómo avanza es de la fábrica, no del router.
+      const resolved =
+        transaction.status === "PENDING" && transaction.payment_method?.type === "PSE"
+          ? mockFactory.advancePseTransaction(transaction)
+          : transaction;
+
       // Wompi wraps the transaction in { data: ... } for both creation and
       // status queries. The same shape is preserved here so ResponseNormalizer
       // does not need a separate branch for status query responses.
-      return reply.code(200).send({ data: transaction });
+      return reply.code(200).send({ data: resolved });
+    },
+  );
+
+  // ── GET /v1/sim/wompi/merchants/:publicKey ───────────────────────────────
+  //
+  // El SDK la llama antes de crear cualquier transacción, porque Wompi exige un
+  // `acceptance_token` firmado y de un solo uso. Existe acá para que el SDK
+  // tenga un solo camino de código y no una rama "modo simulador".
+  app.get(
+    "/v1/sim/wompi/merchants/:publicKey",
+    async (_request: FastifyRequest, reply: FastifyReply) => {
+      return reply.code(200).send(mockFactory.buildMerchantResponse());
     },
   );
 }
