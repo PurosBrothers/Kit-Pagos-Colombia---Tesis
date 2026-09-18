@@ -5,6 +5,7 @@ import { Currency } from "../../domain/value-objects/Currency";
 import { OrderReference } from "../../domain/value-objects/OrderReference";
 import { Payer } from "../../domain/value-objects/Payer";
 import { Gateway } from "../../domain/value-objects/Gateway";
+import { expectTransaction } from "../../test-support/payment-result";
 
 describe("KushkiAdapter", () => {
   const originalFetch = global.fetch;
@@ -46,7 +47,9 @@ describe("KushkiAdapter", () => {
       global.fetch = mockFetch;
 
       const adapter = new KushkiAdapter();
-      const transaction = await adapter.createPayment(validRequest);
+      const transaction = expectTransaction(
+        await adapter.createPayment(validRequest),
+      );
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
 
@@ -108,7 +111,9 @@ describe("KushkiAdapter", () => {
       global.fetch = mockFetch;
 
       const adapter = new KushkiAdapter();
-      const transaction = await adapter.createPayment(validRequest);
+      const transaction = expectTransaction(
+        await adapter.createPayment(validRequest),
+      );
 
       expect(transaction.isApproved()).toBe(false);
       expect(transaction.getStatus()).toBe("DECLINED");
@@ -141,7 +146,9 @@ describe("KushkiAdapter", () => {
       global.fetch = mockFetch;
 
       const adapter = new KushkiAdapter();
-      const transaction = await adapter.createPayment(validRequest);
+      const transaction = expectTransaction(
+        await adapter.createPayment(validRequest),
+      );
 
       expect(transaction.getStatus()).toBe("PENDING");
       expect(transaction.isPending()).toBe(true);

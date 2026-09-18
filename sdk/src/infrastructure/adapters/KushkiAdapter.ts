@@ -3,6 +3,10 @@ import {
   CreatePaymentRequest,
 } from "../../application/ports/PaymentGatewayPort";
 import { Transaction } from "../../domain/entities/Transaction";
+import {
+  PaymentResult,
+  transactionResult,
+} from "../../domain/value-objects/PaymentResult";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { Credentials } from "../../domain/value-objects/Credentials";
 import { ResponseNormalizer } from "../../application/services/ResponseNormalizer";
@@ -16,22 +20,28 @@ const DEFAULT_KUSHKI_BASE_URL =
 export class KushkiAdapter implements PaymentGatewayPort {
   private readonly baseUrl: string;
   private readonly credentials?: Credentials;
-  private readonly normalizer: ResponseNormalizer;
+  /** Ver la nota de WompiAdapter: fuera del constructor para no inflar el CBO. */
+  private readonly normalizer = new ResponseNormalizer();
   private readonly webhookVerifier: WebhookVerifier;
 
   constructor(
     baseUrl: string = DEFAULT_KUSHKI_BASE_URL,
     credentials?: Credentials,
-    normalizer: ResponseNormalizer = new ResponseNormalizer(),
     webhookVerifier: WebhookVerifier = new WebhookVerifier(),
   ) {
     this.baseUrl = baseUrl;
     this.credentials = credentials;
-    this.normalizer = normalizer;
     this.webhookVerifier = webhookVerifier;
   }
 
-  async createPayment(request: CreatePaymentRequest): Promise<Transaction> {
+  /**
+   * Devuelve PaymentResult en vez de Transaction desde el issue #64. El cobro
+   * con tarjeta de Kushki es sincrono —el resultado viene en la respuesta del
+   * POST y no existe un estado intermedio—, asi que este adaptador siempre toma
+   * la rama TRANSACTION. La rama de redireccion le corresponde a Transfer In,
+   * que es el PSE de Kushki y no esta implementado todavia.
+   */
+  async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
     /*
      * Kushki requires the amount to be split into subtotalIva0,
      * subtotalIva, iva and ice.
@@ -116,7 +126,9 @@ export class KushkiAdapter implements PaymentGatewayPort {
       throw errorHandler.handle(parseError, Gateway.KUSHKI);
     }
 
-    return this.normalizer.normalize(rawResponse, Gateway.KUSHKI);
+    return transactionResult(
+      this.normalizer.normalize(rawResponse, Gateway.KUSHKI),
+    );
   }
 
   async getStatus(gatewayTransactionId: string): Promise<Transaction> {

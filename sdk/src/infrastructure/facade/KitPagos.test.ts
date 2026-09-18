@@ -154,7 +154,9 @@ describe("KitPagos", () => {
         }),
       });
 
-      const transaction = await kitPagos.createPayment(validRequest);
+      const transaction = expectTransaction(
+        await kitPagos.createPayment(validRequest),
+      );
 
       expect(transaction.getStatus()).toBe("APPROVED");
       expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.KUSHKI);
