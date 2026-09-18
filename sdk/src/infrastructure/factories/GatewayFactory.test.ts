@@ -32,7 +32,8 @@ describe("GatewayFactory", () => {
 
     it("should hand the resolved credentials and baseUrl over to the Adapter", async () => {
       const originalFetch = global.fetch;
-      const customUrl = "http://localhost:4000/v1/sim/wompi/transactions";
+      // Raíz de la API, no el endpoint de transacciones (issue #64).
+      const customRoot = "http://localhost:4000/v1/sim/wompi";
       const credentials = {
         publicKey: "pub_test_wompi_123",
         privateKey: "prv_test_wompi_456",
@@ -53,7 +54,7 @@ describe("GatewayFactory", () => {
       });
       global.fetch = mockFetch;
 
-      const adapter = factory.create(Gateway.WOMPI, credentials, customUrl);
+      const adapter = factory.create(Gateway.WOMPI, credentials, customRoot);
       await adapter.createPayment({
         amount: new Amount("1000"),
         currency: new Currency("COP"),
@@ -62,7 +63,7 @@ describe("GatewayFactory", () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        customUrl,
+        `${customRoot}/transactions`,
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: `Bearer ${credentials.publicKey}`,

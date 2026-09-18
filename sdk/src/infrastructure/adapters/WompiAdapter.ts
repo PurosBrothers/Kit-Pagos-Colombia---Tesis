@@ -5,8 +5,15 @@ import {
 import { Transaction } from "../../domain/entities/Transaction";
 import {
   PaymentResult,
+  redirectRequired,
   transactionResult,
 } from "../../domain/value-objects/PaymentResult";
+import {
+  buildPseFieldsFor,
+  buildWompiPayload,
+  extractAcceptanceToken,
+  resolvePendingRedirect,
+} from "./wompi-pse";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { Credentials } from "../../domain/value-objects/Credentials";
 import { ResponseNormalizer } from "../../application/services/ResponseNormalizer";
@@ -14,10 +21,19 @@ import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
 
 /**
- * Default base URL for the Wompi mock endpoint (simulator-api, issue #27).
- * Configurable through the constructor to support testing and different environments.
+ * Raíz de la API de Wompi en la API de Simulación (issue #27).
+ *
+ * Desde el issue #64 esto es la **raíz** y no el endpoint de transacciones. El
+ * cambio fue forzado por PSE: el flujo necesita `GET /merchants/{llave}` para el
+ * token de aceptación, y con un `baseUrl` que apuntaba directamente a
+ * `/transactions` esa segunda ruta no tenía dónde vivir. Un `baseUrl` que apunta
+ * a un solo endpoint tampoco era una URL base.
+ *
+ * Es un cambio incompatible para quien sobrescribiera `baseUrl`, y se hizo ahora
+ * a propósito: el paquete todavía no está publicado en npm (issue #88), así que
+ * este es el único momento en que corregirlo no le cuesta nada a nadie.
  */
-const DEFAULT_WOMPI_BASE_URL = "http://localhost:3000/v1/sim/wompi/transactions";
+const DEFAULT_WOMPI_BASE_URL = "http://localhost:3000/v1/sim/wompi";
 
 /**
  * Concrete Wompi adapter. Translates generic PaymentGatewayPort calls into
@@ -64,90 +80,101 @@ export class WompiAdapter implements PaymentGatewayPort {
   }
 
   /**
-   * Returns PaymentResult instead of Transaction since issue #64. Wompi's card
-   * flow always settles in the response, so this adapter always takes the
-   * TRANSACTION branch; the redirect branch belongs to the PSE and Bancolombia
-   * Transfer flows, which are implemented in the follow-up PR of #64.
+   * Crea un pago con tarjeta o con PSE.
+   *
+   * Devuelve `PaymentResult` porque los dos caminos no terminan igual: la tarjeta
+   * se resuelve en la respuesta, PSE no. Ver `wompi-pse.ts` para lo que se midió
+   * contra el sandbox real y por qué PSE necesita un sondeo.
    */
   async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
-    // 1. Map domain value objects to native Wompi fields.
-    //
-    //    `toMinorUnits()` returns a digit string, and Wompi expects a JSON
-    //    integer in `amount_in_cents`. The conversion to `number` happens here,
-    //    at the boundary between the SDK and the wire format: JSON only has the
-    //    `number` type (an IEEE 754 double) and there is no way around it. It
-    //    is safe because the value is already an integer of cents, well below
-    //    Number.MAX_SAFE_INTEGER, so the conversion loses no precision. What the
-    //    domain guarantees is that the integer was computed without floating-point
-    //    arithmetic.
-    const payload = {
-      amount_in_cents: Number(request.amount.toMinorUnits(request.currency)),
-      currency: request.currency.getCode(),
-      reference: request.orderReference.getValue(),
-      customer_email: request.payer.email,
-    };
+    // `toMinorUnits()` devuelve una cadena de dígitos y Wompi espera un entero
+    // JSON. La conversión a `number` ocurre acá, en la frontera entre el SDK y el
+    // formato de cable: JSON solo tiene `number` (un IEEE 754 double) y no hay
+    // manera de evitarlo. Es segura porque el valor ya es un entero de centavos
+    // muy por debajo de Number.MAX_SAFE_INTEGER. Lo que el dominio garantiza es
+    // que ese entero se calculó sin aritmética de punto flotante.
+    const amountInCents = Number(request.amount.toMinorUnits(request.currency));
+    const currency = request.currency.getCode();
+    const reference = request.orderReference.getValue();
 
-    // 2. Authentication: Wompi identifies the merchant with its public key as a
-    //    Bearer token. The header is omitted when there are no credentials so
-    //    the mock endpoint, which does not authenticate, remains consumable
-    //    without configuration.
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (this.credentials) {
-      headers["Authorization"] = `Bearer ${this.credentials.publicKey}`;
+    const payload = buildWompiPayload({
+      amountInCents,
+      currency,
+      reference,
+      customerEmail: request.payer.email,
+      pseFields: buildPseFieldsFor(request.paymentMethod, request.payer, reference),
+      // Wompi acepta una sola URL de retorno, mientras que ReturnUrlConfig
+      // admite una por resultado. Se resuelve con "PENDING" porque es el estado
+      // en el que la transacción está cuando se redirige al pagador. Si el
+      // comercio configuró URLs diferenciadas, las otras dos se pierden: es una
+      // limitación de Wompi, no del SDK, y conviene que quede escrita.
+      redirectUrl: request.returnUrlConfig?.resolveFor("PENDING") ?? undefined,
+      acceptanceToken: await this.fetchAcceptanceToken(),
+      integritySecret: this.credentials?.integritySecret,
+    });
+
+    const rawResponse = await this.request(
+      `${this.baseUrl}/transactions`,
+      "POST",
+      JSON.stringify(payload),
+    );
+
+    if (request.paymentMethod?.type === "PSE") {
+      // La respuesta de creación de un PSE no trae la URL de redirección, así que
+      // hay que consultar hasta que aparezca. El lector se pasa como argumento
+      // para que la mecánica del sondeo no necesite saber de HTTP.
+      return redirectRequired(
+        await resolvePendingRedirect(rawResponse, (id) =>
+          this.request(`${this.baseUrl}/transactions/${id}`, "GET"),
+        ),
+      );
     }
 
-    let response: Response;
-
-    // 3. Perform HTTP request with Node.js native fetch.
-    try {
-      response = await fetch(this.baseUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload),
-      });
-    } catch (networkError) {
-      const errorHandler = new ErrorHandler();
-      throw errorHandler.handle(networkError, Gateway.WOMPI);
-    }
-
-    // 4. Verify successful HTTP status code.
-    if (!response.ok) {
-      let errorBody: unknown;
-      try {
-        errorBody = await response.json();
-      } catch {
-        errorBody = await response.text();
-      }
-      const errorHandler = new ErrorHandler();
-      throw errorHandler.handle({ status: response.status, body: errorBody }, Gateway.WOMPI);
-    }
-
-    // 5. Parse raw JSON response.
-    let rawResponse: unknown;
-    try {
-      rawResponse = await response.json();
-    } catch (parseError) {
-      const errorHandler = new ErrorHandler();
-      throw errorHandler.handle(parseError, Gateway.WOMPI);
-    }
-
-    // 6. Normalize to the domain Transaction entity.
     return transactionResult(this.normalizer.normalize(rawResponse, Gateway.WOMPI));
   }
 
   /**
-   * Queries the status of a transaction by its native Wompi identifier.
+   * Consulta el estado de una transacción por su identificador nativo.
    *
-   * Calls GET /v1/sim/wompi/transactions/:id on the simulator, normalizes the
-   * response with ResponseNormalizer and returns the updated Transaction.
-   * A non-existent id produces an HTTP 404 that ErrorHandler translates to
+   * Un id inexistente produce un HTTP 404 que ErrorHandler traduce a
    * KitPagosError(RESOURCE_NOT_FOUND).
    */
   async getStatus(gatewayTransactionId: string): Promise<Transaction> {
-    const statusUrl = `${this.baseUrl}/${gatewayTransactionId}`;
+    const rawResponse = await this.request(
+      `${this.baseUrl}/transactions/${gatewayTransactionId}`,
+      "GET",
+    );
+    return this.normalizer.normalize(rawResponse, Gateway.WOMPI);
+  }
 
+  /**
+   * Pide un token de aceptación de términos, que Wompi exige para crear.
+   *
+   * Es de un solo uso: hay que pedir uno nuevo por transacción, y reutilizarlo
+   * da "El token de aceptación ya fue usado". Se omite sin credenciales porque
+   * sin llave pública no hay a quién preguntarle, y la API de simulación no lo
+   * valida.
+   */
+  private async fetchAcceptanceToken(): Promise<string | undefined> {
+    if (!this.credentials) {
+      return undefined;
+    }
+    const rawResponse = await this.request(
+      `${this.baseUrl}/merchants/${this.credentials.publicKey}`,
+      "GET",
+    );
+    return extractAcceptanceToken(rawResponse);
+  }
+
+  /**
+   * Una petición HTTP con su manejo de errores y su parseo.
+   *
+   * Estaba duplicada entre `createPayment` y `getStatus`, y con PSE habría
+   * quedado cuatro veces. Consolidarla bajó la complejidad de los dos métodos
+   * públicos en vez de subirla, que era la preocupación de la Definition of Done
+   * (el WompiAdapter ya estaba en CBO 5 de 5).
+   */
+  private async request(url: string, method: string, body?: string): Promise<unknown> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
@@ -156,20 +183,12 @@ export class WompiAdapter implements PaymentGatewayPort {
     }
 
     let response: Response;
-
-    // 1. Perform GET request to the status endpoint.
     try {
-      response = await fetch(statusUrl, {
-        method: "GET",
-        headers,
-      });
+      response = await fetch(url, { method, headers, body });
     } catch (networkError) {
-      const errorHandler = new ErrorHandler();
-      throw errorHandler.handle(networkError, Gateway.WOMPI);
+      throw new ErrorHandler().handle(networkError, Gateway.WOMPI);
     }
 
-    // 2. A 404 from the simulator means the id does not exist in the store.
-    //    ErrorHandler maps it to KitPagosError(RESOURCE_NOT_FOUND).
     if (!response.ok) {
       let errorBody: unknown;
       try {
@@ -177,21 +196,17 @@ export class WompiAdapter implements PaymentGatewayPort {
       } catch {
         errorBody = await response.text();
       }
-      const errorHandler = new ErrorHandler();
-      throw errorHandler.handle({ status: response.status, body: errorBody }, Gateway.WOMPI);
+      throw new ErrorHandler().handle(
+        { status: response.status, body: errorBody },
+        Gateway.WOMPI,
+      );
     }
 
-    // 3. Parse raw JSON response.
-    let rawResponse: unknown;
     try {
-      rawResponse = await response.json();
+      return await response.json();
     } catch (parseError) {
-      const errorHandler = new ErrorHandler();
-      throw errorHandler.handle(parseError, Gateway.WOMPI);
+      throw new ErrorHandler().handle(parseError, Gateway.WOMPI);
     }
-
-    // 4. Normalize to the domain Transaction entity.
-    return this.normalizer.normalize(rawResponse, Gateway.WOMPI);
   }
 
   /**

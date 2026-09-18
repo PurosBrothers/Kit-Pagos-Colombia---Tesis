@@ -98,7 +98,9 @@ describe("KitPagos", () => {
     });
 
     it("should target the baseUrl configured by the merchant instead of the default one", async () => {
-      const simulatorUrl = "http://localhost:4000/v1/sim/wompi/transactions";
+      // Desde el issue #64 el baseUrl es la raíz de la API, no el endpoint de
+      // transacciones: el adaptador le agrega la ruta que corresponda.
+      const simulatorRoot = "http://localhost:4000/v1/sim/wompi";
       const mockFetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 201,
@@ -106,10 +108,10 @@ describe("KitPagos", () => {
       });
       global.fetch = mockFetch;
 
-      await buildConfiguredSdk(simulatorUrl).createPayment(validRequest);
+      await buildConfiguredSdk(simulatorRoot).createPayment(validRequest);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        simulatorUrl,
+        `${simulatorRoot}/transactions`,
         expect.objectContaining({ method: "POST" })
       );
     });
@@ -579,7 +581,7 @@ describe("KitPagos", () => {
       const sdk = new KitPagos({
         gateway: Gateway.WOMPI,
         credentials: { [Gateway.WOMPI]: wompiCredentials },
-        baseUrl: "http://localhost:3000/v1/sim/wompi/transactions",
+        baseUrl: "http://localhost:3000/v1/sim/wompi",
         maxRetries: 2,
       });
 
@@ -611,7 +613,7 @@ describe("KitPagos", () => {
       const sdk = new KitPagos({
         gateway: Gateway.WOMPI,
         credentials: { [Gateway.WOMPI]: wompiCredentials },
-        baseUrl: "http://localhost:3000/v1/sim/wompi/transactions",
+        baseUrl: "http://localhost:3000/v1/sim/wompi",
       });
 
       let callCount = 0;
@@ -634,7 +636,7 @@ describe("KitPagos", () => {
       const sdk = new KitPagos({
         gateway: Gateway.WOMPI,
         credentials: { [Gateway.WOMPI]: wompiCredentials },
-        baseUrl: "http://localhost:3000/v1/sim/wompi/transactions",
+        baseUrl: "http://localhost:3000/v1/sim/wompi",
       });
 
       let callCount = 0;
