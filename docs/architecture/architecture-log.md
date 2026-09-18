@@ -691,6 +691,59 @@ La regla de detección en Rapyd es la presencia de un `redirect_url` no vacío, 
 
 ---
 
+### 40. El adaptador de Kushki entró escrito contra la firma anterior de `createPayment()`
+
+**Origen:** Corrección directa sobre `devops` después de integrar el PR #86 (issue #53).
+
+El PR #86 se abrió antes de que el punto 39 cambiara el tipo de retorno de `createPayment()`
+de `Transaction` a `PaymentResult`, y se integró sin rebasar. El merge automático no dio
+conflicto porque los dos cambios tocan archivos distintos, pero el resultado no compilaba:
+`KushkiAdapter` declaraba `Promise<Transaction>` contra un puerto que ya exigía
+`Promise<PaymentResult>`, y quince aserciones de prueba leían propiedades de `Transaction`
+sobre el valor de la unión. Es el modo de falla típico de una integración larga: el merge
+limpio no prueba nada sobre la compilación, porque Git compara texto y no tipos.
+
+La corrección mantiene la rama `TRANSACTION` como única salida del adaptador, porque el cobro
+con tarjeta de Kushki es sincrono: el estado llega en la respuesta del `POST` y no hay
+redirección que devolver. La rama `REDIRECT_REQUIRED` le corresponde a Transfer In, que es el
+PSE de Kushki (punto 19) y sigue sin implementar. Las pruebas pasaron a usar
+`expectTransaction()` de `test-support/payment-result.ts`, el mismo helper que ya usaban los
+otros tres adaptadores, en vez de tratar la unión como si fuera la entidad.
+
+Se aprovechó el mismo commit para tres cosas que el PR arrastraba:
+
+- **`ResponseNormalizer` salió del constructor a campo inicializado.** Con el parámetro, el CBO
+  de `KushkiAdapter` quedaba en 6 al sumar `PaymentResult` a la firma. Es exactamente la misma
+  maniobra del punto 35 y de los otros tres adaptadores, no una excepción para este caso.
+- **Se borraron `sdk/src.zip` y `simulator-api.zip`** (252 KB), que duplicaban en binario código
+  fuente ya versionado. Un zip de fuentes dentro del repo que lo contiene no tiene lector: nadie
+  lo va a descomprimir para leer lo que está al lado en texto plano, y sí envenena los diffs.
+- **Se restauró la nota de cierre de PSE en Rapyd** en `ubiquitous-language.md`. El PR la había
+  eliminado y reescrito la nota de integridad reintroduciendo el patrón `co_{banco}_bank`, que
+  el issue #68 ya había probado falso (es `co_pse_{banco}_bank`, punto 19). Quedaba un documento
+  que se contradecía consigo mismo: la cabecera declaraba el pendiente abierto con el patrón
+  equivocado mientras las filas de abajo traían el dato verificado.
+
+**Sobre `INITIALIZED`:** el normalizador de Kushki lo traduce a `PENDING`, pero ese valor **no
+está confirmado contra fuente pública de Kushki para pagos con tarjeta** — hoy solo lo emite el
+mock del simulador. El autor del PR lo dejó anotado con honestidad en
+`simulator-api/src/gateways/kushki/types.ts`; lo que faltaba era que
+`layers-and-components.md` no lo presentara como hecho documentado. Queda soportado para que un
+estado intermedio no rompa el normalizador, no como afirmación sobre la API real.
+
+**Verificación:** `tsc --noEmit` 0 errores. `npm test` en `sdk`: 353 passed / 353 total. `npm test`
+en `simulator-api`: 29 passed / 29 total. `npm run metrics`: `✓ All 31 class(es) within
+thresholds.` `npm run lint`: exit 0.
+
+**Lección de proceso, no de arquitectura:** un PR que vive varios días mientras el puerto que
+implementa cambia debajo hay que rebasarlo antes de integrarlo, y la señal de que hace falta no
+es el conflicto de Git sino el compilador. Conviene que la verificación de tipos corra sobre el
+merge propuesto, no solo sobre la rama.
+
+**Estado:** Resuelto en el código.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum

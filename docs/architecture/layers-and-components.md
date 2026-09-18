@@ -188,7 +188,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   - Autenticación: header `Private-Merchant-Id`.
   - Monto: objeto desglosado `amount` en pesos nominales para el mock (`subtotalIva0`, `subtotalIva`, `iva`, `ice`); no se desplaza a centavos como Wompi.
   - HTTP: el mock devuelve 200 tanto para aprobación como para rechazo; el estado de negocio siempre se toma de `transaction_status`.
-  - Mapeo de estado: campo `transaction_status` con valores `APPROVAL`, `DECLINED` e `INITIALIZED`. **Nota crítica:** Kushki usa `APPROVAL` en lugar de `APPROVED`, diferencia que el Response Normalizer gestiona explícitamente.
+  - Mapeo de estado: campo `transaction_status`. **Nota crítica:** Kushki usa `APPROVAL` en lugar de `APPROVED`, diferencia que el Response Normalizer gestiona explícitamente. El cobro con tarjeta es **sincrono** y solo documenta `APPROVAL` y `DECLINED`; el tercer valor `INITIALIZED` que el normalizador acepta **no está confirmado contra fuente pública de Kushki para tarjeta** (sí existe para efectivo y transferencias) y hoy solo lo emite el mock del simulador. Está soportado para que un estado intermedio no rompa el normalizador, no porque la API real lo devuelva en este flujo.
   - Verificación de firma: HMAC-SHA256.
 - **Prioridad:** Media. Implementación validada contra el contrato del simulador; no certificada aún contra sandbox UAT.
 - **Modo simulación:** Redirige solicitudes al simulador en modo pruebas y usa un token simulado.
@@ -207,7 +207,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   - `payload-utils.ts` — parseo del payload, validación del objeto de datos y mapeo de errores de objeto de valor, que las tres ramas repetían textualmente.
   
   Hasta el punto 34 las tres traducciones vivían como ramas de un `switch` dentro de `normalize()`, que medía 360 de las 371 líneas del archivo y tenía complejidad ciclomática 62. Agregar una pasarela significaba editar ese método; ahora significa agregar una clase y registrarla, sin tocar las otras traducciones.
-- **Mapeo de estados:** Cada normalizador traduce los estados crudos de su proveedor al enum `TransactionStatus` con valores `APPROVED`, `DECLINED`, `PENDING`, `EXPIRED`, `VOIDED` y `ERROR`. Para Kushki, `APPROVAL` se traduce a `APPROVED` e `INITIALIZED` a `PENDING`.
+- **Mapeo de estados:** Cada normalizador traduce los estados crudos de su proveedor al enum `TransactionStatus` con valores `APPROVED`, `DECLINED`, `PENDING`, `EXPIRED`, `VOIDED` y `ERROR`. Para Kushki, `APPROVAL` se traduce a `APPROVED` e `INITIALIZED` a `PENDING`, este último con la salvedad de origen anotada arriba.
 - **Construcción de entidad:** Una vez normalizado el estado, construye y retorna la entidad `Transaction` con todos los campos del dominio.
 - **Impacto en métricas CK:** Al centralizar la normalización, el código cliente no necesita referenciar los tipos de respuesta de ninguna pasarela, lo que reduce directamente su CBO (Coupling Between Object Classes) — indicador clave de la evaluación del framework.
 
