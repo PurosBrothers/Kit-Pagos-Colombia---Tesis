@@ -54,6 +54,49 @@ Ingresa los siguientes valores en el campo **Nombre y Apellido del Titular** par
 
 ## 2. PSE (Pagos Seguros en Línea)
 
+> ### Verificado contra la API real el 18 de septiembre de 2026 (issue #64)
+>
+> Lo que sigue en esta sección es correcto en cuanto a la forma del payload y a la
+> ubicación de la URL de redirección. Pero al implementarlo aparecieron cuatro
+> cosas que no están dichas acá y que hacen fallar la integración si uno sigue el
+> paso a paso literalmente. El razonamiento completo está en el punto 45 del
+> `architecture-log.md` y en `sdk/src/infrastructure/adapters/mercadopago-pse.ts`.
+>
+> 1. **El token `TEST-` no sirve para esta API.** `POST /v1/orders` responde
+>    `401 invalid_credentials`: "Test credentials are not supported, use test users
+>    with production credentials to sandbox environment". Hace falta el token
+>    `APP_USR-`, que es lo que ya decía el paso 1 pero sin explicar que un `TEST-`
+>    falla de entrada.
+>
+> 2. **El email del ejemplo no funciona, y un usuario de prueba tampoco.** Con
+>    `test_user_co@testuser.com` la respuesta es `400 / 2034 Invalid users
+>    involved`. Y con un usuario creado por `POST /users/test_user` la orden se
+>    crea pero el pago muere en `failed / processing_error` (402), o sea lo
+>    contrario de lo que aconseja el mensaje de error del punto anterior. **Hay que
+>    usar un email corriente** (por ejemplo `comprador@example.com`).
+>
+> 3. **`total_amount` no admite decimales.** `"5000"` funciona y `"5000.00"`
+>    responde `400 Invalid value for property`.
+>
+> 4. **PSE no se puede cobrar por la Payments API.** Se intentó por
+>    `POST /v1/payments` con el banco en `transaction_details.financial_institution`
+>    y devuelve `424 / 9032 BankTransfers Api fail` con cualquier banco y cualquier
+>    monto, aunque las mismas credenciales sí procesen tarjeta. La Orders API no es
+>    una alternativa: es el único camino.
+>
+> **Campos obligatorios, medidos quitándolos de a uno.** En `payer`: `email`,
+> `entity_type`, `first_name`, `last_name`, `identification`, `phone` y `address`,
+> todos con `400 '$.payer' - missing properties`. Fuera de `payer`:
+> `additional_info` (la IP), `external_reference` y `config` (la URL de retorno).
+> Son opcionales `expiration_time` y `processing_mode`.
+>
+> **Lista real de bancos.** No hace falta adivinarla: `GET /v1/payment_methods`
+> devuelve el método `pse` con su arreglo `financial_institutions`. Ahí están
+> `1001` Banco de Bogotá, `1007` Bancolombia, `1013` BBVA, `1051` Davivienda y el
+> resto, junto con `min_allowed_amount: 1600` y `max_allowed_amount: 340000000`.
+> Un código inexistente **no** se rechaza al crear: pasa la validación y el pago
+> muere después en `processing_error`.
+
 ### Paso a paso de implementación en Sandbox (Orders API)
 
 1. **Crear la Orden:** Envía la solicitud a `POST /v1/orders` utilizando tu `Access Token` de prueba:

@@ -895,6 +895,47 @@ De paso quedó cubierto `CASH`, que existe en el tipo desde el #85 y ninguna pas
 
 ---
 
+### 45. PSE en Mercado Pago obliga a otra API, a más datos del pagador y a una URL de retorno que Wompi no exige
+
+**Responsable de corregirlo en el SAD:** Joan (sección 15.1, objeto de valor `Payer`, y sección 9.1.1, contrato de `CreatePaymentRequest`).
+
+**Encontrado:** Al implementar PSE en Mercado Pago (issue #64, segundo PR) se sondeó la API real (`https://api.mercadopago.com`) el 18 de septiembre de 2026 en vez de trabajar sobre la documentación, siguiendo lo aprendido en el punto 43. Seis resultados, y cuatro cambiaron el diseño.
+
+**1. PSE no se cobra por la Payments API, y eso no se sabía.** Se intentó primero por `POST /v1/payments`, que es la que el adaptador ya usaba para tarjeta, porque habría evitado un segundo endpoint y todo el trabajo que trajo. Con el banco en `transaction_details.financial_institution` la petición pasa la validación de campos y muere igual en `424 / 9032 BankTransfers Api fail`, con dos bancos distintos (1001 y 1051), con montos 2000, 5000 y 50000, y con los dos `entity_type`. El control de tarjeta en el mismo script falla solo con `3003 Invalid card_token_id`, o sea por el token falso y nada más, así que no era un problema de permisos de la cuenta. La hipótesis quedó descartada por medición y el flujo va a `POST /v1/orders`.
+
+**2. Las credenciales de prueba no sirven, y las de producción exigen un pagador que no sea de prueba.** Un token `TEST-` recibe `401 invalid_credentials` en la Orders API, con el mensaje "Test credentials are not supported, use test users with production credentials to sandbox environment". Con el token `APP_USR-` la orden sí se crea, pero **si el pagador es un usuario de prueba creado con `POST /users/test_user`, el pago interno muere en `failed / processing_error` (HTTP 402)**, medido con dos bancos. Con un email corriente responde 201 y entrega la redirección. Es decir que la pasarela contradice su propio mensaje de error. Conviene tenerlo escrito porque el síntoma no dice nada sobre la causa: por ese camino se perdió un buen rato.
+
+**3. La redirección llega en la creación: Mercado Pago sí es un flujo de una sola llamada.** La URL vive en `transactions.payments[0].payment_method.redirect_url`, que es donde la documentación del repo decía, junto a `status: "action_required"` y `status_detail: "waiting_transfer"`. Es la diferencia de fondo con Wompi (punto 43), que no la entrega hasta un `GET` posterior y obligó a escribir un sondeo. Acá ese sondeo no hace falta, y el adaptador emite **una sola** petición.
+
+**4. El monto no admite decimales.** `total_amount: "2000"` responde 201 y `"2000.00"` responde `400 Invalid value for property`. Importa porque `Amount.getValue()` conserva la escala con la que el comercio escribió el monto, así que un `"150000.00"` perfectamente válido en el dominio —y que es exactamente lo que usan los ejemplos del repo— es inválido acá. Se resolvió con `toWholePesos()`, que **lanza en vez de redondear** cuando hay centavos distintos de cero: cobrar un monto que el comercio no pidió es peor que fallar, el mismo criterio con el que `Amount.toMinorUnits()` lanza en vez de truncar.
+
+**5. Qué es obligatorio, medido por omisión.** Quitando cada campo por separado, estos devuelven `400` con `'$.payer' - missing properties`: `email`, `entity_type`, `first_name`, `last_name`, `identification`, `phone` y `address`. Fuera de `payer` son obligatorios `additional_info` (la IP del pagador), `external_reference` y `config` (la URL de retorno). `expiration_time` y `processing_mode` son opcionales: sin ellos responde 201 igual.
+
+**La asimetría más concreta que apareció entre dos pasarelas para el mismo método de pago** es justamente la URL de retorno: en Wompi se midió que `redirect_url` es prescindible (acepta 201 sin ella, punto 43) y en Mercado Pago su ausencia rechaza la orden. O sea que `ReturnUrlConfig` es opcional en el contrato general y obligatorio en esta pasarela, y eso solo se puede verificar localmente porque el puerto no tiene dónde expresar "obligatorio según la pasarela activa".
+
+**6. Un banco inexistente no se detecta al crear.** El código `"9999"` pasa la validación y muere después en `processing_error`, igual que en Wompi. El SDK no puede delegarle a ninguna de las dos la detección de un banco inválido. Por debajo del mínimo de la cuenta (1600 COP, declarado en `GET /v1/payment_methods`) responde 422.
+
+**Decisión: ampliar `Payer` en vez de abrir una bolsa de extras por pasarela.** Mercado Pago pide nombre y apellido separados, teléfono con indicativo y dirección completa, y el dominio no tenía nada de eso: `Payer` traía `fullName` y `phone` como strings únicos, y ninguna dirección. Las alternativas eran un objeto de valor `BillingAddress` aparte o un `Record<string, unknown>` de campos nativos por pasarela. Se eligió ampliar `Payer` con campos **opcionales** y validar en el adaptador:
+
+- **Todos los campos nuevos son opcionales** y `Payer` no valida ninguno. Quien decide qué falta es el adaptador, que sabe contra qué API va a hablar. Validar en el objeto de valor le daría a Mercado Pago poder de veto sobre las otras tres: un comercio que cobra con tarjeta por Wompi tendría que informar la dirección del pagador. Es el mismo criterio con el que los tipos de documento de Wompi viven en `wompi-pse.ts` y no en `Payer`.
+- **`firstName` y `lastName` conviven con `fullName` en vez de derivarse de él**, porque partir un nombre no es una operación segura: en Colombia lo habitual son dos apellidos y "Juan Carlos Pérez Gómez" no tiene una división correcta deducible. Derivarlo habría sido adivinar el apellido del pagador para mandárselo a una pasarela.
+- **La IP va en `CreatePaymentRequest` y no en `Payer`**, porque no es un atributo de la persona sino de la petición: el mismo pagador cambia de IP entre un pago y el siguiente, y guardarla en el objeto de valor invitaría a reutilizar un dato caduco.
+- **La validación acumula todos los campos faltantes en un solo error** en lugar de fallar en el primero, para que el comercio los corrija de una vez en vez de descubrirlos de a uno por HTTP 400 sucesivos.
+
+**Decisión: `baseUrl` de Mercado Pago pasa a ser la raíz.** Igual que en Wompi (punto 43), y por la misma razón: el adaptador ahora necesita dos rutas (`/payments` para tarjeta y `/orders` para PSE) y un `baseUrl` que apuntaba a una sola no tenía dónde colgar la otra. Es un cambio incompatible para quien lo sobrescribiera, y se hace ahora porque el paquete todavía no está publicado en npm (issue #88).
+
+**Decisión: `getStatus()` elige el endpoint por el prefijo del identificador.** Mercado Pago tiene dos familias de recursos y el puerto recibe un string plano: las órdenes son ULIDs prefijados `ORD` (medido: `ORD01M2V7ZQH9BAZ57V99VG1NY0K1`) y los pagos con tarjeta son numéricos. Distinguir por el prefijo es frágil en apariencia; la alternativa era cambiar la firma del puerto para las cuatro pasarelas y meterle a las otras tres una distinción que no tienen. Queda registrado como el punto a repensar si alguna vez se tipa el identificador.
+
+**Métrica CK:** el `MercadoPagoAdapter` estaba en **CBO 5 de 5**, sin margen, así que toda la mecánica de PSE vive en `mercadopago-pse.ts` como funciones de módulo, por el criterio del punto 34. Se consolidó además la plomería HTTP que estaba duplicada entre `createPayment` y `getStatus`, igual que en Wompi. Resultado: WMC 12, CBO 5, RFC 10, MAX_CC 6. En el `MercadoPagoResponseNormalizer` el `switch` de estados se reemplazó por una tabla de módulo, porque cubrir los dos vocabularios (el de tarjeta y el de órdenes) lo habría empujado sobre el MAX_CC ≤ 10; con la tabla quedó en 9.
+
+**Un defecto que este cambio corrige de paso:** `action_required` no estaba en el mapeo de estados, así que una orden de PSE esperando al pagador se habría normalizado como `ERROR`. Tampoco estaba leído `total_amount`, porque el normalizador solo conocía `transaction_amount` de la Payments API, ni `currency` frente a `currency_id`. Los tres son consecuencia de que la Orders API es otra API y no una variante de la misma.
+
+**Verificación:** SDK 409 pruebas / 409 (23 nuevas: 16 en `mercadopago-pse.test.ts` y 7 en `MercadoPagoAdapter.test.ts`). Simulador 45 / 45 (8 nuevas en `mercadopago-pse.test.ts`). `npm run lint` sin hallazgos, `npm run metrics`: `✓ All 31 class(es) within thresholds.`, `typecheck` de `examples/` limpio. El ejemplo `simulate-mercadopago-pse.ts` corrido contra el simulador devuelve `REDIRECT_REQUIRED` con estado nativo `action_required` en **una sola** petición, y la consulta posterior por el identificador `ORD...` se enruta a `/orders` y devuelve `processed` → `APPROVED`.
+
+**Estado:** Resuelto en el código para Mercado Pago. La última pata del flujo real —que el pagador transfiera en el banco y la orden pase a `processed`— no se pudo observar contra la pasarela: exige que una persona entre al simulador bancario. Rapyd y Kushki siguen sin PSE, por las 2 y 3 llamadas previas que el puerto todavía no sabe expresar (límite registrado en el punto 39). `CASH` sigue sin implementar en ninguna de las cuatro.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum

@@ -91,6 +91,35 @@ npm run simulate:mercadopago
 
 ---
 
+### 2b. Simulación de pago con PSE (Mercado Pago)
+
+```bash
+npm run simulate:mercadopago-pse
+```
+
+* **Archivo:** `simulate-mercadopago-pse.ts`
+* **Descripción:** El mismo método de pago que `simulate-wompi-pse.ts`, en otra pasarela. Está pensado para leerse **al lado** de aquel, porque la comparación es el punto: el código de comercio es el mismo —objetos de valor, `createPayment()`, `PaymentResult`— y sin embargo Mercado Pago exige bastante más dato para cobrar exactamente lo mismo.
+* **Qué esperar:**
+  1. Imprime la solicitud, que además del documento lleva nombre y apellido separados, teléfono con indicativo, dirección completa e IP del pagador.
+  2. Muestra una redirección pendiente con la URL del banco y estado nativo `action_required`, en **una sola** petición HTTP.
+  3. Consulta el estado y obtiene `processed` → `APPROVED`.
+* **Lo que este ejemplo enseña y el de Wompi no:** que la abstracción unifica **la forma de pedir el pago y la de leer el resultado**, no la cantidad de datos que hay que reunir antes. Un comercio que migra de Wompi a Mercado Pago no reescribe su integración, pero sí tiene que empezar a recolectar la dirección del pagador. Medido campo por campo contra la API real:
+
+  | Dato | Wompi | Mercado Pago |
+  |---|---|---|
+  | documento del pagador | obligatorio | obligatorio |
+  | nombre y apellido separados | no lo pide | obligatorios |
+  | teléfono con indicativo | no lo pide | obligatorio |
+  | dirección completa | no la pide | obligatoria |
+  | IP del pagador | no la pide | obligatoria |
+  | URL de retorno | **opcional** | **obligatoria** |
+  | sondeo para obtener la URL | **necesario** | no hace falta |
+
+* **Códigos de banco:** son los reales que publica la cuenta en `GET /v1/payment_methods`. `1051` es Davivienda, `1007` Bancolombia, `1013` BBVA. No tienen nada que ver con los de Wompi (`1`, `2`, `3`): el código de banco es el único dato del contrato que no se puede reutilizar al cambiar de pasarela.
+* **Por qué corre contra el simulador:** porque la Orders API real **no se puede ejercitar con credenciales de prueba** (responde `401` y exige un token de producción), y completar el pago requiere que una persona entre al simulador bancario y transfiera. El detalle de lo medido está en el punto 45 del `architecture-log.md`.
+
+---
+
 ### 3. Simulación de pago con Rapyd
 
 ```bash

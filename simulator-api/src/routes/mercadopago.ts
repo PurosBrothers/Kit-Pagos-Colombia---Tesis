@@ -1,9 +1,18 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { GatewayMockFactory } from "../gateways/mercadopago/GatewayMockFactory";
-import { MercadoPagoCreatePaymentRequestBody } from "../gateways/mercadopago/types";
+import {
+  MercadoPagoCreateOrderRequestBody,
+  MercadoPagoCreatePaymentRequestBody,
+} from "../gateways/mercadopago/types";
 
 const SCENARIO_HEADER = "x-simulate-scenario";
 export const DEFAULT_SCENARIO = "APPROVED";
+
+/** Escenario pedido por cabecera, que Fastify puede entregar como lista. */
+function readScenario(request: FastifyRequest): string {
+  const header = request.headers[SCENARIO_HEADER];
+  return Array.isArray(header) ? header[0] : (header ?? DEFAULT_SCENARIO);
+}
 
 /**
  * Router HTTP de Mercado Pago (API de Simulación).
@@ -11,11 +20,17 @@ export const DEFAULT_SCENARIO = "APPROVED";
  * Expone:
  * 1. POST /v1/sim/mercadopago/payments: simula la creación de un pago (status 201).
  * 2. GET /v1/sim/mercadopago/payments/:id: simula la consulta del estado de un pago (status 200).
+ * 3. POST /v1/sim/mercadopago/orders: simula la creación de una orden de PSE (status 201).
+ * 4. GET /v1/sim/mercadopago/orders/:id: simula la consulta de una orden (status 200).
  *
  * Particularidades de Mercado Pago:
  * - El monto se procesa en pesos (`transaction_amount`).
  * - Los estados son en minúsculas (`approved`, `rejected`, `pending`).
  * - Respuesta JSON plana sin envoltorio `data`.
+ * - **Dos APIs distintas, no dos payloads:** la tarjeta va por `/payments` y PSE
+ *   por `/orders`, con otro vocabulario de estados (`action_required`) y el monto
+ *   como string sin decimales. Esto no es una simplificación del mock: es lo que
+ *   se midió contra la API real (issue #64).
  */
 export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   const mockFactory = new GatewayMockFactory();
@@ -87,6 +102,94 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         },
         id,
       );
+      return reply.code(200).send(response);
+    },
+  );
+
+  // 3. Creación de orden para PSE (POST /v1/sim/mercadopago/orders)
+  //
+  // PSE no se cobra por la Payments API sino por esta: contra la API real, el
+  // mismo pago con el banco en `transaction_details.financial_institution`
+  // devuelve 424 pase lo que pase. Ver `mercadopago-pse.ts` en el SDK.
+  app.post(
+    "/v1/sim/mercadopago/orders",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const scenario = readScenario(request);
+      const requestBody = request.body as MercadoPagoCreateOrderRequestBody;
+
+      if (scenario.toUpperCase() === "REJECTED" || scenario.toUpperCase() === "DECLINED") {
+        // La pasarela real no rechaza un PSE al crearlo: la orden se crea y el
+        // pago muere después, con la orden entera en `failed`. Se reproduce con
+        // 402 y no con 201 porque es el código que devolvió la API real.
+        return reply.code(402).send({
+          errors: [
+            {
+              code: "failed",
+              message: "The following transactions failed",
+            },
+          ],
+        });
+      }
+
+      const response = mockFactory.buildPendingOrderResponse(requestBody);
+      return reply.code(201).send(response);
+    },
+  );
+
+  // 4. Consulta de orden (GET /v1/sim/mercadopago/orders/:id)
+  //
+  // Devuelve la orden ya pagada, que es el estado que el comercio ve cuando el
+  // pagador vuelve del banco. Es lo que permite ejercitar el flujo completo de
+  // PSE de punta a punta, que contra la pasarela real exigiría que una persona
+  // entre al banco.
+  app.get(
+    "/v1/sim/mercadopago/orders/:id",
+    async (
+      request: FastifyRequest<{ Params: { id: string } }>,
+      reply: FastifyReply,
+    ) => {
+      const { id } = request.params;
+      const scenario = readScenario(request);
+
+      if (scenario.toUpperCase() === "NOT_FOUND") {
+        return reply.code(404).send({
+          message: "Order not found",
+          error: "not_found",
+          status: 404,
+        });
+      }
+
+      const requestBody: MercadoPagoCreateOrderRequestBody = {
+        total_amount: "150000",
+        // Sin `external_reference` a propósito: el simulador no guarda estado
+        // entre el POST y el GET, así que no conoce la referencia con la que el
+        // comercio creó la orden. Inventar una sería peor que omitirla, porque el
+        // normalizador cae entonces en el identificador de la orden, que sí es un
+        // dato real. Es la limitación conocida del simulador, registrada en
+        // `docs/examples/gateway-interchangeability.md`.
+        payer: { email: "customer@example.com", entity_type: "individual" },
+        transactions: {
+          payments: [
+            {
+              amount: "150000",
+              payment_method: {
+                id: "pse",
+                type: "bank_transfer",
+                financial_institution: "1051",
+              },
+            },
+          ],
+        },
+      };
+
+      // Con el escenario PENDING la orden sigue esperando al pagador, para que se
+      // pueda ejercitar también el caso en que el comercio consulta antes de que
+      // la transferencia se acredite.
+      const response =
+        scenario.toUpperCase() === "PENDING"
+          ? mockFactory.buildPendingOrderResponse(requestBody, id)
+          : mockFactory.buildProcessedOrderResponse(requestBody, id);
+
       return reply.code(200).send(response);
     },
   );

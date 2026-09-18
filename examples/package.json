@@ -8,6 +8,7 @@
     "simulate:wompi": "tsx simulate-wompi-payment.ts",
     "simulate:wompi-pse": "tsx simulate-wompi-pse.ts",
     "simulate:mercadopago": "tsx simulate-mercadopago-payment.ts",
+    "simulate:mercadopago-pse": "tsx simulate-mercadopago-pse.ts",
     "simulate:rapyd": "tsx simulate-rapyd-payment.ts",
     "simulate:kushki": "tsx simulate-kushki-payment.ts",
     "typecheck": "tsc --noEmit"

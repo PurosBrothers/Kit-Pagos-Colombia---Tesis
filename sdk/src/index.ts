@@ -20,6 +20,8 @@ export { Gateway } from "./domain/value-objects/Gateway";
 export {GatewayTransactionId} from "./domain/value-objects/GatewayTransactionId";
 export {OrderReference} from "./domain/value-objects/OrderReference";
 export { Payer } from "./domain/value-objects/Payer";
+// La direccion del pagador la exige la Orders API de Mercado Pago para PSE.
+export type { PayerAddress, PayerAttributes } from "./domain/value-objects/Payer";
 // PaymentMethod se exporta como clase, no como tipo: el comercio necesita los
 // constructores nombrados (`PaymentMethod.pse(...)`) para poder armar uno.
 export { PaymentMethod } from "./domain/value-objects/PaymentMethod";

@@ -94,7 +94,6 @@ describe("pedir un método que la pasarela no implementa", () => {
   });
 
   it.each([
-    ["MercadoPagoAdapter", () => new MercadoPagoAdapter()],
     ["RapydAdapter", () => new RapydAdapter()],
     ["KushkiAdapter", () => new KushkiAdapter()],
   ])("%s should refuse a PSE payment without issuing any request", async (_name, build) => {
@@ -104,6 +103,24 @@ describe("pedir un método que la pasarela no implementa", () => {
     await expect(build().createPayment(pseRequest)).rejects.toMatchObject({
       code: KitPagosErrorCode.UNSUPPORTED_OPERATION,
     });
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Mercado Pago sí implementa PSE desde este issue, así que no debe rechazarlo
+   * por no soportarlo. Lo que sí rechaza es la falta de los datos que su Orders
+   * API exige y el dominio deja opcionales, y lo hace con `INVALID_REQUEST` en
+   * vez de `UNSUPPORTED_OPERATION`: la distinción importa porque la salida de uno
+   * es completar datos y la del otro es cambiar de pasarela.
+   */
+  it("MercadoPagoAdapter should refuse a PSE payment that lacks its required data", async () => {
+    const mockFetch = jest.fn();
+    global.fetch = mockFetch;
+
+    await expect(
+      new MercadoPagoAdapter().createPayment(pseRequest),
+    ).rejects.toMatchObject({ code: KitPagosErrorCode.INVALID_REQUEST });
 
     expect(mockFetch).not.toHaveBeenCalled();
   });

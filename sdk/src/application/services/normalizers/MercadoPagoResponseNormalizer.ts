@@ -17,6 +17,38 @@ import {
 /** Email de relleno cuando la respuesta no trae el del pagador. */
 const FALLBACK_EMAIL = "customer@mercadopago.com";
 
+/**
+ * Estados nativos de Mercado Pago, de las dos APIs, traducidos al enum unificado.
+ *
+ * Es una tabla y no un `switch` porque desde el issue #64 hay que cubrir dos
+ * vocabularios: el de la Payments API, que usa tarjeta (`approved`, `rejected`,
+ * `in_process`), y el de la Orders API, que usa PSE (`processed`,
+ * `action_required`, `expired`). Con un `switch` la complejidad ciclomática del
+ * método se iba sobre el MAX_CC <= 10 de la Definition of Done; una tabla tiene
+ * complejidad constante y además se lee como lo que es, una correspondencia.
+ *
+ * `action_required` es el estado en el que queda una orden de PSE esperando que
+ * el pagador vuelva del banco, y se mapea a `PENDING` porque el dinero no se
+ * movió todavía. Medido contra la API real: llega junto a
+ * `status_detail: "waiting_transfer"`.
+ */
+const STATUS_TABLE: Readonly<Record<string, TransactionStatus>> = {
+  // Payments API (tarjeta).
+  approved: "APPROVED",
+  rejected: "DECLINED",
+  pending: "PENDING",
+  in_process: "PENDING",
+  cancelled: "VOIDED",
+  // Orders API (PSE).
+  processed: "APPROVED",
+  action_required: "PENDING",
+  created: "PENDING",
+  processing: "PENDING",
+  canceled: "VOIDED",
+  expired: "EXPIRED",
+  failed: "ERROR",
+};
+
 /** Traduce la respuesta nativa de Mercado Pago a la entidad Transaction. */
 export class MercadoPagoResponseNormalizer implements GatewayResponseNormalizer {
   normalize(rawResponse: unknown): Transaction {
@@ -32,12 +64,16 @@ export class MercadoPagoResponseNormalizer implements GatewayResponseNormalizer 
     );
 
     const rawStatus = String(data.status ?? "");
-    const currency = new Currency(String(data.currency_id ?? "COP"));
+    // `currency_id` es de la Payments API y `currency` de la Orders API, que es
+    // la que usa PSE. Las dos traen el codigo ISO, solo cambia el nombre.
+    const currency = new Currency(String(data.currency_id ?? data.currency ?? "COP"));
 
-    // `transaction_amount` viaja en pesos con decimales, no en centavos, asi que
-    // se construye el Amount directamente sin pasar por fromMinorUnits().
+    // Las dos APIs expresan el monto en pesos y no en centavos, asi que se
+    // construye el Amount directamente sin pasar por fromMinorUnits(). La
+    // Payments API lo llama `transaction_amount` y lo manda como numero; la
+    // Orders API lo llama `total_amount` y lo manda como string.
     const amount = mapValueObjectError(
-      () => new Amount(amountToString(data.transaction_amount)),
+      () => new Amount(amountToString(data.transaction_amount ?? data.total_amount)),
       Gateway.MERCADOPAGO,
       rawResponse,
       "Malformed amount in Mercado Pago response",
@@ -73,20 +109,10 @@ export class MercadoPagoResponseNormalizer implements GatewayResponseNormalizer 
    *
    * Los estados nativos llegan en minusculas. `rawStatus` se preserva tal como
    * llego para auditoria, de modo que la normalizacion no pierde el original.
+   * Un estado desconocido cae en `ERROR` a proposito: es mejor que el comercio
+   * vea un error que un `APPROVED` inventado.
    */
   private mapStatus(rawStatus: string): TransactionStatus {
-    switch (rawStatus.toLowerCase()) {
-      case "approved":
-        return "APPROVED";
-      case "rejected":
-        return "DECLINED";
-      case "pending":
-      case "in_process":
-        return "PENDING";
-      case "cancelled":
-        return "VOIDED";
-      default:
-        return "ERROR";
-    }
+    return STATUS_TABLE[rawStatus.toLowerCase()] ?? "ERROR";
   }
 }

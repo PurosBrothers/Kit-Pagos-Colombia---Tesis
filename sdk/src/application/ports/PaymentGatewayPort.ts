@@ -48,6 +48,20 @@ export interface CreatePaymentRequest {
    * gasta una ida y vuelta para nada.
    */
   paymentMethod?: PaymentMethod;
+
+  /**
+   * Dirección IP de quien está pagando, tal como la ve el servidor del comercio.
+   *
+   * Vive en la solicitud y no en `Payer` porque no es un atributo de la persona
+   * sino de la petición concreta: el mismo pagador cambia de IP entre un pago y
+   * el siguiente, y guardarla en el objeto de valor invitaría a reutilizar un
+   * dato caduco.
+   *
+   * Mercado Pago la exige para PSE (`additional_info` es obligatorio en la
+   * Orders API, medido el 18 de septiembre de 2026). Las otras tres no la piden,
+   * y por eso es opcional.
+   */
+  ipAddress?: string;
 }
 
 /**

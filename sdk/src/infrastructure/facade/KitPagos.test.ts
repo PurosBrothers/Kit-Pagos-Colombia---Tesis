@@ -497,7 +497,7 @@ describe("KitPagos", () => {
       }
 
       it("should validate native notification (step 1) and retrieve full transaction via getPaymentStatus (step 2)", async () => {
-        const sdk = buildMercadoPagoSdk("http://localhost:3000/v1/sim/mercadopago/payments");
+        const sdk = buildMercadoPagoSdk("http://localhost:3000/v1/sim/mercadopago");
 
         // Paso 1: Validar firma y parsear la notificación entrante
         const event = sdk.validateWebhook(nativePayload, headers);
@@ -547,7 +547,7 @@ describe("KitPagos", () => {
       });
 
       it("should reconcile a rejected payment in step 2 correctly", async () => {
-        const sdk = buildMercadoPagoSdk("http://localhost:3000/v1/sim/mercadopago/payments");
+        const sdk = buildMercadoPagoSdk("http://localhost:3000/v1/sim/mercadopago");
 
         const event = sdk.validateWebhook(nativePayload, headers);
         expect(event.newStatus).toBe("PENDING");
