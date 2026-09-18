@@ -744,6 +744,63 @@ merge propuesto, no solo sobre la rama.
 
 ---
 
+### 41. El adaptador de Kushki perdía la referencia de la orden y el correo del pagador
+
+**Origen:** Corrección directa sobre `devops`, detectada al ejecutar los cuatro ejemplos de
+`examples/` de punta a punta contra el simulador antes de empezar el issue #58.
+
+`KushkiAdapter` no enviaba `request.orderReference` en ningún campo. Los otros tres adaptadores
+sí lo hacen: Wompi en `reference`, Mercado Pago en `external_reference`, Rapyd en
+`merchant_reference_id`. Como no se enviaba, `KushkiResponseNormalizer` construía la
+`OrderReference` a partir de `payload.transactionReference`, y el comercio recibía de vuelta un
+identificador que **nunca había enviado**, con el que no puede conciliar contra su propio pedido.
+El normalizador además fijaba el correo del pagador a la constante `customer@kushki.com`,
+descartando el que el propio adaptador ya mandaba en `contactDetails.email`.
+
+`ubiquitous-language.md` ya advertía exactamente esto en la fila `orderReference`: Kushki recibe
+la referencia del comercio en **`trackingCode`**, y expone en la respuesta un
+`transaction_reference` **generado por Kushki que es distinto**. La documentación estaba bien; el
+código la contradecía.
+
+La corrección envía `trackingCode`, lee la referencia desde ahí y deja `transactionReference` y
+`ticketNumber` como respaldo únicamente para respuestas que no traen `trackingCode`, como la
+consulta de estado. El simulador ahora hace eco de `trackingCode` y de `contactDetails.email`,
+que antes descartaba.
+
+**Una cadena de respaldos cuesta complejidad ciclomática.** Escribir la resolución inline como
+`trackingCode ?? transactionReference ?? ticketNumber`, más la comprobación del correo, subió el
+MAX_CC de `KushkiResponseNormalizer` de 8 a **11**, por encima del umbral de 10, y el script de
+métricas lo marcó en rojo. Cada eslabón de respaldo es una rama. La solución fue mover esas
+ramas a `firstNonEmptyString()` en `payload-utils.ts`, siguiendo el mismo criterio que el resto
+de ese archivo (punto 34): es una función pura de módulo, así que sus ramas no cuentan contra
+ninguna clase. El respaldo es un parámetro obligatorio de tipo `string`, no opcional, para que
+el retorno nunca sea `string | undefined` y quien llama no tenga que encadenar otro `??`, que
+reintroduciría la rama que se quería sacar. El normalizador quedó en MAX_CC **7** y WMC 11, mejor
+que antes de esta corrección.
+
+**Por qué las pruebas no lo detectaron.** Las pruebas del adaptador devolvían
+`transactionReference: "ord-12345"`, es decir el **mismo** valor que la referencia de la orden
+del caso de prueba. Con ese dato, leer el campo correcto y leer el equivocado dan idénticamente
+el mismo resultado, y la aserción pasa en los dos casos. Es un defecto de diseño del dato de
+prueba, no de la aserción: un mock que reproduce una coincidencia que la pasarela real no
+garantiza vuelve invisible justo el error que la prueba debía atrapar. La prueba de regresión
+nueva devuelve a propósito un `transactionReference` distinto de la referencia del comercio.
+
+**Lección para el issue #58 y para el resto de las pruebas de adaptador:** cuando dos campos
+distintos de una respuesta tienen el mismo valor en el dato de prueba, la prueba no distingue
+entre ellos. Los valores de los mocks deben ser distinguibles entre sí por construcción.
+Este defecto se encontró ejecutando los ejemplos, no corriendo las 353 pruebas unitarias, que
+pasaban en verde: es el argumento concreto a favor de meter `examples/` al CI (issue #60).
+
+**Verificación:** `npm test` en `sdk`: 354 passed / 354 total. `npm test` en `simulator-api`:
+29 passed / 29 total. `npm run typecheck` en `examples`: exit 0. `npm run metrics`:
+`✓ All 31 class(es) within thresholds.` `npm run lint`: exit 0. Los cuatro ejemplos ejecutados
+contra el simulador devuelven la referencia del comercio.
+
+**Estado:** Resuelto en el código.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum

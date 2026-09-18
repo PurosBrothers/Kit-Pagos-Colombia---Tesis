@@ -62,6 +62,14 @@ export class KushkiAdapter implements PaymentGatewayPort {
 
     const payload = {
         token: "simulated-token",
+        /*
+         * Kushki recibe la referencia del comercio en `trackingCode`. Es
+         * distinta del `transactionReference` que Kushki genera y devuelve en la
+         * respuesta: si se toma ese como referencia de la orden, el comercio
+         * pierde la suya y no puede conciliar. Ver `ubiquitous-language.md`,
+         * fila `orderReference`.
+         */
+        trackingCode: request.orderReference.getValue(),
         amount: {
             // Kushki recibe los componentes tributarios en pesos nominales.
             // Para COP, 50.000 COP se representa como 50000, no 5000000.

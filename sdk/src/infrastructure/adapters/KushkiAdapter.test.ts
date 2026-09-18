@@ -62,6 +62,7 @@ describe("KushkiAdapter", () => {
           },
           body: JSON.stringify({
             token: "simulated-token",
+            trackingCode: "ord-12345",
             amount: {
               subtotalIva0: 50000,
               subtotalIva: 0,
@@ -304,6 +305,46 @@ describe("KushkiAdapter", () => {
       ).rejects.toThrow();
 
       expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    /*
+     * Regresión: el adaptador no enviaba la referencia del comercio, y el
+     * normalizador tomaba el `transactionReference` que genera Kushki como si lo
+     * fuera. El comercio recibía de vuelta un identificador que nunca envió.
+     * Este caso devuelve a propósito un `transactionReference` distinto de la
+     * referencia de la orden, que es lo que hace la pasarela real.
+     */
+    it("should keep the merchant order reference instead of the Kushki one", async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ticketNumber: "kushki-mock-tx-123",
+          transaction_status: "APPROVAL",
+          amount: {
+            subtotalIva0: 150000,
+            subtotalIva: 0,
+            iva: 0,
+            ice: 0,
+            currency: "COP",
+          },
+          transactionReference: "kushki-generated-2f9c41",
+          trackingCode: "ord-12345",
+          contactDetails: { email: "cliente@example.com" },
+        }),
+      });
+
+      global.fetch = mockFetch;
+
+      const transaction = expectTransaction(
+        await new KushkiAdapter().createPayment(validRequest),
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.trackingCode).toBe("ord-12345");
+
+      expect(transaction.orderReference.getValue()).toBe("ord-12345");
+      expect(transaction.payer.email).toBe("cliente@example.com");
     });
   });
 

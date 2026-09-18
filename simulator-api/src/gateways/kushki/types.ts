@@ -36,6 +36,8 @@ export interface KushkiAmount {
 /** Cuerpo de la solicitud para crear un cargo (POST /card/v1/charges). */
 export interface KushkiCreateChargeRequestBody {
   token: string;
+  /** Referencia del comercio. Distinta del `transactionReference` que genera Kushki. */
+  trackingCode?: string;
   amount: KushkiAmount;
   contactDetails?: {
     email?: string;
@@ -58,5 +60,11 @@ export interface KushkiChargeResponse {
   ticketNumber: string;
   transaction_status: KushkiTransactionStatus;
   amount: KushkiAmount;
+  /** Generado por Kushki, no es la referencia que envió el comercio. */
   transactionReference: string;
+  /** Eco de la referencia del comercio, cuando la solicitud la trae. */
+  trackingCode?: string;
+  contactDetails?: {
+    email?: string;
+  };
 }

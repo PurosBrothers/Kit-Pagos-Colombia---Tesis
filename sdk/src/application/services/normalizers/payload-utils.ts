@@ -113,3 +113,30 @@ export function mapValueObjectError<T>(
 export function amountToString(rawAmount: unknown): string {
   return typeof rawAmount === "number" ? rawAmount.toString() : String(rawAmount ?? "");
 }
+
+/**
+ * Devuelve el primer candidato que sea una cadena no vacia, o el respaldo.
+ *
+ * Existe porque un mismo dato del dominio puede llegar en campos distintos
+ * segun la respuesta: la referencia de la orden en Kushki viene en
+ * `trackingCode` cuando la pasarela hace eco de la peticion, pero la consulta
+ * de estado por `ticketNumber` no la trae. Escribir esa cadena de respaldos
+ * inline como `a ?? b ?? c` cuesta una rama de complejidad ciclomatica por
+ * eslabon dentro del metodo del normalizador; aca no cuesta ninguna, porque es
+ * una funcion pura de modulo. Mismo criterio que el resto de este archivo.
+ *
+ * El respaldo es obligatorio y tipado como string para que el retorno nunca sea
+ * opcional: quien llama no deberia tener que encadenar otro `??`, que es
+ * justamente la rama que se queria evitar.
+ */
+export function firstNonEmptyString(
+  candidates: readonly unknown[],
+  fallback: string,
+): string {
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.length > 0) {
+      return candidate;
+    }
+  }
+  return fallback;
+}

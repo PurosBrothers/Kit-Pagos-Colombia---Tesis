@@ -27,6 +27,10 @@ export class GatewayMockFactory {
       transaction_status: status,
       amount: requestBody.amount,
       transactionReference: randomUUID(),
+      trackingCode: requestBody.trackingCode,
+      contactDetails: requestBody.contactDetails?.email
+        ? { email: requestBody.contactDetails.email }
+        : undefined,
     };
   }
 

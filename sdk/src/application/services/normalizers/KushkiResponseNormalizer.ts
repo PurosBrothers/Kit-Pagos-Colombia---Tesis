@@ -13,6 +13,7 @@ import {
   parsePayload,
   mapValueObjectError,
   amountToString,
+  firstNonEmptyString,
 } from "./payload-utils";
 
 const FALLBACK_EMAIL = "customer@kushki.com";
@@ -60,12 +61,24 @@ export class KushkiResponseNormalizer implements GatewayResponseNormalizer {
 
     const rawStatus = String(payload.transaction_status ?? "");
 
+    /*
+     * La referencia de la orden es la del comercio, que viaja en `trackingCode`.
+     * `transactionReference` lo genera Kushki y es otra cosa: usarlo acá le
+     * devuelve al comercio un identificador que nunca envió, con el que no puede
+     * conciliar. Se conserva como respaldo solo para respuestas que no traen
+     * `trackingCode`, como la consulta de estado por `ticketNumber`.
+     */
     const orderReference = new OrderReference(
-      String(payload.transactionReference ?? ticketNumber),
+      firstNonEmptyString(
+        [payload.trackingCode, payload.transactionReference],
+        ticketNumber,
+      ),
     );
 
+    const contactDetails = payload.contactDetails as Record<string, unknown>;
+
     const payer = new Payer({
-      email: FALLBACK_EMAIL,
+      email: firstNonEmptyString([contactDetails?.email], FALLBACK_EMAIL),
     });
 
     const gatewayTransactionId = new GatewayTransactionId(
