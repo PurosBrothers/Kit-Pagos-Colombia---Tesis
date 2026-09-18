@@ -91,7 +91,17 @@ Dos detalles que se ven en la salida y vale la pena entender:
 
 ---
 
-### 4. Verificar tipos sin ejecutar
+### 4. Simulación de pago con Kushki
+
+```bash
+npm run simulate:kushki
+```
+
+* **Archivo:** `simulate-kushki-payment.ts`
+* **Qué demuestra:** Kushki requiere un monto desglosado en base gravable, IVA, parte exenta e impuesto al consumo. El comercio conserva el mismo `CreatePaymentRequest` unificado y usa `TaxBreakdown.fromTaxIncluded(...)` para generar un desglose que suma exactamente el total. El adaptador lo convierte al formato nativo y traduce `APPROVAL` a `APPROVED`.
+* **Qué esperar:** La creación y la consulta posterior imprimen el mismo identificador nativo (`ticketNumber`) y un estado unificado `APPROVED`; el estado nativo se conserva como `APPROVAL` para auditoría.
+
+### 5. Verificar tipos sin ejecutar
 
 ```bash
 npm run typecheck

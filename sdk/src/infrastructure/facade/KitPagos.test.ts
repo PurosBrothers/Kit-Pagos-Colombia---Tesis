@@ -137,22 +137,27 @@ describe("KitPagos", () => {
       }
     });
 
-    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for a gateway without an Adapter yet", async () => {
-      // Rapyd ya tiene Adapter (issue #52), asi que el caso sin implementar se
-      // ejerce ahora con Kushki.
+    it("should create a payment through the configured Kushki adapter", async () => {
       const kitPagos = new KitPagos({
         gateway: Gateway.KUSHKI,
         credentials: { [Gateway.KUSHKI]: wompiCredentials },
       });
 
-      try {
-        await kitPagos.createPayment(validRequest);
-        fail("Should have thrown KitPagosError");
-      } catch (error) {
-        const sdkError = error as KitPagosError;
-        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
-        expect(sdkError.gateway).toBe(Gateway.KUSHKI);
-      }
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ticketNumber: "kushki-ticket-123",
+          transaction_status: "APPROVAL",
+          amount: { subtotalIva0: 150000, subtotalIva: 0, iva: 0, ice: 0, currency: "COP" },
+          transactionReference: "kushki-reference-123",
+        }),
+      });
+
+      const transaction = await kitPagos.createPayment(validRequest);
+
+      expect(transaction.getStatus()).toBe("APPROVED");
+      expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.KUSHKI);
     });
 
     it("should propagate KitPagosError(CONNECTION_FAILED) when the gateway is unreachable", async () => {

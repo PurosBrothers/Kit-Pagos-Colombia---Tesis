@@ -4,6 +4,7 @@ import { PaymentGatewayPort } from "../../application/ports/PaymentGatewayPort";
 import { WompiAdapter } from "../adapters/WompiAdapter";
 import { MercadoPagoAdapter } from "../adapters/MercadoPagoAdapter";
 import { RapydAdapter } from "../adapters/RapydAdapter";
+import { KushkiAdapter } from "../adapters/KushkiAdapter";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 
@@ -31,8 +32,8 @@ export class GatewayFactory {
       case Gateway.RAPYD:
         return new RapydAdapter(baseUrl, credentials);
 
-      // El adaptador para KUSHKI se incorpora en la Iteración 2
       case Gateway.KUSHKI:
+        return new KushkiAdapter(baseUrl, credentials);
       default:
         throw new KitPagosError(
           KitPagosErrorCode.UNSUPPORTED_OPERATION,

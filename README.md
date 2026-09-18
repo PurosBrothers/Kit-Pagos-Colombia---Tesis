@@ -11,7 +11,7 @@ SDK unificado para la integración de pasarelas de pago colombianas.
 | `Gateway.MERCADOPAGO` | [Mercado Pago](https://mercadopago.com.co/developers) | Firma: HMAC-SHA256 header `x-signature` |
 | `Gateway.KUSHKI` | [Kushki](https://docs.kushki.com/co) | Firma: HMAC-SHA256 header `x-kushki-signature` |
 
-De las cuatro, solo Wompi tiene Adapter implementado en esta iteración. Las demás lanzan `SdkError(UNSUPPORTED_OPERATION)` al resolverse.
+Los cuatro gateways tienen adaptador para el entorno de simulación. Kushki replica el contrato de cargos con tarjeta, incluido el desglose tributario y el estado nativo `APPROVAL`; esta implementación no pretende aún ser una integración productiva completa.
 
 ## Ejemplo rápido
 

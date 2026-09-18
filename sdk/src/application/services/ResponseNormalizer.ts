@@ -6,6 +6,7 @@ import { GatewayResponseNormalizer } from "./normalizers/GatewayResponseNormaliz
 import { WompiResponseNormalizer } from "./normalizers/WompiResponseNormalizer";
 import { MercadoPagoResponseNormalizer } from "./normalizers/MercadoPagoResponseNormalizer";
 import { RapydResponseNormalizer } from "./normalizers/RapydResponseNormalizer";
+import { KushkiResponseNormalizer } from "./normalizers/KushkiResponseNormalizer";
 
 /**
  * Servicio de aplicacion que traduce la respuesta nativa de cualquier pasarela a
@@ -31,7 +32,7 @@ export class ResponseNormalizer {
     [Gateway.WOMPI]: new WompiResponseNormalizer(),
     [Gateway.MERCADOPAGO]: new MercadoPagoResponseNormalizer(),
     [Gateway.RAPYD]: new RapydResponseNormalizer(),
-    // El normalizador de KUSHKI se incorpora en la Iteracion 2.
+    [Gateway.KUSHKI]: new KushkiResponseNormalizer(),
   };
 
   /**

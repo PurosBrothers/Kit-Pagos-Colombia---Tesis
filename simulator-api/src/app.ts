@@ -3,6 +3,7 @@ import { healthRoute } from "./routes/health";
 import { wompiRoutes } from "./routes/wompi";
 import { mercadopagoRoutes } from "./routes/mercadopago";
 import { rapydRoutes } from "./routes/rapyd";
+import { kushkiRoutes } from "./routes/kushki";
 
 /**
  * Construye y configura la instancia de Fastify de la API de Simulacion,
@@ -23,6 +24,7 @@ export function buildApp(): FastifyInstance {
   app.register(wompiRoutes);
   app.register(mercadopagoRoutes);
   app.register(rapydRoutes);
+  app.register(kushkiRoutes);
 
   return app;
 }

@@ -8,6 +8,7 @@
     "simulate:wompi": "tsx simulate-wompi-payment.ts",
     "simulate:mercadopago": "tsx simulate-mercadopago-payment.ts",
     "simulate:rapyd": "tsx simulate-rapyd-payment.ts",
+    "simulate:kushki": "tsx simulate-kushki-payment.ts",
     "typecheck": "tsc --noEmit"
   },
   "author": "Andres Henao, Joan Orduz, Joshua Prieto, David Rodriguez",

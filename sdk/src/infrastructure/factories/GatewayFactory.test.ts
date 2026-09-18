@@ -9,6 +9,7 @@ import { Currency } from "../../domain/value-objects/Currency";
 import { OrderReference } from "../../domain/value-objects/OrderReference";
 import { Payer } from "../../domain/value-objects/Payer";
 import { MercadoPagoAdapter } from "../adapters/MercadoPagoAdapter";
+import { KushkiAdapter } from "../adapters/KushkiAdapter";
 
 
 describe("GatewayFactory", () => {
@@ -136,19 +137,13 @@ describe("GatewayFactory", () => {
       global.fetch = originalFetch;
     });
 
-    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for KUSHKI", () => {
-      expect(() => factory.create(Gateway.KUSHKI)).toThrow(KitPagosError);
+    it("should return an instance of KushkiAdapter when gateway is KUSHKI", () => {
+      const adapter = factory.create(Gateway.KUSHKI);
 
-      try {
-        factory.create(Gateway.KUSHKI);
-      } catch (error) {
-        expect(error).toBeInstanceOf(KitPagosError);
-        const sdkError = error as KitPagosError;
-        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
-        expect(sdkError.gateway).toBe(Gateway.KUSHKI);
-        expect(sdkError.originalPayload).toBeNull();
-        expect(sdkError.message).toContain("Gateway not supported in this iteration: KUSHKI");
-      }
+      expect(adapter).toBeInstanceOf(KushkiAdapter);
+      expect(typeof adapter.createPayment).toBe("function");
+      expect(typeof adapter.getStatus).toBe("function");
+      expect(typeof adapter.verifySignature).toBe("function");
     });
 
     it("should throw KitPagosError(UNSUPPORTED_OPERATION) for unknown gateways (default)", () => {
