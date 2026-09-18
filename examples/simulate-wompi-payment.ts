@@ -94,7 +94,18 @@ async function main(): Promise<void> {
    * native format, makes the HTTP request and normalizes the response. None of
    * that leaks out here.
    */
-  const transaction = await kitPagos.createPayment(request);
+  const result = await kitPagos.createPayment(request);
+
+  // createPayment() returns either a transaction or a pending redirect, and the
+  // compiler forces the distinction: `result.transaction` does not exist until the
+  // redirect case is ruled out. Wompi's card flow always settles in the response,
+  // so this branch is unreachable here — it becomes reachable with PSE.
+  if (result.outcome === "REDIRECT_REQUIRED") {
+    console.log(`Payment requires redirect to: ${result.redirect.redirectUrl}`);
+    return;
+  }
+
+  const transaction = result.transaction;
 
   console.log("Transaction created:");
   console.log(`  Gateway ID:         ${transaction.gatewayTransactionId.value}`);

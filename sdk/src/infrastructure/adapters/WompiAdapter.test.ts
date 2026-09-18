@@ -8,6 +8,7 @@ import { Payer } from "../../domain/value-objects/Payer";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
+import { expectTransaction } from "../../test-support/payment-result";
 
 describe("WompiAdapter", () => {
   const originalFetch = global.fetch;
@@ -48,7 +49,7 @@ describe("WompiAdapter", () => {
       global.fetch = mockFetch;
 
       const adapter = new WompiAdapter();
-      const transaction = await adapter.createPayment(validRequest);
+      const transaction = expectTransaction(await adapter.createPayment(validRequest));
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(

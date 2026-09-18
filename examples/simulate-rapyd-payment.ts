@@ -102,7 +102,31 @@ async function main(): Promise<void> {
    * ve acá, y por eso el mismo código sirve para las cuatro pasarelas.
    */
   console.log("Creando el pago...");
-  const transaction = await kitPagos.createPayment(request);
+  const result = await kitPagos.createPayment(request);
+
+  /**
+   * createPayment() devuelve o una transacción o una redirección pendiente, y hay
+   * que distinguir las dos antes de usar el resultado. Rapyd es la pasarela donde
+   * esto se nota: si el pago dispara 3DS, responde con una URL a la que el pagador
+   * tiene que ir, y el pago no avanza hasta que vaya. Un comercio que ignore esta
+   * rama deja el pago colgado hasta que expire.
+   *
+   * El compilador obliga a escribir este bloque: `result.transaction` no existe
+   * hasta haber descartado el caso de redirección.
+   */
+  if (result.outcome === "REDIRECT_REQUIRED") {
+    console.log("El pago requiere que el pagador complete un paso por fuera:");
+    console.log(`  Redirigir a:        ${result.redirect.redirectUrl}`);
+    console.log(`  ID en la pasarela:  ${result.redirect.gatewayTransactionId.value}`);
+    console.log(`  Estado nativo:      ${result.redirect.rawStatus}`);
+    console.log(
+      "  En una aplicación real, acá se responde con un redirect HTTP y el\n" +
+        "  estado final se conoce por webhook o consultando getPaymentStatus().",
+    );
+    return;
+  }
+
+  const transaction = result.transaction;
 
   console.log("Transacción creada exitosamente:");
   console.log(`  ID en la pasarela:  ${transaction.gatewayTransactionId.value}`);

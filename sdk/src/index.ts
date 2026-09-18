@@ -20,6 +20,13 @@ export { Gateway } from "./domain/value-objects/Gateway";
 export {GatewayTransactionId} from "./domain/value-objects/GatewayTransactionId";
 export {OrderReference} from "./domain/value-objects/OrderReference";
 export { Payer } from "./domain/value-objects/Payer";
+// PaymentMethod se exporta como clase, no como tipo: el comercio necesita los
+// constructores nombrados (`PaymentMethod.pse(...)`) para poder armar uno.
+export { PaymentMethod } from "./domain/value-objects/PaymentMethod";
+export type {
+  PaymentMethodType,
+  PayerKind,
+} from "./domain/value-objects/PaymentMethod";
 export { RejectionCategory } from "./domain/value-objects/RejectionCategory";
 export { RejectionReason } from "./domain/value-objects/RejectionReason";
 export { ReturnUrlConfig } from "./domain/value-objects/ReturnUrlConfig";
@@ -29,6 +36,20 @@ export { WebhookEvent } from "./domain/value-objects/WebhookEvent";
 
 // Tipos del puerto y de la entrada de un pago
 export type {PaymentGatewayPort, CreatePaymentRequest} from "./application/ports/PaymentGatewayPort";
+
+// Resultado de crear un pago. El comercio necesita los tipos para poder
+// distinguir las dos ramas, y las dos funciones constructoras para escribir
+// dobles de prueba de un adaptador sin armar los objetos literales a mano.
+export type {
+  PaymentResult,
+  PendingRedirect,
+  TransactionOutcome,
+  RedirectRequiredOutcome,
+} from "./domain/value-objects/PaymentResult";
+export {
+  transactionResult,
+  redirectRequired,
+} from "./domain/value-objects/PaymentResult";
 
 // Tipos de configuracion: sin ellos el comercio no puede tipar el objeto que
 // le pasa al constructor de KitPagos.

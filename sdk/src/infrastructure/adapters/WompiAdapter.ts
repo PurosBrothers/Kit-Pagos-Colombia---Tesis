@@ -3,6 +3,10 @@ import {
   CreatePaymentRequest,
 } from "../../application/ports/PaymentGatewayPort";
 import { Transaction } from "../../domain/entities/Transaction";
+import {
+  PaymentResult,
+  transactionResult,
+} from "../../domain/value-objects/PaymentResult";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { Credentials } from "../../domain/value-objects/Credentials";
 import { ResponseNormalizer } from "../../application/services/ResponseNormalizer";
@@ -33,7 +37,14 @@ const DEFAULT_WOMPI_BASE_URL = "http://localhost:3000/v1/sim/wompi/transactions"
 export class WompiAdapter implements PaymentGatewayPort {
   private readonly baseUrl: string;
   private readonly credentials?: Credentials;
-  private readonly normalizer: ResponseNormalizer;
+  /**
+   * Se construye acá en vez de recibirse por constructor, por la misma razón que
+   * ErrorHandler y que RetryHandler en la fachada (architecture-log.md, punto 35):
+   * un colaborador en la firma del constructor cuenta para el CBO, y el umbral de
+   * la Definition of Done es 5. No se pierde nada: el normalizador no tiene
+   * estado ni configuración, y ninguna prueba lo sustituía.
+   */
+  private readonly normalizer = new ResponseNormalizer();
   private readonly webhookVerifier: WebhookVerifier;
 
   /**
@@ -45,16 +56,20 @@ export class WompiAdapter implements PaymentGatewayPort {
   constructor(
     baseUrl: string = DEFAULT_WOMPI_BASE_URL,
     credentials?: Credentials,
-    normalizer: ResponseNormalizer = new ResponseNormalizer(),
     webhookVerifier: WebhookVerifier = new WebhookVerifier(),
   ) {
     this.baseUrl = baseUrl;
     this.credentials = credentials;
-    this.normalizer = normalizer;
     this.webhookVerifier = webhookVerifier;
   }
 
-  async createPayment(request: CreatePaymentRequest): Promise<Transaction> {
+  /**
+   * Returns PaymentResult instead of Transaction since issue #64. Wompi's card
+   * flow always settles in the response, so this adapter always takes the
+   * TRANSACTION branch; the redirect branch belongs to the PSE and Bancolombia
+   * Transfer flows, which are implemented in the follow-up PR of #64.
+   */
+  async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
     // 1. Map domain value objects to native Wompi fields.
     //
     //    `toMinorUnits()` returns a digit string, and Wompi expects a JSON
@@ -119,7 +134,7 @@ export class WompiAdapter implements PaymentGatewayPort {
     }
 
     // 6. Normalize to the domain Transaction entity.
-    return this.normalizer.normalize(rawResponse, Gateway.WOMPI);
+    return transactionResult(this.normalizer.normalize(rawResponse, Gateway.WOMPI));
   }
 
   /**

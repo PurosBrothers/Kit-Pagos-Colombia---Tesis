@@ -240,7 +240,9 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 
 - **Patrón Arquitectónico:** Value Object del dominio.
 - **Responsabilidad:** Encapsula las URLs de redirección post-pago configuradas por el comercio: `returnUrl` (URL base), `success` (pago aprobado), `failure` (pago rechazado) y `pending` (pago pendiente de confirmación).
-- **Uso:** La entidad `Transaction` utiliza este objeto de valor para resolver la URL de redirección correspondiente mediante el método `resolveFor(status)`.
+- **Uso:** Viaja como campo opcional `returnUrlConfig` de `CreatePaymentRequest`, y son los adaptadores los que lo consumen: hoy `RapydAdapter` llama `resolveFor("APPROVED")` y `resolveFor("DECLINED")` para llenar `complete_payment_url` y `error_payment_url` en el cuerpo que le manda a Rapyd.
+- **Corrección (issue #64):** Este apartado afirmaba que «la entidad `Transaction` utiliza este objeto de valor». Es falso y nunca fue cierto en el código: `Transaction.ts` no importa `ReturnUrlConfig` ni lo referencia. La confusión tiene sentido porque `resolveFor(status)` recibe un `TransactionStatus`, pero recibir un estado como argumento no es lo mismo que ser usado por la entidad. Quien resuelve la URL es el adaptador, en el momento de armar la petición, y no la transacción una vez creada.
+- **Relación con el resultado de un pago:** Desde el issue #64, cuando una pasarela devuelve una redirección, la URL a la que hay que enviar al pagador llega en `PaymentResult` (rama `REDIRECT_REQUIRED`) y **no** sale de `ReturnUrlConfig`. Son dos cosas distintas y conviene no confundirlas: `ReturnUrlConfig` son las URLs **del comercio**, a donde la pasarela devuelve al pagador cuando termina; `PendingRedirect.redirectUrl` es la URL **de la pasarela o del banco**, a donde el comercio tiene que mandar al pagador para que el pago avance.
 
 ---
 
