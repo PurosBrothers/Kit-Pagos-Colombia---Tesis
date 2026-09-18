@@ -19,6 +19,7 @@ import { Credentials } from "../../domain/value-objects/Credentials";
 import { ResponseNormalizer } from "../../application/services/ResponseNormalizer";
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
+import { assertSupportedPaymentMethod } from "./payment-method-support";
 
 /**
  * Raíz de la API de Wompi en la API de Simulación (issue #27).
@@ -87,6 +88,10 @@ export class WompiAdapter implements PaymentGatewayPort {
    * contra el sandbox real y por qué PSE necesita un sondeo.
    */
   async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
+    // Wompi es hoy la única que sabe cobrar por PSE. `CASH` (Efecty y
+    // equivalentes) sigue sin implementarse en ninguna.
+    assertSupportedPaymentMethod(request.paymentMethod, Gateway.WOMPI, ["CARD", "PSE"]);
+
     // `toMinorUnits()` devuelve una cadena de dígitos y Wompi espera un entero
     // JSON. La conversión a `number` ocurre acá, en la frontera entre el SDK y el
     // formato de cable: JSON solo tiene `number` (un IEEE 754 double) y no hay

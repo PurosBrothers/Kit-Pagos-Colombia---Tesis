@@ -12,6 +12,7 @@ import { Credentials } from "../../domain/value-objects/Credentials";
 import { ResponseNormalizer } from "../../application/services/ResponseNormalizer";
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
+import { assertSupportedPaymentMethod } from "./payment-method-support";
 
 /**
  * URL base por defecto del endpoint mock de Mercado Pago (simulator-api).
@@ -54,6 +55,13 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
    * redirigen, entran en el PR siguiente de #64.
    */
   async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
+    // PSE en Mercado Pago no usa la API de pagos sino la Orders API
+    // (`POST /v1/orders`), que devuelve `status: "action_required"`. Queda fuera
+    // de este issue, y hasta que entre hay que fallar explícito: descartar el
+    // método pedido cobraría con tarjeta un pago que el pagador quiso hacer por
+    // PSE. Ver `payment-method-support.ts`.
+    assertSupportedPaymentMethod(request.paymentMethod, Gateway.MERCADOPAGO, ["CARD"]);
+
     // 1. Mapeo de objetos de valor del dominio a campos nativos de Mercado Pago.
     //    A diferencia de Wompi, el monto viaja en pesos en `transaction_amount`,
     //    por lo que se usa getValue() en lugar de toMinorUnits().

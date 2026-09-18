@@ -862,6 +862,39 @@ De paso quedó claro que los dos secretos de Wompi son fáciles de intercambiar,
 
 ---
 
+### 44. Pedir un método de pago que la pasarela no implementa cobraba con tarjeta, en silencio
+
+**Responsable de corregirlo en el SAD:** Joan (sección 9.1.1, contrato de `createPayment()`, y sección 11.2, catálogo de códigos de error).
+
+**Encontrado:** Al terminar PSE en Wompi (issue #64) se probó el mismo código de comercio contra las otras tres pasarelas, que es precisamente lo que el issue pide como resultado esperado. El resultado, medido contra el simulador el 18 de septiembre de 2026:
+
+```
+MERCADOPAGO: pedí PSE y obtuve -> TRANSACTION (APPROVED)
+RAPYD:       pedí PSE y obtuve -> TRANSACTION (APPROVED)
+```
+
+El comercio pedía PSE, el adaptador descartaba `request.paymentMethod` porque no lo leía, y el pago salía **con tarjeta**, aprobado y sin ninguna señal de que el método se hubiera cambiado. Es el mismo defecto de fondo del punto 39 —un campo del contrato que ningún adaptador lee y que se descarta callado— pero con una consecuencia peor: ahí se perdía una URL de redirección, acá se cobra con un medio de pago distinto del que el pagador eligió.
+
+**Por qué apareció recién ahora.** `paymentMethod` nació opcional y sin lector en el issue #85. Mientras PSE no funcionaba en ninguna pasarela, el campo era decorativo y el defecto inalcanzable en la práctica. Al implementarlo en una sola, "cambiar de pasarela" pasó a ser un escenario real y el campo decorativo se volvió una trampa. Es un recordatorio de que un campo del contrato sin lector no es neutral: es un defecto en espera de que algo lo active.
+
+**Corrección.** Se agregó `assertSupportedPaymentMethod()` como función de módulo en `payment-method-support.ts`, y cada adaptador **declara** en su `createPayment()` qué métodos sabe cobrar: Wompi `CARD` y `PSE`, las otras tres solo `CARD`. Pedir otra cosa lanza `UNSUPPORTED_OPERATION` **antes de tocar la red**, porque un cobro que no debe ocurrir no debe llegar a salir.
+
+Tres decisiones dentro de esa corrección:
+
+- **La verificación vive en el adaptador, no en la fachada.** Qué métodos soporta cada proveedor es conocimiento de infraestructura. Ponerle la tabla de capacidades a `KitPagos` obligaría a la aplicación a saber qué sabe hacer cada pasarela, que es justo lo que la Arquitectura Hexagonal separa. El adaptador declara, y la verificación en sí está en un solo lugar.
+- **`UNSUPPORTED_OPERATION` y no `INVALID_REQUEST`.** La solicitud del comercio no tiene nada de inválida: es correcta y la pasarela activa no la puede atender. La distinción es accionable, porque la salida de un `UNSUPPORTED_OPERATION` es cambiar de pasarela y la de un `INVALID_REQUEST` es corregir los datos.
+- **Omitir el método sigue siendo válido** y no se verifica: el contrato dice que sin método informado cada pasarela aplica su predeterminado, que en las cuatro es tarjeta. Lo que no puede pasar es pedir algo concreto y recibir otra cosa.
+
+Es función de módulo y no clase ni método por lo mismo que `payload-utils.ts` y `rapyd-signature.ts`: no hay estado, y así no le cuesta CBO a ninguno de los cuatro adaptadores, que es lo que permitió cablearla en los cuatro sin tocar ningún umbral (ver punto 34).
+
+De paso quedó cubierto `CASH`, que existe en el tipo desde el #85 y ninguna pasarela implementa: las cuatro lo rechazan explícitamente.
+
+**Verificación:** SDK 386 pruebas / 386, incluidas 12 nuevas en `payment-method-support.test.ts` que comprueban que los tres adaptadores sin PSE lo rechazan **sin emitir ninguna petición** (`fetch` espiado, cero llamadas), que Wompi sí lo acepta, y que los cuatro rechazan `CASH`. `npm run metrics`: `✓ All 31 class(es) within thresholds.` Contra el simulador, las tres pasarelas devuelven hoy `UNSUPPORTED_OPERATION` con el mensaje que nombra la pasarela y los métodos que sí soporta.
+
+**Estado:** Resuelto en el código.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum

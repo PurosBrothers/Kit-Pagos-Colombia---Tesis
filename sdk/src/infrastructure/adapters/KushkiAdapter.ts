@@ -13,6 +13,7 @@ import { ResponseNormalizer } from "../../application/services/ResponseNormalize
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
 import { TaxBreakdown } from "../../domain/value-objects/TaxBreakdown";
+import { assertSupportedPaymentMethod } from "./payment-method-support";
 
 const DEFAULT_KUSHKI_BASE_URL =
   "http://localhost:3000/v1/sim/kushki/charges";
@@ -42,6 +43,11 @@ export class KushkiAdapter implements PaymentGatewayPort {
    * que es el PSE de Kushki y no esta implementado todavia.
    */
   async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
+    // PSE en Kushki es el mecanismo Transfer In, que son tres llamadas (issue
+    // #68). Queda fuera de este issue, y hasta que entre hay que fallar explícito
+    // en vez de cobrar con tarjeta algo que el pagador quiso pagar por PSE.
+    assertSupportedPaymentMethod(request.paymentMethod, Gateway.KUSHKI, ["CARD"]);
+
     /*
      * Kushki requires the amount to be split into subtotalIva0,
      * subtotalIva, iva and ice.

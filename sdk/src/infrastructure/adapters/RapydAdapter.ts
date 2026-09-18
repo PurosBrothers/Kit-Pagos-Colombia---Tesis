@@ -15,6 +15,7 @@ import {
   redirectRequired,
 } from "../../domain/value-objects/PaymentResult";
 import { extractRapydRedirect } from "../../application/services/normalizers/rapyd-redirect";
+import { assertSupportedPaymentMethod } from "./payment-method-support";
 
 /**
  * URL del endpoint de pagos del mock de Rapyd (simulator-api, issue #52).
@@ -80,6 +81,12 @@ export class RapydAdapter implements PaymentGatewayPort {
    * hoy, porque su flujo 3DS ya devuelve `redirect_url`.
    */
   async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
+    // PSE en Rapyd son 47 métodos `co_pse_{banco}_bank` y exige crear el
+    // `customer` antes del pago, o sea dos llamadas (issue #68). Queda fuera de
+    // este issue, y hasta que entre hay que fallar explícito en vez de cobrar con
+    // tarjeta algo que el pagador quiso pagar por PSE.
+    assertSupportedPaymentMethod(request.paymentMethod, Gateway.RAPYD, ["CARD"]);
+
     // 1. Mapeo del dominio a campos nativos de Rapyd.
     //
     //    El monto va en pesos, NO en centavos: `toMinorUnits()` no se usa acá, y
