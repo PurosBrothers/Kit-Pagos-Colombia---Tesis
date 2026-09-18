@@ -6,9 +6,5 @@
 # OS
 .DS_Store
 
-# Cache local del CLI de Salesforce. Se regenera solo, borrarlo no sirve.
-.sf/
-
 # Dependencies
 node_modules/
-env
