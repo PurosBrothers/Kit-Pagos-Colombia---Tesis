@@ -107,4 +107,29 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(200).send(mockFactory.buildMerchantResponse());
     },
   );
+
+  /**
+   * Lista de entidades financieras de PSE.
+   *
+   * Reproduce lo medido contra el sandbox real el 18 de septiembre de 2026, con los
+   * tres bancos de prueba y sus nombres textuales. Son los codigos que fuerzan cada
+   * desenlace: 1 aprueba, 2 declina y 3 simula un error.
+   *
+   * Los nombres van tal cual, sin cambiarlos por nombres de bancos reales, por dos
+   * razones: es lo que devuelve el sandbox, y un comercio que ve "Banco que
+   * declina" en su selector sabe de inmediato contra que entorno esta apuntando.
+   */
+  app.get(
+    "/v1/sim/wompi/pse/financial_institutions",
+    async (_request: FastifyRequest, reply: FastifyReply) => {
+      return reply.code(200).send({
+        data: [
+          { financial_institution_code: "1", financial_institution_name: "Banco que aprueba" },
+          { financial_institution_code: "2", financial_institution_name: "Banco que declina" },
+          { financial_institution_code: "3", financial_institution_name: "Banco que simula un error" },
+        ],
+        meta: {},
+      });
+    },
+  );
 }

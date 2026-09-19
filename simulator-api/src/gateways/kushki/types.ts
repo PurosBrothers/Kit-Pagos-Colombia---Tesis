@@ -68,3 +68,77 @@ export interface KushkiChargeResponse {
     email?: string;
   };
 }
+
+/**
+ * Cuerpo de `POST /transfer/v1/tokens`, el primer paso de Transfer In.
+ *
+ * **Forma verificada contra la API UAT** el 18 de septiembre de 2026: este cuerpo,
+ * tal como el adaptador lo arma, responde `201` con el token. La ruta es en plural;
+ * `/transfer/v1/token` responde como una ruta inexistente.
+ */
+export interface KushkiTransferTokenRequestBody {
+  bankId?: string;
+  callbackUrl?: string;
+  userType?: string;
+  documentType?: string;
+  documentNumber?: string;
+  email?: string;
+  currency?: string;
+  paymentDescription?: string;
+  amount?: KushkiAmount;
+}
+
+/** Cuerpo de `POST /transfer/v1/init`, el segundo paso. */
+/**
+ * Estados nativos de una transferencia, que **no** son los de tarjeta.
+ *
+ * Medidos contra la API UAT real el 18 de septiembre de 2026: la transferencia
+ * nace en `requestedToken` y pasa a `initializedTransaction` al iniciarla. Los
+ * finales vienen de la documentacion de Kushki: llevar una transferencia hasta el
+ * desenlace exige autorizar en el portal del banco.
+ */
+export type KushkiTransferStatus =
+  | "requestedToken"
+  | "initializedTransaction"
+  | "approvedTransaction"
+  | "declinedTransaction";
+
+/** Respuesta de `POST /transfer/v1/init`, con la forma medida. No trae estado. */
+export interface KushkiTransferInitResponse {
+  bankId: string;
+  bankName: string;
+  redirectUrl: string;
+  transactionReference: string;
+  trazabilityCode: string;
+}
+
+/** Respuesta de `GET /transfer/v1/status/{token}`, con la forma medida. */
+export interface KushkiTransferStatusResponse {
+  status: KushkiTransferStatus;
+  token: string;
+  paymentDescription: string;
+  email: string;
+  amount: KushkiAmount;
+  transactionReference: string;
+  bankId: string;
+  documentType: string;
+  documentNumber: string;
+  currency: string;
+  country: string;
+  created: number;
+  merchantName: string;
+  callbackUrl: string;
+}
+
+export interface KushkiTransferInitRequestBody {
+  token?: string;
+  /** Kushki lo exige aunque ya viajo al pedir el token. Medido: sin el, 400 T001. */
+  amount?: KushkiAmount;
+}
+
+/** Una entidad financiera de `GET /transfer/v1/bankList`. */
+export interface KushkiBank {
+  code: string;
+  name: string;
+}
+

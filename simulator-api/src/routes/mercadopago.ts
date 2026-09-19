@@ -193,4 +193,46 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(200).send(response);
     },
   );
+
+  /**
+   * Catalogo de metodos de pago, donde viven los bancos de PSE.
+   *
+   * Mercado Pago no tiene endpoint de bancos: los anida en la entrada `pse`, bajo
+   * `financial_institutions`, como `{ id, description }`. El mock devuelve cinco de
+   * las 47 entidades medidas mas **un metodo que no es PSE**, a proposito: sin algo
+   * que haya que descartar, una prueba del filtro pasaria aunque el filtro no
+   * filtrara.
+   *
+   * `min_allowed_amount` y `max_allowed_amount` son los valores reales medidos. El
+   * SDK todavia no los lee, y estan igual porque son la clase de dato que un
+   * comercio descubre que necesitaba recien cuando un cobro de 1.500 pesos falla.
+   */
+  app.get(
+    "/v1/sim/mercadopago/payment_methods",
+    async (_request: FastifyRequest, reply: FastifyReply) => {
+      return reply.code(200).send([
+        {
+          id: "master",
+          name: "Mastercard",
+          payment_type_id: "credit_card",
+          status: "active",
+        },
+        {
+          id: "pse",
+          name: "PSE",
+          payment_type_id: "bank_transfer",
+          status: "active",
+          min_allowed_amount: 1600,
+          max_allowed_amount: 340000000,
+          financial_institutions: [
+            { id: "1001", description: "Banco de Bogot\u00e1" },
+            { id: "1007", description: "Bancolombia" },
+            { id: "1013", description: "BBVA" },
+            { id: "1051", description: "Davivienda" },
+            { id: "1019", description: "DAVIbank S.A." },
+          ],
+        },
+      ]);
+    },
+  );
 }

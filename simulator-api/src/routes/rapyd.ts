@@ -1,6 +1,9 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { GatewayMockFactory } from "../gateways/rapyd/GatewayMockFactory";
-import { RapydCreatePaymentRequestBody } from "../gateways/rapyd/types";
+import {
+  RapydCreateCustomerRequestBody,
+  RapydCreatePaymentRequestBody,
+} from "../gateways/rapyd/types";
 
 const SCENARIO_HEADER = "x-simulate-scenario";
 const DEFAULT_SCENARIO = "APPROVED";
@@ -57,6 +60,32 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
           .send({ error: `Escenario aun no soportado: ${scenario}` });
       }
 
+      // PSE se reconoce por el prefijo del metodo de pago, que en Rapyd son 47
+      // tipos `co_pse_{banco}_bank` en vez de un metodo con un campo de banco.
+      const methodType = (requestBody.payment_method as { type?: unknown })?.type;
+      const esPse =
+        typeof methodType === "string" && methodType.startsWith("co_pse_");
+
+      if (esPse) {
+        // Rapyd rechaza el pago sin cliente previo, medido como
+        // `MISSING_PAYMENT_METHOD_REQUIRED_FIELD - [CUSTOMER]`. El mock lo
+        // reproduce para que una prueba note si el adaptador se saltara la
+        // primera llamada.
+        if (!requestBody.customer) {
+          return reply.code(400).send({
+            status: {
+              error_code: "MISSING_PAYMENT_METHOD_REQUIRED_FIELD - [CUSTOMER]",
+              status: "ERROR",
+              message: "Please contact Rapyd Client Support.",
+              response_code: "MISSING_PAYMENT_METHOD_REQUIRED_FIELD - [CUSTOMER]",
+              operation_id: "",
+            },
+          });
+        }
+
+        return reply.code(201).send(mockFactory.buildPseCreatedResponse(requestBody));
+      }
+
       return reply.code(201).send(mockFactory.buildApprovedResponse(requestBody));
     },
   );
@@ -67,6 +96,52 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
       const { paymentId } = request.params as { paymentId: string };
 
       return reply.code(200).send(mockFactory.buildStatusResponse(paymentId));
+    },
+  );
+
+  /**
+   * Creacion de cliente, la primera de las dos llamadas de PSE.
+   *
+   * Existe como ruta aparte y no como un paso implicito del pago porque asi es en
+   * Rapyd: el `customer` es una entidad propia, y el pago la referencia. Que el
+   * mock la exponga separada es lo que permite que una prueba verifique que el
+   * adaptador hace las dos llamadas en orden, y no solo que el resultado final sea
+   * el esperado.
+   */
+  app.post(
+    "/v1/sim/rapyd/customers",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const requestBody = request.body as RapydCreateCustomerRequestBody;
+
+      // Rapyd valida el nombre antes que nada, y responde con un codigo propio
+      // distinto del de los campos que faltan.
+      if (!requestBody.name) {
+        return reply.code(400).send({
+          status: {
+            error_code: "INVALID_CUSTOMER_NAME",
+            status: "ERROR",
+            message: "",
+            response_code: "INVALID_CUSTOMER_NAME",
+            operation_id: "",
+          },
+        });
+      }
+
+      return reply.code(200).send(mockFactory.buildCustomerResponse(requestBody));
+    },
+  );
+
+  /**
+   * Catalogo de metodos de pago de un pais, del que se filtra la lista de bancos.
+   *
+   * El parametro `country` se acepta y se ignora: el SDK manda siempre `CO` porque
+   * PSE no existe fuera de Colombia, y devolver un catalogo distinto por pais seria
+   * simular una funcionalidad que el SDK no usa.
+   */
+  app.get(
+    "/v1/sim/rapyd/payment_methods/country",
+    async (_request: FastifyRequest, reply: FastifyReply) => {
+      return reply.code(200).send(mockFactory.buildPaymentMethodsResponse());
     },
   );
 }
