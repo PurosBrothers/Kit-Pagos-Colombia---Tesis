@@ -171,3 +171,51 @@ export interface RapydPaymentMethodsResponse {
   status: RapydResponseStatus;
   data: RapydPaymentMethodType[];
 }
+
+/**
+ * Cuerpo de `POST /v1/checkout`, la página de pago alojada de Rapyd.
+ *
+ * Es el camino de tarjeta, y no `POST /v1/payments`, por una razón medida: cobrar una
+ * tarjeta servidor-a-servidor en Rapyd exige mandar el número de la tarjeta en la
+ * petición, y un método guardado responde `ERROR_CARD_NOT_AUTHENTICATED`. La página
+ * alojada es el único camino que cobra tarjeta sin que el número pase por el comercio.
+ */
+export interface RapydCreateCheckoutRequestBody {
+  amount: string;
+  currency: string;
+  country: string;
+  merchant_reference_id?: string;
+  payment_method_type_categories?: string[];
+  receipt_email?: string;
+  complete_payment_url?: string;
+  error_payment_url?: string;
+}
+
+/**
+ * Página de pago de Rapyd, con la forma verificada contra `sandboxapi.rapyd.net` el 19 de
+ * septiembre de 2026.
+ *
+ * Lo que importa de esta forma es que el pago vive **anidado y vacío** hasta que alguien
+ * pague: `payment.id` y `payment.status` llegan en `null`, y el identificador del recurso
+ * lleva el prefijo `checkout_`, no `payment_`. Por eso el SDK elige la ruta de consulta
+ * mirando el prefijo: un `checkout_` en `/payments/{id}` responde `ERROR_GET_PAYMENT`.
+ */
+export interface RapydCheckout {
+  id: string;
+  status: "NEW" | "DON";
+  redirect_url: string;
+  payment: {
+    id: string | null;
+    status: string | null;
+    paid?: boolean;
+    amount: string;
+    currency_code: string;
+    merchant_reference_id?: string;
+    receipt_email?: string;
+  };
+}
+
+export interface RapydCheckoutResponse {
+  status: RapydResponseStatus;
+  data: RapydCheckout;
+}

@@ -15,21 +15,23 @@ describe("mock de Kushki", () => {
     },
   };
 
-  describe("POST /v1/sim/kushki/charges", () => {
+  describe("POST /v1/sim/kushki/card/v1/charges", () => {
     it("crea un cargo aprobado con el estado nativo APPROVAL y el monto desglosado", async () => {
       const app = buildApp();
 
       const response = await app.inject({
         method: "POST",
-        url: "/v1/sim/kushki/charges",
+        url: "/v1/sim/kushki/card/v1/charges",
         payload: validRequestBody,
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(201);
       const body = response.json();
       expect(body.ticketNumber).toMatch(/^[0-9a-f]{18}$/);
-      expect(body.transaction_status).toBe("APPROVAL");
-      expect(body.amount).toEqual(validRequestBody.amount);
+      expect(body.details.transactionStatus).toBe("APPROVAL");
+      expect(body.details.subtotalIva0).toBe(50000);
+      expect(body.details.currencyCode).toBe("COP");
+      expect(body.details.approvedTransactionAmount).toBe(50000);
       expect(typeof body.transactionReference).toBe("string");
 
       await app.close();
@@ -40,31 +42,32 @@ describe("mock de Kushki", () => {
 
       const response = await app.inject({
         method: "POST",
-        url: "/v1/sim/kushki/charges",
+        url: "/v1/sim/kushki/card/v1/charges",
         headers: { "x-simulate-scenario": "APPROVED" },
         payload: validRequestBody,
       });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json().transaction_status).toBe("APPROVAL");
+      expect(response.statusCode).toBe(201);
+      expect(response.json().details.transactionStatus).toBe("APPROVAL");
 
       await app.close();
     });
 
-    it("devuelve DECLINED en el cuerpo, manteniendo HTTP 200", async () => {
-      // Kushki comunica el rechazo de negocio mediante transaction_status, no
-      // con un código HTTP 4xx. Este caso protege ese detalle del contrato.
+    it("devuelve DECLINED en el cuerpo, con el mismo HTTP que una aprobación", async () => {
+      // Kushki comunica el rechazo de negocio en el estado dentro del cuerpo, no con un
+      // código HTTP distinto. Este caso protege ese detalle del contrato: un adaptador que
+      // decidiera mirando `response.ok` reportaría este rechazo como aprobado.
       const app = buildApp();
 
       const response = await app.inject({
         method: "POST",
-        url: "/v1/sim/kushki/charges",
+        url: "/v1/sim/kushki/card/v1/charges",
         headers: { "x-simulate-scenario": "DECLINED" },
         payload: validRequestBody,
       });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json().transaction_status).toBe("DECLINED");
+      expect(response.statusCode).toBe(201);
+      expect(response.json().details.transactionStatus).toBe("DECLINED");
 
       await app.close();
     });
@@ -74,13 +77,40 @@ describe("mock de Kushki", () => {
 
       const response = await app.inject({
         method: "POST",
-        url: "/v1/sim/kushki/charges",
+        url: "/v1/sim/kushki/card/v1/charges",
         headers: { "x-simulate-scenario": "PENDING" },
         payload: validRequestBody,
       });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json().transaction_status).toBe("INITIALIZED");
+      expect(response.statusCode).toBe(201);
+      expect(response.json().details.transactionStatus).toBe("INITIALIZED");
+
+      await app.close();
+    });
+
+    it("rechaza un cobro sin token con el mismo 400 K001 de la API real", async () => {
+      // Medido: `POST /card/v1/charges` sin token, o con el literal "simulated-token" que
+      // el SDK mandaba, responde `400 K001`. El mock lo exige para que ningún cambio
+      // futuro pueda dejar de mandar el token del comercio y seguir en verde (punto 50).
+      const app = buildApp();
+
+      const sinToken = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        payload: { ...validRequestBody, token: undefined },
+      });
+
+      expect(sinToken.statusCode).toBe(400);
+      expect(sinToken.json().code).toBe("K001");
+
+      const tokenSimulado = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        payload: { ...validRequestBody, token: "simulated-token" },
+      });
+
+      expect(tokenSimulado.statusCode).toBe(400);
+      expect(tokenSimulado.json().code).toBe("K001");
 
       await app.close();
     });
@@ -90,7 +120,7 @@ describe("mock de Kushki", () => {
 
       const response = await app.inject({
         method: "POST",
-        url: "/v1/sim/kushki/charges",
+        url: "/v1/sim/kushki/card/v1/charges",
         headers: { "x-simulate-scenario": "TIMEOUT" },
         payload: validRequestBody,
       });
@@ -114,14 +144,9 @@ describe("mock de Kushki", () => {
       expect(response.statusCode).toBe(200);
       const body = response.json();
       expect(body.ticketNumber).toBe("kushki-ticket-123");
-      expect(body.transaction_status).toBe("APPROVAL");
-      expect(body.amount).toEqual({
-        subtotalIva0: 50000,
-        subtotalIva: 0,
-        iva: 0,
-        ice: 0,
-        currency: "COP",
-      });
+      expect(body.details.transactionStatus).toBe("APPROVAL");
+      expect(body.details.subtotalIva0).toBe(50000);
+      expect(body.details.currencyCode).toBe("COP");
 
       await app.close();
     });
@@ -136,7 +161,7 @@ describe("mock de Kushki", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().transaction_status).toBe("DECLINED");
+      expect(response.json().details.transactionStatus).toBe("DECLINED");
 
       await app.close();
     });

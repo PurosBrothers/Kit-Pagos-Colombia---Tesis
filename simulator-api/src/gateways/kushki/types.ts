@@ -56,16 +56,37 @@ export type KushkiTransactionStatus = "APPROVAL" | "DECLINED" | "INITIALIZED";
  * DECLINED: la decisión de éxito o fallo está en el cuerpo, nunca en el
  * código HTTP.
  */
+/**
+ * Respuesta de `POST /card/v1/charges` con `fullResponse: true`.
+ *
+ * **Forma verificada contra la API UAT** el 19 de septiembre de 2026. Dos cosas que el
+ * mock tenía mal y que solo se vieron midiendo:
+ *
+ * 1. Sin `fullResponse: true`, la respuesta es `{ ticketNumber, transactionReference }` y
+ *    nada más: no trae monto ni estado, así que **no alcanza para armar una Transaction**.
+ * 2. Con `fullResponse: true`, el estado y el monto no están en la raíz sino dentro de
+ *    `details`, con otros nombres: `transactionStatus` en camelCase y el monto desarmado
+ *    en campos sueltos (`subtotalIva0`, `ivaValue`…) en vez de un objeto `amount`.
+ */
 export interface KushkiChargeResponse {
+  /** Identificador del cobro. Es el único campo de estado que vive en la raíz. */
   ticketNumber: string;
-  transaction_status: KushkiTransactionStatus;
-  amount: KushkiAmount;
   /** Generado por Kushki, no es la referencia que envió el comercio. */
   transactionReference: string;
-  /** Eco de la referencia del comercio, cuando la solicitud la trae. */
-  trackingCode?: string;
-  contactDetails?: {
-    email?: string;
+  details: {
+    transactionStatus: KushkiTransactionStatus;
+    /** Eco de la referencia del comercio, cuando la solicitud la trae. */
+    trackingCode?: string;
+    subtotalIva0: number;
+    subtotalIva: number;
+    ivaValue: number;
+    iceValue: number;
+    currencyCode: string;
+    approvedTransactionAmount: number;
+    responseText: string;
+    contactDetails?: {
+      email?: string;
+    };
   };
 }
 

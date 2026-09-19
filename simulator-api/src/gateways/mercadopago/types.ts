@@ -31,6 +31,15 @@ export interface MercadoPagoCreatePaymentRequestBody {
   transaction_amount: number;
   description?: string;
   external_reference?: string;
+  /**
+   * Mercado Pago **deduce el método de pago del token**, así que el comercio no manda
+   * `payment_method_id` en un cobro con tarjeta: se midió que mandar el token sin ese campo
+   * responde `201`, y que omitir el token responde
+   * `400 "payment_method_id attribute can't be null"`.
+   */
+  token?: string;
+  /** Obligatorio incluso cuando son una: sin él responde `400 "Invalid installments"`. */
+  installments?: number;
   payment_method_id?: string;
   payer: MercadoPagoPayer;
 }

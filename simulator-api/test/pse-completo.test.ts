@@ -316,6 +316,25 @@ describe("PSE en las cuatro pasarelas", () => {
       expect(response.json().ticketNumber).toBeUndefined();
     });
 
+    /**
+     * Esta ruta no contesta por un cobro con tarjeta.
+     *
+     * Importa porque el adaptador prueba las dos rutas de consulta en orden: si esta
+     * respondiera a cualquier identificador, un cobro con tarjeta se reportaría con el
+     * vocabulario de transferencia (`approvedTransaction` en vez de `APPROVAL`) y el orden
+     * de las rutas no se ejercitaría nunca. Se distinguen por su forma: 32 caracteres hex
+     * el token de transferencia, 18 el ticket de tarjeta.
+     */
+    it("no contesta por un ticket de tarjeta, que es de otro método", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/sim/kushki/transfer/v1/status/a263b3997a5b446985",
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().code).toBe("T004");
+    });
+
     /** El estado no final tiene que ser el nativo de transferencia, no el de tarjeta. */
     it("reporta initializedTransaction en el escenario pendiente", async () => {
       const response = await app.inject({

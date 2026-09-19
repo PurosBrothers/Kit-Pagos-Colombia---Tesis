@@ -1,5 +1,8 @@
 import { randomBytes } from "node:crypto";
 import {
+  RapydCheckout,
+  RapydCheckoutResponse,
+  RapydCreateCheckoutRequestBody,
   RapydCreateCustomerRequestBody,
   RapydCreatePaymentRequestBody,
   RapydCustomerResponse,
@@ -9,6 +12,10 @@ import {
   RapydPaymentResponse,
   RapydResponseStatus,
 } from "./types";
+import {
+  TransactionStore,
+  transactionStore,
+} from "../../store/TransactionStore";
 
 /**
  * Gateway Mock Factory — Rapyd (issue #52).
@@ -24,6 +31,14 @@ import {
  * cambia nada de lo que ya existe.
  */
 export class GatewayMockFactory {
+  /**
+   * El store llega por constructor, como en la fábrica de Wompi, para poder sustituirlo
+   * en una prueba sin tocar el singleton compartido. La página de pago es el primer
+   * recurso de Rapyd que necesita estado entre peticiones: sin guardarla, la segunda
+   * consulta no podría saber que la primera ya ocurrió.
+   */
+  constructor(private readonly store: TransactionStore = transactionStore) {}
+
   /**
    * Rapyd identifica sus pagos con el prefijo `payment_` seguido de 32
    * caracteres hexadecimales. Se replica esa forma en vez de usar `randomUUID()`
@@ -67,6 +82,70 @@ export class GatewayMockFactory {
       failure_message: "",
       created_at: Math.floor(Date.now() / 1000),
     });
+  }
+
+  /**
+   * Crea la página de pago con la que Rapyd cobra tarjeta.
+   *
+   * Nace `NEW` y con el pago en `null`: **no es una simplificación**, es lo que devuelve
+   * Rapyd, porque en este punto nadie pagó todavía. El comercio recibe una URL y una
+   * redirección, igual que en PSE.
+   */
+  buildCheckoutCreatedResponse(
+    requestBody: RapydCreateCheckoutRequestBody,
+  ): RapydCheckoutResponse {
+    const id = `checkout_${randomBytes(16).toString("hex")}`;
+    const checkout: RapydCheckout = {
+      id,
+      status: "NEW",
+      redirect_url: `http://localhost:3000/v1/sim/rapyd/checkout/${id}/pagar`,
+      payment: {
+        id: null,
+        status: null,
+        amount: requestBody.amount,
+        currency_code: requestBody.currency,
+        merchant_reference_id: requestBody.merchant_reference_id,
+        receipt_email: requestBody.receipt_email,
+      },
+    };
+
+    this.store.save(id, checkout);
+    return { status: GatewayMockFactory.buildStatus(), data: checkout };
+  }
+
+  /**
+   * Paga una página de pago, como si el pagador hubiera llenado el formulario.
+   *
+   * Contra el sandbox real la página **nunca se paga sola**: se midió que un checkout
+   * creado y no visitado se queda en `NEW` indefinidamente, así que el estado posterior al
+   * pago no se puede observar sin que una persona lo llene. Acá lo dispara la visita a la
+   * URL de redirección, y la consulta de estado queda siendo una lectura pura.
+   *
+   * Es a propósito distinto del PSE de Wompi, que avanza por número de consultas: ahí la
+   * URL del banco es un destino externo que el mock no puede servir, mientras que acá la
+   * página es del mismo proveedor y el simulador sí puede representar la visita. Con esto
+   * el orden del flujo —redirigir, pagar, consultar— se ejercita en el orden real.
+   *
+   * No hace falta un contador ni un campo extra: que el pago tenga `id` **es** el estado.
+   */
+  payCheckout(checkout: RapydCheckout): RapydCheckout {
+    if (checkout.payment.id) {
+      return checkout;
+    }
+
+    const advanced: RapydCheckout = {
+      ...checkout,
+      status: "DON",
+      payment: {
+        ...checkout.payment,
+        id: GatewayMockFactory.buildPaymentId(),
+        status: "CLO",
+        paid: true,
+      },
+    };
+
+    this.store.save(advanced.id, advanced);
+    return advanced;
   }
 
   /**

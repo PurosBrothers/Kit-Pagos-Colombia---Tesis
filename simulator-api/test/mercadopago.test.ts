@@ -4,6 +4,10 @@ describe("Mercado Pago Simulation Routes", () => {
   const validRequestBody = {
     transaction_amount: 50000,
     description: "orden-mp-123",
+    // El token y las cuotas son obligatorios en un cobro con tarjeta de Mercado Pago, y
+    // el mock ahora los exige igual que la API real.
+    token: "a1b2c3d4e5f6",
+    installments: 1,
     payer: {
       email: "cliente.mp@example.com",
       first_name: "Juan",
@@ -69,6 +73,40 @@ describe("Mercado Pago Simulation Routes", () => {
       expect(body.status).toBe("rejected");
       expect(body.status_detail).toBe("cc_rejected_other_reason");
       expect(body.date_approved).toBeNull();
+
+      await app.close();
+    });
+
+    it("rechaza un cobro sin token, con el mensaje de la API real", async () => {
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        payload: { ...validRequestBody, token: undefined },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().message).toBe(
+        "payment_method_id attribute can't be null",
+      );
+
+      await app.close();
+    });
+
+    it("rechaza un cobro sin cuotas, aunque sean una", async () => {
+      // Mercado Pago es la única de las cuatro que exige las cuotas siempre. Es la razón
+      // de que `installments` viva en el dominio del SDK y no en un solo adaptador.
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        payload: { ...validRequestBody, installments: undefined },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().message).toBe("Invalid installments");
 
       await app.close();
     });

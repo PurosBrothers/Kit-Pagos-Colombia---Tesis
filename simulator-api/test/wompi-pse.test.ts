@@ -117,7 +117,7 @@ describe("PSE en el simulador de Wompi", () => {
     await app.close();
   });
 
-  it("no altera el flujo de tarjeta, que sigue resolviéndose al crear", async () => {
+  it("resuelve la tarjeta en la primera consulta, sin publicar URL de banco", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -132,7 +132,17 @@ describe("PSE en el simulador de Wompi", () => {
       },
     });
 
-    expect(response.json().data.status).toBe("APPROVED");
+    // La tarjeta nace pendiente igual que el PSE, pero avanza distinto: no tiene banco al
+    // que redirigir, así que la primera consulta ya la resuelve.
+    expect(response.json().data.status).toBe("PENDING");
+
+    const consultada = await app.inject({
+      method: "GET",
+      url: `/v1/sim/wompi/transactions/${response.json().data.id}`,
+    });
+
+    expect(consultada.json().data.status).toBe("APPROVED");
+    expect(consultada.json().data.payment_method?.extra?.async_payment_url).toBeUndefined();
 
     await app.close();
   });

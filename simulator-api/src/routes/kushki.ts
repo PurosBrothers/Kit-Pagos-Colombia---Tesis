@@ -12,22 +12,25 @@ const DEFAULT_SCENARIO = "APPROVED";
  * Router HTTP de Kushki (API de Simulación).
  *
  * Expone:
- * 1. POST /v1/sim/kushki/charges: simula la creación de un cargo con
- *    tarjeta, replicando POST /card/v1/charges de Kushki.
- * 2. GET /v1/sim/kushki/charges/:ticketNumber: simula la consulta de
- *    estado por ticketNumber.
+ * 1. POST /v1/sim/kushki/card/v1/charges: crea un cobro con tarjeta. La ruta lleva el
+ *    prefijo `card/v1` porque **es la ruta real**: se midió que `POST /charges`, que es
+ *    la que el SDK usaba, responde `403 Forbidden` igual que una ruta inventada.
+ * 2. GET /v1/sim/kushki/charges/:ticketNumber: consulta el estado por ticketNumber.
+ *    **Esta no tiene equivalente medido**: contra la API real se probaron catorce rutas
+ *    candidatas de consulta de cobros con tarjeta y ninguna existe. Se conserva para que
+ *    el ejemplo pueda mostrar el ciclo de vida completo, y está declarado en el punto 50.
  *
- * Punto crítico de esta ruta, explícito en el issue: SIEMPRE responde
- * HTTP 200, incluso cuando el escenario es un rechazo. La decisión
- * de éxito o fallo vive únicamente en el campo transaction_status del
- * cuerpo, nunca en el código HTTP — es justo el comportamiento que rompe
- * un adaptador que decide mirando response.ok.
+ * Punto crítico de esta ruta, explícito en el issue: un **rechazo** viaja con el mismo
+ * código HTTP que una aprobación, y la decisión de éxito o fallo vive únicamente en el
+ * estado dentro del cuerpo. Es justo el comportamiento que rompe un adaptador que decide
+ * mirando `response.ok`. Lo que cambió es el código: `201` y no `200`, porque es el que
+ * responde Kushki al crear.
  */
 export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
   const mockFactory = new GatewayMockFactory();
 
   app.post(
-    "/v1/sim/kushki/charges",
+    "/v1/sim/kushki/card/v1/charges",
     async (request: FastifyRequest, reply: FastifyReply) => {
       const scenarioHeader = request.headers[SCENARIO_HEADER];
       const scenario = (
@@ -38,23 +41,37 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
 
       const requestBody = request.body as KushkiCreateChargeRequestBody;
 
+      /*
+       * Sin token no hay cobro, y el error es el que responde Kushki de verdad.
+       *
+       * Medido contra `api-uat.kushkipagos.com`: `POST /card/v1/charges` con
+       * `token: "simulated-token"` —el literal que el SDK mandaba— responde
+       * `400 K001 "Cuerpo de la petición inválido"`. El mock viejo aceptaba cualquier
+       * token, así que el defecto era invisible para toda la suite (punto 50).
+       */
+      if (!requestBody?.token || requestBody.token === "simulated-token") {
+        return reply
+          .code(400)
+          .send({ code: "K001", message: "Cuerpo de la petición inválido." });
+      }
+
       if (scenario === "DECLINED" || scenario === "REJECTED") {
         // HTTP 200, no 4xx: Kushki nunca usa el status HTTP para señalar
         // un rechazo de negocio.
         return reply
-          .code(200)
+          .code(201)
           .send(mockFactory.buildDeclinedResponse(requestBody));
       }
 
       if (scenario === "INITIALIZED" || scenario === "PENDING") {
         return reply
-          .code(200)
+          .code(201)
           .send(mockFactory.buildInitializedResponse(requestBody));
       }
 
       if (scenario === "APPROVED" || scenario === "APPROVAL") {
         return reply
-          .code(200)
+          .code(201)
           .send(mockFactory.buildApprovedResponse(requestBody));
       }
 
@@ -199,6 +216,23 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       reply: FastifyReply,
     ) => {
       const { token } = request.params;
+
+      /*
+       * Un ticket de tarjeta consultado acá no es una transferencia, y hay que decirlo.
+       *
+       * Es la contraparte del 404 que ya daba la ruta de tarjeta ante un token de
+       * transferencia, y hace falta por lo mismo: el adaptador prueba las dos rutas en
+       * orden, y si esta contestara a cualquier identificador, un cobro con tarjeta se
+       * reportaría con el vocabulario de transferencia —`approvedTransaction` en vez de
+       * `APPROVAL`— y el orden de las rutas nunca se ejercitaría. Se distinguen por su
+       * forma: el token de transferencia son 32 hex y el ticket de tarjeta son 18.
+       */
+      if (!/^[0-9a-f]{32}$/.test(token)) {
+        return reply
+          .code(404)
+          .send({ code: "T004", message: "Transferencia no encontrada" });
+      }
+
       const scenarioHeader = request.headers[SCENARIO_HEADER];
       const scenario = (
         Array.isArray(scenarioHeader)

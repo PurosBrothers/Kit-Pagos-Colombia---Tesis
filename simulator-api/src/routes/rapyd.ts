@@ -1,9 +1,12 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { GatewayMockFactory } from "../gateways/rapyd/GatewayMockFactory";
 import {
+  RapydCheckout,
+  RapydCreateCheckoutRequestBody,
   RapydCreateCustomerRequestBody,
   RapydCreatePaymentRequestBody,
 } from "../gateways/rapyd/types";
+import { transactionStore } from "../store/TransactionStore";
 
 const SCENARIO_HEADER = "x-simulate-scenario";
 const DEFAULT_SCENARIO = "APPROVED";
@@ -14,8 +17,13 @@ const DEFAULT_SCENARIO = "APPROVED";
  * Expone las dos operaciones que el `RapydAdapter` del SDK necesita, con las
  * mismas rutas que la API real bajo el prefijo de simulacion:
  *
- * 1. `POST /v1/sim/rapyd/payments` — creacion de pago (201).
+ * 1. `POST /v1/sim/rapyd/payments` — creacion de pago (201), que es el camino de PSE.
  * 2. `GET  /v1/sim/rapyd/payments/:paymentId` — consulta de estado (200).
+ * 3. `POST /v1/sim/rapyd/checkout` — pagina de pago alojada (201), el camino de tarjeta.
+ * 4. `GET  /v1/sim/rapyd/checkout/:checkoutId` — consulta de la pagina (200).
+ * 5. `GET  /v1/sim/rapyd/checkout/:checkoutId/pagar` — la visita del pagador a la pagina,
+ *    que es el unico punto donde el cobro se concreta. No es una ruta de la API de Rapyd:
+ *    es el destino de `redirect_url`.
  *
  * Sigue el mismo reparto que la ruta de Mercado Pago: instancia su propia
  * fabrica y resuelve el escenario aca, sin pasar por `ScenarioEngine`. Ese
@@ -87,6 +95,115 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
       }
 
       return reply.code(201).send(mockFactory.buildApprovedResponse(requestBody));
+    },
+  );
+
+  /**
+   * Página de pago alojada: el camino de tarjeta de Rapyd.
+   *
+   * No es una alternativa de diseño, es el único camino medido que cobra una tarjeta sin
+   * que el número pase por el servidor del comercio. `POST /v1/payments` con un método
+   * `co_visa_card` guardado responde `ERROR_CARD_NOT_AUTHENTICATED`, y la variante que
+   * funciona exige `number`, `expiration_month` y `cvv` en la petición.
+   */
+  app.post(
+    "/v1/sim/rapyd/checkout",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const requestBody = request.body as RapydCreateCheckoutRequestBody;
+
+      // Rapyd no crea una página sin monto, divisa y país; el mock tampoco, para que una
+      // prueba note si el adaptador dejara de mandar alguno.
+      if (!requestBody?.amount || !requestBody?.currency || !requestBody?.country) {
+        return reply.code(400).send({
+          status: {
+            error_code: "MISSING_REQUIRED_FIELD",
+            status: "ERROR",
+            message: "amount, currency and country are required.",
+            response_code: "MISSING_REQUIRED_FIELD",
+            operation_id: "",
+          },
+        });
+      }
+
+      // 200 y no 201: se midió que Rapyd responde 200 al crear una página de pago, a
+      // diferencia de `POST /v1/payments`, que responde 201. La misma API usa los dos.
+      return reply
+        .code(200)
+        .send(mockFactory.buildCheckoutCreatedResponse(requestBody));
+    },
+  );
+
+  /**
+   * Consulta de una página de pago.
+   *
+   * Es una ruta aparte de la de pagos y no un detalle: un identificador `checkout_`
+   * consultado en `/payments/{id}` responde `400 ERROR_GET_PAYMENT` contra la API real.
+   */
+  app.get(
+    "/v1/sim/rapyd/checkout/:checkoutId",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { checkoutId } = request.params as { checkoutId: string };
+      const checkout = transactionStore.findById(checkoutId) as
+        | RapydCheckout
+        | undefined;
+
+      if (!checkout) {
+        return reply.code(400).send({
+          status: {
+            error_code: "ERROR_GET_CHECKOUT_PAGE",
+            status: "ERROR",
+            message: "",
+            response_code: "ERROR_GET_CHECKOUT_PAGE",
+            operation_id: "",
+          },
+        });
+      }
+
+      // Lectura pura: la página se paga cuando alguien la visita, no cuando el comercio
+      // pregunta por ella.
+      return reply.code(200).send({
+        status: {
+          status: "SUCCESS",
+          error_code: "",
+          message: "",
+          response_code: "",
+          operation_id: "",
+        },
+        data: checkout,
+      });
+    },
+  );
+
+  /**
+   * La página que vería el pagador, y el único lugar donde el cobro se concreta.
+   *
+   * No representa una ruta de la API de Rapyd: es el destino de `redirect_url`, o sea la
+   * página alojada a la que Rapyd manda al pagador. Existe para que el ejemplo pueda
+   * recorrer el flujo en el orden real —crear, redirigir, pagar, consultar— en vez de
+   * suponer que el pago aparece solo.
+   */
+  app.get(
+    "/v1/sim/rapyd/checkout/:checkoutId/pagar",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { checkoutId } = request.params as { checkoutId: string };
+      const checkout = transactionStore.findById(checkoutId) as
+        | RapydCheckout
+        | undefined;
+
+      if (!checkout) {
+        return reply.code(404).send({
+          status: {
+            error_code: "ERROR_GET_CHECKOUT_PAGE",
+            status: "ERROR",
+            message: "",
+            response_code: "ERROR_GET_CHECKOUT_PAGE",
+            operation_id: "",
+          },
+        });
+      }
+
+      const pagado = mockFactory.payCheckout(checkout);
+      return reply.code(200).send({ paid: true, payment_id: pagado.payment.id });
     },
   );
 

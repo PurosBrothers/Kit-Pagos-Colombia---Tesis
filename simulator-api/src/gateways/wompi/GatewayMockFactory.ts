@@ -30,25 +30,29 @@ export class GatewayMockFactory {
   constructor(private readonly store: TransactionStore = transactionStore) {}
 
   /**
-   * Builds an approved transaction response with the same shape that the
-   * real Wompi API would return: the `transaction` object wrapped in `data`,
-   * with a generated `id` and reflecting the amount, reference and payer
-   * email received in the original request.
+   * Crea un cobro con tarjeta como lo crea Wompi: **`PENDING`, no `APPROVED`**.
    *
-   * The transaction is saved in the store before returning, indexed by its
-   * `id`, so that GET /v1/sim/wompi/transactions/:id can retrieve it without
-   * having to rebuild it.
+   * Que nazca pendiente no es una complicación del mock, es lo que se midió contra
+   * `sandbox.wompi.co` el 19 de septiembre de 2026: `POST /transactions` con
+   * `payment_method: {type: "CARD", token, installments}` responde `201` con
+   * `status: "PENDING"` y `finalized_at: null`, y la transacción pasa a `APPROVED`
+   * unos 600 ms después. El cobro con tarjeta de Wompi **es asíncrono**, igual que su
+   * PSE, y el mock que devolvía `APPROVED` de una le escondía ese paso al comercio.
+   *
+   * La transacción se guarda en el store para que la consulta posterior la resuelva,
+   * que es justo el paso que el comercio tiene que saber que existe.
    */
   buildApprovedResponse(
     requestBody: WompiCreateTransactionRequestBody,
   ): WompiTransactionResponse {
     const transaction: WompiTransaction = {
       id: randomUUID(),
-      status: "APPROVED",
+      status: "PENDING",
       amount_in_cents: requestBody.amount_in_cents,
       currency: requestBody.currency,
       reference: requestBody.reference,
       customer_email: requestBody.customer_email,
+      payment_method: requestBody.payment_method,
     };
 
     // Persist in the shared store before responding, so that
@@ -116,6 +120,24 @@ export class GatewayMockFactory {
    * (`1` aprueba, `2` declina, `3` da error), para que una prueba pueda elegir
    * el desenlace sin depender del azar.
    */
+  /**
+   * Resuelve un cobro con tarjeta cuando se lo consulta.
+   *
+   * Medido: Wompi lo resuelve solo en unos 600 ms sin que nadie haga nada, así que para
+   * cuando el comercio consulta ya está resuelto. El mock hace lo mismo en la primera
+   * consulta, y así el ejemplo muestra el ciclo completo —crear pendiente, consultar,
+   * ver el estado final— que es el que el comercio tiene que programar de verdad.
+   */
+  advanceCardTransaction(transaction: WompiTransaction): WompiTransaction {
+    if (transaction.status !== "PENDING") {
+      return transaction;
+    }
+
+    const advanced: WompiTransaction = { ...transaction, status: "APPROVED" };
+    this.store.save(advanced.id, advanced);
+    return advanced;
+  }
+
   advancePseTransaction(transaction: WompiTransaction): WompiTransaction {
     const extra = transaction.payment_method?.extra ?? {};
 

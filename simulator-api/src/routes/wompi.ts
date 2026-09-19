@@ -50,6 +50,24 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
 
       const requestBody = request.body as WompiCreateTransactionRequestBody;
 
+      /*
+       * Wompi no cobra sin método de pago, y el mock tampoco.
+       *
+       * Medido contra `sandbox.wompi.co`: un `POST /transactions` sin `payment_method`
+       * responde `422 UNPROCESSABLE "No se especificó método de pago o fuente de pago"`.
+       * El mock lo aceptaba, y por eso el SDK pudo pasar meses sin mandar el token de
+       * tarjeta con todas las pruebas en verde. Un mock que acepta más que la API real no
+       * es permisivo: es el lugar donde se esconden los defectos (puntos 48 y 50).
+       */
+      if (!requestBody?.payment_method) {
+        return reply.code(422).send({
+          error: {
+            type: "UNPROCESSABLE",
+            reason: "No se especificó método de pago o fuente de pago",
+          },
+        });
+      }
+
       try {
         const response = scenarioEngine.execute(scenario, requestBody);
         return reply.code(201).send(response);
@@ -82,12 +100,11 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
       }
 
       // Un PSE pendiente avanza un paso en cada consulta: primero publica la URL
-      // de redirección sin salir de PENDING, y después resuelve. La decisión de
-      // cómo avanza es de la fábrica, no del router.
-      const resolved =
-        transaction.status === "PENDING" && transaction.payment_method?.type === "PSE"
-          ? mockFactory.advancePseTransaction(transaction)
-          : transaction;
+      // de redirección sin salir de PENDING, y después resuelve. Un cobro con tarjeta
+      // pendiente resuelve en la primera consulta, porque así se midió Wompi: nace
+      // PENDING y pasa a APPROVED solo, en unos 600 ms. La decisión de cómo avanza cada
+      // método es de la fábrica, no del router.
+      const resolved = resolvePendingTransaction(transaction, mockFactory);
 
       // Wompi wraps the transaction in { data: ... } for both creation and
       // status queries. The same shape is preserved here so ResponseNormalizer
@@ -132,4 +149,25 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
       });
     },
   );
+}
+
+/**
+ * Avanza una transacción pendiente según su método de pago.
+ *
+ * Los dos métodos de Wompi son asíncronos y lo son de maneras distintas: PSE publica la
+ * URL del banco en una consulta y resuelve en la siguiente, y la tarjeta resuelve en la
+ * primera. Tener la decisión en una función con nombre evita que el router acumule la
+ * diferencia entre métodos, que es conocimiento de la pasarela y no del transporte.
+ */
+function resolvePendingTransaction(
+  transaction: WompiTransaction,
+  mockFactory: GatewayMockFactory,
+): WompiTransaction {
+  if (transaction.status !== "PENDING") {
+    return transaction;
+  }
+
+  return transaction.payment_method?.type === "PSE"
+    ? mockFactory.advancePseTransaction(transaction)
+    : mockFactory.advanceCardTransaction(transaction);
 }

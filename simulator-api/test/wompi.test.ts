@@ -11,7 +11,7 @@ describe("POST /v1/sim/wompi/transactions", () => {
     payment_method: { type: "CARD", token: "tok_test_fake" },
   };
 
-  it("responde APROBADO reflejando amount_in_cents y reference (sin header de escenario)", async () => {
+  it("crea el cobro PENDIENTE, reflejando amount_in_cents y reference (sin header de escenario)", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -23,7 +23,10 @@ describe("POST /v1/sim/wompi/transactions", () => {
     expect(response.statusCode).toBe(201);
 
     const body = response.json();
-    expect(body.data.status).toBe("APPROVED");
+    // PENDING y no APPROVED: medido contra sandbox.wompi.co, el cobro con tarjeta nace
+    // pendiente y se resuelve unos 600 ms después. El mock devolvía APPROVED de una y le
+    // escondía al comercio que tiene que consultar el estado.
+    expect(body.data.status).toBe("PENDING");
     expect(typeof body.data.id).toBe("string");
     expect(body.data.id.length).toBeGreaterThan(0);
     expect(body.data.amount_in_cents).toBe(validRequestBody.amount_in_cents);
@@ -46,7 +49,25 @@ describe("POST /v1/sim/wompi/transactions", () => {
     });
 
     expect(response.statusCode).toBe(201);
-    expect(response.json().data.status).toBe("APPROVED");
+    expect(response.json().data.status).toBe("PENDING");
+
+    await app.close();
+  });
+
+  it("rechaza el cobro sin método de pago, con el 422 que responde Wompi", async () => {
+    // Medido: `POST /transactions` sin `payment_method` responde
+    // `422 "No se especificó método de pago o fuente de pago"`. El mock lo aceptaba, y por
+    // eso el SDK pudo no mandar nunca el token de tarjeta con la suite en verde.
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/transactions",
+      payload: { ...validRequestBody, payment_method: undefined },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json().error.reason).toContain("método de pago");
 
     await app.close();
   });

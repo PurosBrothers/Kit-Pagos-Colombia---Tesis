@@ -46,6 +46,34 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
 
       const requestBody = request.body as MercadoPagoCreatePaymentRequestBody;
 
+      /*
+       * Mercado Pago no cobra sin token ni sin cuotas, y responde distinto a cada falta.
+       * Las dos formas están medidas contra la API real:
+       *
+       * - sin `token`: `400 "payment_method_id attribute can't be null"`, porque el método
+       *   de pago lo deduce del token y sin token no hay nada que deducir.
+       * - sin `installments`: `400 "Invalid installments"`. Es la única de las cuatro
+       *   pasarelas que exige las cuotas siempre, incluso cuando son una, y es la razón de
+       *   que `installments` sea parte del dominio y no un extra de cada adaptador.
+       */
+      if (!requestBody?.token) {
+        return reply.code(400).send({
+          message: "payment_method_id attribute can't be null",
+          error: "bad_request",
+          status: 400,
+          cause: [],
+        });
+      }
+
+      if (requestBody.installments === undefined) {
+        return reply.code(400).send({
+          message: "Invalid installments",
+          error: "bad_request",
+          status: 400,
+          cause: [],
+        });
+      }
+
       if (scenario === DEFAULT_SCENARIO || scenario.toUpperCase() === "APPROVED") {
         const response = mockFactory.buildApprovedResponse(requestBody);
         return reply.code(201).send(response);

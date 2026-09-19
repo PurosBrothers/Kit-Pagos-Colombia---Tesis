@@ -17,24 +17,38 @@ import {
  * escenario ejecutar (eso es responsabilidad de la ruta) y no valida el
  * body de la solicitud.
  *
- * A diferencia de Wompi, esta respuesta refleja el mismo objeto `amount`
- * descompuesto que llegó en la solicitud: Kushki no lo colapsa a un
- * escalar en ningún punto del ciclo de vida de la transacción.
+ * A diferencia de Wompi, esta respuesta no colapsa el monto a un escalar en ningún punto
+ * del ciclo de vida. Lo que sí hace, y el mock reproduce desde que se midió, es
+ * **desarmarlo en campos sueltos dentro de `details`** en vez de devolver el mismo objeto
+ * `amount` que llegó: ver `KushkiChargeResponse` en `types.ts`.
  */
 export class GatewayMockFactory {
   private buildResponse(
     requestBody: KushkiCreateChargeRequestBody,
     status: KushkiTransactionStatus,
   ): KushkiChargeResponse {
+    const amount = requestBody.amount;
+    const total =
+      amount.subtotalIva0 + amount.subtotalIva + amount.iva + (amount.ice ?? 0);
+
     return {
       ticketNumber: randomUUID().replace(/-/g, "").slice(0, 18),
-      transaction_status: status,
-      amount: requestBody.amount,
       transactionReference: randomUUID(),
-      trackingCode: requestBody.trackingCode,
-      contactDetails: requestBody.contactDetails?.email
-        ? { email: requestBody.contactDetails.email }
-        : undefined,
+      details: {
+        transactionStatus: status,
+        trackingCode: requestBody.trackingCode,
+        subtotalIva0: amount.subtotalIva0,
+        subtotalIva: amount.subtotalIva,
+        ivaValue: amount.iva,
+        iceValue: amount.ice ?? 0,
+        currencyCode: amount.currency,
+        approvedTransactionAmount: total,
+        responseText:
+          status === "APPROVAL" ? "Transacción aprobada" : "Transacción declinada",
+        contactDetails: requestBody.contactDetails?.email
+          ? { email: requestBody.contactDetails.email }
+          : undefined,
+      },
     };
   }
 
