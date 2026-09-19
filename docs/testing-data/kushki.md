@@ -63,6 +63,12 @@ segunda (punto 50 del `architecture-log.md`):
 - **Las cuotas se llaman `months`** y son opcionales.
 - **La cuenta UAT aprueba todo.** Las tarjetas de rechazo de la tabla de arriba se cobraron y
   respondieron `APPROVAL`, así que los desenlaces de rechazo no se pudieron observar.
+- **La tarjeta que la tabla de arriba lista como aprobada no tokeniza en esta cuenta.**
+  `5451 9515 7492 5480` responde `400 K006 "DFR029 - Bin de tarjeta inválido"` en
+  `POST /card/v1/tokens`: el BIN no está habilitado para el comercio. Las tarjetas de rechazo
+  de la misma tabla sí tokenizan, así que no es la tabla entera, es esa fila para esta cuenta.
+  Para probar conviene una Visa de prueba genérica (`4242 4242 4242 4242`), que tokeniza y
+  aprueba.
 - **No se encontró cómo consultar un cobro con tarjeta.** `GET /card/v1/charges/{ticket}`
   responde `403 "Missing Authentication Token"`. Sigue pendiente desde el punto 48.
 

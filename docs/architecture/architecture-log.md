@@ -1280,6 +1280,68 @@ Sin verificar, y conviene que esté escrito:
 
 ---
 
+### 51. Pruebas de contrato contra los sandboxes reales, y el defecto que encontraron en la primera corrida
+
+**Contexto.** Los puntos 43, 44, 46, 48 y 50 encontraron dieciocho defectos midiendo contra las APIs reales, y cada uno terminó igual: con el defecto corregido y la medición escrita en prosa acá. Eso deja un agujero que ninguno de esos puntos resuelve. **Una medición escrita es verdad el día que se escribió**, y nadie —ni un jurado, ni el propio autor tres meses después— puede volver a comprobarla sin repetir el trabajo a mano. Peor: si mañana Kushki publica `POST /charges`, o Mercado Pago deja de exigir las cuotas, el SDK sigue diseñado alrededor de una restricción que ya no existe y nada lo avisa.
+
+**Decisión.** Un segundo conjunto de pruebas, en `sdk/test/sandbox/`, que llama a los cuatro sandboxes de verdad. No reemplaza a nada: las 552 pruebas de `src/` siguen siendo herméticas y siguen siendo las que corren en cada cambio.
+
+**Cómo quedaron separadas, y por qué eso no es opcional.** Una prueba que sale a la red no es una prueba unitaria, y mezclarlas arruina a las dos: la suite deja de ser determinista, tarda, y no corre sin credenciales. Así que:
+
+| | `npm test` | `npm run test:sandbox` |
+| --- | --- | --- |
+| Qué corre | 552 pruebas de `src/`, con `fetch` sustituido | 15 pruebas contra los cuatro sandboxes |
+| Red | No | Sí |
+| Credenciales | No | Sí, y si faltan **se salta**, no falla |
+| Cuándo | En cada cambio | Antes de cerrar un trabajo, y cuando se sospecha un cambio en una pasarela |
+
+`jest.config.js` excluye los archivos `*.sandbox.test.ts` por nombre y `jest.sandbox.config.js` es el único que los corre, en serie y con timeout largo. Que **falten credenciales salte la prueba en vez de romperla** es deliberado: una suite roja por una credencial ausente enseña a ignorar el rojo, y es la forma más rápida de que nadie vuelva a mirar estas pruebas.
+
+**Qué afirman, que no es lo obvio.** Afirman que la pasarela sigue aceptando lo que el SDK manda y devolviendo lo que el SDK lee. **No afirman desenlaces.** Que un cobro termine aprobado depende del antifraude de una cuenta de prueba —Mercado Pago rechaza con `cc_rejected_high_risk` de forma intermitente— y no del SDK; una prueba que exija `APPROVED` falla por algo que no es un defecto, y una prueba que falla por motivos ajenos se termina ignorando. Lo que sí se exige es que el estado sea uno que el dominio reconozca, porque un estado desconocido cae en `ERROR` y eso sí sería un defecto.
+
+Y donde una decisión de diseño salió de un error medido, **la prueba afirma que el error sigue ocurriendo**. Suena al revés y es lo más valioso del conjunto:
+
+| Prueba | Qué sostiene |
+| --- | --- |
+| Kushki responde `403` en `/charges` **igual que en una ruta inventada** | Por qué la ruta correcta vive en una constante y por qué un `403` de Kushki no distingue "no existe" de "no podés" |
+| Mercado Pago rechaza un cobro con token y sin `installments` | Por qué las cuotas están en `PaymentMethod` y no las inventa cada adaptador |
+| Rapyd rechaza cobrar un token de tarjeta en `/payments` | Por qué la tarjeta de Rapyd va por página alojada, que es la decisión más costosa del PR |
+| Wompi rechaza una transacción sin firma de integridad | El issue pendiente de exigir `integritySecret` |
+| Kushki sin `fullResponse` devuelve una respuesta sin monto ni estado | Por qué el SDK manda esa bandera siempre |
+
+El día que una de esas cinco pruebas falle, la noticia no es que el SDK se rompió: es que una decisión se puede revisar con evidencia en vez de quedar como folclore del repositorio.
+
+---
+
+#### El defecto diecinueve, encontrado en la primera corrida
+
+**Mercado Pago no creaba nada. Ni tarjeta, ni PSE.**
+
+`POST /v1/payments` responde `400 "Header X-Idempotency-Key can't be null"` y `POST /v1/orders`, que es por donde va PSE, `400 "Missing HTTP header: X-Idempotency-Key."`. El SDK no mandaba ese header en ninguna de las dos. Es la única de las cuatro pasarelas que lo exige.
+
+Lo que hace a este defecto distinto de los dieciocho anteriores es **por qué las mediciones a mano no lo vieron**. Los scripts con los que se midió Mercado Pago en los puntos 45 y 50 mandaban `X-Idempotency-Key` sin pensarlo, copiado del ejemplo de la documentación; el simulador no lo pedía; y los ejemplos corren contra el simulador. Así que la pasarela estaba medida, el mock estaba alineado con esa medición, los nueve ejemplos pasaban, y **ninguna de las tres cosas ejercitaba el camino del SDK contra la API real**. Hacía falta exactamente esto: el SDK, sin intermediarios, contra Mercado Pago.
+
+Dicho de otro modo: medir a mano y después alinear el mock tiene un punto ciego, y el punto ciego es todo lo que el que mide hace sin darse cuenta.
+
+**La corrección y su matiz.** `MercadoPagoAdapter` manda una llave nueva en cada POST, y ninguna en los GET porque una consulta no crea nada. Que sea nueva por intento y **no derivada de `orderReference`** fue una decisión, y la tentación era la contraria: con la referencia como llave, dos intentos de cobrar la misma orden producirían un solo cobro, lo que suena a más seguridad. El problema es que Mercado Pago devuelve la respuesta original para una llave repetida, así que un cobro rechazado quedaría incobrable —reintentar con otra tarjeta sobre la misma orden repetiría el rechazo viejo— y el comercio no tendría forma de salir de ahí. La protección contra el doble débito en este SDK ya existe y es otra: `createPayment()` es la única operación que no se envuelve en `RetryHandler` (punto 35).
+
+El mock de Mercado Pago ahora exige el header en las dos rutas, y reproduce las **dos formas distintas** en que cada API se queja del mismo campo: `message` en la API de pagos, `errors[].code = "empty_required_header"` en la de órdenes.
+
+---
+
+#### Dos cosas menores que aparecieron de paso
+
+**La tarjeta que la documentación de Kushki lista como aprobada no sirve en esta cuenta.** `5451 9515 7492 5480` responde `400 K006 "DFR029 - Bin de tarjeta inválido"` al tokenizar, o sea que el BIN no está habilitado para el comercio. Las tarjetas de rechazo de la misma tabla sí tokenizan, así que no es la tabla entera: es esa fila para esta cuenta. Las pruebas usan una Visa de prueba genérica.
+
+**Wompi valida en orden fijo y se queja de una cosa por respuesta:** formato del token, después token de aceptación, después firma. Salió de intentar aislar la queja por la firma: con un token inventado contesta `"Formato inválido"` sobre el token, y con token válido y sin token de aceptación, `"No está presente"` sobre ese. Eso es evidencia directa del acoplamiento que dejó afuera la exigencia de `integritySecret`: exigir el secreto sin exigir también el token de aceptación dejaría al comercio igual de lejos de poder cobrar, con un error menos.
+
+**Un detalle de formato que conviene no descubrir en producción.** El mismo cobro de 20 000 pesos devuelve `"20000.00"` en Wompi y `"20000"` en Mercado Pago y Kushki, porque Wompi trabaja en centavos y el SDK reconstruye con dos decimales, mientras que las otras dos lo devuelven en pesos y el SDK preserva lo que vino. Son el mismo valor y `Amount` no impone una escala, pero un comercio que compare montos como texto entre pasarelas se lleva una sorpresa. Las pruebas lo comparan como número, y queda escrito acá.
+
+**Estado:** Aplicado. `npm run test:sandbox` corre 15 pruebas contra los cuatro sandboxes y pasa. El defecto diecinueve está corregido, con prueba unitaria de la llave, prueba de que sea distinta en cada intento, y el mock exigiéndola en las dos rutas.
+
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum

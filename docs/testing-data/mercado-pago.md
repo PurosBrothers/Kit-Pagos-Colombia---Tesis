@@ -69,6 +69,18 @@ Dos llamadas: `POST /v1/card_tokens?public_key=...` con los datos de la tarjeta,
 - **Un rechazo viaja con `201`.** La cuenta de prueba rechazó con
   `cc_rejected_high_risk`, `cc_rejected_max_attempts` y `pending_review_manual`, siempre con
   HTTP `201`: el código HTTP no dice si el pago salió, solo que la transacción se creó.
+- **`X-Idempotency-Key` es obligatorio, y es un header, no un campo del cuerpo.** Es la única
+  de las cuatro pasarelas que lo exige, y sin él no se crea nada. Las dos APIs se quejan
+  distinto del mismo header, así que conviene reconocer las dos formas:
+
+  | Ruta | Respuesta sin el header |
+  | --- | --- |
+  | `POST /v1/payments` (tarjeta) | `400 {"message": "Header X-Idempotency-Key can't be null", "cause": [{"code": 4292}]}` |
+  | `POST /v1/orders` (PSE) | `400 {"errors": [{"code": "empty_required_header", "message": "Missing HTTP header: X-Idempotency-Key."}]}` |
+
+  Cuidado al medir a mano: los ejemplos de la documentación de Mercado Pago lo incluyen, así
+  que se copia sin pensarlo y el requisito pasa desapercibido. Fue el defecto 19 del proyecto
+  (punto 51 del `architecture-log.md`), y el SDK no podía cobrar por ningún método.
 
 ```json
 {
