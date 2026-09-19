@@ -35,6 +35,49 @@ function readScenario(request: FastifyRequest): string {
 export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   const mockFactory = new GatewayMockFactory();
 
+  /**
+   * Mercado Pago no crea nada sin llave de idempotencia, y es la única de las cuatro que la
+   * exige. Medido con las pruebas contra sandbox: `POST /v1/payments` responde
+   * `400 "Header X-Idempotency-Key can\u2019t be null"` y `POST /v1/orders`
+   * `400 "Missing HTTP header: X-Idempotency-Key."`, o sea que cada API se queja distinto del
+   * mismo header. El mock las distingue porque el SDK no podía crear cobros en ninguna de las
+   * dos y el mock los aceptaba en ambas: exactamente lo que este simulador no debe hacer.
+   */
+  function rejectsWithoutIdempotencyKey(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    api: "payments" | "orders",
+  ): boolean {
+    if (request.headers["x-idempotency-key"]) {
+      return false;
+    }
+
+    if (api === "payments") {
+      reply.code(400).send({
+        message: "Header X-Idempotency-Key can\u2019t be null",
+        error: "bad_request",
+        status: 400,
+        cause: [
+          {
+            code: 4292,
+            description: "Header X-Idempotency-Key can\u2019t be null",
+          },
+        ],
+      });
+      return true;
+    }
+
+    reply.code(400).send({
+      errors: [
+        {
+          code: "empty_required_header",
+          message: "Missing HTTP header: X-Idempotency-Key.",
+        },
+      ],
+    });
+    return true;
+  }
+
   // 1. Creación de pago (POST /v1/sim/mercadopago/payments)
   app.post(
     "/v1/sim/mercadopago/payments",
@@ -43,6 +86,10 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       const scenario = Array.isArray(scenarioHeader)
         ? scenarioHeader[0]
         : (scenarioHeader ?? DEFAULT_SCENARIO);
+
+      if (rejectsWithoutIdempotencyKey(request, reply, "payments")) {
+        return reply;
+      }
 
       const requestBody = request.body as MercadoPagoCreatePaymentRequestBody;
 
@@ -74,17 +121,25 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (scenario === DEFAULT_SCENARIO || scenario.toUpperCase() === "APPROVED") {
+      if (
+        scenario === DEFAULT_SCENARIO ||
+        scenario.toUpperCase() === "APPROVED"
+      ) {
         const response = mockFactory.buildApprovedResponse(requestBody);
         return reply.code(201).send(response);
       }
 
-      if (scenario.toUpperCase() === "REJECTED" || scenario.toUpperCase() === "DECLINED") {
+      if (
+        scenario.toUpperCase() === "REJECTED" ||
+        scenario.toUpperCase() === "DECLINED"
+      ) {
         const response = mockFactory.buildRejectedResponse(requestBody);
         return reply.code(201).send(response);
       }
 
-      return reply.code(501).send({ error: `Escenario aún no soportado: ${scenario}` });
+      return reply
+        .code(501)
+        .send({ error: `Escenario aún no soportado: ${scenario}` });
     },
   );
 
@@ -109,7 +164,10 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (scenario.toUpperCase() === "REJECTED" || scenario.toUpperCase() === "DECLINED") {
+      if (
+        scenario.toUpperCase() === "REJECTED" ||
+        scenario.toUpperCase() === "DECLINED"
+      ) {
         const response = mockFactory.buildRejectedResponse(
           {
             transaction_amount: 50000,
@@ -142,10 +200,17 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/v1/sim/mercadopago/orders",
     async (request: FastifyRequest, reply: FastifyReply) => {
+      if (rejectsWithoutIdempotencyKey(request, reply, "orders")) {
+        return reply;
+      }
+
       const scenario = readScenario(request);
       const requestBody = request.body as MercadoPagoCreateOrderRequestBody;
 
-      if (scenario.toUpperCase() === "REJECTED" || scenario.toUpperCase() === "DECLINED") {
+      if (
+        scenario.toUpperCase() === "REJECTED" ||
+        scenario.toUpperCase() === "DECLINED"
+      ) {
         // La pasarela real no rechaza un PSE al crearlo: la orden se crea y el
         // pago muere después, con la orden entera en `failed`. Se reproduce con
         // 402 y no con 201 porque es el código que devolvió la API real.

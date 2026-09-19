@@ -45,17 +45,44 @@ describe("PSE en el simulador de Mercado Pago", () => {
       ],
     },
     additional_info: { "payer.ip_address": "200.100.50.25" },
-    config: { online: { callback_url: "https://comercio.example.com/retorno" } },
+    config: {
+      online: { callback_url: "https://comercio.example.com/retorno" },
+    },
   };
 
   function createOrder(app: ReturnType<typeof buildApp>, scenario?: string) {
     return app.inject({
       method: "POST",
       url: "/v1/sim/mercadopago/orders",
-      headers: scenario ? { "x-simulate-scenario": scenario } : {},
+      // La llave de idempotencia va siempre: la API de órdenes no crea nada sin ella, así
+      // que el mock tampoco.
+      headers: {
+        "x-idempotency-key": "prueba-idempotencia",
+        ...(scenario ? { "x-simulate-scenario": scenario } : {}),
+      },
       payload: orderPayload,
     });
   }
+
+  /**
+   * La API de órdenes se queja distinto que la de pagos por el mismo header que faltaba:
+   * `errors[]` con `empty_required_header` en vez de `message`. El mock reproduce las dos
+   * formas porque son las dos que el SDK puede recibir.
+   */
+  it("rechaza una orden sin llave de idempotencia, con la forma de la API de órdenes", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/mercadopago/orders",
+      payload: orderPayload,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().errors[0].code).toBe("empty_required_header");
+
+    await app.close();
+  });
 
   /**
    * La API real devuelve la URL del banco ya en la creación, que es la diferencia
@@ -101,10 +128,12 @@ describe("PSE en el simulador de Mercado Pago", () => {
     const order = (await createOrder(app)).json();
 
     expect(order.external_reference).toBe("orden-mp-pse-123");
-    expect(order.transactions.payments[0].payment_method.financial_institution).toBe(
-      "1051",
+    expect(
+      order.transactions.payments[0].payment_method.financial_institution,
+    ).toBe("1051");
+    expect(order.config.online.callback_url).toBe(
+      "https://comercio.example.com/retorno",
     );
-    expect(order.config.online.callback_url).toBe("https://comercio.example.com/retorno");
   });
 
   /**
@@ -125,7 +154,9 @@ describe("PSE en el simulador de Mercado Pago", () => {
     expect(response.statusCode).toBe(200);
     expect(order.id).toBe(created.id);
     expect(order.status).toBe("processed");
-    expect(order.transactions.payments[0].payment_method.redirect_url).toBeUndefined();
+    expect(
+      order.transactions.payments[0].payment_method.redirect_url,
+    ).toBeUndefined();
   });
 
   it("permite consultar una orden que sigue esperando al pagador", async () => {
@@ -139,7 +170,9 @@ describe("PSE en el simulador de Mercado Pago", () => {
     const order = response.json();
 
     expect(order.status).toBe("action_required");
-    expect(order.transactions.payments[0].payment_method.redirect_url).toBeDefined();
+    expect(
+      order.transactions.payments[0].payment_method.redirect_url,
+    ).toBeDefined();
   });
 
   /**

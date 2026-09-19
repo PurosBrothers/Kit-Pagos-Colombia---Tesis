@@ -22,6 +22,7 @@ describe("Mercado Pago Simulation Routes", () => {
       const response = await app.inject({
         method: "POST",
         url: "/v1/sim/mercadopago/payments",
+        headers: { "x-idempotency-key": "prueba-idempotencia" },
         payload: validRequestBody,
       });
 
@@ -47,7 +48,10 @@ describe("Mercado Pago Simulation Routes", () => {
       const response = await app.inject({
         method: "POST",
         url: "/v1/sim/mercadopago/payments",
-        headers: { "x-simulate-scenario": "APPROVED" },
+        headers: {
+          "x-idempotency-key": "prueba-idempotencia",
+          "x-simulate-scenario": "APPROVED",
+        },
         payload: validRequestBody,
       });
 
@@ -64,7 +68,10 @@ describe("Mercado Pago Simulation Routes", () => {
       const response = await app.inject({
         method: "POST",
         url: "/v1/sim/mercadopago/payments",
-        headers: { "x-simulate-scenario": "REJECTED" },
+        headers: {
+          "x-idempotency-key": "prueba-idempotencia",
+          "x-simulate-scenario": "REJECTED",
+        },
         payload: validRequestBody,
       });
 
@@ -83,6 +90,7 @@ describe("Mercado Pago Simulation Routes", () => {
       const response = await app.inject({
         method: "POST",
         url: "/v1/sim/mercadopago/payments",
+        headers: { "x-idempotency-key": "prueba-idempotencia" },
         payload: { ...validRequestBody, token: undefined },
       });
 
@@ -102,11 +110,51 @@ describe("Mercado Pago Simulation Routes", () => {
       const response = await app.inject({
         method: "POST",
         url: "/v1/sim/mercadopago/payments",
+        headers: { "x-idempotency-key": "prueba-idempotencia" },
         payload: { ...validRequestBody, installments: undefined },
       });
 
       expect(response.statusCode).toBe(400);
       expect(response.json().message).toBe("Invalid installments");
+
+      await app.close();
+    });
+
+    /**
+     * El defecto que encontraron las pruebas contra sandbox del SDK: Mercado Pago no crea
+     * nada sin llave de idempotencia, y el SDK no la mandaba. Duró invisible porque este
+     * mock la aceptaba ausente y porque las mediciones a mano la mandaban sin pensarlo.
+     */
+    it("rechaza un cobro sin llave de idempotencia", async () => {
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        payload: validRequestBody,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().message).toContain("X-Idempotency-Key");
+
+      await app.close();
+    });
+
+    /**
+     * La llave se revisa antes que el cuerpo, como en la API real: un cobro sin llave y sin
+     * token se queja de la llave, no del token.
+     */
+    it("revisa la llave de idempotencia antes que el token", async () => {
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        payload: { ...validRequestBody, token: undefined },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().message).toContain("X-Idempotency-Key");
 
       await app.close();
     });
@@ -117,7 +165,10 @@ describe("Mercado Pago Simulation Routes", () => {
       const response = await app.inject({
         method: "POST",
         url: "/v1/sim/mercadopago/payments",
-        headers: { "x-simulate-scenario": "TIMEOUT_NO_SOPORTADO" },
+        headers: {
+          "x-idempotency-key": "prueba-idempotencia",
+          "x-simulate-scenario": "TIMEOUT_NO_SOPORTADO",
+        },
         payload: validRequestBody,
       });
 
