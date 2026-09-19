@@ -8,6 +8,7 @@ import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import { RetryHandler } from "../../application/services/RetryHandler";
+import { PseBank } from "../../domain/value-objects/PseBank";
 
 /**
  * Unica clase que el desarrollador que consume el SDK instancia directamente.
@@ -91,6 +92,28 @@ export class KitPagos {
       maxRetries: this.configurator.getMaxRetries(),
     });
     return retryHandler.execute(() => adapter.getStatus(id));
+  }
+
+  /**
+   * Lista los bancos habilitados para PSE en la pasarela activa.
+   *
+   * Los `code` que devuelve van derecho a `PaymentMethod.pse({ bankCode })` sin
+   * transformarlos, y **solo sirven en la pasarela que los dio**: cambiar de
+   * pasarela obliga a volver a pedir la lista. Eso no es una fuga de la
+   * abstracción sino la consecuencia de que cada pasarela identifique a los bancos
+   * a su manera; lo que el SDK garantiza es que el comercio nunca tenga que saber
+   * de qué manera.
+   *
+   * Va envuelto en `RetryHandler` como la consulta de estado, y por el mismo
+   * motivo: es una lectura idempotente, así que reintentarla no puede cobrar dos
+   * veces. `createPayment()` no lo está, precisamente porque no lo es.
+   */
+  async getPseBanks(): Promise<PseBank[]> {
+    const adapter = this.resolveAdapter();
+    const retryHandler = new RetryHandler({
+      maxRetries: this.configurator.getMaxRetries(),
+    });
+    return retryHandler.execute(() => adapter.getPseBanks());
   }
 
 

@@ -49,6 +49,7 @@ import { GatewayTransactionId } from "../../domain/value-objects/GatewayTransact
 import type { PendingRedirect } from "../../domain/value-objects/PaymentResult";
 import type { PayerKind, PaymentMethod } from "../../domain/value-objects/PaymentMethod";
 import type { Payer } from "../../domain/value-objects/Payer";
+import type { PseBank } from "../../domain/value-objects/PseBank";
 
 /**
  * Tipos de documento que Wompi acepta en `user_legal_id_type`.
@@ -403,4 +404,41 @@ export async function resolvePendingRedirect(
     gatewayTransactionId: new GatewayTransactionId(id, Gateway.WOMPI),
     rawStatus: resolved.status,
   };
+}
+
+/**
+ * Traduce la respuesta de `GET /v1/pse/financial_institutions` a la lista
+ * unificada de bancos.
+ *
+ * Forma medida contra el sandbox el 18 de septiembre de 2026:
+ *
+ * ```json
+ * { "data": [ { "financial_institution_code": "1",
+ *               "financial_institution_name": "Banco que aprueba" } ], "meta": {} }
+ * ```
+ *
+ * El sandbox devuelve **tres** entidades y ninguna es un banco real: se llaman
+ * "Banco que aprueba", "Banco que declina" y "Banco que simula un error", con
+ * códigos 1, 2 y 3, y son las que fuerzan cada desenlace (punto 43). Los nombres
+ * se devuelven tal cual, sin disimular que son de prueba: un comercio que ve
+ * "Banco que declina" en su selector sabe al instante que está apuntando al
+ * sandbox, y eso es más útil que un nombre inventado que parezca de producción.
+ */
+export function parseWompiPseBanks(rawResponse: unknown): PseBank[] {
+  const payload = rawResponse as { data?: unknown } | null;
+  const entries = Array.isArray(payload?.data) ? payload!.data : [];
+
+  return entries.flatMap((entry) => {
+    const bank = entry as Record<string, unknown>;
+    const code = bank.financial_institution_code;
+    const name = bank.financial_institution_name;
+
+    // Una entrada sin código no se puede usar para cobrar, así que se descarta en
+    // vez de llegar al selector del comercio como una opción que falla al elegirla.
+    if (typeof code !== "string" || code.length === 0) {
+      return [];
+    }
+
+    return [{ code, name: typeof name === "string" ? name : code }];
+  });
 }

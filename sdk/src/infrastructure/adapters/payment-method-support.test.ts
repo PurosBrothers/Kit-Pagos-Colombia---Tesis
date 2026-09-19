@@ -93,37 +93,71 @@ describe("pedir un método que la pasarela no implementa", () => {
     global.fetch = originalFetch;
   });
 
+  /**
+   * Las cuatro pasarelas implementan PSE desde que se amplió el alcance del issue
+   * #64, así que ya ninguna lo rechaza por no soportarlo. Lo que sigue importando, y
+   * es lo que estas pruebas cuidan, es que **falle antes de la red** cuando faltan
+   * los datos que cada pasarela exige y el dominio deja opcionales.
+   *
+   * Que sea `INVALID_REQUEST` y no `UNSUPPORTED_OPERATION` no es un detalle: la
+   * salida de uno es completar datos y la del otro es cambiar de pasarela, y el
+   * comercio necesita saber cuál de las dos le toca.
+   *
+   * Cada pasarela pide un conjunto distinto. Rapyd exige nombre y teléfono además
+   * del documento, porque su `customer` es una entidad aparte; Kushki exige la URL
+   * de retorno, que viaja al pedir el token; Mercado Pago exige nombre, apellido,
+   * dirección e IP. Esta solicitud trae solo el documento, así que las tres deben
+   * rechazarla.
+   */
   it.each([
     ["RapydAdapter", () => new RapydAdapter()],
     ["KushkiAdapter", () => new KushkiAdapter()],
-  ])("%s should refuse a PSE payment without issuing any request", async (_name, build) => {
-    const mockFetch = jest.fn();
-    global.fetch = mockFetch;
+    ["MercadoPagoAdapter", () => new MercadoPagoAdapter()],
+  ])(
+    "%s should refuse an incomplete PSE payment without issuing any request",
+    async (_name, build) => {
+      const mockFetch = jest.fn();
+      global.fetch = mockFetch;
 
-    await expect(build().createPayment(pseRequest)).rejects.toMatchObject({
-      code: KitPagosErrorCode.UNSUPPORTED_OPERATION,
-    });
+      await expect(build().createPayment(pseRequest)).rejects.toMatchObject({
+        code: KitPagosErrorCode.INVALID_REQUEST,
+      });
 
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
+      expect(mockFetch).not.toHaveBeenCalled();
+    },
+  );
 
   /**
-   * Mercado Pago sí implementa PSE desde este issue, así que no debe rechazarlo
-   * por no soportarlo. Lo que sí rechaza es la falta de los datos que su Orders
-   * API exige y el dominio deja opcionales, y lo hace con `INVALID_REQUEST` en
-   * vez de `UNSUPPORTED_OPERATION`: la distinción importa porque la salida de uno
-   * es completar datos y la del otro es cambiar de pasarela.
+   * El código de banco es opaco y **con significado por pasarela** (punto 19), así
+   * que un comercio que migra de Wompi a Rapyd sin cambiarlo manda un número donde
+   * Rapyd espera `co_pse_{banco}_bank`. Rapyd responde a eso con
+   * `ERROR_GET_PAYMENT_METHOD_TYPE` y un mensaje que no menciona de dónde sacar el
+   * valor correcto, así que el SDK lo ataja antes y dice qué hacer.
    */
-  it("MercadoPagoAdapter should refuse a PSE payment that lacks its required data", async () => {
+  it("RapydAdapter should refuse a bank code from another gateway", async () => {
     const mockFetch = jest.fn();
     global.fetch = mockFetch;
 
+    const conCodigoAjeno: CreatePaymentRequest = {
+      ...pseRequest,
+      payer: new Payer({
+        email: "cliente@example.com",
+        fullName: "Jaime Pavlich Mariscal",
+        phone: "3001234567",
+        documentType: "CC",
+        documentNumber: "1099888777",
+      }),
+      // "1051" es el código de Davivienda en Mercado Pago, no en Rapyd.
+      paymentMethod: PaymentMethod.pse({ bankCode: "1051" }),
+    };
+
     await expect(
-      new MercadoPagoAdapter().createPayment(pseRequest),
+      new RapydAdapter().createPayment(conCodigoAjeno),
     ).rejects.toMatchObject({ code: KitPagosErrorCode.INVALID_REQUEST });
 
     expect(mockFetch).not.toHaveBeenCalled();
   });
+
 
   /** Wompi sí la implementa, así que no debe rechazarla. */
   it("WompiAdapter should accept a PSE payment", async () => {

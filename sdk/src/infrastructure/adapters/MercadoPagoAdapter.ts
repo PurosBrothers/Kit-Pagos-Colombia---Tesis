@@ -19,7 +19,9 @@ import {
   buildPseOrderPayload,
   extractOrderRedirect,
   isOrderId,
+  parseMercadoPagoPseBanks,
 } from "./mercadopago-pse";
+import type { PseBank } from "../../domain/value-objects/PseBank";
 
 /**
  * Raíz de la API de Mercado Pago en la API de Simulación.
@@ -134,6 +136,22 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
     );
 
     return this.normalizer.normalize(rawResponse, Gateway.MERCADOPAGO);
+  }
+
+  /**
+   * Lista los bancos habilitados para PSE.
+   *
+   * Mercado Pago no tiene endpoint de bancos: tiene uno de métodos de pago, y las
+   * entidades vienen anidadas en la entrada `pse`. Por eso la ruta acá es
+   * `/payment_methods` y el filtrado vive en `parseMercadoPagoPseBanks`, que es
+   * donde se conoce la forma nativa.
+   */
+  async getPseBanks(): Promise<PseBank[]> {
+    const rawResponse = await this.request(
+      `${this.baseUrl}/payment_methods`,
+      "GET",
+    );
+    return parseMercadoPagoPseBanks(rawResponse);
   }
 
   /**

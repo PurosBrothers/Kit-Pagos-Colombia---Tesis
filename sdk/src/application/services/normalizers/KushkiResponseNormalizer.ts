@@ -7,6 +7,10 @@ import { OrderReference } from "../../../domain/value-objects/OrderReference";
 import { Payer } from "../../../domain/value-objects/Payer";
 import { GatewayTransactionId } from "../../../domain/value-objects/GatewayTransactionId";
 import { GatewayResponseNormalizer } from "./GatewayResponseNormalizer";
+import {
+  KUSHKI_NATIVE_STATUS,
+  lookupNativeStatus,
+} from "../../../domain/services/native-status";
 import { KitPagosError } from "../../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../../domain/value-objects/KitPagosErrorCode";
 import {
@@ -15,12 +19,23 @@ import {
   amountToString,
   firstNonEmptyString,
 } from "./payload-utils";
+import {
+  isKushkiTransferResponse,
+  normalizeKushkiTransfer,
+} from "./kushki-transfer";
 
 const FALLBACK_EMAIL = "customer@kushki.com";
 
 export class KushkiResponseNormalizer implements GatewayResponseNormalizer {
   normalize(rawResponse: unknown): Transaction {
     const payload = parsePayload(rawResponse, Gateway.KUSHKI, "Kushki");
+
+    // Kushki responde con dos formas distintas según el método, y una consulta de
+    // transferencia no trae `ticketNumber` ni `transaction_status`. Ver
+    // `kushki-transfer.ts`, y el punto 48 del architecture-log para lo medido.
+    if (isKushkiTransferResponse(payload)) {
+      return normalizeKushkiTransfer(payload, rawResponse);
+    }
 
     const ticketNumber = String(payload.ticketNumber ?? "");
 
@@ -98,15 +113,6 @@ export class KushkiResponseNormalizer implements GatewayResponseNormalizer {
   }
 
   private mapStatus(rawStatus: string): TransactionStatus {
-    switch (rawStatus.toUpperCase()) {
-      case "APPROVAL":
-        return "APPROVED";
-      case "DECLINED":
-        return "DECLINED";
-      case "INITIALIZED":
-        return "PENDING";
-      default:
-        return "ERROR";
-    }
+    return lookupNativeStatus(KUSHKI_NATIVE_STATUS, rawStatus);
   }
 }

@@ -13,6 +13,7 @@ import {
   buildWompiPayload,
   extractAcceptanceToken,
   resolvePendingRedirect,
+  parseWompiPseBanks,
 } from "./wompi-pse";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { Credentials } from "../../domain/value-objects/Credentials";
@@ -20,6 +21,7 @@ import { ResponseNormalizer } from "../../application/services/ResponseNormalize
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
 import { assertSupportedPaymentMethod } from "./payment-method-support";
+import type { PseBank } from "../../domain/value-objects/PseBank";
 
 /**
  * Raíz de la API de Wompi en la API de Simulación (issue #27).
@@ -150,6 +152,27 @@ export class WompiAdapter implements PaymentGatewayPort {
       "GET",
     );
     return this.normalizer.normalize(rawResponse, Gateway.WOMPI);
+  }
+
+  /**
+   * Lista los bancos habilitados para PSE.
+   *
+   * Wompi es la única de las cuatro con un endpoint dedicado a esto,
+   * `GET /v1/pse/financial_institutions`, y se autentica con la llave pública
+   * como el resto de sus lecturas.
+   *
+   * **En sandbox la lista no son bancos.** Devuelve tres entidades llamadas
+   * "Banco que aprueba", "Banco que declina" y "Banco que simula un error", con
+   * códigos 1, 2 y 3, que son las que fuerzan cada desenlace (punto 43). El SDK las
+   * pasa tal cual: disimularlas con nombres que parezcan de producción le
+   * esconderia al comercio contra qué entorno está apuntando.
+   */
+  async getPseBanks(): Promise<PseBank[]> {
+    const rawResponse = await this.request(
+      `${this.baseUrl}/pse/financial_institutions`,
+      "GET",
+    );
+    return parseWompiPseBanks(rawResponse);
   }
 
   /**

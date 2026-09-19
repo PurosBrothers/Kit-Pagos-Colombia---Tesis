@@ -75,6 +75,7 @@ import type { PendingRedirect } from "../../domain/value-objects/PaymentResult";
 import type { PayerKind } from "../../domain/value-objects/PaymentMethod";
 import type { Amount } from "../../domain/value-objects/Amount";
 import type { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
+import type { PseBank } from "../../domain/value-objects/PseBank";
 
 /**
  * Naturaleza jurídica tal como la nombra Mercado Pago.
@@ -298,4 +299,56 @@ export function extractOrderRedirect(rawResponse: unknown): PendingRedirect {
  */
 export function isOrderId(gatewayTransactionId: string): boolean {
   return gatewayTransactionId.startsWith(ORDER_ID_PREFIX);
+}
+
+/**
+ * Traduce la respuesta de `GET /v1/payment_methods` a la lista de bancos de PSE.
+ *
+ * ## Por qué hay que buscar dentro de la respuesta
+ *
+ * Porque Mercado Pago no tiene un endpoint de bancos: tiene uno de **métodos de
+ * pago**, y los bancos vienen anidados dentro de la entrada `pse`, en
+ * `financial_institutions`, como `{ id, description }`. Medido el 18 de
+ * septiembre de 2026: la respuesta trae decenas de métodos de todo tipo y **47**
+ * entidades dentro de `pse`, con `min_allowed_amount: 1600` y
+ * `max_allowed_amount: 340000000` en la misma entrada.
+ *
+ * Que sean 47 no es casualidad: Rapyd expone exactamente 47 métodos
+ * `co_pse_{banco}_bank`. Las dos están leyendo el mismo registro de entidades de
+ * ACH Colombia, cada una con su forma.
+ *
+ * Si la entrada `pse` no aparece, la lista vuelve vacía en vez de fallar: que una
+ * cuenta no tenga PSE habilitado es una configuración posible del comercio, no una
+ * respuesta malformada, y el error correcto lo dará el intento de cobro.
+ */
+export function parseMercadoPagoPseBanks(rawResponse: unknown): PseBank[] {
+  const methods = Array.isArray(rawResponse) ? rawResponse : [];
+  const pse = methods.find(
+    (method) => (method as Record<string, unknown>)?.id === "pse",
+  ) as Record<string, unknown> | undefined;
+
+  const institutions = Array.isArray(pse?.financial_institutions)
+    ? (pse!.financial_institutions as unknown[])
+    : [];
+
+  return institutions.flatMap((entry) => {
+    const bank = entry as Record<string, unknown>;
+    // El identificador llega numérico en unas entradas y como texto en otras, y
+    // `PaymentMethod.pse()` lo recibe como string: se normaliza acá, que es donde
+    // se conoce la forma nativa, y no en el dominio.
+    const rawId = bank.id;
+    const code =
+      typeof rawId === "string"
+        ? rawId
+        : typeof rawId === "number"
+          ? String(rawId)
+          : "";
+
+    if (code.length === 0) {
+      return [];
+    }
+
+    const name = bank.description;
+    return [{ code, name: typeof name === "string" ? name : code }];
+  });
 }

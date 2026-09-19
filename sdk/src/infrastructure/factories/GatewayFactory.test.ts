@@ -118,7 +118,7 @@ describe("GatewayFactory", () => {
       const adapter = factory.create(
         Gateway.RAPYD,
         credentials,
-        "https://sandboxapi.rapyd.net/v1/payments"
+        "https://sandboxapi.rapyd.net/v1"
       );
 
       await adapter.createPayment({
