@@ -801,6 +801,65 @@ contra el simulador devuelven la referencia del comercio.
 
 ---
 
+### 42. La intercambiabilidad quedó verificada de forma ejecutable, y dejó dos hallazgos
+
+**Origen:** Issue #58, `examples/gateway-interchangeability.ts`. Cierre de la Iteración 2.
+
+El issue nombraba el archivo `examples/intercambiabilidad.ts`. Se usó el nombre en inglés por la
+convención del proyecto, que pide identificadores y nombres de archivo en inglés y reserva el
+español para comentarios y salida de consola, como en los otros cuatro ejemplos.
+
+Hasta ahora la intercambiabilidad de las cuatro pasarelas era una afirmación sostenida por cuatro
+ejemplos separados, uno por pasarela, que había que leer en paralelo para convencerse. El ejemplo
+nuevo describe el pago **una sola vez** y lo cobra por las cuatro en un ciclo, comparando después
+por código que coincidan en estado normalizado, monto y referencia de la orden, y saliendo con
+código distinto de cero si no coinciden. La diferencia no es de presentación: una afirmación pasó
+a ser una verificación que se rompe sola cuando deja de ser cierta. Se comprobó rompiendo a mano
+el mapeo de `APPROVAL` en `KushkiResponseNormalizer`; el ejemplo salió con código 1 y nombró la
+discrepancia exacta.
+
+El ejemplo **no tiene ningún condicional por pasarela**, que era la condición que el issue puso
+para considerar la demostración válida. Tiene uno solo, y no discrimina pasarelas sino ramas del
+contrato de `createPayment()` (punto 39): estaría igual con una sola pasarela.
+
+**Hallazgo 1: el monto normalizado no vuelve con la misma escala en las cuatro.** Wompi y Rapyd
+devuelven `150000.00`; Mercado Pago y Kushki, `150000`. Es el mismo monto, y `Amount.equals()`
+compara por valor, así que la verificación pasa. Pero significa que **comparar montos como cadena
+en cualquier parte del proyecto es un defecto latente**, y que `Amount.getValue()` no sirve para
+decidir igualdad aunque lo parezca. El ejemplo lo documenta en su propia salida, porque las dos
+escalas se ven una debajo de la otra en la tabla. No amerita cambiar el dominio: la escala
+entrante la fija cada pasarela y `Amount` ya expone el método correcto para no depender de ella.
+
+**Hallazgo 2: `SDKOptions.baseUrl` es un escalar, así que cambiar de pasarela contra el simulador
+obliga a cambiar también el endpoint.** El ejemplo lo resuelve con una tabla de datos indexada por
+`Gateway`, no con condicionales, y en producción esa tabla desaparece porque cada adaptador conoce
+la URL real de su pasarela. Es decir, el ejemplo cambia dos valores de configuración donde el
+issue anticipaba uno, y el segundo es un artefacto del modo simulación (RF-09), no del modelo. Se
+deja anotado y no se cambia: convertir `baseUrl` en un mapa por pasarela le agregaría al comercio
+una estructura que solo sirve para pruebas.
+
+**Lo que este ejemplo todavía no puede demostrar:** PSE. Las cuatro resuelven el cobro con tarjeta
+en la respuesta del `POST`, así que la rama `REDIRECT_REQUIRED` no se alcanza. Extenderlo a un
+segundo recorrido por método de pago es lo que va a poner a prueba de verdad el corte del puerto,
+por el problema que el punto 39 dejó abierto: el número de llamadas previas a la redirección varía
+por pasarela y el puerto asume una sola.
+
+**Verificación:** `npm run typecheck` en `examples`: exit 0. Ejemplo ejecutado contra el simulador:
+las cuatro pasarelas devuelven `APPROVED`, el mismo monto y la misma referencia, con estados
+nativos `APPROVED`, `CLO`, `approved` y `APPROVAL`. Con el mapeo de Kushki roto a propósito:
+código de salida 1.
+
+**Cambios que esto obliga en el SAD:**
+
+- **Sección 13 (Joan).** Vale un ADR corto sobre la comparación de montos por valor y no por
+  representación, con el hallazgo 1 como evidencia de por qué la distinción no es teórica.
+- **`prototypes-evaluation-plan.md` (David).** Este ejemplo es el artefacto sobre el que se mide
+  la variable "conceptos nativos expuestos" de la Fase 5; conviene que el plan lo nombre.
+
+**Estado:** Resuelto en el código. Pendiente en el SAD, según el reparto de arriba.
+
+---
+
 ### 43. PSE en Wompi no es un flujo de una sola llamada, y su sandbox no puede validarlo
 
 **Responsable de corregirlo en el SAD:** Joan (sección 9.1.1 y sección 13, ADR) para el flujo de creación de pago con redirección; David (sección 15.3, API de Simulación) para la responsabilidad nueva del simulador.
@@ -1335,10 +1394,33 @@ El mock de Mercado Pago ahora exige el header en las dos rutas, y reproduce las 
 
 **Wompi valida en orden fijo y se queja de una cosa por respuesta:** formato del token, después token de aceptación, después firma. Salió de intentar aislar la queja por la firma: con un token inventado contesta `"Formato inválido"` sobre el token, y con token válido y sin token de aceptación, `"No está presente"` sobre ese. Eso es evidencia directa del acoplamiento que dejó afuera la exigencia de `integritySecret`: exigir el secreto sin exigir también el token de aceptación dejaría al comercio igual de lejos de poder cobrar, con un error menos.
 
-**Un detalle de formato que conviene no descubrir en producción.** El mismo cobro de 20 000 pesos devuelve `"20000.00"` en Wompi y `"20000"` en Mercado Pago y Kushki, porque Wompi trabaja en centavos y el SDK reconstruye con dos decimales, mientras que las otras dos lo devuelven en pesos y el SDK preserva lo que vino. Son el mismo valor y `Amount` no impone una escala, pero un comercio que compare montos como texto entre pasarelas se lleva una sorpresa. Las pruebas lo comparan como número, y queda escrito acá.
+**Y una confirmación independiente del hallazgo 1 del punto 42.** Escribiendo estas pruebas se tropezó con lo mismo por otro camino: el cobro de 20 000 pesos devuelve `"20000.00"` en Wompi y `"20000"` en Mercado Pago y Kushki, así que la primera versión de las aserciones comparaba la cadena exacta y fallaba en dos de las cuatro pasarelas. Que el ejemplo de intercambiabilidad y estas pruebas hayan chocado con la misma piedra, cada uno por su lado, es lo que convierte el "defecto latente" que anticipó el punto 42 en algo ya observado dos veces: **comparar montos como texto falla, y la forma correcta es comparar por valor**. Las pruebas comparan como número, con un comentario que dice por qué.
 
 **Estado:** Aplicado. `npm run test:sandbox` corre 15 pruebas contra los cuatro sandboxes y pasa. El defecto diecinueve está corregido, con prueba unitaria de la llave, prueba de que sea distinta en cada intento, y el mock exigiéndola en las dos rutas.
 
+---
+
+### 52. Fusionar dos ramas que pasaban sus pruebas por separado rompió el ejemplo de intercambiabilidad, y el `typecheck` no lo vio
+
+**Responsable de corregirlo en el SAD:** nadie. No es un defecto del diseño sino de la integración, y lo que deja es una lección sobre qué cuenta como verificación.
+
+**Encontrado:** Al fusionar la rama de tarjeta y PSE (issue #64) con `devops`, que traía el ejemplo de intercambiabilidad (issue #58). Git reportó tres archivos en conflicto y los tres eran de texto: la bitácora y el `README` porque los dos lados escribieron en el mismo lugar, y el `package.json` de ejemplos porque los dos agregaron un script. Ninguno de los tres era el problema.
+
+**El conflicto de verdad no lo reportó Git**, porque no es textual: `gateway-interchangeability.ts` y los adaptadores nunca se tocaron en las mismas líneas, pero la rama de tarjeta cambió el contrato que el ejemplo daba por cierto. El ejemplo quedó roto en tres formas, y las tres pasaban el `typecheck`:
+
+| Lo que el ejemplo suponía | Lo que la otra rama volvió cierto | Cómo se manifestaba |
+| --- | --- | --- |
+| Un cobro con tarjeta no necesita declarar método de pago | La tarjeta exige token, y sin él el adaptador corta antes de la red | `INVALID_REQUEST` en la primera pasarela |
+| Las cuatro resuelven la tarjeta en la respuesta del `POST` | Rapyd cobra en su página alojada y redirige también con tarjeta; Wompi crea en `PENDING` | La rama que el ejemplo trataba como inalcanzable pasó a ser el camino normal |
+| `baseUrl` puede apuntar al recurso del cobro, `.../wompi/transactions` | El cobro con tarjeta agregó llamadas fuera del recurso, como el token de aceptación en `merchants/{llave}` | `404` que parecía del simulador y era de la URL base |
+
+**Por qué el `typecheck` no alcanzó.** `paymentMethod` es opcional en `CreatePaymentRequest`, porque PSE y tarjeta no piden los mismos campos y la obligatoriedad real depende del método elegido; el compilador no tiene con qué saber que faltaba. La rama de la redirección tipaba bien porque el ejemplo la manejaba: lanzaba un error diciendo "con tarjeta no debería pasar". Y la URL base es una cadena. **Las tres las encontró correr el ejemplo**, que es exactamente el argumento del punto 51 apareciendo por tercera vez: primero contra los sandboxes, después con la llave de idempotencia, ahora en una fusión.
+
+**Lo que se corrigió.** El ejemplo describe el pago con `PaymentMethod.card()`, apunta `baseUrl` a la raíz de cada pasarela como los otros ocho, y absorbe la diferencia de pasos con dos condicionales que **no preguntan qué pasarela es**: si el resultado pide redirigir, hace de pagador visitando la URL y consulta; si la transacción no es final, consulta. Sigue sin tener un solo `if` por pasarela, que es lo que el issue #58 pedía demostrar, y ahora demuestra algo más fuerte: que las cuatro necesitan **distinta cantidad de llamadas** —una Mercado Pago y Kushki, dos Wompi, tres Rapyd— y el código del comercio es el mismo igual.
+
+**La lección de proceso.** Dos ramas que pasan sus pruebas por separado no pasan juntas, y la parte que lo detecta no es la que Git señala. Un conflicto resuelto sin correr los ejemplos de la otra rama habría entrado a `devops` con el cierre de la Iteración 2 roto y el `CI` en verde, porque el ejemplo no está en el `CI`: necesita el simulador arriba. Que el argumento central de la tesis dependa de un ejemplo que nadie corre automáticamente es el riesgo que este punto deja anotado.
+
+**Estado:** Resuelto en el código. El ejemplo corre contra el simulador y las cuatro pasarelas coinciden en estado normalizado, monto y referencia. Queda abierto meter los ejemplos al `CI` levantando el simulador, que hoy no está.
 
 ---
 
