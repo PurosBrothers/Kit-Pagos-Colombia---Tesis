@@ -55,16 +55,6 @@ import {
 /** Raíz de la API de Mercado Pago en el simulador, no el endpoint de pagos. */
 const SIMULATOR_MERCADOPAGO_URL = "http://localhost:3000/v1/sim/mercadopago";
 
-/**
- * Banco de PSE. Mercado Pago publica la lista real en
- * `GET /v1/payment_methods`, dentro de `pse.financial_institutions`: `"1051"` es
- * Davivienda, `"1007"` Bancolombia, `"1013"` BBVA.
- *
- * El código es opaco y con alcance de pasarela: este `"1051"` no significa nada
- * para Wompi, donde los códigos de prueba son `"1"`, `"2"` y `"3"`. Es el único
- * dato del contrato que no se puede reutilizar al cambiar de pasarela.
- */
-const BANK_CODE = "1051";
 
 const options: SDKOptions = {
   gateway: Gateway.MERCADOPAGO,
@@ -81,6 +71,25 @@ async function main(): Promise<void> {
   const kitPagos = new KitPagos(options);
 
   console.log("=== Kit Pagos Colombia — PSE con Mercado Pago ===\n");
+
+  /**
+   * El banco sale de la pasarela, no del código del comercio.
+   *
+   * Antes acá había un `"1051"` escrito a mano, y era una deuda visible: en PSE el
+   * pagador elige de una lista viva, y un código fijo muestra bancos que ya no están o
+   * esconde los que sí. `getPseBanks()` la trae, y el `code` entra en
+   * `PaymentMethod.pse()` sin transformarlo.
+   */
+  const banks = await kitPagos.getPseBanks();
+  const banco = banks[0];
+
+  if (!banco) {
+    console.error("La pasarela no devolvió ningún banco habilitado para PSE.");
+    process.exit(1);
+  }
+
+  console.log(`Bancos disponibles: ${banks.length}`);
+  console.log(`Elegido:            ${banco.name}  (${banco.code})\n`);
 
   const request = {
     amount: new Amount("150000.00"),
@@ -104,7 +113,7 @@ async function main(): Promise<void> {
         neighborhood: "Chapinero",
       },
     }),
-    paymentMethod: PaymentMethod.pse({ bankCode: BANK_CODE }),
+    paymentMethod: PaymentMethod.pse({ bankCode: banco.code }),
     // Obligatoria en Mercado Pago, a diferencia de Wompi: sin ella la Orders API
     // responde 400 por `config` faltante.
     returnUrlConfig: new ReturnUrlConfig("https://comercio-de-prueba.example.com/retorno"),
@@ -121,7 +130,7 @@ async function main(): Promise<void> {
   console.log(`  Documento:    ${request.payer.documentType} ${request.payer.documentNumber}`);
   console.log(`  Teléfono:     +${request.payer.phoneAreaCode} ${request.payer.phone}`);
   console.log(`  Ciudad:       ${request.payer.address?.city}`);
-  console.log(`  Método:       ${request.paymentMethod.type} contra el banco "${BANK_CODE}" (Davivienda)\n`);
+  console.log(`  Método:       ${request.paymentMethod.type} contra el banco "${banco.code}" (${banco.name})\n`);
 
   const result = await kitPagos.createPayment(request);
 

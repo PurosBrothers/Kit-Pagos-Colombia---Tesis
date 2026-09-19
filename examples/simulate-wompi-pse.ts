@@ -40,12 +40,6 @@ import {
 /** Raíz de la API de Wompi en el simulador, no el endpoint de transacciones. */
 const SIMULATOR_WOMPI_URL = "http://localhost:3000/v1/sim/wompi";
 
-/**
- * Banco de pruebas. El simulador usa los mismos códigos que el sandbox de Wompi:
- * `1` aprueba, `2` declina y `3` simula un error. Son opacos y con alcance de
- * pasarela: este `"1"` no significa nada para Rapyd ni para Kushki.
- */
-const BANK_CODE = "1";
 
 const options: SDKOptions = {
   gateway: Gateway.WOMPI,
@@ -77,6 +71,25 @@ async function main(): Promise<void> {
    * - el documento del pagador, que PSE exige por regulación. Va en `Payer` y no
    *   en el método de pago para no tener dos fuentes de verdad del mismo dato.
    */
+  /**
+   * El banco sale de la pasarela, no del código del comercio.
+   *
+   * Antes acá había un `"1"` escrito a mano, y era una deuda visible: en PSE el
+   * pagador elige de una lista viva, y un código fijo muestra bancos que ya no están o
+   * esconde los que sí. `getPseBanks()` la trae, y el `code` entra en
+   * `PaymentMethod.pse()` sin transformarlo.
+   */
+  const banks = await kitPagos.getPseBanks();
+  const banco = banks[0];
+
+  if (!banco) {
+    console.error("La pasarela no devolvió ningún banco habilitado para PSE.");
+    process.exit(1);
+  }
+
+  console.log(`Bancos disponibles: ${banks.length}`);
+  console.log(`Elegido:            ${banco.name}  (${banco.code})\n`);
+
   const request = {
     amount: new Amount("150000.00"),
     currency: new Currency("COP"),
@@ -87,7 +100,7 @@ async function main(): Promise<void> {
       documentType: "CC",
       documentNumber: "1099888777",
     }),
-    paymentMethod: PaymentMethod.pse({ bankCode: BANK_CODE }),
+    paymentMethod: PaymentMethod.pse({ bankCode: banco.code }),
     returnUrlConfig: new ReturnUrlConfig("https://comercio-de-prueba.example.com/retorno"),
   };
 
@@ -97,7 +110,7 @@ async function main(): Promise<void> {
   console.log(`  Referencia:   ${request.orderReference.getValue()}`);
   console.log(`  Pagador:      ${request.payer.email}`);
   console.log(`  Documento:    ${request.payer.documentType} ${request.payer.documentNumber}`);
-  console.log(`  Método:       ${request.paymentMethod.type} contra el banco "${BANK_CODE}"`);
+  console.log(`  Método:       ${request.paymentMethod.type} contra el banco "${banco.code}" (${banco.name})`);
   console.log(`  ¿Exige documento?  ${request.paymentMethod.requiresPayerDocument()}\n`);
 
   const result = await kitPagos.createPayment(request);
