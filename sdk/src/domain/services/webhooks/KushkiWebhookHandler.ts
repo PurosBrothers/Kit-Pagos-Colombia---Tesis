@@ -3,6 +3,7 @@ import { WebhookEvent } from "../../value-objects/WebhookEvent";
 import { TransactionStatus } from "../../value-objects/TransactionStatus";
 import { GatewayWebhookHandler } from "./GatewayWebhookHandler";
 import { safeCompare, hmacSha256 } from "./signature-utils";
+import { KUSHKI_NATIVE_STATUS, lookupNativeStatus } from "../native-status";
 
 /** Kushki no declara un tipo de evento en el cuerpo. */
 const DEFAULT_EVENT_TYPE = "transaction.updated";
@@ -48,13 +49,10 @@ export class KushkiWebhookHandler implements GatewayWebhookHandler {
  * Kushki nombra la aprobacion "APPROVAL" y no "APPROVED", que es la diferencia
  * facil de pasar por alto al leer este mapeo junto al de las otras pasarelas.
  */
+/**
+ * Comparte la tabla con el normalizador: antes le faltaba `INITIALIZED`, el
+ * estado no final de los flujos de efectivo y transferencia (punto 46).
+ */
 function mapStatus(rawStatus: string): TransactionStatus {
-  switch (rawStatus) {
-    case "APPROVAL":
-      return "APPROVED";
-    case "DECLINED":
-      return "DECLINED";
-    default:
-      return "ERROR";
-  }
+  return lookupNativeStatus(KUSHKI_NATIVE_STATUS, rawStatus);
 }

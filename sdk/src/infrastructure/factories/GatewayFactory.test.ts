@@ -8,6 +8,7 @@ import { Amount } from "../../domain/value-objects/Amount";
 import { Currency } from "../../domain/value-objects/Currency";
 import { OrderReference } from "../../domain/value-objects/OrderReference";
 import { Payer } from "../../domain/value-objects/Payer";
+import { PaymentMethod } from "../../domain/value-objects/PaymentMethod";
 import { MercadoPagoAdapter } from "../adapters/MercadoPagoAdapter";
 import { KushkiAdapter } from "../adapters/KushkiAdapter";
 
@@ -32,7 +33,8 @@ describe("GatewayFactory", () => {
 
     it("should hand the resolved credentials and baseUrl over to the Adapter", async () => {
       const originalFetch = global.fetch;
-      const customUrl = "http://localhost:4000/v1/sim/wompi/transactions";
+      // Raíz de la API, no el endpoint de transacciones (issue #64).
+      const customRoot = "http://localhost:4000/v1/sim/wompi";
       const credentials = {
         publicKey: "pub_test_wompi_123",
         privateKey: "prv_test_wompi_456",
@@ -53,16 +55,17 @@ describe("GatewayFactory", () => {
       });
       global.fetch = mockFetch;
 
-      const adapter = factory.create(Gateway.WOMPI, credentials, customUrl);
+      const adapter = factory.create(Gateway.WOMPI, credentials, customRoot);
       await adapter.createPayment({
         amount: new Amount("1000"),
         currency: new Currency("COP"),
         orderReference: new OrderReference("ord-1"),
         payer: new Payer({ email: "cliente@example.com" }),
+        paymentMethod: PaymentMethod.card("tok_test_card_4242"),
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        customUrl,
+        `${customRoot}/transactions`,
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: `Bearer ${credentials.publicKey}`,
@@ -117,7 +120,7 @@ describe("GatewayFactory", () => {
       const adapter = factory.create(
         Gateway.RAPYD,
         credentials,
-        "https://sandboxapi.rapyd.net/v1/payments"
+        "https://sandboxapi.rapyd.net/v1"
       );
 
       await adapter.createPayment({
@@ -125,10 +128,11 @@ describe("GatewayFactory", () => {
         currency: new Currency("COP"),
         orderReference: new OrderReference("ord-1"),
         payer: new Payer({ email: "cliente@example.com" }),
+        paymentMethod: PaymentMethod.card("tok_test_card_4242"),
       });
 
       const [url, init] = mockFetch.mock.calls[0];
-      expect(url).toBe("https://sandboxapi.rapyd.net/v1/payments");
+      expect(url).toBe("https://sandboxapi.rapyd.net/v1/checkout");
       // Rapyd no usa Bearer: identifica al comercio con el header access_key y
       // una firma por peticion.
       expect(init.headers.access_key).toBe(credentials.publicKey);

@@ -7,6 +7,10 @@ import { OrderReference } from "../../../domain/value-objects/OrderReference";
 import { Payer } from "../../../domain/value-objects/Payer";
 import { GatewayTransactionId } from "../../../domain/value-objects/GatewayTransactionId";
 import { GatewayResponseNormalizer } from "./GatewayResponseNormalizer";
+import {
+  WOMPI_NATIVE_STATUS,
+  lookupNativeStatus,
+} from "../../../domain/services/native-status";
 import { parsePayload, requireData, mapValueObjectError } from "./payload-utils";
 
 /** Email de relleno cuando la respuesta no trae el del pagador. */
@@ -72,17 +76,6 @@ export class WompiResponseNormalizer implements GatewayResponseNormalizer {
    * afirmar que el banco respondio, y eso no se sabe.
    */
   private mapStatus(rawStatus: string): TransactionStatus {
-    switch (rawStatus.toUpperCase()) {
-      case "APPROVED":
-        return "APPROVED";
-      case "DECLINED":
-        return "DECLINED";
-      case "VOIDED":
-        return "VOIDED";
-      case "PENDING":
-        return "PENDING";
-      default:
-        return "ERROR";
-    }
+    return lookupNativeStatus(WOMPI_NATIVE_STATUS, rawStatus);
   }
 }

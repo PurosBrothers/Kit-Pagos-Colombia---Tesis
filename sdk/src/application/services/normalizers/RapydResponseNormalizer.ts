@@ -104,6 +104,14 @@ export class RapydResponseNormalizer implements GatewayResponseNormalizer {
         // Activo: creado y esperando que el pagador lo complete. Es el estado en
         // el que el comercio debe reintentar el polling.
         return "PENDING";
+      case "NEW":
+        // No es un estado de pago sino de **checkout**: la página existe y nadie la
+        // completó todavía. Entra acá porque desde el issue #64 un cobro con tarjeta en
+        // Rapyd devuelve un checkout, y consultarlo antes de que el pagador pague
+        // responde `status: "NEW"` con `payment.id` en null (ver `rapyd-checkout.ts`).
+        // Sin esta rama caía en `default` y un cobro recién creado se reportaba como
+        // ERROR, que es el mismo defecto que el punto 46 corrigió en los webhooks.
+        return "PENDING";
       case "ERR":
         // Rapyd no distingue el rechazo de negocio del fallo tecnico por
         // `status` (es "ERR" en ambos casos). Se aplica el mismo criterio de

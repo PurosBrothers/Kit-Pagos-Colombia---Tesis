@@ -7,6 +7,10 @@ import { OrderReference } from "../../../domain/value-objects/OrderReference";
 import { Payer } from "../../../domain/value-objects/Payer";
 import { GatewayTransactionId } from "../../../domain/value-objects/GatewayTransactionId";
 import { GatewayResponseNormalizer } from "./GatewayResponseNormalizer";
+import {
+  KUSHKI_NATIVE_STATUS,
+  lookupNativeStatus,
+} from "../../../domain/services/native-status";
 import { KitPagosError } from "../../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../../domain/value-objects/KitPagosErrorCode";
 import {
@@ -15,12 +19,32 @@ import {
   amountToString,
   firstNonEmptyString,
 } from "./payload-utils";
+import {
+  isKushkiTransferResponse,
+  normalizeKushkiTransfer,
+} from "./kushki-transfer";
+import {
+  flattenKushkiCharge,
+  isKushkiFullResponseCharge,
+} from "./kushki-card";
 
 const FALLBACK_EMAIL = "customer@kushki.com";
 
 export class KushkiResponseNormalizer implements GatewayResponseNormalizer {
   normalize(rawResponse: unknown): Transaction {
-    const payload = parsePayload(rawResponse, Gateway.KUSHKI, "Kushki");
+    const raw = parsePayload(rawResponse, Gateway.KUSHKI, "Kushki");
+
+    // Kushki responde con tres formas distintas según el método y la ruta. Una consulta
+    // de transferencia no trae `ticketNumber` ni `transaction_status` (`kushki-transfer.ts`,
+    // punto 48), y un cobro con tarjeta trae todo anidado en `details` y con otros nombres
+    // (`kushki-card.ts`, punto 50). Las dos formas se resuelven antes de leer nada: la de
+    // transferencia con su propio normalizador, porque no comparte ni los campos ni los
+    // estados, y la de tarjeta aplanándola, porque es la misma información con otra forma.
+    if (isKushkiTransferResponse(raw)) {
+      return normalizeKushkiTransfer(raw, rawResponse);
+    }
+
+    const payload = isKushkiFullResponseCharge(raw) ? flattenKushkiCharge(raw) : raw;
 
     const ticketNumber = String(payload.ticketNumber ?? "");
 
@@ -98,15 +122,6 @@ export class KushkiResponseNormalizer implements GatewayResponseNormalizer {
   }
 
   private mapStatus(rawStatus: string): TransactionStatus {
-    switch (rawStatus.toUpperCase()) {
-      case "APPROVAL":
-        return "APPROVED";
-      case "DECLINED":
-        return "DECLINED";
-      case "INITIALIZED":
-        return "PENDING";
-      default:
-        return "ERROR";
-    }
+    return lookupNativeStatus(KUSHKI_NATIVE_STATUS, rawStatus);
   }
 }

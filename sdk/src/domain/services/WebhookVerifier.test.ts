@@ -1,6 +1,9 @@
 import * as crypto from "crypto";
 import { WebhookVerifier } from "./WebhookVerifier";
 import { Gateway } from "../value-objects/Gateway";
+// Se compara contra el normalizador a propósito: la causa del defecto del punto
+// 46 era que las dos piezas traducían el mismo estado por separado.
+import { ResponseNormalizer } from "../../application/services/ResponseNormalizer";
 
 describe("WebhookVerifier", () => {
   const verifier = new WebhookVerifier();
@@ -397,6 +400,97 @@ describe("WebhookVerifier", () => {
         transaction_status: "UNKNOWN",
       });
       expect(verifier.parse(kushkiUnknown, Gateway.KUSHKI).newStatus).toBe("ERROR");
+    });
+
+    /**
+     * Regresión del defecto encontrado al revisar qué faltaba para cerrar PSE
+     * (punto 46 del `architecture-log.md`).
+     *
+     * Cada pasarela traducía sus estados en dos lugares —el normalizador de
+     * respuestas y el manejador de webhooks— y a la copia del webhook le faltaba
+     * exactamente el **estado no final** en las tres que mapean estados. No es
+     * casualidad: los webhooks se escribieron cuando el SDK solo cobraba con
+     * tarjeta, donde la notificación llega con el pago ya resuelto. PSE rompe ese
+     * supuesto, porque la primera notificación puede llegar mientras el pagador
+     * todavía no volvió del banco.
+     *
+     * El efecto era que **la notificación de un pago en curso se reportaba como
+     * `ERROR`**, que para el comercio es la diferencia entre esperar al pagador y
+     * darle la orden por perdida.
+     */
+    describe("estados no finales, que PSE volvió alcanzables", () => {
+      it("mapea PENDING de Wompi a PENDING y no a ERROR", () => {
+        const wompiPending = JSON.stringify({
+          data: { transaction: { id: "wompi-pse-1", status: "PENDING" } },
+        });
+
+        expect(verifier.parse(wompiPending, Gateway.WOMPI).newStatus).toBe("PENDING");
+      });
+
+      /**
+       * `action_required` es el estado de una orden de PSE esperando la
+       * transferencia, y `processed` el de una ya pagada. Los dos son de la Orders
+       * API, que el manejador no conocía porque solo tenía el vocabulario de la
+       * Payments API.
+       */
+      it("mapea los estados de la Orders API de Mercado Pago", () => {
+        const waiting = JSON.stringify({
+          action: "order.updated",
+          data: { id: "ORD01M2V7ZQH9BAZ57V99VG1NY0K1" },
+          status: "action_required",
+        });
+        const paid = JSON.stringify({
+          action: "order.updated",
+          data: { id: "ORD01M2V7ZQH9BAZ57V99VG1NY0K1" },
+          status: "processed",
+        });
+        const expired = JSON.stringify({
+          action: "order.updated",
+          data: { id: "ORD01M2V7ZQH9BAZ57V99VG1NY0K1" },
+          status: "expired",
+        });
+
+        expect(verifier.parse(waiting, Gateway.MERCADOPAGO).newStatus).toBe("PENDING");
+        expect(verifier.parse(paid, Gateway.MERCADOPAGO).newStatus).toBe("APPROVED");
+        expect(verifier.parse(expired, Gateway.MERCADOPAGO).newStatus).toBe("EXPIRED");
+      });
+
+      /** `INITIALIZED` es el estado no final de efectivo y transferencias en Kushki. */
+      it("mapea INITIALIZED de Kushki a PENDING", () => {
+        const initialized = JSON.stringify({
+          transaction_id: "kushki-cash-1",
+          transaction_status: "INITIALIZED",
+        });
+
+        expect(verifier.parse(initialized, Gateway.KUSHKI).newStatus).toBe("PENDING");
+      });
+
+      /**
+       * La razón de fondo por la que el defecto existía: dos tablas para lo mismo.
+       * Ahora el webhook y el normalizador comparten la fuente, así que un estado
+       * que uno entiende el otro también.
+       */
+      it("coincide con el normalizador para el mismo estado nativo", () => {
+        const normalizer = new ResponseNormalizer();
+
+        const wompiResponse = {
+          data: {
+            id: "wompi-pse-1",
+            status: "PENDING",
+            amount_in_cents: 15000000,
+            currency: "COP",
+            reference: "ord-1",
+            customer_email: "cliente@example.com",
+          },
+        };
+        const wompiWebhook = JSON.stringify({
+          data: { transaction: { id: "wompi-pse-1", status: "PENDING" } },
+        });
+
+        expect(verifier.parse(wompiWebhook, Gateway.WOMPI).newStatus).toBe(
+          normalizer.normalize(wompiResponse, Gateway.WOMPI).getStatus(),
+        );
+      });
     });
 
     it("lanza error si el gateway no es reconocido", () => {

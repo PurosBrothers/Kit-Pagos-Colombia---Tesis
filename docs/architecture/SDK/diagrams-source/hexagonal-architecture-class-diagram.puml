@@ -38,6 +38,37 @@ package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
   class Payer <<Value Object>> #C8E6C9 {
     email : string
     fullName : string | null
+    phone : string | null
+    documentType : string | null
+    documentNumber : string | null
+  }
+
+  class PaymentMethod <<Value Object>> #C8E6C9 {
+    type : PaymentMethodType
+    cardToken : string | null
+    bankCode : string | null
+    payerKind : PayerKind | null
+    --
+    card(cardToken) : PaymentMethod
+    pse(attributes) : PaymentMethod
+    cash(attributes) : PaymentMethod
+  }
+
+  class PseBank <<Value Object>> #C8E6C9 {
+    code : string
+    name : string
+  }
+
+  class PendingRedirect <<Value Object>> #C8E6C9 {
+    redirectUrl : string
+    gatewayTransactionId : GatewayTransactionId
+    rawStatus : string
+  }
+
+  class PaymentResult <<Union etiquetada>> #C8E6C9 {
+    outcome : "TRANSACTION" | "REDIRECT_REQUIRED"
+    transaction : Transaction
+    redirect : PendingRedirect
   }
 
   class GatewayTransactionId <<Value Object>> #C8E6C9 {
@@ -89,6 +120,12 @@ package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
     ERROR
   }
 
+  enum PaymentMethodType #E0E0E0 {
+    CARD
+    PSE
+    CASH
+  }
+
   enum Gateway #E0E0E0 {
     WOMPI
     RAPYD
@@ -103,6 +140,10 @@ package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
   Transaction "0..1" *-- RejectionReason
   Transaction --> TransactionStatus : estado
   GatewayTransactionId --> Gateway
+  PaymentMethod --> PaymentMethodType : tipo
+  PaymentResult --> Transaction : o resuelve
+  PaymentResult --> PendingRedirect : o falta redirigir
+  PendingRedirect *-- GatewayTransactionId
 
   WebhookVerifier o--> GatewayWebhookHandler : despacha por Gateway
   WompiWebhookHandler ..|> GatewayWebhookHandler
@@ -113,8 +154,9 @@ package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
 
 package "APLICACION (Puertos y Servicios)" #FFFFFF {
   interface PaymentGatewayPort <<Puerto>> #90CAF9 {
-    createPayment(request) : Promise<Transaction>
+    createPayment(request) : Promise<PaymentResult>
     getStatus(gatewayTransactionId) : Promise<Transaction>
+    getPseBanks() : Promise<PseBank[]>
     verifySignature(payload, headers, secret) : boolean
   }
 
@@ -130,6 +172,7 @@ package "APLICACION (Puertos y Servicios)" #FFFFFF {
     class WompiResponseNormalizer #5B9BD5
     class RapydResponseNormalizer #5B9BD5
     class MercadoPagoResponseNormalizer #5B9BD5
+    class KushkiResponseNormalizer #5B9BD5
   }
 
   class RetryHandler <<Resilience Utility>> #2E75B6 {
@@ -149,12 +192,14 @@ package "APLICACION (Puertos y Servicios)" #FFFFFF {
   WompiResponseNormalizer ..|> GatewayResponseNormalizer
   RapydResponseNormalizer ..|> GatewayResponseNormalizer
   MercadoPagoResponseNormalizer ..|> GatewayResponseNormalizer
+  KushkiResponseNormalizer ..|> GatewayResponseNormalizer
 }
 
 package "INFRAESTRUCTURA (Facade, Factory y Adapters)" #FFFFFF {
   class KitPagos <<Facade Pattern>> #1F4E79 {
-    createPayment(request) : Promise<Transaction>
+    createPayment(request) : Promise<PaymentResult>
     getPaymentStatus(id) : Promise<Transaction>
+    getPseBanks() : Promise<PseBank[]>
     validateWebhook(payload, headers) : WebhookEvent
   }
 
@@ -205,6 +250,19 @@ note right of GatewayResponseNormalizer
   de un condicional. Agregar Kushki es
   agregar una clase, sin tocar las otras.
   (ver architecture-log.md, punto 34).
+end note
+
+note right of PaymentGatewayPort
+  El puerto crecio de tres metodos a
+  cuatro: elegir banco no es un paso
+  opcional de PSE, es parte del metodo
+  de pago, y sin la lista el comercio
+  tiene que hablarle directo a la
+  pasarela. El codigo de PseBank es
+  opaco y con significado por pasarela:
+  sale de getPseBanks() y entra en
+  PaymentMethod.pse() sin transformarse.
+  (ver architecture-log.md, punto 47).
 end note
 
 @enduml

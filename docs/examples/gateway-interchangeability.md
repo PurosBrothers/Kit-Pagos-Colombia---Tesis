@@ -60,10 +60,18 @@ for (const pasarela of PASARELAS) {
 No aparece ningún concepto nativo: ni `amount_in_cents` de Wompi, ni la firma HMAC de Rapyd, ni
 `transaction_amount` de Mercado Pago, ni el objeto `amount` descompuesto por impuesto de Kushki.
 
-**El ejemplo no tiene ni un condicional por pasarela.** Tiene uno solo, y no discrimina pasarelas
-sino ramas del contrato: `createPayment()` devuelve o una transacción o una redirección pendiente
-(issue #64), y el compilador no permite leer la transacción hasta que se descarta la redirección.
-Ese `if` estaría igual con una sola pasarela.
+**El ejemplo no tiene ni un condicional por pasarela.** Tiene dos, y ninguno discrimina pasarelas:
+los dos son ramas del contrato, y estarían igual con una sola pasarela. El primero es la forma del
+resultado, porque `createPayment()` devuelve o una transacción o una redirección pendiente (issue
+ #64) y el compilador no permite leer la transacción hasta que se descarta la redirección. El
+segundo es si el estado ya es definitivo, con `transaction.isFinal()`.
+
+El segundo `if` apareció al implementar el cobro con tarjeta, y lo que absorbe es que **el número
+de llamadas necesarias no es el mismo en las cuatro**: una para Mercado Pago y Kushki, que traen el
+desenlace en el cuerpo del `POST`; dos para Wompi, que crea la transacción en `PENDING` y la
+resuelve después; tres para Rapyd, que además redirige. El comercio escribe el caso de tres
+llamadas y le sirve para las cuatro, que es la forma en que la diferencia queda absorbida en vez de
+esconderse.
 
 ## La salida
 
@@ -118,16 +126,21 @@ Son del simulador, no del SDK, y conviene tenerlos presentes al leer la salida.
 - **Las credenciales se declaran una sola vez.** `SDKOptions.credentials` es un mapa por
   pasarela, así que el comercio registra las cuatro y el SDK usa las de la activa. No hace falta
   reconfigurar credenciales al cambiar de pasarela.
-- **El ejemplo no consulta el estado después de crear.** El simulador es en buena medida sin
-  estado: la ruta `GET` de Mercado Pago responde con un monto y un correo fijos escritos en el
-  código, sin recordar el pago creado. Comparar los resultados de la consulta produciría
-  diferencias que son del mock y no del SDK. Los cuatro ejemplos individuales sí hacen la
-  consulta, cada uno contra su propia pasarela, donde esa limitación no distorsiona nada.
+- **El ejemplo consulta el estado solo cuando hace falta**, no siempre. Consultar de más traería
+  una limitación del mock a una comparación que quiere hablar del SDK. Las consultas que sí hace
+  —Wompi y Rapyd— devuelven la referencia y el monto del pago creado, así que entran en la
+  comparación sin distorsionarla.
 
 ## Lo que este ejemplo todavía no puede demostrar
 
-PSE. Las cuatro pasarelas resuelven el cobro con tarjeta en la respuesta del `POST`, así que la
-rama `REDIRECT_REQUIRED` del resultado no se alcanza. Cuando PSE esté implementado (issue #64),
-esta demostración debería extenderse a un segundo recorrido por método de pago, y ahí aparece el
-problema que el punto 39 dejó abierto: el número de llamadas previas a la redirección varía por
-pasarela (Wompi 1, Mercado Pago 1, Rapyd 2, Kushki 3), y el puerto sigue asumiendo una sola.
+PSE. La rama `REDIRECT_REQUIRED` del resultado ya se alcanza, pero por tarjeta y en una sola
+pasarela: Rapyd cobra la tarjeta en su propia página alojada, para dejar el servidor del comercio
+fuera del alcance de PCI DSS. Con PSE redirigen las cuatro, y ahí aparece el problema que el punto
+ 39 dejó abierto: el número de llamadas previas a la redirección varía por pasarela (Wompi 1,
+Mercado Pago 1, Rapyd 2, Kushki 3), y el puerto sigue asumiendo una sola.
+
+Este ejemplo quedó escrito antes de que el cobro con tarjeta se midiera contra los sandboxes
+reales, y lo que creía sobre la tarjeta resultó falso en dos puntos: daba por hecho que las cuatro
+resolvían en la respuesta del `POST`, y describía el pago sin token de tarjeta, que ninguna de las
+cuatro acepta de verdad. Las dos cosas pasaban el `typecheck`, así que lo que las encontró fue
+ejecutarlo. Está en los puntos 50 y 51 del [`architecture-log.md`](../architecture/architecture-log.md).

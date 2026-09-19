@@ -56,6 +56,8 @@ export interface RapydCreatePaymentRequestBody {
   complete_payment_url?: string;
   error_payment_url?: string;
   payment_method?: Record<string, unknown>;
+  /** Obligatorio en PSE: Rapyd rechaza el pago sin cliente previo. */
+  customer?: string;
 }
 
 /** Objeto de negocio que Rapyd retorna dentro de `data`. */
@@ -79,6 +81,19 @@ export interface RapydPayment {
   failure_code: string;
   failure_message: string;
   created_at: number;
+  /**
+   * Paso que Rapyd espera a continuacion. Medido para PSE:
+   * `"pending_confirmation"`, que no es el `"3d_verification"` del flujo de
+   * tarjeta con autenticacion. `"not_applicable"` cuando no falta nada.
+   */
+  next_action?: string;
+  /**
+   * URL a la que hay que mandar al pagador. En PSE viene **en la respuesta de
+   * creacion**, sin sondeo, a diferencia de Wompi. Vacia cuando no aplica.
+   */
+  redirect_url?: string;
+  /** Identificador del cliente, obligatorio en PSE. */
+  customer?: string;
 }
 
 /**
@@ -86,13 +101,121 @@ export interface RapydPayment {
  * llamada de API (`SUCCESS` o `ERROR`), que es independiente del estado del
  * pago que viaja en `data.status`.
  */
+/**
+ * Sobre `status` que Rapyd pone en todas sus respuestas, con exito o con error.
+ *
+ * Se extrajo a un tipo con nombre al agregar PSE: antes estaba escrito inline en
+ * `RapydPaymentResponse`, y con las respuestas de cliente y de catalogo habria
+ * quedado repetido tres veces.
+ */
+export interface RapydResponseStatus {
+  error_code: string;
+  /** Resultado de la llamada de API, independiente del estado del pago. */
+  status: "SUCCESS" | "ERROR";
+  message: string;
+  response_code: string;
+  operation_id: string;
+}
+
 export interface RapydPaymentResponse {
-  status: {
-    error_code: string;
-    status: "SUCCESS" | "ERROR";
-    message: string;
-    response_code: string;
-    operation_id: string;
-  };
+  status: RapydResponseStatus;
   data: RapydPayment;
+}
+
+/**
+ * Cuerpo de `POST /v1/customers`, la primera de las dos llamadas de PSE.
+ *
+ * Los tres campos son los que el sandbox real exige, medido el 18 de septiembre
+ * de 2026: sin `name` responde `INVALID_CUSTOMER_NAME`, y sin `email` o sin
+ * `phone_number` el rechazo llega recien en el pago, como
+ * `MISSING_PAYMENT_METHOD_REQUIRED_FIELD`.
+ */
+export interface RapydCreateCustomerRequestBody {
+  name?: string;
+  email?: string;
+  phone_number?: string;
+}
+
+/** Cliente de Rapyd, con la forma minima que el adaptador lee. */
+export interface RapydCustomer {
+  id: string;
+  name: string;
+  email: string;
+  phone_number: string;
+  created_at: number;
+}
+
+/** Sobre `{ status, data }` de una respuesta de cliente. */
+export interface RapydCustomerResponse {
+  status: RapydResponseStatus;
+  data: RapydCustomer;
+}
+
+/**
+ * Metodo de pago del catalogo de un pais.
+ *
+ * PSE aparece como 47 entradas con `type` del patron `co_pse_{banco}_bank` y
+ * `category: "bank_redirect"`, medido contra el sandbox real.
+ */
+export interface RapydPaymentMethodType {
+  type: string;
+  name: string;
+  category: string;
+  image: string;
+  country: string;
+  payment_flow_type: string;
+}
+
+/** Sobre de la respuesta de `GET /v1/payment_methods/country`. */
+export interface RapydPaymentMethodsResponse {
+  status: RapydResponseStatus;
+  data: RapydPaymentMethodType[];
+}
+
+/**
+ * Cuerpo de `POST /v1/checkout`, la página de pago alojada de Rapyd.
+ *
+ * Es el camino de tarjeta, y no `POST /v1/payments`, por una razón medida: cobrar una
+ * tarjeta servidor-a-servidor en Rapyd exige mandar el número de la tarjeta en la
+ * petición, y un método guardado responde `ERROR_CARD_NOT_AUTHENTICATED`. La página
+ * alojada es el único camino que cobra tarjeta sin que el número pase por el comercio.
+ */
+export interface RapydCreateCheckoutRequestBody {
+  amount: string;
+  currency: string;
+  country: string;
+  merchant_reference_id?: string;
+  payment_method_type_categories?: string[];
+  receipt_email?: string;
+  complete_payment_url?: string;
+  error_payment_url?: string;
+}
+
+/**
+ * Página de pago de Rapyd, con la forma verificada contra `sandboxapi.rapyd.net` el 19 de
+ * septiembre de 2026.
+ *
+ * Lo que importa de esta forma es que el pago vive **anidado y vacío** hasta que alguien
+ * pague: `payment.id` y `payment.status` llegan en `null`, y el identificador del recurso
+ * lleva el prefijo `checkout_`, no `payment_`. Por eso el SDK elige la ruta de consulta
+ * mirando el prefijo: un `checkout_` en `/payments/{id}` responde `ERROR_GET_PAYMENT`.
+ */
+export interface RapydCheckout {
+  id: string;
+  status: "NEW" | "DON";
+  redirect_url: string;
+  payment: {
+    id: string | null;
+    status: string | null;
+    paid?: boolean;
+    amount: string;
+    currency_code: string;
+    merchant_reference_id?: string;
+    receipt_email?: string;
+  };
+}
+
+export interface RapydCheckoutResponse {
+  status: RapydResponseStatus;
+  data: RapydCheckout;
 }

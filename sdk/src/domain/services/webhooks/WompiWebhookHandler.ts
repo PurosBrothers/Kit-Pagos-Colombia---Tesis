@@ -3,6 +3,7 @@ import { WebhookEvent } from "../../value-objects/WebhookEvent";
 import { TransactionStatus } from "../../value-objects/TransactionStatus";
 import { GatewayWebhookHandler } from "./GatewayWebhookHandler";
 import { safeCompare, sha256Hex } from "./signature-utils";
+import { WOMPI_NATIVE_STATUS, lookupNativeStatus } from "../native-status";
 
 /** Tipo de evento por defecto cuando el cuerpo no lo declara. */
 const DEFAULT_EVENT_TYPE = "transaction.updated";
@@ -63,16 +64,13 @@ function resolvePath(body: unknown, path: string): unknown {
     );
 }
 
-/** Traduce el estado nativo de Wompi al enum unificado. */
+/**
+ * Traduce el estado nativo de Wompi al enum unificado.
+ *
+ * Comparte la tabla con el normalizador de respuestas: antes tenia su propia
+ * copia a la que le faltaba `PENDING`, de modo que la notificacion de un PSE
+ * esperando al pagador se reportaba como `ERROR` (punto 46 del architecture-log).
+ */
 function mapStatus(rawStatus: string): TransactionStatus {
-  switch (rawStatus) {
-    case "APPROVED":
-      return "APPROVED";
-    case "DECLINED":
-      return "DECLINED";
-    case "VOIDED":
-      return "VOIDED";
-    default:
-      return "ERROR";
-  }
+  return lookupNativeStatus(WOMPI_NATIVE_STATUS, rawStatus);
 }

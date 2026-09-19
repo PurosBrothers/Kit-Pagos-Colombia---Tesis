@@ -3,6 +3,7 @@ import { WebhookEvent } from "../../value-objects/WebhookEvent";
 import { TransactionStatus } from "../../value-objects/TransactionStatus";
 import { GatewayWebhookHandler } from "./GatewayWebhookHandler";
 import { safeCompare, hmacSha256 } from "./signature-utils";
+import { MERCADOPAGO_NATIVE_STATUS, lookupNativeStatus } from "../native-status";
 
 /** Tipo de evento por defecto cuando el cuerpo no declara `action` ni `type`. */
 const DEFAULT_EVENT_TYPE = "payment.updated";
@@ -65,19 +66,12 @@ function parseSignatureHeader(header: string): Record<string, string> {
  * conciliacion mediante getPaymentStatus(gatewayTransactionId).
  */
 function mapStatus(rawStatus: string | undefined): TransactionStatus {
-  switch (rawStatus) {
-    case undefined:
-      return "PENDING";
-    case "approved":
-      return "APPROVED";
-    case "rejected":
-      return "DECLINED";
-    case "pending":
-    case "in_process":
-      return "PENDING";
-    case "cancelled":
-      return "VOIDED";
-    default:
-      return "ERROR";
+  if (rawStatus === undefined) {
+    return "PENDING";
   }
+  // Comparte la tabla con el normalizador, que es lo que suma el vocabulario de
+  // la Orders API: antes esta copia solo conocia los estados de tarjeta, asi que
+  // una notificacion de una orden de PSE (`processed`, `action_required`) se
+  // reportaba como `ERROR` (punto 46 del architecture-log).
+  return lookupNativeStatus(MERCADOPAGO_NATIVE_STATUS, rawStatus);
 }

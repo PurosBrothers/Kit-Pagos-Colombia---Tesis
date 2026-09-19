@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc",
     "test": "jest",
+    "test:sandbox": "jest --config jest.sandbox.config.js",
     "lint": "eslint .",
     "metrics": "ts-node --project tsconfig.json scripts/ck-metrics.ts"
   },

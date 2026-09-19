@@ -13,11 +13,20 @@ import {
   KitPagosErrorCode,
   OrderReference,
   Payer,
+  PaymentMethod,
   TaxBreakdown,
   type SDKOptions,
 } from "kit-pagos-colombia";
 
-const SIMULATOR_KUSHKI_URL = "http://localhost:3000/v1/sim/kushki/charges";
+/**
+ * Raíz de la API de Kushki en el simulador, no el endpoint del cobro.
+ *
+ * Tiene que ser la raíz porque el adaptador le agrega la ruta de cada operación, y las de
+ * Kushki no comparten prefijo: el cobro con tarjeta vive en `/card/v1/charges` y la
+ * transferencia en `/transfer/v1/...`. Este ejemplo apuntaba a `/charges`, la ruta que el
+ * SDK usaba antes de medirla contra la API real, donde responde `403 Forbidden`.
+ */
+const SIMULATOR_KUSHKI_URL = "http://localhost:3000/v1/sim/kushki";
 
 const options: SDKOptions = {
   gateway: Gateway.KUSHKI,
@@ -47,6 +56,17 @@ async function main(): Promise<void> {
       fullName: "Jaime Pavlich",
     }),
     taxBreakdown,
+    /**
+     * El token de la tarjeta, de `POST /card/v1/tokens`.
+     *
+     * Kushki es la pasarela donde este dato dejó el defecto más visible: el SDK mandaba
+     * el literal `"simulated-token"`, y contra la API real eso responde `400 K001`. El
+     * simulador lo aceptaba, así que la suite entera podía estar en verde con un cobro
+     * que nunca habría funcionado. Ver el punto 50 del architecture-log.
+     */
+    paymentMethod: PaymentMethod.card("kushki-token-ejemplo-no-real", {
+      installments: 1,
+    }),
   };
 
   console.log("=== Kit Pagos Colombia — Ejemplo de pago simulado con Kushki ===\n");

@@ -50,9 +50,101 @@ Ingresa los siguientes valores en el campo **Nombre y Apellido del Titular** par
 | **No Soportado** | `UNSU` | `-` |
 | **Usado para Aplicar Regla de Montos** | `TEST` | `-` |
 
+### 1.1. El cobro medido contra la API real (19 de septiembre de 2026)
+
+Dos llamadas: `POST /v1/card_tokens?public_key=...` con los datos de la tarjeta, y
+`POST /v1/payments` con el token. Lo que apareció al medir (punto 50 del
+`architecture-log.md`):
+
+- **`installments` es obligatorio, incluso cuando es 1.** Sin el campo responde
+  `400 "Invalid installments"`, y se comprobó con tres tarjetas colombianas distintas. Es la
+  única de las cuatro pasarelas que lo exige siempre, y la razón de que las cuotas vivan en
+  `PaymentMethod` y no en un adaptador.
+- **`payment_method_id` no se manda: se deduce del token.** Omitir el token responde
+  `400 "payment_method_id attribute can't be null"`, que nombra un campo que el comercio no
+  tiene que escribir. Con token, la respuesta trae `payment_method_id: "visa"` o `"master"`.
+- **El token es de un solo uso.** Reusarlo en un segundo cobro responde `400 "bin_not_found"`,
+  que es un mensaje sobre el BIN y no sobre el token: fácil de perseguir por el lado
+  equivocado.
+- **Un rechazo viaja con `201`.** La cuenta de prueba rechazó con
+  `cc_rejected_high_risk`, `cc_rejected_max_attempts` y `pending_review_manual`, siempre con
+  HTTP `201`: el código HTTP no dice si el pago salió, solo que la transacción se creó.
+- **`X-Idempotency-Key` es obligatorio, y es un header, no un campo del cuerpo.** Es la única
+  de las cuatro pasarelas que lo exige, y sin él no se crea nada. Las dos APIs se quejan
+  distinto del mismo header, así que conviene reconocer las dos formas:
+
+  | Ruta | Respuesta sin el header |
+  | --- | --- |
+  | `POST /v1/payments` (tarjeta) | `400 {"message": "Header X-Idempotency-Key can't be null", "cause": [{"code": 4292}]}` |
+  | `POST /v1/orders` (PSE) | `400 {"errors": [{"code": "empty_required_header", "message": "Missing HTTP header: X-Idempotency-Key."}]}` |
+
+  Cuidado al medir a mano: los ejemplos de la documentación de Mercado Pago lo incluyen, así
+  que se copia sin pensarlo y el requisito pasa desapercibido. Fue el defecto 19 del proyecto
+  (punto 51 del `architecture-log.md`), y el SDK no podía cobrar por ningún método.
+
+```json
+{
+  "transaction_amount": 150000,
+  "description": "ORDER-1042",
+  "external_reference": "ORDER-1042",
+  "token": "016e85e4a608bfb0c1787ae2f4ed91e0",
+  "installments": 1,
+  "payer": { "email": "comprador@example.com" }
+}
+```
+
 ---
 
 ## 2. PSE (Pagos Seguros en Línea)
+
+> ### Verificado contra la API real el 18 de septiembre de 2026 (issue #64)
+>
+> Lo que sigue en esta sección es correcto en cuanto a la forma del payload y a la
+> ubicación de la URL de redirección. Pero al implementarlo aparecieron cuatro
+> cosas que no están dichas acá y que hacen fallar la integración si uno sigue el
+> paso a paso literalmente. El razonamiento completo está en el punto 45 del
+> `architecture-log.md` y en `sdk/src/infrastructure/adapters/mercadopago-pse.ts`.
+>
+> 1. **El token `TEST-` no sirve para esta API.** `POST /v1/orders` responde
+>    `401 invalid_credentials`: "Test credentials are not supported, use test users
+>    with production credentials to sandbox environment". Hace falta el token
+>    `APP_USR-`, que es lo que ya decía el paso 1 pero sin explicar que un `TEST-`
+>    falla de entrada.
+>
+> 2. **El email del ejemplo no funciona, y un usuario de prueba tampoco.** Con
+>    `test_user_co@testuser.com` la respuesta es `400 / 2034 Invalid users
+>    involved`. Y con un usuario creado por `POST /users/test_user` la orden se
+>    crea pero el pago muere en `failed / processing_error` (402), o sea lo
+>    contrario de lo que aconseja el mensaje de error del punto anterior. **Hay que
+>    usar un email corriente** (por ejemplo `comprador@example.com`).
+>
+> 3. **`total_amount` no admite decimales.** `"5000"` funciona y `"5000.00"`
+>    responde `400 Invalid value for property`.
+>
+> 4. **PSE no se puede cobrar por la Payments API.** Se intentó por
+>    `POST /v1/payments` con el banco en `transaction_details.financial_institution`
+>    y devuelve `424 / 9032 BankTransfers Api fail` con cualquier banco y cualquier
+>    monto, aunque las mismas credenciales sí procesen tarjeta. La Orders API no es
+>    una alternativa: es el único camino.
+>
+> **Campos obligatorios, medidos quitándolos de a uno.** En `payer`: `email`,
+> `entity_type`, `first_name`, `last_name`, `identification`, `phone` y `address`,
+> todos con `400 '$.payer' - missing properties`. Fuera de `payer`:
+> `additional_info` (la IP), `external_reference` y `config` (la URL de retorno).
+> Son opcionales `expiration_time` y `processing_mode`.
+>
+> **Lista real de bancos.** No hace falta adivinarla: `GET /v1/payment_methods`
+> devuelve el método `pse` con su arreglo `financial_institutions`. Ahí están
+> `1001` Banco de Bogotá, `1007` Bancolombia, `1013` BBVA, `1051` Davivienda y el
+> resto, junto con `min_allowed_amount: 1600` y `max_allowed_amount: 340000000`.
+> Un código inexistente **no** se rechaza al crear: pasa la validación y el pago
+> muere después en `processing_error`.
+>
+> Son **47 entidades**, contadas contra la API real el 18 de septiembre de 2026 — el
+> mismo número que devuelve Rapyd, porque las dos leen el registro de ACH Colombia.
+> El SDK las expone con `kitPagos.getPseBanks()`, que filtra esa entrada del
+> catálogo; el comercio no tiene que conocer que la lista viene anidada dentro de
+> todos los métodos de pago del país.
 
 ### Paso a paso de implementación en Sandbox (Orders API)
 

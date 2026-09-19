@@ -9,15 +9,26 @@ import { Gateway } from "../../domain/value-objects/Gateway";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import { expectTransaction } from "../../test-support/payment-result";
+import { PaymentMethod } from "../../domain/value-objects/PaymentMethod";
+import { ReturnUrlConfig } from "../../domain/value-objects/ReturnUrlConfig";
+import { computeIntegritySignature } from "./wompi-pse";
 
 describe("WompiAdapter", () => {
   const originalFetch = global.fetch;
 
+  /**
+   * Pedido base de un cobro con tarjeta.
+   *
+   * Lleva token desde que se midió que Wompi no cobra sin método de pago: un
+   * `POST /transactions` sin `payment_method` responde
+   * `422 "No se especificó método de pago o fuente de pago"`.
+   */
   const validRequest: CreatePaymentRequest = {
     amount: new Amount("50000"),
     currency: new Currency("COP"),
     orderReference: new OrderReference("ord-12345"),
     payer: new Payer({ email: "cliente@example.com" }),
+    paymentMethod: PaymentMethod.card("tok_test_card_4242"),
   };
 
   const approvedWompiMockResponse = {
@@ -62,6 +73,11 @@ describe("WompiAdapter", () => {
             currency: "COP",
             reference: "ord-12345",
             customer_email: "cliente@example.com",
+            payment_method: {
+              type: "CARD",
+              token: "tok_test_card_4242",
+              installments: 1,
+            },
           }),
         },
       );
@@ -159,7 +175,8 @@ describe("WompiAdapter", () => {
     });
 
     it("should use custom baseUrl when provided in constructor", async () => {
-      const customUrl = "https://custom.api.wompi.test/transactions";
+      // Raíz de la API: el adaptador agrega /transactions (issue #64).
+      const customRoot = "https://custom.api.wompi.test";
       const mockFetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 201,
@@ -167,11 +184,11 @@ describe("WompiAdapter", () => {
       });
       global.fetch = mockFetch;
 
-      const adapter = new WompiAdapter(customUrl);
+      const adapter = new WompiAdapter(customRoot);
       await adapter.createPayment(validRequest);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        customUrl,
+        `${customRoot}/transactions`,
         expect.objectContaining({ method: "POST" }),
       );
     });
@@ -407,6 +424,248 @@ describe("WompiAdapter", () => {
       const isValid = adapter.verifySignature(payload, headers, secret);
 
       expect(isValid).toBe(false);
+    });
+  });
+
+  /**
+   * PSE (issue #64). Lo que se verifica acá es que el adaptador respete el orden
+   * real medido contra el sandbox: la creación no trae la URL de redirección, así
+   * que hay que consultar hasta que aparezca, y el resultado debe ser
+   * REDIRECT_REQUIRED y no una transacción.
+   */
+  describe("createPayment() con tarjeta", () => {
+    function mockCreated() {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => approvedWompiMockResponse,
+      });
+      global.fetch = mockFetch;
+      return mockFetch;
+    }
+
+    /**
+     * Wompi cobra la tarjeta con el token del comercio y las cuotas dentro de
+     * `payment_method`, que es el campo cuya ausencia responde
+     * `422 "No se especificó método de pago o fuente de pago"`.
+     */
+    it("should send the card token and installments as payment_method", async () => {
+      const mockFetch = mockCreated();
+
+      await new WompiAdapter().createPayment(validRequest);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.payment_method).toEqual({
+        type: "CARD",
+        token: "tok_test_card_4242",
+        installments: 1,
+      });
+    });
+
+    it("should send the requested installments", async () => {
+      const mockFetch = mockCreated();
+
+      await new WompiAdapter().createPayment({
+        ...validRequest,
+        paymentMethod: PaymentMethod.card("tok_test_card_4242", { installments: 12 }),
+      });
+
+      expect(JSON.parse(mockFetch.mock.calls[0][1].body).payment_method.installments).toBe(
+        12,
+      );
+    });
+
+    /** El número de la tarjeta no viaja nunca: el SDK solo acepta el token. */
+    it("should never send anything that looks like a card number", async () => {
+      const mockFetch = mockCreated();
+
+      await new WompiAdapter().createPayment(validRequest);
+
+      expect(mockFetch.mock.calls[0][1].body).not.toMatch(/\b\d{13,19}\b/);
+    });
+
+    /**
+     * Falla acá y no en la pasarela. Es una llamada de red que se ahorra, y sobre todo un
+     * mensaje que dice qué falta y dónde conseguirlo, en vez del 422 en castellano de
+     * Wompi sobre un campo que el comercio no escribió.
+     */
+    it("should refuse a card payment without a token before calling the gateway", async () => {
+      const mockFetch = jest.fn();
+      global.fetch = mockFetch;
+
+      await expect(
+        new WompiAdapter().createPayment({
+          ...validRequest,
+          paymentMethod: undefined,
+        }),
+      ).rejects.toMatchObject({
+        code: KitPagosErrorCode.INVALID_REQUEST,
+        gateway: Gateway.WOMPI,
+      });
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("should say where to get the token in the error message", async () => {
+      global.fetch = jest.fn();
+
+      await expect(
+        new WompiAdapter().createPayment({ ...validRequest, paymentMethod: undefined }),
+      ).rejects.toThrow("POST /v1/tokens/cards");
+    });
+  });
+
+  describe("createPayment() con PSE", () => {
+    const pseRequest: CreatePaymentRequest = {
+      amount: new Amount("150000"),
+      currency: new Currency("COP"),
+      orderReference: new OrderReference("ord-pse-1"),
+      payer: new Payer({
+        email: "cliente@example.com",
+        documentType: "CC",
+        documentNumber: "1099888777",
+      }),
+      paymentMethod: PaymentMethod.pse({ bankCode: "1" }),
+    };
+
+    /** Creación sin URL, tal como responde Wompi. */
+    const createdPse = {
+      data: {
+        id: "wompi-pse-1",
+        status: "PENDING",
+        amount_in_cents: 15000000,
+        currency: "COP",
+        reference: "ord-pse-1",
+        customer_email: "cliente@example.com",
+        payment_method: { type: "PSE", extra: { is_three_ds: false } },
+      },
+    };
+
+    /** Consulta posterior, ya con la URL. */
+    const pseWithUrl = {
+      data: {
+        ...createdPse.data,
+        payment_method: {
+          type: "PSE",
+          extra: { async_payment_url: "https://banco.example/pagar?ticket=abc" },
+        },
+      },
+    };
+
+    function mockResponses(...bodies: unknown[]) {
+      const mockFetch = jest.fn();
+      for (const body of bodies) {
+        mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => body });
+      }
+      global.fetch = mockFetch;
+      return mockFetch;
+    }
+
+    it("should return REDIRECT_REQUIRED with the url found after polling", async () => {
+      mockResponses(createdPse, pseWithUrl);
+
+      const result = await new WompiAdapter().createPayment(pseRequest);
+
+      expect(result.outcome).toBe("REDIRECT_REQUIRED");
+      if (result.outcome !== "REDIRECT_REQUIRED") return;
+      expect(result.redirect.redirectUrl).toBe("https://banco.example/pagar?ticket=abc");
+      expect(result.redirect.gatewayTransactionId.value).toBe("wompi-pse-1");
+    });
+
+    it("should send the native PSE fields that Wompi requires", async () => {
+      const mockFetch = mockResponses(createdPse, pseWithUrl);
+
+      await new WompiAdapter().createPayment(pseRequest);
+
+      const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(sentBody.payment_method).toEqual({
+        type: "PSE",
+        user_type: 0,
+        user_legal_id_type: "CC",
+        user_legal_id: "1099888777",
+        financial_institution_code: "1",
+        payment_description: "Pago ord-pse-1",
+      });
+    });
+
+    /**
+     * Un documento faltante es un error del comercio, no un rechazo de la
+     * pasarela: atajarlo local ahorra una ida y vuelta y da un mensaje que dice
+     * qué falta, en vez de un 422 genérico.
+     */
+    it("should fail locally without touching the network if the payer has no document", async () => {
+      const mockFetch = jest.fn();
+      global.fetch = mockFetch;
+
+      await expect(
+        new WompiAdapter().createPayment({
+          ...pseRequest,
+          payer: new Payer({ email: "cliente@example.com" }),
+        }),
+      ).rejects.toMatchObject({ code: KitPagosErrorCode.INVALID_REQUEST });
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("should sign the transaction and attach the acceptance token when configured", async () => {
+      const mockFetch = mockResponses(
+        { data: { presigned_acceptance: { acceptance_token: "tok_sim_1" } } },
+        createdPse,
+        pseWithUrl,
+      );
+
+      await new WompiAdapter(undefined, {
+        publicKey: "pub_test_1",
+        privateKey: "prv_test_1",
+        integritySecret: "test_integrity_secreto",
+      }).createPayment(pseRequest);
+
+      // La primera llamada es por el token de aceptación, que es de un solo uso.
+      expect(mockFetch.mock.calls[0][0]).toContain("/merchants/pub_test_1");
+
+      const sentBody = JSON.parse(mockFetch.mock.calls[1][1].body);
+      expect(sentBody.acceptance_token).toBe("tok_sim_1");
+      expect(sentBody.signature).toBe(
+        computeIntegritySignature("ord-pse-1", 15000000, "COP", "test_integrity_secreto"),
+      );
+    });
+
+    /**
+     * Wompi acepta una sola URL de retorno mientras ReturnUrlConfig admite una
+     * por resultado. Se manda la de PENDING porque es el estado en el que está la
+     * transacción cuando se redirige al pagador.
+     */
+    it("should send the return url resolved for the pending state", async () => {
+      const mockFetch = mockResponses(createdPse, pseWithUrl);
+
+      await new WompiAdapter().createPayment({
+        ...pseRequest,
+        returnUrlConfig: new ReturnUrlConfig("https://comercio.example.com/retorno"),
+      });
+
+      const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(sentBody.redirect_url).toBe("https://comercio.example.com/retorno");
+    });
+
+    /**
+     * Los dos métodos viajan en el mismo campo nativo, así que nunca se mandan juntos: un
+     * cobro con tarjeta lleva el token y ningún dato de PSE, y un PSE al revés.
+     *
+     * Esta prueba antes afirmaba que un cobro con tarjeta **no mandaba `payment_method`**,
+     * que era lo que el SDK hacía y lo que Wompi rechaza con
+     * `422 "No se especificó método de pago o fuente de pago"`. La prueba pasaba porque el
+     * simulador aceptaba el cobro sin método.
+     */
+    it("should send the card in payment_method, without any PSE field", async () => {
+      const mockFetch = mockResponses(approvedWompiMockResponse);
+
+      await new WompiAdapter().createPayment(validRequest);
+
+      const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(sentBody.payment_method.type).toBe("CARD");
+      expect(sentBody.payment_method.token).toBe("tok_test_card_4242");
+      expect(sentBody.payment_method.financial_institution_code).toBeUndefined();
+      expect(sentBody.payment_method.user_legal_id).toBeUndefined();
     });
   });
 });

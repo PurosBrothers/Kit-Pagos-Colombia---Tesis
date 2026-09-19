@@ -14,14 +14,19 @@ import {
   Currency,
   OrderReference,
   Payer,
+  PaymentMethod,
   KitPagosError,
   KitPagosErrorCode,
   type SDKOptions,
 } from "kit-pagos-colombia";
 
-/** Endpoint del mock de Mercado Pago en la API de Simulación local. */
-const SIMULATOR_MERCADOPAGO_URL =
-  "http://localhost:3000/v1/sim/mercadopago/payments";
+/**
+ * Raíz del mock de Mercado Pago en la API de Simulación local.
+ *
+ * Es la raíz y no el endpoint de pagos desde el issue #64: PSE se cobra por la
+ * Orders API, así que el adaptador necesita colgar dos rutas de acá.
+ */
+const SIMULATOR_MERCADOPAGO_URL = "http://localhost:3000/v1/sim/mercadopago";
 
 /**
  * Paso 1: Configurar el SDK para Mercado Pago.
@@ -60,12 +65,25 @@ async function main(): Promise<void> {
       email: "jaime.pavlich@example.com",
       fullName: "Jaime Pavlich",
     }),
+    /**
+     * El token de la tarjeta, que el comercio obtiene de la tokenización de Mercado
+     * Pago (`POST /v1/card_tokens`) desde el navegador. El SDK lo trata como una
+     * cadena opaca: el número de la tarjeta nunca llega hasta acá.
+     *
+     * Las cuotas no son un adorno en Mercado Pago: es la única de las cuatro
+     * pasarelas que las exige siempre, y omitirlas responde `400 Invalid
+     * installments` incluso cuando el pago es de una sola cuota.
+     */
+    paymentMethod: PaymentMethod.card("a1b2c3d4e5f6ejemplonoreal", {
+      installments: 1,
+    }),
   };
 
   console.log("Solicitud de pago:");
   console.log(`  Monto:      ${request.amount.getValue()} ${request.currency.getCode()} (pesos directos, sin centavos)`);
   console.log(`  Referencia: ${request.orderReference.getValue()}`);
-  console.log(`  Pagador:    ${request.payer.email}\n`);
+  console.log(`  Pagador:    ${request.payer.email}`);
+  console.log(`  Cuotas:     ${request.paymentMethod.installments}\n`);
 
   /**
    * Paso 3: Crear el pago en Mercado Pago.

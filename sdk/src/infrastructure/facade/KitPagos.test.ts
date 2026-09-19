@@ -4,6 +4,7 @@ import { Amount } from "../../domain/value-objects/Amount";
 import { Currency } from "../../domain/value-objects/Currency";
 import { OrderReference } from "../../domain/value-objects/OrderReference";
 import { Payer } from "../../domain/value-objects/Payer";
+import { PaymentMethod } from "../../domain/value-objects/PaymentMethod";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { Credentials } from "../../domain/value-objects/Credentials";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
@@ -24,6 +25,9 @@ describe("KitPagos", () => {
     currency: new Currency("COP"),
     orderReference: new OrderReference("ORDER-1042"),
     payer: new Payer({ email: "cliente@example.com" }),
+    // Cobrar con tarjeta exige el token en las tres pasarelas que cobran
+    // servidor-a-servidor, y el SDK lo exige antes de salir a la red (punto 50).
+    paymentMethod: PaymentMethod.card("tok_test_card_4242"),
   };
 
   const approvedWompiResponse = {
@@ -98,7 +102,9 @@ describe("KitPagos", () => {
     });
 
     it("should target the baseUrl configured by the merchant instead of the default one", async () => {
-      const simulatorUrl = "http://localhost:4000/v1/sim/wompi/transactions";
+      // Desde el issue #64 el baseUrl es la raíz de la API, no el endpoint de
+      // transacciones: el adaptador le agrega la ruta que corresponda.
+      const simulatorRoot = "http://localhost:4000/v1/sim/wompi";
       const mockFetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 201,
@@ -106,10 +112,10 @@ describe("KitPagos", () => {
       });
       global.fetch = mockFetch;
 
-      await buildConfiguredSdk(simulatorUrl).createPayment(validRequest);
+      await buildConfiguredSdk(simulatorRoot).createPayment(validRequest);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        simulatorUrl,
+        `${simulatorRoot}/transactions`,
         expect.objectContaining({ method: "POST" })
       );
     });
@@ -495,7 +501,7 @@ describe("KitPagos", () => {
       }
 
       it("should validate native notification (step 1) and retrieve full transaction via getPaymentStatus (step 2)", async () => {
-        const sdk = buildMercadoPagoSdk("http://localhost:3000/v1/sim/mercadopago/payments");
+        const sdk = buildMercadoPagoSdk("http://localhost:3000/v1/sim/mercadopago");
 
         // Paso 1: Validar firma y parsear la notificación entrante
         const event = sdk.validateWebhook(nativePayload, headers);
@@ -545,7 +551,7 @@ describe("KitPagos", () => {
       });
 
       it("should reconcile a rejected payment in step 2 correctly", async () => {
-        const sdk = buildMercadoPagoSdk("http://localhost:3000/v1/sim/mercadopago/payments");
+        const sdk = buildMercadoPagoSdk("http://localhost:3000/v1/sim/mercadopago");
 
         const event = sdk.validateWebhook(nativePayload, headers);
         expect(event.newStatus).toBe("PENDING");
@@ -579,7 +585,7 @@ describe("KitPagos", () => {
       const sdk = new KitPagos({
         gateway: Gateway.WOMPI,
         credentials: { [Gateway.WOMPI]: wompiCredentials },
-        baseUrl: "http://localhost:3000/v1/sim/wompi/transactions",
+        baseUrl: "http://localhost:3000/v1/sim/wompi",
         maxRetries: 2,
       });
 
@@ -611,7 +617,7 @@ describe("KitPagos", () => {
       const sdk = new KitPagos({
         gateway: Gateway.WOMPI,
         credentials: { [Gateway.WOMPI]: wompiCredentials },
-        baseUrl: "http://localhost:3000/v1/sim/wompi/transactions",
+        baseUrl: "http://localhost:3000/v1/sim/wompi",
       });
 
       let callCount = 0;
@@ -634,7 +640,7 @@ describe("KitPagos", () => {
       const sdk = new KitPagos({
         gateway: Gateway.WOMPI,
         credentials: { [Gateway.WOMPI]: wompiCredentials },
-        baseUrl: "http://localhost:3000/v1/sim/wompi/transactions",
+        baseUrl: "http://localhost:3000/v1/sim/wompi",
       });
 
       let callCount = 0;

@@ -43,6 +43,12 @@ export class ScenarioEngine {
     requestBody: WompiCreateTransactionRequestBody,
   ): WompiTransactionResponse {
     if (scenario === DEFAULT_SCENARIO) {
+      // PSE no se resuelve en la respuesta ni en el camino feliz: queda PENDING
+      // esperando que el pagador vaya al banco. Por eso no depende del escenario
+      // pedido, sino del método de pago (issue #64).
+      if (requestBody.payment_method?.type === "PSE") {
+        return this.wompiMockFactory.buildPendingPseResponse(requestBody);
+      }
       return this.wompiMockFactory.buildApprovedResponse(requestBody);
     }
 

@@ -8,6 +8,10 @@ import { Payer } from "../../../domain/value-objects/Payer";
 import { GatewayTransactionId } from "../../../domain/value-objects/GatewayTransactionId";
 import { GatewayResponseNormalizer } from "./GatewayResponseNormalizer";
 import {
+  MERCADOPAGO_NATIVE_STATUS,
+  lookupNativeStatus,
+} from "../../../domain/services/native-status";
+import {
   parsePayload,
   requireData,
   mapValueObjectError,
@@ -16,6 +20,7 @@ import {
 
 /** Email de relleno cuando la respuesta no trae el del pagador. */
 const FALLBACK_EMAIL = "customer@mercadopago.com";
+
 
 /** Traduce la respuesta nativa de Mercado Pago a la entidad Transaction. */
 export class MercadoPagoResponseNormalizer implements GatewayResponseNormalizer {
@@ -32,12 +37,16 @@ export class MercadoPagoResponseNormalizer implements GatewayResponseNormalizer 
     );
 
     const rawStatus = String(data.status ?? "");
-    const currency = new Currency(String(data.currency_id ?? "COP"));
+    // `currency_id` es de la Payments API y `currency` de la Orders API, que es
+    // la que usa PSE. Las dos traen el codigo ISO, solo cambia el nombre.
+    const currency = new Currency(String(data.currency_id ?? data.currency ?? "COP"));
 
-    // `transaction_amount` viaja en pesos con decimales, no en centavos, asi que
-    // se construye el Amount directamente sin pasar por fromMinorUnits().
+    // Las dos APIs expresan el monto en pesos y no en centavos, asi que se
+    // construye el Amount directamente sin pasar por fromMinorUnits(). La
+    // Payments API lo llama `transaction_amount` y lo manda como numero; la
+    // Orders API lo llama `total_amount` y lo manda como string.
     const amount = mapValueObjectError(
-      () => new Amount(amountToString(data.transaction_amount)),
+      () => new Amount(amountToString(data.transaction_amount ?? data.total_amount)),
       Gateway.MERCADOPAGO,
       rawResponse,
       "Malformed amount in Mercado Pago response",
@@ -73,20 +82,10 @@ export class MercadoPagoResponseNormalizer implements GatewayResponseNormalizer 
    *
    * Los estados nativos llegan en minusculas. `rawStatus` se preserva tal como
    * llego para auditoria, de modo que la normalizacion no pierde el original.
+   * Un estado desconocido cae en `ERROR` a proposito: es mejor que el comercio
+   * vea un error que un `APPROVED` inventado.
    */
   private mapStatus(rawStatus: string): TransactionStatus {
-    switch (rawStatus.toLowerCase()) {
-      case "approved":
-        return "APPROVED";
-      case "rejected":
-        return "DECLINED";
-      case "pending":
-      case "in_process":
-        return "PENDING";
-      case "cancelled":
-        return "VOIDED";
-      default:
-        return "ERROR";
-    }
+    return lookupNativeStatus(MERCADOPAGO_NATIVE_STATUS, rawStatus);
   }
 }
