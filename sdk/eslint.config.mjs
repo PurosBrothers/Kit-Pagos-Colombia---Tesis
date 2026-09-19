@@ -6,7 +6,13 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     // Ignorar dist, node_modules, coverage y archivos de configuración de raíz
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'jest.config.js'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'coverage/**',
+      'jest.config.js',
+      'jest.sandbox.config.js',
+    ],
   },
   {
     rules: {
