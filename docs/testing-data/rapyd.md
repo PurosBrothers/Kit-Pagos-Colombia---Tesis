@@ -184,9 +184,11 @@ Para simular rechazos o errores en el procesamiento de tarjetas en Sandbox:
 ## 5. PSE (Pagos Seguros en Línea)
 
 > **Procedencia de esta sección.** Todo lo que sigue se obtuvo llamando el sandbox real de Rapyd
-> (`https://sandboxapi.rapyd.net`) el **15 de septiembre de 2026**, con las credenciales
-> `RAPYD_API_ACCESS_KEY` / `RAPYD_API_SECRET_KEY` del `.env`, firmando con la propia función
-> `computeRapydSignature()` del SDK. No es documentación pública transcrita: la documentación
+> (`https://sandboxapi.rapyd.net`) con las credenciales `RAPYD_API_ACCESS_KEY` /
+> `RAPYD_API_SECRET_KEY` del `.env`, firmando con la propia función `computeRapydSignature()` del
+> SDK. El **catálogo y el contrato de campos** se midieron el **15 de septiembre de 2026** (issue
+> #68); el **pago de PSE de punta a punta**, el **18 de septiembre de 2026** (issue #64), y lo que
+> salió de ahí está marcado abajo. No es documentación pública transcrita: la documentación
 > pública de Rapyd **no menciona PSE en ninguna página**, y su sitemap completo contiene un solo
 > método colombiano (`bancolombia.html`). Ver `architecture-log.md`, punto 19.
 
@@ -246,6 +248,15 @@ esquema idéntico. Salieron **6 esquemas distintos**, y **los 47 de PSE comparte
 > **falso** en los dos aspectos: son **dos** campos, se llaman `customer_identification_type` y
 > `customer_identification_number`, y son **obligatorios siempre**, sin condición de monto.
 
+> **Y esta tabla está incompleta, medido el 18 de septiembre de 2026.** Es la respuesta *autorizada*
+> de Rapyd sobre sus propios campos obligatorios, y le faltan dos: un pago con los cuatro campos
+> correctos y un `customer` sin teléfono rechaza con
+> `MISSING_PAYMENT_METHOD_REQUIRED_FIELD - [PHONE_NUMBER]`, y sin correo, con `[EMAIL]`. Ninguno de
+> los dos aparece acá ni en el `payment_options` del método. El cuerpo del error tampoco dice dónde
+> mirar: su `message` completo es *"Please contact Rapyd Client Support."*. La consecuencia práctica
+> es que **los campos obligatorios de PSE en Rapyd no se pueden derivar de su API**: hay que
+> provocar los rechazos uno por uno, que es lo que se hizo.
+
 El tipo de documento admite **siete** valores: `RC` (Registro Civil), `TI` (Tarjeta de Identidad),
 `CC`, `CE`, `PP`, `DE` y `NIT`. Es el conjunto más amplio de las cuatro pasarelas, así que un
 `documentType` que Rapyd acepta puede ser rechazado por las otras tres — nunca al revés.
@@ -281,13 +292,31 @@ valor `Payer` del SDK (`fullName`, `email`, `phone`, `documentType`, `documentNu
 los cuales estaban declarados y sin usar. Esta sección es la razón por la que existen.
 
 La consecuencia arquitectónica es que **PSE en Rapyd no es un pago de un paso**: exige crear un
-`customer` primero, y `PaymentGatewayPort` no tiene hoy dónde expresar ese paso previo.
+`customer` primero. Cómo lo resolvió el SDK —escondiendo la secuencia dentro del adaptador, sin
+cambiar el puerto— está en el punto 47 del `architecture-log.md`.
+
+**Tres cosas más, medidas el 18 de septiembre de 2026 al implementarlo:**
+
+1. **El teléfono va en el `customer`, no en los campos del pago.** Mandarlo en
+   `payment_method.fields` devuelve `UNKNOWN_PAYMENT_METHOD_FIELD - [PHONE_NUMBER]`. Es el mismo
+   campo que Rapyd exige en un lado y rechaza en el otro, así que no hay forma de acertar por
+   simetría: hay que saber cuál va dónde.
+2. **El prefijo `+57` es opcional de verdad.** `3001234567` y `+573001234567` los acepta los dos y
+   devuelve el valor tal como se mandó. El SDK no transforma el número.
+3. **Un pago que falla deja el cliente creado.** `POST /v1/customers` sin correo responde `200` y
+   devuelve su `cus_...`; el pago posterior es el que rechaza, con `[EMAIL]`. O sea que un dato que
+   se podía verificar sin salir del proceso alcanza para dejar un cliente huérfano en la pasarela,
+   que no se puede limpiar por API. Por eso el adaptador valida todo **antes** de la primera
+   llamada.
 
 ### 5.5. Paso a paso de implementación en Sandbox (API)
 
 1. **Listar los bancos.** `GET /v1/payment_methods/countries/CO`, filtrar
    `category === "bank_redirect"` y quedarse con los que empiecen por `co_pse_`. No hay lista
-   estática publicada: el catálogo se pide por API y Rapyd lo actualiza.
+   estática publicada: el catálogo se pide por API y Rapyd lo actualiza. La misma lista sale por
+   `GET /v1/payment_methods/country?country=CO`, que es la ruta que usa `getPseBanks()` del SDK: se
+   llamaron las dos el 18 de septiembre de 2026 y devuelven los mismos 97 métodos y los mismos 47 de
+   PSE. Ojo con la firma si se cambia de forma: Rapyd firma el path **incluida la query string**.
 2. **Crear el `customer`.** `POST /v1/customers` con `name`, `email` y `phone_number` respetando
    las expresiones regulares de arriba. Guardar el `id` devuelto (prefijo `cus_`).
 3. **Crear el pago.** `POST /v1/payments` con el tipo del banco elegido:
@@ -309,8 +338,11 @@ La consecuencia arquitectónica es que **PSE en Rapyd no es un pago de un paso**
 }
 ```
 
-4. **Redirigir.** La respuesta trae `data.redirect_url`. Como `payment_flow_type` es
-   `redirect_url`, este paso **no es opcional**: sin la redirección el pago no avanza.
+4. **Redirigir.** La respuesta trae `data.redirect_url`, **en la propia respuesta de creación y sin
+   sondeo** (medido el 18 de septiembre de 2026, junto con `status: "ACT"`,
+   `next_action: "pending_confirmation"` y `paid: false`). Es la diferencia con Wompi, donde la URL
+   puede no venir en la creación. Como `payment_flow_type` es `redirect_url`, este paso **no es
+   opcional**: sin la redirección el pago no avanza.
 5. **Esperar el resultado.** Llega por webhook, con la misma semántica por tipo de evento que el
    resto de Rapyd: `PAYMENT_COMPLETED` (`CLO`) aprobado, `PAYMENT_FAILED` (`ERR`) rechazado,
    `PAYMENT_EXPIRED` (`EXP`) si el pagador nunca autorizó dentro de los 14 días.
@@ -331,11 +363,17 @@ devuelve la API, nunca se deriva del string del tipo.** El tipo conserva la marc
 
 ### 5.7. Lo que sigue sin confirmarse
 
-Honestidad sobre el alcance de esta verificación: se confirmó el **catálogo** y el **contrato de
-campos**, no un pago completo de punta a punta. Falta por confirmar (a) qué devuelve exactamente
-`data.redirect_url` para un `co_pse_*` y si la página intermedia es de PSE o de SafetyPay, y (b) si
-el sandbox permite forzar estados finales de PSE como sí lo permite con las tarjetas de 3DS. Nada
-de eso bloquea el diseño de `PaymentMethod`, que es lo que este issue tenía que desbloquear.
+El 15 de septiembre quedaban dos huecos. **El 18 de septiembre se cerró el primero:** un pago PSE
+real devuelve `status: "ACT"`, `next_action: "pending_confirmation"` y una `redirect_url` del
+dominio `sandboxcheckout.rapyd.net/complete-bank-payment?token=payment_...`, con las URL de retorno
+del comercio adjuntas como parámetros. Es una página de **Rapyd**, no de PSE ni de SafetyPay, así
+que la advertencia de la sección 5.1 sigue en pie: el destino final lo decide la pasarela y el SDK
+no puede prometerlo.
+
+**Sigue abierto** si el sandbox permite forzar estados finales de PSE como sí lo permite con las
+tarjetas de 3DS. Lo que se sabe es que el pago nace con `paid: false` y una `expiration` a 14 días,
+y que el resultado llega por webhook. Nada de eso bloquea el diseño, y lo que el SDK afirma hoy de
+PSE en Rapyd está medido hasta la redirección, no más allá.
 
 > **Nota sobre el catálogo del sandbox.** La documentación de Rapyd advierte que en sandbox
 > `List Payment Methods by Country` devuelve **todos** los métodos de la plataforma, mientras que en

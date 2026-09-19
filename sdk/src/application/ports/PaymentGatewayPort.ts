@@ -7,6 +7,7 @@ import { ReturnUrlConfig } from "../../domain/value-objects/ReturnUrlConfig";
 import { TaxBreakdown } from "../../domain/value-objects/TaxBreakdown";
 import { PaymentMethod } from "../../domain/value-objects/PaymentMethod";
 import { PaymentResult } from "../../domain/value-objects/PaymentResult";
+import { PseBank } from "../../domain/value-objects/PseBank";
 
 /**
  * Datos de entrada para crear un pago a traves de un Adapter concreto.
@@ -48,6 +49,20 @@ export interface CreatePaymentRequest {
    * gasta una ida y vuelta para nada.
    */
   paymentMethod?: PaymentMethod;
+
+  /**
+   * Dirección IP de quien está pagando, tal como la ve el servidor del comercio.
+   *
+   * Vive en la solicitud y no en `Payer` porque no es un atributo de la persona
+   * sino de la petición concreta: el mismo pagador cambia de IP entre un pago y
+   * el siguiente, y guardarla en el objeto de valor invitaría a reutilizar un
+   * dato caduco.
+   *
+   * Mercado Pago la exige para PSE (`additional_info` es obligatorio en la
+   * Orders API, medido el 18 de septiembre de 2026). Las otras tres no la piden,
+   * y por eso es opcional.
+   */
+  ipAddress?: string;
 }
 
 /**
@@ -71,6 +86,39 @@ export interface PaymentGatewayPort {
   createPayment(request: CreatePaymentRequest): Promise<PaymentResult>;
 
   getStatus(gatewayTransactionId: string): Promise<Transaction>;
+
+  /**
+   * Lista las entidades financieras habilitadas para cobrar por PSE.
+   *
+   * ## Por qué el puerto crece, que no es gratis
+   *
+   * El puerto es el contrato que sostiene el argumento de este trabajo, así que
+   * agregarle un método obliga a justificarlo: las cuatro pasarelas tienen que
+   * implementarlo, y cada método nuevo es una promesa más que las cuatro deben
+   * poder cumplir. Se agregó porque elegir banco **no es un paso opcional de
+   * PSE, es parte del método de pago**: sin la lista, el comercio no puede
+   * construir la pantalla que PSE exige, y termina hablándole directo a la
+   * pasarela justo antes de usar el SDK para cobrar. Un puerto que cubre el cobro
+   * pero no el paso sin el cual el cobro no puede armarse deja la abstracción
+   * incompleta en el peor lugar posible, que es el visible.
+   *
+   * La alternativa considerada era una interfaz aparte que implementaran solo los
+   * adaptadores con PSE. Se descartó porque las cuatro pasarelas soportan PSE de
+   * forma nativa, así que la interfaz aparte no ahorraba ninguna implementación y
+   * en cambio obligaba al comercio a preguntarle al SDK si su pasarela sabe
+   * responder, que es exactamente el tipo de pregunta que el SDK existe para no
+   * tener que hacer.
+   *
+   * ## Lo que este método no hace
+   *
+   * No cachea. La lista no cambia entre dos pagos y pedirla en cada carga del
+   * checkout gasta una llamada, pero guardarla dentro del SDK sería el primer
+   * estado que tendrían los adaptadores, y con estado aparece la pregunta de
+   * cuándo se invalida —que es justamente el caso que importa, una entidad
+   * caída—. El comercio, que sabe cuánto tolera de desactualización en su propio
+   * checkout, puede cachear; el SDK no puede saberlo por él.
+   */
+  getPseBanks(): Promise<PseBank[]>;
 
   verifySignature(
     payload: string,

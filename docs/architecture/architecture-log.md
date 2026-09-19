@@ -801,6 +801,366 @@ contra el simulador devuelven la referencia del comercio.
 
 ---
 
+### 43. PSE en Wompi no es un flujo de una sola llamada, y su sandbox no puede validarlo
+
+**Responsable de corregirlo en el SAD:** Joan (sección 9.1.1 y sección 13, ADR) para el flujo de creación de pago con redirección; David (sección 15.3, API de Simulación) para la responsabilidad nueva del simulador.
+
+**Encontrado:** Al implementar PSE (issue #64) se sondeó el sandbox real (`https://sandbox.wompi.co/v1`) el 18 de septiembre de 2026, en vez de trabajar sobre la documentación. Los resultados contradijeron el supuesto con el que se venía diseñando, que era que Wompi resolvía la redirección en una sola llamada.
+
+**1. La respuesta de creación no trae la URL de redirección.**
+
+`POST /transactions` devuelve HTTP 201 con `status: "PENDING"` y un `payment_method.extra` que contiene solo `{is_three_ds, three_ds_auth_type}`. El campo `async_payment_url` **no existe** en ese momento: aparece únicamente en un `GET /transactions/{id}` posterior. El flujo real es crear, consultar hasta que la URL aparezca, y recién entonces redirigir.
+
+**2. En sandbox la URL y el estado final llegan en el mismo instante, así que el orden no se puede verificar ahí.**
+
+Sondeando cada 500 ms:
+
+| Banco | La URL aparece a los | Estado en ese momento |
+|---|---|---|
+| `1` (aprueba) | 1075 ms | `APPROVED` |
+| `2` (declina) | 1650 ms | `DECLINED` |
+
+El sandbox resuelve el pago solo, sin que nadie visite el banco, de modo que cuando la URL existe ya no sirve para nada. **No hay ninguna ventana en la que redirigir tenga sentido.** En producción el comportamiento debe ser el contrario: la transacción se queda `PENDING` hasta que el pagador pague en el banco, y la URL aparece mientras sigue `PENDING`.
+
+La consecuencia es la justificación más concreta que ha aparecido hasta ahora para que la API de Simulación exista. No es una comodidad para no gastar credenciales: es **el único lugar donde el orden del flujo de redirección se puede ejercitar**, porque el sandbox de la propia pasarela colapsa los dos eventos en uno. El simulador reproduce el orden en dos pasos, y no necesita un contador porque la presencia de la URL **es** el estado: primera consulta, sigue `PENDING` pero ya con `async_payment_url`; segunda consulta, estado final. Está cubierto en `simulator-api/test/wompi-pse.test.ts`.
+
+**3. El código de institución financiera no se valida al crear.**
+
+Un código inexistente (`"99"`) devolvió HTTP 201. El SDK no puede delegarle a la pasarela la detección de un banco inválido, y por eso el adaptador pasa `bankCode` opaco sin inventar una lista blanca que la pasarela no aplica.
+
+**4. Campos obligatorios, medidos por omisión y no leídos de la documentación.**
+
+| Campo | ¿Obligatorio? | Evidencia |
+|---|---|---|
+| `payment_description` | Sí | HTTP 422 `"No está presente"` |
+| `user_type` | Sí | HTTP 422, solo admite `0` o `1` |
+| `user_legal_id` y `user_legal_id_type` | Sí | HTTP 422; tipos válidos `RC, TI, CC, TE, CE, NIT, PP, DNI, PPT, PA` |
+| `redirect_url` | No | HTTP 201 sin él |
+| `customer_data` | No | HTTP 201 sin él |
+
+Que `redirect_url` sea opcional es lo que permite que `ReturnUrlConfig` siga siendo opcional para PSE. Y el conjunto de tipos de documento vive en `wompi-pse.ts` y no en `Payer`, porque tiene alcance de pasarela: meterlo en el dominio le daría a Wompi poder de veto sobre las otras tres.
+
+**5. El `WompiAdapter` no podía hablar con Wompi real, y eso incluía el flujo de tarjeta.**
+
+Ni `acceptance_token` ni la firma de integridad existían en el SDK ni en el simulador. O sea que el adaptador solo funcionaba contra el mock, que no valida nada, y el flujo de tarjeta que se daba por terminado habría fallado igual contra la pasarela. Se cerró dentro de este issue. La firma es `SHA256(reference + amount_in_cents + currency + integrity_secret)`, hash plano y **no** un HMAC, a diferencia de la firma de webhooks; el `acceptance_token` es de un solo uso y hay que pedir uno nuevo por transacción.
+
+De paso quedó claro que los dos secretos de Wompi son fáciles de intercambiar, porque el panel los entrega juntos y el único síntoma es un HTTP 422 con `"La firma es inválida"`, que no dice nada sobre rotulado. `Credentials` ahora distingue `integritySecret` del secreto de eventos, y el saneamiento del `ErrorHandler` redacta los dos.
+
+**6. Decisiones de diseño que esto forzó.**
+
+- **`createPayment()` sondea internamente** hasta que la URL aparezca, con límite de 5 s e intervalo de 400 ms (lo medido fue 1075 ms y 1650 ms). Se descartó agregar un tercer caso a `PaymentResult` porque obligaría a todo consumidor a manejar tres ramas para una mecánica que es de una sola pasarela.
+- **No usa `RetryHandler`.** Su `execute()` reintenta sobre excepciones: que la URL todavía no esté es un estado intermedio esperado, no un fallo, y pasarlo por ahí obligaría a lanzar una excepción para señalar normalidad y haría que el pipeline de errores clasificara ese estado como error de pasarela.
+- **Si el sondeo se agota, lanza** `GATEWAY_TIMEOUT` llevando el `gatewayTransactionId`. Devolver la transacción en `PENDING` sin URL reproduciría el defecto del punto 39; perder el identificador sería peor todavía, porque volvería irrastreable un cobro que ya existe.
+- **`payment_description` se deriva de `orderReference`** en vez de agregar un campo al contrato, para no ampliar la superficie pública justo antes de publicar en npm (issue #88). La contrapartida es que el pagador ve una referencia interna del comercio en el banco.
+- **`baseUrl` pasó a ser la raíz de la API** y no el endpoint de transacciones, porque `GET /merchants/{llave}` no tenía dónde vivir. Es un cambio incompatible para quien lo sobrescribiera, y se hizo ahora porque el paquete todavía no está publicado: es el único momento en que no le cuesta nada a nadie. Las URLs finales no cambiaron, solo el valor de configuración.
+
+**Métrica CK:** el `WompiAdapter` estaba en **CBO 5 de 5**, sin margen. Un primer intento con métodos privados que declaraban `WompiPseFields` y `WompiRedirectSnapshot` en sus firmas lo subió a 7, porque el script cuenta los tipos que aparecen en firmas de métodos. Se resolvió moviendo esos métodos a funciones de módulo en `wompi-pse.ts`, y consolidando la plomería HTTP que estaba duplicada entre `createPayment` y `getStatus`. Resultado: WMC 14, CBO 5, RFC 14, MAX_CC 6, es decir el mismo WMC que antes de agregar PSE.
+
+**Verificación:** SDK 374 pruebas / 374. Simulador 37 / 37. `npm run metrics`: `✓ All 31 class(es) within thresholds.` El ejemplo `simulate-wompi-pse.ts` corrido contra el simulador devuelve `REDIRECT_REQUIRED` con estado nativo `PENDING`, y la consulta posterior devuelve `APPROVED`, que es el orden que el sandbox real no permite observar.
+
+**Estado:** Resuelto en el código para Wompi. Mercado Pago queda fuera de este issue porque usa la Orders API en vez de la Payments API, y Rapyd y Kushki siguen necesitando 2 y 3 llamadas antes de la redirección, límite ya registrado en el punto 39.
+
+---
+
+### 44. Pedir un método de pago que la pasarela no implementa cobraba con tarjeta, en silencio
+
+**Responsable de corregirlo en el SAD:** Joan (sección 9.1.1, contrato de `createPayment()`, y sección 11.2, catálogo de códigos de error).
+
+**Encontrado:** Al terminar PSE en Wompi (issue #64) se probó el mismo código de comercio contra las otras tres pasarelas, que es precisamente lo que el issue pide como resultado esperado. El resultado, medido contra el simulador el 18 de septiembre de 2026:
+
+```
+MERCADOPAGO: pedí PSE y obtuve -> TRANSACTION (APPROVED)
+RAPYD:       pedí PSE y obtuve -> TRANSACTION (APPROVED)
+```
+
+El comercio pedía PSE, el adaptador descartaba `request.paymentMethod` porque no lo leía, y el pago salía **con tarjeta**, aprobado y sin ninguna señal de que el método se hubiera cambiado. Es el mismo defecto de fondo del punto 39 —un campo del contrato que ningún adaptador lee y que se descarta callado— pero con una consecuencia peor: ahí se perdía una URL de redirección, acá se cobra con un medio de pago distinto del que el pagador eligió.
+
+**Por qué apareció recién ahora.** `paymentMethod` nació opcional y sin lector en el issue #85. Mientras PSE no funcionaba en ninguna pasarela, el campo era decorativo y el defecto inalcanzable en la práctica. Al implementarlo en una sola, "cambiar de pasarela" pasó a ser un escenario real y el campo decorativo se volvió una trampa. Es un recordatorio de que un campo del contrato sin lector no es neutral: es un defecto en espera de que algo lo active.
+
+**Corrección.** Se agregó `assertSupportedPaymentMethod()` como función de módulo en `payment-method-support.ts`, y cada adaptador **declara** en su `createPayment()` qué métodos sabe cobrar: Wompi `CARD` y `PSE`, las otras tres solo `CARD`. Pedir otra cosa lanza `UNSUPPORTED_OPERATION` **antes de tocar la red**, porque un cobro que no debe ocurrir no debe llegar a salir.
+
+Tres decisiones dentro de esa corrección:
+
+- **La verificación vive en el adaptador, no en la fachada.** Qué métodos soporta cada proveedor es conocimiento de infraestructura. Ponerle la tabla de capacidades a `KitPagos` obligaría a la aplicación a saber qué sabe hacer cada pasarela, que es justo lo que la Arquitectura Hexagonal separa. El adaptador declara, y la verificación en sí está en un solo lugar.
+- **`UNSUPPORTED_OPERATION` y no `INVALID_REQUEST`.** La solicitud del comercio no tiene nada de inválida: es correcta y la pasarela activa no la puede atender. La distinción es accionable, porque la salida de un `UNSUPPORTED_OPERATION` es cambiar de pasarela y la de un `INVALID_REQUEST` es corregir los datos.
+- **Omitir el método sigue siendo válido** y no se verifica: el contrato dice que sin método informado cada pasarela aplica su predeterminado, que en las cuatro es tarjeta. Lo que no puede pasar es pedir algo concreto y recibir otra cosa.
+
+Es función de módulo y no clase ni método por lo mismo que `payload-utils.ts` y `rapyd-signature.ts`: no hay estado, y así no le cuesta CBO a ninguno de los cuatro adaptadores, que es lo que permitió cablearla en los cuatro sin tocar ningún umbral (ver punto 34).
+
+De paso quedó cubierto `CASH`, que existe en el tipo desde el #85 y ninguna pasarela implementa: las cuatro lo rechazan explícitamente.
+
+**Verificación:** SDK 386 pruebas / 386, incluidas 12 nuevas en `payment-method-support.test.ts` que comprueban que los tres adaptadores sin PSE lo rechazan **sin emitir ninguna petición** (`fetch` espiado, cero llamadas), que Wompi sí lo acepta, y que los cuatro rechazan `CASH`. `npm run metrics`: `✓ All 31 class(es) within thresholds.` Contra el simulador, las tres pasarelas devuelven hoy `UNSUPPORTED_OPERATION` con el mensaje que nombra la pasarela y los métodos que sí soporta.
+
+**Estado:** Resuelto en el código.
+
+---
+
+### 45. PSE en Mercado Pago obliga a otra API, a más datos del pagador y a una URL de retorno que Wompi no exige
+
+**Responsable de corregirlo en el SAD:** Joan (sección 15.1, objeto de valor `Payer`, y sección 9.1.1, contrato de `CreatePaymentRequest`).
+
+**Encontrado:** Al implementar PSE en Mercado Pago (issue #64, segundo PR) se sondeó la API real (`https://api.mercadopago.com`) el 18 de septiembre de 2026 en vez de trabajar sobre la documentación, siguiendo lo aprendido en el punto 43. Seis resultados, y cuatro cambiaron el diseño.
+
+**1. PSE no se cobra por la Payments API, y eso no se sabía.** Se intentó primero por `POST /v1/payments`, que es la que el adaptador ya usaba para tarjeta, porque habría evitado un segundo endpoint y todo el trabajo que trajo. Con el banco en `transaction_details.financial_institution` la petición pasa la validación de campos y muere igual en `424 / 9032 BankTransfers Api fail`, con dos bancos distintos (1001 y 1051), con montos 2000, 5000 y 50000, y con los dos `entity_type`. El control de tarjeta en el mismo script falla solo con `3003 Invalid card_token_id`, o sea por el token falso y nada más, así que no era un problema de permisos de la cuenta. La hipótesis quedó descartada por medición y el flujo va a `POST /v1/orders`.
+
+**2. Las credenciales de prueba no sirven, y las de producción exigen un pagador que no sea de prueba.** Un token `TEST-` recibe `401 invalid_credentials` en la Orders API, con el mensaje "Test credentials are not supported, use test users with production credentials to sandbox environment". Con el token `APP_USR-` la orden sí se crea, pero **si el pagador es un usuario de prueba creado con `POST /users/test_user`, el pago interno muere en `failed / processing_error` (HTTP 402)**, medido con dos bancos. Con un email corriente responde 201 y entrega la redirección. Es decir que la pasarela contradice su propio mensaje de error. Conviene tenerlo escrito porque el síntoma no dice nada sobre la causa: por ese camino se perdió un buen rato.
+
+**3. La redirección llega en la creación: Mercado Pago sí es un flujo de una sola llamada.** La URL vive en `transactions.payments[0].payment_method.redirect_url`, que es donde la documentación del repo decía, junto a `status: "action_required"` y `status_detail: "waiting_transfer"`. Es la diferencia de fondo con Wompi (punto 43), que no la entrega hasta un `GET` posterior y obligó a escribir un sondeo. Acá ese sondeo no hace falta, y el adaptador emite **una sola** petición.
+
+**4. El monto no admite decimales.** `total_amount: "2000"` responde 201 y `"2000.00"` responde `400 Invalid value for property`. Importa porque `Amount.getValue()` conserva la escala con la que el comercio escribió el monto, así que un `"150000.00"` perfectamente válido en el dominio —y que es exactamente lo que usan los ejemplos del repo— es inválido acá. Se resolvió con `toWholePesos()`, que **lanza en vez de redondear** cuando hay centavos distintos de cero: cobrar un monto que el comercio no pidió es peor que fallar, el mismo criterio con el que `Amount.toMinorUnits()` lanza en vez de truncar.
+
+**5. Qué es obligatorio, medido por omisión.** Quitando cada campo por separado, estos devuelven `400` con `'$.payer' - missing properties`: `email`, `entity_type`, `first_name`, `last_name`, `identification`, `phone` y `address`. Fuera de `payer` son obligatorios `additional_info` (la IP del pagador), `external_reference` y `config` (la URL de retorno). `expiration_time` y `processing_mode` son opcionales: sin ellos responde 201 igual.
+
+**La asimetría más concreta que apareció entre dos pasarelas para el mismo método de pago** es justamente la URL de retorno: en Wompi se midió que `redirect_url` es prescindible (acepta 201 sin ella, punto 43) y en Mercado Pago su ausencia rechaza la orden. O sea que `ReturnUrlConfig` es opcional en el contrato general y obligatorio en esta pasarela, y eso solo se puede verificar localmente porque el puerto no tiene dónde expresar "obligatorio según la pasarela activa".
+
+**6. Un banco inexistente no se detecta al crear.** El código `"9999"` pasa la validación y muere después en `processing_error`, igual que en Wompi. El SDK no puede delegarle a ninguna de las dos la detección de un banco inválido. Por debajo del mínimo de la cuenta (1600 COP, declarado en `GET /v1/payment_methods`) responde 422.
+
+**Decisión: ampliar `Payer` en vez de abrir una bolsa de extras por pasarela.** Mercado Pago pide nombre y apellido separados, teléfono con indicativo y dirección completa, y el dominio no tenía nada de eso: `Payer` traía `fullName` y `phone` como strings únicos, y ninguna dirección. Las alternativas eran un objeto de valor `BillingAddress` aparte o un `Record<string, unknown>` de campos nativos por pasarela. Se eligió ampliar `Payer` con campos **opcionales** y validar en el adaptador:
+
+- **Todos los campos nuevos son opcionales** y `Payer` no valida ninguno. Quien decide qué falta es el adaptador, que sabe contra qué API va a hablar. Validar en el objeto de valor le daría a Mercado Pago poder de veto sobre las otras tres: un comercio que cobra con tarjeta por Wompi tendría que informar la dirección del pagador. Es el mismo criterio con el que los tipos de documento de Wompi viven en `wompi-pse.ts` y no en `Payer`.
+- **`firstName` y `lastName` conviven con `fullName` en vez de derivarse de él**, porque partir un nombre no es una operación segura: en Colombia lo habitual son dos apellidos y "Juan Carlos Pérez Gómez" no tiene una división correcta deducible. Derivarlo habría sido adivinar el apellido del pagador para mandárselo a una pasarela.
+- **La IP va en `CreatePaymentRequest` y no en `Payer`**, porque no es un atributo de la persona sino de la petición: el mismo pagador cambia de IP entre un pago y el siguiente, y guardarla en el objeto de valor invitaría a reutilizar un dato caduco.
+- **La validación acumula todos los campos faltantes en un solo error** en lugar de fallar en el primero, para que el comercio los corrija de una vez en vez de descubrirlos de a uno por HTTP 400 sucesivos.
+
+**Decisión: `baseUrl` de Mercado Pago pasa a ser la raíz.** Igual que en Wompi (punto 43), y por la misma razón: el adaptador ahora necesita dos rutas (`/payments` para tarjeta y `/orders` para PSE) y un `baseUrl` que apuntaba a una sola no tenía dónde colgar la otra. Es un cambio incompatible para quien lo sobrescribiera, y se hace ahora porque el paquete todavía no está publicado en npm (issue #88).
+
+**Decisión: `getStatus()` elige el endpoint por el prefijo del identificador.** Mercado Pago tiene dos familias de recursos y el puerto recibe un string plano: las órdenes son ULIDs prefijados `ORD` (medido: `ORD01M2V7ZQH9BAZ57V99VG1NY0K1`) y los pagos con tarjeta son numéricos. Distinguir por el prefijo es frágil en apariencia; la alternativa era cambiar la firma del puerto para las cuatro pasarelas y meterle a las otras tres una distinción que no tienen. Queda registrado como el punto a repensar si alguna vez se tipa el identificador.
+
+**Métrica CK:** el `MercadoPagoAdapter` estaba en **CBO 5 de 5**, sin margen, así que toda la mecánica de PSE vive en `mercadopago-pse.ts` como funciones de módulo, por el criterio del punto 34. Se consolidó además la plomería HTTP que estaba duplicada entre `createPayment` y `getStatus`, igual que en Wompi. Resultado: WMC 12, CBO 5, RFC 10, MAX_CC 6. En el `MercadoPagoResponseNormalizer` el `switch` de estados se reemplazó por una tabla de módulo, porque cubrir los dos vocabularios (el de tarjeta y el de órdenes) lo habría empujado sobre el MAX_CC ≤ 10; con la tabla quedó en 9.
+
+**Un defecto que este cambio corrige de paso:** `action_required` no estaba en el mapeo de estados, así que una orden de PSE esperando al pagador se habría normalizado como `ERROR`. Tampoco estaba leído `total_amount`, porque el normalizador solo conocía `transaction_amount` de la Payments API, ni `currency` frente a `currency_id`. Los tres son consecuencia de que la Orders API es otra API y no una variante de la misma.
+
+**Verificación:** SDK 409 pruebas / 409 (23 nuevas: 16 en `mercadopago-pse.test.ts` y 7 en `MercadoPagoAdapter.test.ts`). Simulador 45 / 45 (8 nuevas en `mercadopago-pse.test.ts`). `npm run lint` sin hallazgos, `npm run metrics`: `✓ All 31 class(es) within thresholds.`, `typecheck` de `examples/` limpio. El ejemplo `simulate-mercadopago-pse.ts` corrido contra el simulador devuelve `REDIRECT_REQUIRED` con estado nativo `action_required` en **una sola** petición, y la consulta posterior por el identificador `ORD...` se enruta a `/orders` y devuelve `processed` → `APPROVED`.
+
+**Estado:** Resuelto en el código para Mercado Pago. La última pata del flujo real —que el pagador transfiera en el banco y la orden pase a `processed`— no se pudo observar contra la pasarela: exige que una persona entre al simulador bancario. Rapyd y Kushki siguen sin PSE, por las 2 y 3 llamadas previas que el puerto todavía no sabe expresar (límite registrado en el punto 39). `CASH` sigue sin implementar en ninguna de las cuatro.
+
+---
+
+### 46. Cada pasarela traducía sus estados dos veces, y a la copia del webhook le faltaba justo el estado que PSE necesita
+
+**Responsable de corregirlo en el SAD:** David (sección 15.1, `WebhookVerifier`) y Joan (sección 9.2, conciliación por webhook).
+
+**Encontrado:** Al revisar qué faltaba para cerrar el issue #64 se comparó, para las cuatro pasarelas, el mapeo de estados del normalizador de respuestas contra el del manejador de webhooks. Están en capas distintas y se escribieron en momentos distintos, y habían divergido en las tres pasarelas que mapean estados:
+
+| Pasarela | El normalizador conocía | Al manejador de webhook le faltaba |
+|---|---|---|
+| Wompi | `APPROVED`, `DECLINED`, `VOIDED`, `PENDING` | **`PENDING`** |
+| Kushki | `APPROVAL`, `DECLINED`, `INITIALIZED` | **`INITIALIZED`** |
+| Mercado Pago | los estados de la Payments API y los de la Orders API | **`processed`, `action_required`, `expired`** |
+
+Lo que le faltaba a cada manejador era exactamente **el estado no final**, y no es casualidad: los webhooks se escribieron cuando el SDK solo cobraba con tarjeta, donde la notificación llega con el pago ya resuelto. Como un estado ausente de la tabla cae en `ERROR` por diseño, el efecto era que **la notificación de un pago en curso se reportaba como error**. Para el comercio esa es la diferencia entre seguir esperando al pagador y dar la orden por perdida.
+
+**Por qué apareció recién ahora.** Es el mismo mecanismo de los puntos 39 y 44: una rama del código que no era alcanzable en la práctica. Mientras PSE no funcionara en ninguna pasarela, ningún webhook podía traer un estado intermedio, así que la tabla incompleta era inofensiva. Al implementar PSE en Wompi y en Mercado Pago, el estado no final pasó a ser el **primero** que la pasarela notifica, y la tabla incompleta se volvió un defecto activo. Van tres apariciones del mismo patrón en este issue: conviene anotarlo como regla, no como anécdota. **Código inalcanzable no es código correcto; es un defecto esperando que algo lo alcance.**
+
+Y hay un agravante propio: la causa no era una tabla mal escrita sino **dos tablas para lo mismo**. Al agregar el vocabulario de la Orders API (punto 45) se actualizó la del normalizador y no la del webhook, porque nada obligaba a mirar las dos. Una segunda copia de una traducción no es duplicación inocente: es una copia que se va a quedar atrás.
+
+**Corrección.** Se extrajeron las tablas a `domain/services/native-status.ts`, y ahora el normalizador y el manejador de webhook de cada pasarela leen **la misma**. Vive en el dominio y no en la capa de aplicación porque los manejadores de webhook son del dominio y no pueden importar de `application/` sin invertir la dependencia que define ADR-01; al revés sí, y los normalizadores son los que importan.
+
+**Rapyd queda afuera a propósito.** Su manejador de webhook no traduce un estado sino un **tipo de evento**: Rapyd manda un webhook distinto por resultado (`PAYMENT_COMPLETED`, `PAYMENT_FAILED`) en vez de un evento único con un campo variable, y además desambigua el rechazo del fallo técnico por el prefijo de `failure_code`. Meterlo en la misma tabla obligaría a fingir que un tipo de evento y un estado son lo mismo. Su normalizador sí traduce estados nativos, pero no tiene con quién compartirlos, así que la duplicación que este punto corrige no existe en Rapyd.
+
+**Hallazgo secundario: `ReturnUrlConfig` en Kushki no está sin cablear, está bien así.** La pieza 3 del issue #64 pide cablear `ReturnUrlConfig` en los adaptadores, y Kushki es el único que no lo lee. Revisado contra lo que el issue #68 ya había resuelto en `ubiquitous-language.md`: en Kushki la URL de retorno se llama `callbackUrl`, **existe solo para transferencias** y viaja **al solicitar el token**, un paso previo al cobro. Para tarjeta, que es lo único que Kushki implementa hoy, su flujo es transparente y síncrono y no tiene ningún campo donde ponerla. Cablear algo habría sido inventar un campo, que es justo el error que los puntos 43 y 45 registran. Queda pendiente junto con PSE en Kushki, no por separado.
+
+**Verificación:** SDK 413 pruebas / 413 (4 nuevas en `WebhookVerifier.test.ts`). Se comprobó que las nuevas **fallan sin la corrección**: revirtiendo el manejador de Wompi a su `switch` anterior, dos de ellas fallan con `Expected: "PENDING", Received: "ERROR"`, que es exactamente el síntoma del defecto. Una de las pruebas compara el resultado del webhook contra el del normalizador para el mismo estado nativo, de modo que si las dos piezas vuelven a divergir la prueba lo dice. `npm run lint` sin hallazgos y `npm run metrics`: `✓ All 31 class(es) within thresholds.` Las tablas no suman una clase porque son constantes de módulo.
+
+**Estado:** Resuelto en el código. Lo que el webhook de PSE **no** tiene verificado es qué identificador manda Mercado Pago para una orden: `getStatus()` enruta por el prefijo `ORD` (punto 45), y si la notificación trajera el id numérico del pago en vez del de la orden, iría al endpoint de pagos. No se puede medir sin una URL pública que reciba la notificación, así que queda declarado como límite y no como cerrado.
+
+---
+
+### 47. PSE en las cuatro pasarelas: el puerto tuvo que crecer, y la lista de bancos fue el argumento
+
+**Responsable de corregirlo en el SAD:** Joan (sección 15.2, `PaymentGatewayPort` y fachada) y David (sección 15.1, objetos de valor del dominio).
+
+**Encontrado:** Al revisar qué faltaba para dar PSE por cerrado con dos de cuatro pasarelas, aparecieron dos cosas que no eran trabajo aparte sino partes del mismo flujo, y por eso el alcance del issue #64 se amplió en vez de abrirse issues nuevos.
+
+La primera: **el comercio no podía obtener la lista de bancos desde el SDK**. En PSE el pagador siempre elige su banco antes de que exista el pago, y los dos ejemplos del repositorio traían el código escrito a mano, `"1"` y `"1051"`. La superficie pública era `createPayment()`, `getPaymentStatus()` y `validateWebhook()`, así que para armar el selector había que hablarle directo a la pasarela. Eso no es una comodidad que falta: es el paso inmediatamente anterior al cobro, del mismo flujo, sin cubrir, y deja la abstracción incompleta en el lugar más visible.
+
+La segunda: **PSE en Rapyd y en Kushki**, sin las cuales el trabajo puede afirmar que unificó PSE en la mitad de las pasarelas colombianas, no en las pasarelas colombianas.
+
+**Lo que se midió antes de escribir código**, siguiendo lo que los puntos 43 y 45 dejaron como regla.
+
+*La lista de bancos existe en las cuatro y ninguna la publica igual:*
+
+| Pasarela | Dónde está | Forma nativa |
+|---|---|---|
+| Wompi | `GET /v1/pse/financial_institutions`, endpoint dedicado | `financial_institution_code` / `financial_institution_name` |
+| Mercado Pago | anidada en la entrada `pse` de `GET /v1/payment_methods` | `id` / `description`, 47 entidades |
+| Rapyd | **no hay lista**: se filtra el catálogo del país, `GET /v1/payment_methods/country?country=CO` | `type` / `name`, 47 de 97 métodos del país |
+| Kushki | `GET /transfer/v1/bankList` | no medida: sin credenciales de API |
+
+De Rapyd conviene anotar algo que puede confundir a quien compare este punto con el 19: el catálogo del país se alcanza por **dos rutas que son la misma**. El #68 lo midió como `GET /v1/payment_methods/countries/CO` y el adaptador usa `GET /v1/payment_methods/country?country=CO`; se llamaron las dos, y las dos devuelven los mismos 97 métodos y los mismos 47 de PSE. La forma con query string es la que importa acá porque la firma de Rapyd se calcula sobre el path **incluida** la query, así que si `extractRapydUrlPath()` la descartara la petición daría 401; no lo hace, y el pedido real contra el sandbox lo confirma.
+
+Que Mercado Pago y Rapyd devuelvan **47** entidades no es casualidad: las dos están leyendo el mismo registro de ACH Colombia, cada una con su forma. Y en el sandbox de Wompi la lista **no son bancos**: son tres entidades llamadas "Banco que aprueba", "Banco que declina" y "Banco que simula un error", con códigos `1`, `2` y `3`, y el nombre de cada una dice qué desenlace simula. El SDK las pasa tal cual, porque un comercio que ve "Banco que declina" en su selector sabe al instante contra qué entorno está apuntando.
+
+*PSE en Rapyd son dos llamadas y no hay forma de evitarlo.* Un `POST /v1/payments` con el `payment_method` completo y sin cliente previo responde `MISSING_PAYMENT_METHOD_REQUIRED_FIELD - [CUSTOMER]`. Eso confirma con la respuesta en la mano lo que el issue #68 había documentado. Tres hallazgos más, ninguno en la documentación:
+
+1. **`GET /v1/payment_methods/{tipo}/required_fields` miente por omisión.** Para `co_pse_bancolombia_bank` declara exactamente cuatro campos —dos obligatorios, `customer_identification_type` y `customer_identification_number`— y un `payment_options` con `customer`. El pago rechaza además por `[PHONE_NUMBER]` y por `[EMAIL]`, que ese endpoint **no menciona en ninguna parte**. O sea que la lista autorizada de la pasarela sobre sus propios campos obligatorios está incompleta, y el cuerpo del error no ayuda: su `message` completo es *"Please contact Rapyd Client Support."*, sin decir dónde mirar.
+2. **El teléfono va en el cliente, no en los campos del pago.** Mandarlo en `payment_method.fields` devuelve `UNKNOWN_PAYMENT_METHOD_FIELD - [PHONE_NUMBER]`: el mismo campo que falta en un lado se rechaza en el otro.
+3. **El prefijo internacional no hace falta:** `+573001234567` y `3001234567` funcionan igual, así que el adaptador manda el número tal como viene. No hay transformación que inventar.
+
+*Y el `next_action` de PSE no estaba en el catálogo.* Rapyd devuelve `status: "ACT"` con `next_action: "pending_confirmation"` y la `redirect_url` **en la respuesta de creación**, sin sondeo, a diferencia de Wompi. Eso valida una decisión del punto 39: `extractRapydRedirect` detecta la redirección por la **presencia de `redirect_url`** y no por el enum `next_action`, precisamente porque el catálogo completo de ese enum no se había podido verificar. PSE entró sin tocar una línea de ese módulo. La decisión conservadora se pagó sola.
+
+*De Kushki se midió primero solo lo que se podía sin credenciales de API.* Con la técnica del issue #68 —comparar contra una ruta inventada, porque AWS API Gateway responde `Unauthorized` a lo que existe y `Missing Authentication Token` a lo que no— se confirmaron las rutas y **se resolvió una que el #68 había dejado abierta**: el token se pide en `POST /transfer/v1/tokens`, en plural; el singular responde como ruta inexistente. Lo demás venía de la referencia, y quedó declarado como tal. **Después aparecieron las credenciales de API y se midió el flujo entero, que encontró cuatro defectos: eso es el punto 48.**
+
+---
+
+#### La decisión: el puerto creció un método, y eso no es gratis
+
+`PaymentGatewayPort` pasó de tres métodos a cuatro con `getPseBanks(): Promise<PseBank[]>`. Agregarle un método al puerto obliga a justificarlo, porque es el contrato que sostiene el argumento de este trabajo y las cuatro pasarelas tienen que poder cumplirlo.
+
+Entró porque **elegir banco no es un paso opcional de PSE, es parte del método de pago**. En Kushki eso es literal: su referencia dice que el endpoint de bancos *"is required only for Transfer In payment method in Colombia"*, o sea que sin la lista no hay `bankId` con el que cobrar. Un puerto que cubre el cobro pero no el paso sin el cual el cobro no puede armarse deja al comercio hablándole directo a la pasarela justo antes de usar el SDK.
+
+**La alternativa que se descartó** era una interfaz aparte implementada solo por los adaptadores con PSE. No ahorraba ninguna implementación, porque las cuatro soportan PSE de forma nativa, y en cambio le devolvía al comercio la pregunta de si su pasarela sabe responder, que es exactamente el tipo de pregunta que el SDK existe para no tener que hacer.
+
+**Por qué el código de banco sigue siendo opaco, y por qué eso dejó de ser una concesión.** El punto 19 decidió que `bankCode` fuera opaco y con significado por pasarela: numérico en Wompi y Mercado Pago, `bankId` en Kushki, y el nombre del método entero en Rapyd, donde PSE son 47 métodos y no uno con un campo de banco. Con `getPseBanks()` eso se cierra: el código que sale de la lista es el que entra en `PaymentMethod.pse({ bankCode })`, **sin transformarlo**. El comercio nunca lo interpreta, lo pasa. Un catálogo propio de bancos colombianos habría agregado una traducción en los dos sentidos y un mapa que mantener cada vez que una pasarela suma una entidad, para resolver un problema que nadie tiene. Lo que sí hay que respetar es que un código de una pasarela no sirve en otra, y los adaptadores lo detectan: mandarle `"1"` a Rapyd produce un `INVALID_REQUEST` del SDK que dice qué patrón espera y de dónde sacarlo, en vez del `ERROR_GET_PAYMENT_METHOD_TYPE` de Rapyd, que no menciona ninguna de las dos cosas.
+
+**Lo que `getPseBanks()` no hace: cachear.** La lista no cambia entre dos pagos y pedirla en cada carga del checkout gasta una llamada. Guardarla dentro del SDK sería el primer estado que tendrían los adaptadores, y con estado aparece la pregunta de cuándo se invalida, que es justo el caso que importa: una entidad caída. El comercio sabe cuánto tolera de desactualización en su propio checkout; el SDK no puede saberlo por él.
+
+---
+
+#### Los flujos de varias llamadas quedan escondidos en el adaptador, con un costo que conviene nombrar
+
+El issue #64 dejó abierta la pregunta de cómo expresa el puerto que el número de llamadas antes de redirigir varía por pasarela: una en Wompi y Mercado Pago, dos en Rapyd, dos en Kushki más la lista de bancos. Las dos salidas eran esconder la secuencia dentro del adaptador o reconocer los pasos en el contrato.
+
+**Se eligió esconderla.** Cuántas llamadas hace falta es un detalle del proveedor, no del cobro. Reconocer los pasos en el contrato le impondría a las dos pasarelas de una llamada una ceremonia que no necesitan, y expondría en la API pública una diferencia entre proveedores, que es el criterio con el que el propio issue define un puerto mal cortado.
+
+**El costo es real y se midió, no se supuso.** Si la segunda llamada de Rapyd falla, el cliente ya quedó creado y nadie lo va a limpiar. Y no es un escenario teórico: un pago sin `payer.email` **crea el cliente igual** y falla recién en el pago, con `MISSING_PAYMENT_METHOD_REQUIRED_FIELD - [EMAIL]`. O sea que la pasarela te deja un cliente huérfano por un dato que se podía verificar sin salir del proceso.
+
+De ahí la mitigación: `assertPseRequirements()` corre **antes de la primera llamada** y acumula todo lo que falta en un solo error. No elimina el estado a medias —una caída de red entre las dos llamadas sigue pudiendo producirlo— pero saca del camino la causa prevenible, que era la única que el SDK podía atacar. Lo que queda queda declarado acá, no escondido.
+
+**Y una excepción que el dominio hace innecesaria.** Escondidas quedan las llamadas de máquina, no las que necesitan una persona en el medio. En Kushki la secuencia completa son tres pasos y el primero es pedir la lista de bancos, que **no** está dentro de `createPayment()`: el pagador tiene que *elegir*, y elegir pasa en la interfaz del comercio. Por eso la lista es un método del puerto y no un paso interno.
+
+---
+
+#### Kushki no publica cómo distinguir sus identificadores, así que el SDK pregunta en vez de adivinar
+
+Kushki consulta cada método en una ruta distinta: `/charges/{ticketNumber}` para tarjeta y `/transfer/v1/status/{token}` para transferencia. No hay discriminador publicado.
+
+La primera implementación deducía la ruta de la forma del identificador —"el ticket de tarjeta es solo dígitos"—, imitando al adaptador de Mercado Pago, que elige entre la Orders API y la Payments API por el prefijo `ORD`. **No son comparables, y las pruebas existentes lo demostraron de inmediato:** usan identificadores como `kushki-mock-tx-123`, que esa regla habría mandado a la ruta de transferencias. El prefijo `ORD` está documentado y medido; esta regla era una suposición sobre un formato que no se podía verificar, y su modo de fallo es reportar "no existe" sobre un pago que sí existe.
+
+Se cambió por una lista de rutas que se prueban en orden: tarjeta primero, porque es el método mayoritario y así el caso común no paga nada, y transferencia solo si Kushki responde que el recurso no existe. Cualquier otro error corta el intento, porque un 401 en la primera ruta no dice nada sobre la segunda y seguir probando convertiría un problema de credenciales en un "no encontrado". El costo es una llamada extra al consultar una transferencia; la ventaja es que no depende de ninguna suposición sobre formatos.
+
+**El simulador tuvo que aprender a decir "no existe".** Su ruta de consulta de tarjeta respondía 200 a cualquier identificador, así que el respaldo nunca se habría ejercitado. Ahora devuelve 404 cuando le consultan un token de transferencia, y la regla de los 32 caracteres hexadecimales vive **en el mock y no en el SDK** a propósito: el mock es el que emite los dos identificadores, así que sabe cuál es cuál. El SDK no lo sabe y no debe inventarlo.
+
+---
+
+#### Tres cambios incompatibles de `baseUrl`, y por qué los cuatro adaptadores ahora se parecen
+
+Los adaptadores de Rapyd y Kushki recibían una `baseUrl` que apuntaba a un recurso concreto (`.../rapyd/payments`, `.../kushki/charges`), porque cada uno hablaba con uno solo. PSE los obliga a hablar con tres o cuatro rutas, y desde una URL que apunta a un recurso las demás solo se alcanzan recortando la cadena. Las dos pasaron a la raíz, como ya había hecho Mercado Pago (punto 45). Los cuatro adaptadores quedan con la misma convención: `baseUrl` es la raíz y cada método arma su ruta.
+
+---
+
+#### Un hallazgo del propio código: el objeto de valor hizo innecesaria una validación
+
+Al escribir las pruebas se descubrió que la comprobación de "falta el código de banco" en los adaptadores de Rapyd y Kushki era **inalcanzable**: `PaymentMethod.pse()` rechaza construirse sin `bankCode`, así que un PSE sin banco no puede llegar a un adaptador. La prueba que intentaba provocar ese estado no compiló contra la realidad: falló al construir el objeto.
+
+Se borró la comprobación. Es evidencia a favor del diseño del punto 39 —un objeto de valor que hace imposibles los estados inválidos ahorra validación repetida en cada adaptador— y también es la aplicación de la regla que el punto 46 dejó: **código inalcanzable no es código correcto, es un defecto esperando que algo lo alcance**. Lo que el dominio no puede saber es si el código es *de esta pasarela*, y eso sí se sigue verificando.
+
+---
+
+#### Lo que las métricas CK cobraron, y lo que se corrigió en vez de declararse
+
+`getPseBanks()` subió el CBO de **5 a 6 en cinco clases a la vez**: los cuatro adaptadores y la fachada. Todas estaban exactamente en el umbral, y CBO cuenta los tipos que aparecen en las firmas, así que nombrar el tipo de retorno bastó. Es la cuantificación de lo que este punto afirma en prosa: **agregarle un método al puerto no es gratis**.
+
+Se registró como excepción documentada, con dos argumentos. Primero, que `PseBank` es una interfaz de dos strings sin comportamiento, y la métrica la cuenta igual que a un colaborador como `WebhookVerifier`, que se inyecta y se invoca. Segundo, que las dos formas de bajar el número empeoraban el diseño: devolver el tipo estructural inline le quita el nombre y la documentación, y sacar la lista a un puerto aparte mueve el acoplamiento sin reducirlo.
+
+**Las violaciones de WMC del mismo cambio no se declararon, se corrigieron.** Rapyd llegó a 23 y Kushki a 22 contra un umbral de 20, y ahí la señal era legítima: las dos clases habían pasado a hacer más. Se movió traducción a funciones de módulo —`rapyd-payload.ts` y `kushki-amount.ts`, siguiendo el punto 34— y quedaron en 20 y 18, con la complejidad máxima de Rapyd bajando de 7 a 4. De paso se eliminó una duplicación que ya había empezado a separarse: las URL de retorno del comercio se resolvían igual en el camino de tarjeta y en el de PSE, en dos copias.
+
+La diferencia importa: se declara excepción cuando la métrica mide algo que no es el problema, y se corrige cuando sí lo es.
+
+---
+
+#### Hallazgo de paso: los diagramas del SDK describían el puerto anterior, y nadie lo había registrado
+
+Al ir a agregar el método nuevo se encontró que las fuentes PlantUML del SDK seguían mostrando `createPayment(request) : Promise<Transaction>`. Eso quedó desactualizado con el PR #85, que cambió el tipo de retorno a `PaymentResult` (punto 39), y ningún punto de este documento lo anotó: la Sección D rastrea diagramas que citan "PayU", no diagramas que citan una firma vieja. El diagrama de clases tampoco tenía `PaymentMethod`, ni `PendingRedirect`, ni `KushkiResponseNormalizer`, que ya existen en el código.
+
+Se corrigieron las dos fuentes y se regeneraron los dos PNG contra el servidor público de PlantUML, con el mismo procedimiento de los puntos 17 y 18: `hexagonal-architecture-class-diagram.puml` (el puerto con sus cuatro métodos y el tipo de retorno real, la fachada con `getPseBanks()`, los objetos de valor `PaymentMethod`, `PseBank`, `PendingRedirect` y `PaymentResult`, los campos de `Payer` que PSE volvió necesarios, y el normalizador de Kushki) y `component-diagram.puml` (la caja de la fachada). La nota nueva del puerto explica ahí mismo por qué creció y por qué el código de banco es opaco.
+
+Lo que esto deja como lección es de proceso, no de diseño: **un diagrama con fuente en el repositorio no se actualiza solo porque la fuente esté versionada.** La firma del puerto cambió en un PR que no tocó el `.puml`, y la desincronización sobrevivió a dos issues.
+
+---
+
+**Verificación:** SDK **487 pruebas / 487** (74 nuevas: `rapyd-pse.test.ts`, `kushki-pse.test.ts`, `pse-banks.test.ts` y los bloques de PSE en los dos adaptadores). Simulador **63 / 63** (18 nuevas en `pse-completo.test.ts`). `npm run lint` sin hallazgos, `npm run metrics`: `✓ All 31 class(es) within thresholds.`, `npm run typecheck` de los ejemplos limpio.
+
+Y la verificación que los puntos 43 y 44 dejaron como obligatoria, porque encontró defectos que las pruebas unitarias no vieron: **los cinco ejemplos de PSE corridos contra el simulador**, los cuatro de cobro terminando en `APPROVED` tras la redirección, y el de la lista de bancos devolviendo las cuatro listas y el rechazo del código ajeno.
+
+**Y `getPseBanks()` se corrió contra las APIs reales, no solo contra el simulador**, instanciando `KitPagos` con las credenciales del `.env` y apuntando a cada sandbox:
+
+| Pasarela | Bancos devueltos | Qué confirma |
+| --- | --- | --- |
+| Wompi | **3** | Son los tres bancos de prueba del sandbox, con los códigos `1`, `2` y `3` |
+| Mercado Pago | **47** | Códigos numéricos de ACH (`1001` Banco de Bogotá, `1007` Bancolombia) |
+| Rapyd | **47** | Los `co_pse_*` del catálogo, ninguno con código fuera del patrón ni sin nombre |
+| Kushki | **7** en UAT | `bankId` de su lista, más un octavo elemento que no es un banco (punto 48) |
+
+El caso de Rapyd trajo de regalo la confirmación de una decisión del punto 19: `co_pse_scotiabank_colpatria_bank` devuelve como nombre **"Davibank"**. El tipo conserva la marca vieja y el `name` trae la nueva, así que leer el nombre de la API en vez de derivarlo del código no es prolijidad, es lo único correcto.
+
+**Estado:** Resuelto para las cuatro pasarelas, con las cuatro medidas contra sus APIs de sandbox. La de Kushki se midió al final, cuando aparecieron sus credenciales de API, y lo que salió de ahí está en el punto 48: no confirmó la implementación, la corrigió en cuatro lugares.
+
+---
+
+### 48. Medir Kushki con credenciales reales encontró cuatro defectos que el simulador no podía mostrar
+
+**Contexto.** El punto 47 cerró PSE en las cuatro pasarelas dejando una asimetría declarada: Wompi, Mercado Pago y Rapyd se habían medido contra sus APIs de sandbox, y Kushki estaba implementado contra su documentación, porque en `.env` había credenciales de *dashboard* y no de API. El mismo día aparecieron las credenciales de API en el dashboard UAT del comercio, así que se midió el flujo completo de Transfer In: lista de bancos, token, inicio y consulta de estado.
+
+**Lo que apareció.** Medir no confirmó la implementación: la corrigió en cuatro lugares, y **los cuatro defectos rompían PSE de Kushki de punta a punta**. Con 487 pruebas en verde.
+
+| # | Lo que el SDK asumía | Lo que la API responde | Consecuencia |
+| --- | --- | --- | --- |
+| 1 | `POST /transfer/v1/init` recibe `{ token }` | `400 T001` con solo el token; `201` con `{ token, amount }` | **Ningún PSE de Kushki podía iniciarse** |
+| 2 | La lista de bancos son bancos | Encabeza con `{"code":"0","name":"A continuación seleccione su banco"}` | Un checkout que tome el primer elemento cobra a un banco inexistente |
+| 3 | Un normalizador sirve para los dos métodos | La consulta de transferencia no trae `ticketNumber`, `transaction_status` ni `contactDetails` | `getPaymentStatus()` fallaba con `MALFORMED_RESPONSE: missing ticketNumber` |
+| 4 | Los estados son los de tarjeta | Son `requestedToken` e `initializedTransaction` | Una transferencia en curso se reportaba como `ERROR` |
+
+Y un quinto, que apareció recién al recorrer el flujo entero y no en las llamadas sueltas: el criterio elegido para distinguir las dos formas de respuesta —"tiene `token` y no tiene `ticketNumber`"— es correcto **antes** de iniciar la transferencia y falso **después**, porque Kushki le asigna un `ticketNumber` al llegar al procesador. O sea que fallaba exactamente en el único momento en que un comercio consulta un pago. El discriminador pasó a ser el nombre del campo de estado, que es lo único que no cambia: `status` en transferencia, `transaction_status` en tarjeta.
+
+---
+
+#### Por qué las pruebas no veían nada de esto
+
+Porque el mock estaba escrito a partir de lo que el código esperaba. Su propio comentario lo decía:
+
+> *"Reusa la forma de un cobro para que el normalizador de Kushki, que es uno solo para los dos métodos, la entienda sin ramas nuevas."*
+
+Eso está al revés. El mock devolvía la forma de un cobro con tarjeta con el token metido en `ticketNumber` —una forma que Kushki **nunca** produce— porque era la que el normalizador ya sabía leer. Un mock que se acomoda al código confirma el código; verificarlo exige que el mock se parezca a la pasarela, aunque eso obligue a ramas nuevas. Es el hallazgo de los puntos 43 y 44 por tercera vez en el mismo issue, y la tercera vez ya no es anécdota: **es la razón por la que "las pruebas pasan" no es evidencia de que una integración funciona**, y por la que la Definition of Done pide correr los ejemplos contra algo que no sea el propio mock.
+
+La corrección incluyó rehacer el mock del simulador con las formas medidas: `init` devuelve los cinco campos reales y ningún estado, la consulta devuelve `token`/`status`, la lista incluye el elemento de relleno, y `GET /charges/{id}` responde `403` como la API real. Las pruebas que había que cambiar son la medida de cuánto se estaba verificando: nueve, todas afirmando una forma que la pasarela no usa.
+
+---
+
+#### El orden de las dos rutas de consulta se invirtió, y esa decisión tampoco era deducible
+
+El punto 47 decidió que `getStatus()` pruebe la ruta de tarjeta y pase a la de transferencia solo si Kushki responde que el recurso no existe, con el argumento de que tarjeta es el método mayoritario y así el caso común no paga la llamada extra. Medir mostró que ese orden **no puede funcionar**:
+
+| Consulta | Respuesta medida |
+| --- | --- |
+| `GET /charges/{token de transferencia}` | `403 Forbidden` |
+| `GET /charges/{identificador inventado}` | `403 Forbidden` |
+| `GET /rutaQueNoExisteDeControl/x` | `403 Forbidden` |
+| `GET /transfer/v1/status/{token que existe}` | `200` con el estado |
+| `GET /transfer/v1/status/{token inventado}` | `400 T001` |
+
+La ruta de tarjeta contesta lo mismo para todo, incluso para lo que no existe, así que **nunca emite un "no encontrado" del que se pueda encadenar** y el respaldo no se activaba jamás. La de transferencia sí discrimina, así que es la única que puede ir primero. El costo se invirtió: ahora es la consulta de tarjeta la que paga una llamada extra.
+
+Hay un corolario incómodo que conviene dejar escrito en vez de tapar: lo medido sugiere que **`GET /charges/{id}` no es la ruta de consulta de cobros con tarjeta de Kushki**, y ese camino nunca se verificó contra su API real. Se conserva como segunda opción porque es la que el simulador implementa y la que el flujo de tarjeta usa hoy, pero encontrar la ruta real es trabajo pendiente, y la técnica del #68 no sirve para buscarla: a la altura de la raíz del dominio, las rutas registradas y las inexistentes responden igual.
+
+---
+
+#### Qué quedó verificado y qué no
+
+Verificado, ejecutando el SDK compilado contra `https://api-uat.kushkipagos.com`:
+
+| Operación | Resultado |
+| --- | --- |
+| `getPseBanks()` | 7 bancos, sin el elemento de relleno |
+| `createPayment()` con PSE | `REDIRECT_REQUIRED`, con la `redirectUrl` del agente de Kushki y el token como identificador |
+| `getPaymentStatus()` | `PENDING` / `initializedTransaction`, con la referencia del comercio y el monto correctos |
+
+Sin verificar: el desenlace. Llevar una transferencia hasta `approvedTransaction` o `declinedTransaction` exige que una persona autorice en el portal del banco simulado, y se midió que **los números de documento de prueba no cambian el estado por sí solos**: las cuatro transferencias creadas con los cuatro documentos de la tabla de datos de prueba quedaron en `initializedTransaction`. Los estados finales de la tabla de traducción vienen de la documentación de Kushki y están marcados como tales en el código.
+
+**Estado:** Corregido. Los cuatro defectos tienen prueba de regresión, incluido el del discriminador, que usa como dato de entrada la respuesta medida de una transferencia ya iniciada. Con esto las cuatro pasarelas quedan al mismo nivel de evidencia para PSE, que era lo que el punto 47 dejó abierto. Pendiente y sin issue: la ruta real de consulta de cobros con tarjeta en Kushki.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum

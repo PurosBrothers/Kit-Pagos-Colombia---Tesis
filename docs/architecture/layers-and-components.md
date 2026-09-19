@@ -109,7 +109,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 
 - **Patrón Arquitectónico:** GoF Facade.
 - **Responsabilidad:** Es el punto de entrada único del SDK y el único componente que el desarrollador que consume el SDK instancia directamente.
-- **Métodos Públicos:** Expone tres métodos: `createPayment(request)`, `getPaymentStatus(id)` y `validateWebhook(payload, headers)`. Estos nombres coinciden con el Component Diagram C4 y la sección 9.1.1 del SAD; la sección 15.2 usa nombres distintos (`getStatus`, `verifyWebhook`), inconsistencia registrada en `architecture-log.md` (punto 1).
+- **Métodos Públicos:** Expone cuatro métodos: `createPayment(request)`, `getPaymentStatus(id)`, `getPseBanks()` y `validateWebhook(payload, headers)`. Los tres primeros nombres coinciden con el Component Diagram C4 y la sección 9.1.1 del SAD; la sección 15.2 usa nombres distintos (`getStatus`, `verifyWebhook`), inconsistencia registrada en `architecture-log.md` (punto 1). `getPseBanks()` se agregó al implementar PSE en las cuatro pasarelas: el pagador elige su banco de una lista viva antes de que exista el pago, y sin este método el comercio tendría que pedirla directo a la pasarela (ver `architecture-log.md`, punto 47).
 - **Comportamiento:** Oculta la complejidad interna del sistema detrás de una interfaz simple y predecible. Mantiene una referencia a `SDKConfigurator` y a `GatewayFactory`; antes de ejecutar cualquier operación consulta al Configurator para determinar la pasarela activa y sus credenciales, solicita al Factory la instancia del adaptador correspondiente, y envuelve la llamada resultante con `RetryHandler`. Retorna entidades `Transaction` normalizadas al desarrollador o excepciones `SdkError` tipadas en caso de fallo. `validateWebhook()` retorna un `WebhookEvent` en lugar de un booleano, para cumplir RF-04 (ver sección 2.10).
 
 ---
@@ -132,7 +132,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 ### 2.4. Payment Gateway Port (`src/application/ports/PaymentGatewayPort.ts`)
 
 - **Patrón Arquitectónico:** Puerto de salida de la Arquitectura Hexagonal. Define el contrato que los adaptadores de infraestructura deben implementar para conectarse al núcleo del sistema.
-- **Responsabilidad:** Es la interfaz abstracta que especifica las tres operaciones disponibles — `createPayment()`, `getStatus()` y `verifySignature()` — sin conocimiento de ningún proveedor específico.
+- **Responsabilidad:** Es la interfaz abstracta que especifica las cuatro operaciones disponibles — `createPayment()`, `getStatus()`, `getPseBanks()` y `verifySignature()` — sin conocimiento de ningún proveedor específico. `createPayment()` devuelve `PaymentResult`, una unión etiquetada de transacción resuelta o redirección pendiente, porque un pago por PSE no termina en la llamada que lo crea (`architecture-log.md`, punto 39). Cuántas llamadas HTTP hace falta antes de esa redirección varía por pasarela —una en Wompi y Mercado Pago, dos en Rapyd y en Kushki— y el contrato no lo expresa a propósito: la secuencia queda escondida en el adaptador (punto 47).
 - **Extensibilidad:** Cualquier clase que implemente este contrato puede conectarse al sistema como pasarela válida, lo que hace posible incorporar nuevos proveedores sin modificar el núcleo.
 
 ---
@@ -203,7 +203,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   - `WompiResponseNormalizer` — monto en centavos (`amount_in_cents`), datos envueltos en `data`, divisa en `currency`.
   - `MercadoPagoResponseNormalizer` — monto en pesos (`transaction_amount`), pago en la raíz del payload, divisa en `currency_id`.
   - `RapydResponseNormalizer` — monto en pesos, datos envueltos en `data`, divisa en `currency_code`, y dos estados que exigen leer un segundo campo para desambiguarse (`CLO` necesita `paid`, `ERR` necesita `failure_code`).
-  - `KushkiResponseNormalizer` — suma el objeto tributario en pesos nominales y convierte respuestas incompletas a `KitPagosError(MALFORMED_RESPONSE)`.
+  - `KushkiResponseNormalizer` — suma el objeto tributario en pesos nominales y convierte respuestas incompletas a `KitPagosError(MALFORMED_RESPONSE)`. Es el único que atiende **dos formas de respuesta de la misma pasarela**: Kushki responde distinto una tarjeta y una transferencia de PSE, así que el normalizador decide cuál tiene enfrente —por el nombre del campo de estado— y delega la de transferencia en `kushki-transfer.ts`, un módulo de funciones. Por qué son dos formas y no una está medido en el punto 48 del `architecture-log.md`.
   - `payload-utils.ts` — parseo del payload, validación del objeto de datos y mapeo de errores de objeto de valor, que las tres ramas repetían textualmente.
   
   Hasta el punto 34 las tres traducciones vivían como ramas de un `switch` dentro de `normalize()`, que medía 360 de las 371 líneas del archivo y tenía complejidad ciclomática 62. Agregar una pasarela significaba editar ese método; ahora significa agregar una clase y registrarla, sin tocar las otras traducciones.

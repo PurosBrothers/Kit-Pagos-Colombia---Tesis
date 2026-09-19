@@ -9,22 +9,40 @@ import { ResponseNormalizer } from "../../application/services/ResponseNormalize
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
 import { buildRapydHeaders, serializeBody } from "./rapyd-signature";
+import { buildCardPaymentPayload } from "./rapyd-payload";
 import {
   PaymentResult,
   transactionResult,
   redirectRequired,
 } from "../../domain/value-objects/PaymentResult";
 import { extractRapydRedirect } from "../../application/services/normalizers/rapyd-redirect";
+import { assertSupportedPaymentMethod } from "./payment-method-support";
+import {
+  assertPseRequirements,
+  buildCustomerPayload,
+  buildPsePaymentPayload,
+  extractCustomerId,
+  parseRapydPseBanks,
+} from "./rapyd-pse";
+import type { PseBank } from "../../domain/value-objects/PseBank";
 
 /**
- * URL del endpoint de pagos del mock de Rapyd (simulator-api, issue #52).
+ * URL raíz de la API de Rapyd (o de su mock en simulator-api, issue #52).
  *
- * Es la URL de la colección de pagos, siguiendo la misma convención que los
- * adaptadores de Wompi y Mercado Pago: `baseUrl` apunta al recurso que se crea
- * con POST, y la consulta de estado le agrega `/{id}`. Contra el sandbox real de
- * Rapyd el valor equivalente es `https://sandboxapi.rapyd.net/v1/payments`.
+ * **Cambió con PSE, y es un cambio incompatible.** Antes apuntaba a la colección
+ * de pagos (`.../rapyd/payments`), porque el adaptador solo hablaba con ese
+ * recurso. PSE obliga a hablar con tres: `POST /customers` antes del pago,
+ * `/payments` para cobrar y `/payment_methods/country` para la lista de bancos.
+ * Con la URL apuntando a un recurso concreto, las otras dos solo se podían
+ * alcanzar recortando la cadena, que es la clase de truco que después nadie
+ * entiende.
+ *
+ * Es el mismo cambio que hizo el adaptador de Mercado Pago cuando entró PSE
+ * (punto 45), y deja a los cuatro adaptadores con la misma convención: `baseUrl`
+ * es la raíz y cada método arma su ruta. Contra el sandbox real el valor
+ * equivalente es `https://sandboxapi.rapyd.net/v1`.
  */
-const DEFAULT_RAPYD_URL = "http://localhost:3000/v1/sim/rapyd/payments";
+const DEFAULT_RAPYD_URL = "http://localhost:3000/v1/sim/rapyd";
 
 /**
  * Adapter concreto de Rapyd Collect. Traduce las llamadas genéricas de
@@ -80,41 +98,22 @@ export class RapydAdapter implements PaymentGatewayPort {
    * hoy, porque su flujo 3DS ya devuelve `redirect_url`.
    */
   async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
-    // 1. Mapeo del dominio a campos nativos de Rapyd.
-    //
-    //    El monto va en pesos, NO en centavos: `toMinorUnits()` no se usa acá, y
-    //    usarlo multiplicaría el cobro por cien. Se envía como string y con la
-    //    escala fija de la divisa por indicación explícita de Rapyd, que
-    //    documenta que JSON.stringify convierte `12.00` en `12` y que eso rompe
-    //    el cálculo de la firma, recomendando enviar los montos con ceros a la
-    //    derecha como strings numéricos. `toFixedScale()` produce justamente eso.
-    const payload: Record<string, unknown> = {
-      amount: request.amount.toFixedScale(
-        request.currency.getMinorUnitExponent()
-      ),
-      currency: request.currency.getCode(),
-      merchant_reference_id: request.orderReference.getValue(),
-      // Rapyd no modela un email de pagador obligatorio como las otras tres
-      // pasarelas; `receipt_email` (opcional) es el campo equivalente más
-      // cercano y sirve para que el pagador reciba el recibo.
-      receipt_email: request.payer.email,
-    };
+    assertSupportedPaymentMethod(request.paymentMethod, Gateway.RAPYD, [
+      "CARD",
+      "PSE",
+    ]);
 
-    if (request.returnUrlConfig) {
-      const completeUrl = request.returnUrlConfig.resolveFor("APPROVED");
-      const errorUrl = request.returnUrlConfig.resolveFor("DECLINED");
-      if (completeUrl) {
-        payload.complete_payment_url = completeUrl;
-      }
-      if (errorUrl) {
-        payload.error_payment_url = errorUrl;
-      }
+    if (request.paymentMethod?.type === "PSE") {
+      return this.createPsePayment(request);
     }
+
+    // 1. Mapeo del dominio a campos nativos de Rapyd, en rapyd-payload.ts.
+    const payload = buildCardPaymentPayload(request);
 
     // 2. Serializar una sola vez. Este mismo string se firma y se envía.
     //    serializeBody usa JSON.stringify sin espacios, que es lo que Rapyd exige.
     const bodyString = serializeBody(payload);
-    const url = this.baseUrl;
+    const url = `${this.baseUrl}/payments`;
     const headers = buildRapydHeaders("post", url, bodyString, this.credentials);
 
     // 3. Petición HTTP
@@ -156,7 +155,7 @@ export class RapydAdapter implements PaymentGatewayPort {
    * el cuerpo firmado es un string vacío.
    */
   async getStatus(gatewayTransactionId: string): Promise<Transaction> {
-    const url = `${this.baseUrl}/${gatewayTransactionId}`;
+    const url = `${this.baseUrl}/payments/${gatewayTransactionId}`;
     const headers = buildRapydHeaders("get", url, "", this.credentials);
 
     let response: Response;
@@ -168,6 +167,114 @@ export class RapydAdapter implements PaymentGatewayPort {
     }
 
     return this.readTransaction(response);
+  }
+
+  /**
+   * Cobra por PSE, que en Rapyd son **dos llamadas**: primero el cliente y
+   * después el pago.
+   *
+   * ## Por qué la secuencia queda escondida acá y no en el puerto
+   *
+   * Porque el número de llamadas antes de redirigir es distinto en cada pasarela
+   * —una en Wompi y Mercado Pago, dos acá, tres en Kushki— y es un detalle del
+   * proveedor, no del cobro. Meterlo en el contrato le impondría a las pasarelas
+   * de una llamada una ceremonia que no necesitan, y expondría en la API pública
+   * una diferencia entre proveedores, que es justamente el criterio con el que el
+   * issue #64 define un puerto mal cortado.
+   *
+   * El costo de esconderla es real y conviene nombrarlo: si la segunda llamada
+   * falla, el cliente ya quedó creado en Rapyd y nadie lo va a limpiar. Se midió
+   * que eso pasa de verdad —un pago sin `payer.email` crea el cliente y recién
+   * después rechaza con `[EMAIL]`—, y por eso `assertPseRequirements()` corre
+   * **antes** de la primera llamada: no elimina el estado a medias, pero saca del
+   * camino la causa que sí se podía prevenir sin salir del proceso. Queda la
+   * causa que no: una caída de red entre las dos.
+   */
+  private async createPsePayment(
+    request: CreatePaymentRequest,
+  ): Promise<PaymentResult> {
+    assertPseRequirements(request);
+
+    const customerResponse = await this.send(
+      "post",
+      "/customers",
+      buildCustomerPayload(request),
+    );
+    const customerId = extractCustomerId(customerResponse);
+
+    const paymentResponse = await this.send(
+      "post",
+      "/payments",
+      buildPsePaymentPayload(request, customerId),
+    );
+
+    // Rapyd devuelve la redirección en la respuesta de creación, sin sondeo: se
+    // midió `status: "ACT"`, `next_action: "pending_confirmation"` y
+    // `redirect_url` presente. `extractRapydRedirect` la detecta por la presencia
+    // de la URL y no por el `next_action`, así que PSE entró sin tocarlo, aunque
+    // su `next_action` no existía en el catálogo conocido cuando se eligió esa
+    // regla (punto 39).
+    const redirect = extractRapydRedirect(paymentResponse);
+    if (redirect) {
+      return redirectRequired(redirect);
+    }
+
+    // Sin URL no hay a dónde mandar al pagador. Normalizar deja que el pipeline
+    // de errores lo reporte como respuesta malformada, que es la verdad, en vez
+    // de devolver una transacción pendiente que nunca va a avanzar.
+    return transactionResult(
+      this.normalizer.normalize(paymentResponse, Gateway.RAPYD),
+    );
+  }
+
+  /**
+   * Lista los bancos de PSE filtrando el catálogo de métodos de pago de Colombia.
+   *
+   * Rapyd es la única de las cuatro sin lista de bancos: PSE son 47
+   * `payment_method_type` dentro de un catálogo de 97 para Colombia, así que la
+   * lista se arma filtrando por el prefijo `co_pse_`. El país está fijo en `CO`
+   * porque el SDK es de pasarelas colombianas y PSE no existe fuera de Colombia.
+   */
+  async getPseBanks(): Promise<PseBank[]> {
+    const rawResponse = await this.send(
+      "get",
+      "/payment_methods/country?country=CO",
+    );
+    return parseRapydPseBanks(rawResponse);
+  }
+
+  /**
+   * Firma, manda y valida una petición contra Rapyd.
+   *
+   * Extraída al implementar PSE: la creación de pago, la de cliente, la consulta
+   * y la lista de bancos hacen exactamente lo mismo salvo el método, la ruta y el
+   * cuerpo. Sin esto habría cuatro copias del mismo armado de firma, y la firma de
+   * Rapyd es precisamente lo que no conviene tener escrito cuatro veces: se
+   * calcula sobre el cuerpo serializado exacto, así que cualquier diferencia entre
+   * copias produce un 401 difícil de rastrear.
+   */
+  private async send(
+    httpMethod: "get" | "post",
+    path: string,
+    payload?: Record<string, unknown>,
+  ): Promise<unknown> {
+    const url = `${this.baseUrl}${path}`;
+    const bodyString = payload ? serializeBody(payload) : "";
+    const headers = buildRapydHeaders(httpMethod, url, bodyString, this.credentials);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: httpMethod.toUpperCase(),
+        headers,
+        body: payload ? bodyString : undefined,
+      });
+    } catch (networkError) {
+      const errorHandler = new ErrorHandler();
+      throw errorHandler.handle(networkError, Gateway.RAPYD);
+    }
+
+    return this.readRawResponse(response);
   }
 
   /**

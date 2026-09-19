@@ -85,6 +85,56 @@ const KNOWN_EXCEPTIONS: Record<string, { metric: 'WMC' | 'CBO' | 'RFC' | 'MAX_CC
   }],
 };
 
+/**
+ * El costo medido de agregarle un metodo al puerto, que se cobra igual en las cinco
+ * clases que tienen que nombrar su tipo de retorno.
+ *
+ * `getPseBanks(): Promise<PseBank[]>` subio el CBO de 5 a 6 en los cuatro
+ * adaptadores y en la fachada, todos de golpe y todos por la misma razon: CBO cuenta
+ * los tipos que aparecen en las firmas, y las cinco clases estaban exactamente en el
+ * umbral. No es que el diseño se acoplara mas de lo que debia, es que el puerto
+ * crecio, y este numero es justamente la evidencia de que crecer **no es gratis**:
+ * el issue #64 lo afirmo en prosa y la metrica lo cobro.
+ *
+ * Tampoco es acoplamiento de la clase que la metrica quiere detectar. `PseBank` es
+ * una interfaz de dos strings sin comportamiento, y CBO la cuenta igual que a un
+ * colaborador como `WebhookVerifier`, que se inyecta y se invoca. La señal que si
+ * discrimina eso es WMC, y las cinco clases estan por debajo del umbral: las dos que
+ * se habian pasado —Rapyd en 23 y Kushki en 22— se corrigieron de verdad moviendo
+ * traduccion a funciones de modulo, no declarando excepciones.
+ *
+ * Se descarto bajarlo de las dos formas que habia. Devolver el tipo estructural
+ * inline (`Promise<{ code: string; name: string }[]>`) esquiva el conteo sin cambiar
+ * el diseño, y ademas empeora lo que importa: el tipo pierde el nombre y la
+ * documentacion. Y sacar la lista de bancos a un puerto aparte implementado por
+ * cuatro clases nuevas mueve el acoplamiento sin reducirlo, y le devuelve al comercio
+ * la pregunta de si su pasarela sabe responder, que es la que el SDK existe para no
+ * tener que hacer.
+ *
+ * Ver architecture-log.md, punto 47.
+ */
+const PSE_BANKS_CBO_EXCEPTION = {
+  metric: 'CBO' as const,
+  reason: 'CBO 6 = 5 previos + PseBank, el tipo de retorno de getPseBanks(), ' +
+          'agregado al puerto al completar PSE. Es una interfaz de datos de dos ' +
+          'strings, no un colaborador, y las cinco clases afectadas estaban en el ' +
+          'umbral. Las violaciones de WMC del mismo cambio se corrigieron en vez de ' +
+          'declararse. Ver architecture-log.md, punto 47.',
+};
+
+for (const className of [
+  'WompiAdapter',
+  'MercadoPagoAdapter',
+  'RapydAdapter',
+  'KushkiAdapter',
+  'KitPagos',
+]) {
+  KNOWN_EXCEPTIONS[className] = [
+    ...(KNOWN_EXCEPTIONS[className] ?? []),
+    PSE_BANKS_CBO_EXCEPTION,
+  ];
+}
+
 // ── ANSI terminal colors ──────────────────────────────────────────────────────
 const RED   = '\x1b[31m';
 const GREEN = '\x1b[32m';

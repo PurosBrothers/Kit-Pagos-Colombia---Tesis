@@ -1,8 +1,13 @@
 import { randomBytes } from "node:crypto";
 import {
+  RapydCreateCustomerRequestBody,
   RapydCreatePaymentRequestBody,
+  RapydCustomerResponse,
   RapydPayment,
+  RapydPaymentMethodsResponse,
+  RapydPaymentMethodType,
   RapydPaymentResponse,
+  RapydResponseStatus,
 } from "./types";
 
 /**
@@ -32,17 +37,7 @@ export class GatewayMockFactory {
 
   /** Envuelve el objeto de negocio en el sobre `{ status, data }` que Rapyd usa siempre. */
   private static wrap(data: RapydPayment): RapydPaymentResponse {
-    return {
-      status: {
-        error_code: "",
-        status: "SUCCESS",
-        message: "",
-        response_code: "",
-        // Rapyd devuelve un UUID de operacion para trazar la llamada de API.
-        operation_id: randomBytes(16).toString("hex"),
-      },
-      data,
-    };
+    return { status: GatewayMockFactory.buildStatus(), data };
   }
 
   /**
@@ -96,5 +91,123 @@ export class GatewayMockFactory {
       failure_message: "",
       created_at: Math.floor(Date.now() / 1000),
     });
+  }
+
+  /**
+   * Respuesta de `POST /v1/customers`, la primera de las dos llamadas de PSE.
+   *
+   * Rapyd prefija los identificadores de cliente con `cus_` y 32 caracteres
+   * hexadecimales, igual que los de pago con `payment_`. Medido contra el sandbox
+   * real: `cus_01f2f7ddace1fc8aa19ae9c535d7fb57`.
+   */
+  buildCustomerResponse(
+    requestBody: RapydCreateCustomerRequestBody,
+  ): RapydCustomerResponse {
+    return {
+      status: GatewayMockFactory.buildStatus(),
+      data: {
+        id: `cus_${randomBytes(16).toString("hex")}`,
+        name: requestBody.name ?? "",
+        email: requestBody.email ?? "",
+        phone_number: requestBody.phone_number ?? "",
+        created_at: Math.floor(Date.now() / 1000),
+      },
+    };
+  }
+
+  /**
+   * Respuesta de un pago por PSE recien creado.
+   *
+   * Reproduce lo medido contra el sandbox real el 18 de septiembre de 2026, que se
+   * separa del flujo de tarjeta en tres cosas:
+   *
+   * 1. `status: "ACT"` con `paid: false`, no `CLO` con `paid: true`. El pago
+   *    arranco y nadie cobro nada todavia.
+   * 2. `next_action: "pending_confirmation"`, que **no** es el
+   *    `"3d_verification"` del flujo de tarjeta. Importa que el mock use el valor
+   *    real: si usara el de 3DS, una prueba podria pasar por la razon equivocada.
+   * 3. La `redirect_url` viene **en esta misma respuesta**, sin sondeo, a
+   *    diferencia de Wompi. Y lleva incrustadas las dos URL de retorno del
+   *    comercio como parametros, que es la unica evidencia de que el SDK las
+   *    envio de verdad.
+   */
+  buildPseCreatedResponse(
+    requestBody: RapydCreatePaymentRequestBody,
+  ): RapydPaymentResponse {
+    const id = GatewayMockFactory.buildPaymentId();
+    const params = new URLSearchParams({ token: id });
+
+    if (requestBody.complete_payment_url) {
+      params.set("complete_payment_url", requestBody.complete_payment_url);
+    }
+    if (requestBody.error_payment_url) {
+      params.set("error_payment_url", requestBody.error_payment_url);
+    }
+
+    return GatewayMockFactory.wrap({
+      id,
+      status: "ACT",
+      paid: false,
+      amount: requestBody.amount,
+      currency_code: requestBody.currency,
+      merchant_reference_id: requestBody.merchant_reference_id,
+      receipt_email: requestBody.receipt_email ?? "",
+      failure_code: "",
+      failure_message: "",
+      created_at: Math.floor(Date.now() / 1000),
+      next_action: "pending_confirmation",
+      redirect_url: `https://sandboxcheckout.rapyd.net/complete-bank-payment?${params.toString()}`,
+      customer: typeof requestBody.customer === "string" ? requestBody.customer : "",
+    });
+  }
+
+  /**
+   * Catalogo de metodos de pago de Colombia, del que PSE es una parte.
+   *
+   * Rapyd no tiene lista de bancos: devuelve el catalogo del pais y PSE son 47
+   * entradas dentro. El mock incluye cuatro de esos 47 mas un metodo que **no** es
+   * PSE, a proposito: sin una entrada que haya que descartar, una prueba del filtro
+   * pasaria aunque el filtro no filtrara nada.
+   *
+   * Los nombres son los reales medidos contra el sandbox.
+   */
+  buildPaymentMethodsResponse(): RapydPaymentMethodsResponse {
+    const pseBanks: readonly [string, string][] = [
+      ["co_pse_bancolombia_bank", "Bancolombia"],
+      ["co_pse_banco_davivienda_bank", "Banco Davivienda"],
+      ["co_pse_banco_de_bogota_bank", "Banco de Bogota"],
+      ["co_pse_banco_av_villas_bank", "Banco AV Villas"],
+    ];
+
+    const methods: RapydPaymentMethodType[] = pseBanks.map(([type, name]) => ({
+      type,
+      name,
+      category: "bank_redirect",
+      image: "",
+      country: "CO",
+      payment_flow_type: "BANK_REDIRECT",
+    }));
+
+    methods.push({
+      type: "co_visa_card",
+      name: "Visa",
+      category: "card",
+      image: "",
+      country: "CO",
+      payment_flow_type: "",
+    });
+
+    return { status: GatewayMockFactory.buildStatus(), data: methods };
+  }
+
+  /** Sobre de exito, compartido por las tres clases de respuesta. */
+  private static buildStatus(): RapydResponseStatus {
+    return {
+      error_code: "",
+      status: "SUCCESS",
+      message: "",
+      response_code: "",
+      operation_id: randomBytes(16).toString("hex"),
+    };
   }
 }

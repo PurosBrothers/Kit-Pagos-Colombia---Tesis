@@ -4,6 +4,7 @@ import {
   ScenarioEngine,
   UnsupportedScenarioError,
 } from "../scenarios/ScenarioEngine";
+import { GatewayMockFactory } from "../gateways/wompi/GatewayMockFactory";
 import { WompiCreateTransactionRequestBody, WompiTransaction } from "../gateways/wompi/types";
 import { transactionStore } from "../store/TransactionStore";
 
@@ -31,6 +32,7 @@ const SCENARIO_HEADER = "x-simulate-scenario";
  */
 export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   const scenarioEngine = new ScenarioEngine();
+  const mockFactory = new GatewayMockFactory();
 
   // ── POST /v1/sim/wompi/transactions ──────────────────────────────────────
   app.post(
@@ -79,10 +81,55 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      // Un PSE pendiente avanza un paso en cada consulta: primero publica la URL
+      // de redirección sin salir de PENDING, y después resuelve. La decisión de
+      // cómo avanza es de la fábrica, no del router.
+      const resolved =
+        transaction.status === "PENDING" && transaction.payment_method?.type === "PSE"
+          ? mockFactory.advancePseTransaction(transaction)
+          : transaction;
+
       // Wompi wraps the transaction in { data: ... } for both creation and
       // status queries. The same shape is preserved here so ResponseNormalizer
       // does not need a separate branch for status query responses.
-      return reply.code(200).send({ data: transaction });
+      return reply.code(200).send({ data: resolved });
+    },
+  );
+
+  // ── GET /v1/sim/wompi/merchants/:publicKey ───────────────────────────────
+  //
+  // El SDK la llama antes de crear cualquier transacción, porque Wompi exige un
+  // `acceptance_token` firmado y de un solo uso. Existe acá para que el SDK
+  // tenga un solo camino de código y no una rama "modo simulador".
+  app.get(
+    "/v1/sim/wompi/merchants/:publicKey",
+    async (_request: FastifyRequest, reply: FastifyReply) => {
+      return reply.code(200).send(mockFactory.buildMerchantResponse());
+    },
+  );
+
+  /**
+   * Lista de entidades financieras de PSE.
+   *
+   * Reproduce lo medido contra el sandbox real el 18 de septiembre de 2026, con los
+   * tres bancos de prueba y sus nombres textuales. Son los codigos que fuerzan cada
+   * desenlace: 1 aprueba, 2 declina y 3 simula un error.
+   *
+   * Los nombres van tal cual, sin cambiarlos por nombres de bancos reales, por dos
+   * razones: es lo que devuelve el sandbox, y un comercio que ve "Banco que
+   * declina" en su selector sabe de inmediato contra que entorno esta apuntando.
+   */
+  app.get(
+    "/v1/sim/wompi/pse/financial_institutions",
+    async (_request: FastifyRequest, reply: FastifyReply) => {
+      return reply.code(200).send({
+        data: [
+          { financial_institution_code: "1", financial_institution_name: "Banco que aprueba" },
+          { financial_institution_code: "2", financial_institution_name: "Banco que declina" },
+          { financial_institution_code: "3", financial_institution_name: "Banco que simula un error" },
+        ],
+        meta: {},
+      });
     },
   );
 }

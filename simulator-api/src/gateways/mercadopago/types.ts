@@ -57,6 +57,90 @@ export interface MercadoPagoPaymentResponse {
   date_approved?: string | null;
 }
 
+/**
+ * Contratos de la Orders API (`/v1/orders`), que es por donde se cobra PSE.
+ *
+ * No es una variante del cuerpo de `/v1/payments`: es otra API, con otro
+ * vocabulario de estados y con los montos como **string sin decimales**. Todo lo
+ * que sigue reproduce la forma que devolvió la API real el 18 de septiembre de
+ * 2026; el detalle de lo medido está en `sdk/src/infrastructure/adapters/mercadopago-pse.ts`.
+ */
+
+/** Cuerpo de la solicitud para crear una orden (POST /v1/orders). */
+export interface MercadoPagoCreateOrderRequestBody {
+  type?: string;
+  total_amount: string;
+  external_reference?: string;
+  processing_mode?: string;
+  payer: MercadoPagoPayer & {
+    entity_type?: string;
+    phone?: { area_code?: string; number?: string };
+    address?: Record<string, string>;
+  };
+  transactions: {
+    payments: Array<{
+      amount: string;
+      payment_method: {
+        id: string;
+        type: string;
+        financial_institution?: string;
+      };
+    }>;
+  };
+  additional_info?: Record<string, unknown>;
+  config?: { online?: { callback_url?: string } };
+}
+
+/**
+ * Estados nativos de una orden.
+ *
+ * `action_required` es el que importa para PSE: la orden existe y espera que el
+ * pagador vuelva del banco. Convive con `processed` (pagada) y `failed`.
+ */
+export type MercadoPagoOrderStatus =
+  | "created"
+  | "processing"
+  | "action_required"
+  | "processed"
+  | "canceled"
+  | "failed"
+  | "expired";
+
+/** Respuesta nativa de la Orders API (POST /v1/orders y GET /v1/orders/:id). */
+export interface MercadoPagoOrderResponse {
+  id: string;
+  type: string;
+  processing_mode: string;
+  external_reference?: string;
+  /** String sin decimales: la API real rechaza `"2000.00"` con HTTP 400. */
+  total_amount: string;
+  total_paid_amount: string;
+  country_code: string;
+  status: MercadoPagoOrderStatus;
+  status_detail: string;
+  currency: string;
+  created_date: string;
+  last_updated_date: string;
+  /** La API real solo devuelve `entity_type` acá; no repite el email del pagador. */
+  payer: { entity_type?: string };
+  config?: { online?: { callback_url?: string } };
+  transactions: {
+    payments: Array<{
+      id: string;
+      amount: string;
+      reference_id: string;
+      status: MercadoPagoOrderStatus;
+      status_detail: string;
+      payment_method: {
+        id: string;
+        type: string;
+        redirect_url?: string;
+        financial_institution?: string;
+      };
+    }>;
+  };
+}
+
 /** Formato nativo de la notificación webhook de dos pasos de Mercado Pago. */
 export interface MercadoPagoWebhookNotification {
   action?: string;

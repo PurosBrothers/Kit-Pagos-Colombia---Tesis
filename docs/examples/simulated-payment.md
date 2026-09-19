@@ -29,7 +29,7 @@ Toda la integración cabe en dos bloques. El primero configura el SDK una sola v
 const kitPagos = new KitPagos({
   gateway: Gateway.WOMPI,
   credentials: { [Gateway.WOMPI]: { publicKey: "pub_test_...", privateKey: "prv_test_..." } },
-  baseUrl: "http://localhost:3000/v1/sim/wompi/transactions",
+  baseUrl: "http://localhost:3000/v1/sim/wompi",
 });
 ```
 

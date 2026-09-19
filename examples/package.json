@@ -2,14 +2,19 @@
   "name": "kit-pagos-colombia-examples",
   "version": "0.1.0",
   "private": true,
-  "description": "Ejemplos ejecutables de integración del SDK Kit Pagos Colombia, consumido como un paquete externo.",
+  "description": "Ejemplos ejecutables de integraci\u00f3n del SDK Kit Pagos Colombia, consumido como un paquete externo.",
   "scripts": {
     "start": "tsx simulate-wompi-payment.ts",
     "simulate:wompi": "tsx simulate-wompi-payment.ts",
+    "simulate:wompi-pse": "tsx simulate-wompi-pse.ts",
     "simulate:mercadopago": "tsx simulate-mercadopago-payment.ts",
+    "simulate:mercadopago-pse": "tsx simulate-mercadopago-pse.ts",
     "simulate:rapyd": "tsx simulate-rapyd-payment.ts",
     "simulate:kushki": "tsx simulate-kushki-payment.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "simulate:pse-bancos": "tsx simulate-pse-bancos.ts",
+    "simulate:rapyd-pse": "tsx simulate-rapyd-pse.ts",
+    "simulate:kushki-pse": "tsx simulate-kushki-pse.ts"
   },
   "author": "Andres Henao, Joan Orduz, Joshua Prieto, David Rodriguez",
   "license": "Apache-2.0",
