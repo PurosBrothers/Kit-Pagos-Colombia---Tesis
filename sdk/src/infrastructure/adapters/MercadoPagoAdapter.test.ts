@@ -62,7 +62,11 @@ describe("MercadoPagoAdapter", () => {
         "http://localhost:3000/v1/sim/mercadopago/payments",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            // Sin este header Mercado Pago no crea nada; ver el docstring de request().
+            "X-Idempotency-Key": expect.any(String),
+          },
           body: JSON.stringify({
             transaction_amount: 50000,
             description: "ORDER-MP-123",
@@ -101,9 +105,72 @@ describe("MercadoPagoAdapter", () => {
           headers: {
             "Content-Type": "application/json",
             Authorization: "Bearer APP_USR_priv_secret_456",
+            "X-Idempotency-Key": expect.any(String),
           },
         })
       );
+    });
+
+    /**
+     * Mercado Pago es la única de las cuatro que exige una llave de idempotencia, y sin ella
+     * no crea nada: `400 "Header X-Idempotency-Key can't be null"` en `/payments` y
+     * `400 "Missing HTTP header: X-Idempotency-Key."` en `/orders`, que es por donde va PSE.
+     * Lo encontraron las pruebas contra sandbox; las mediciones a mano mandaban el header sin
+     * pensarlo y el simulador no lo pedía, así que el SDK no podía cobrar por ningún método.
+     */
+    it("manda una llave de idempotencia en cada creación", async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => approvedMpResponse,
+      });
+      global.fetch = mockFetch;
+
+      await new MercadoPagoAdapter().createPayment(validRequest);
+
+      const key = mockFetch.mock.calls[0][1].headers["X-Idempotency-Key"];
+      expect(key).toBeTruthy();
+    });
+
+    /**
+     * Una llave por intento, no derivada de la referencia de la orden.
+     *
+     * Con la referencia como llave, Mercado Pago devolvería la respuesta original en el
+     * segundo intento, y un cobro rechazado quedaría incobrable: reintentar con otra tarjeta
+     * sobre la misma orden repetiría el rechazo viejo.
+     */
+    it("usa una llave distinta en cada intento del mismo pedido", async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => approvedMpResponse,
+      });
+      global.fetch = mockFetch;
+
+      const adapter = new MercadoPagoAdapter();
+      await adapter.createPayment(validRequest);
+      await adapter.createPayment(validRequest);
+
+      const [primera, segunda] = mockFetch.mock.calls.map(
+        (call) => call[1].headers["X-Idempotency-Key"],
+      );
+      expect(primera).not.toBe(segunda);
+    });
+
+    /** Una consulta no crea nada, así que no necesita llave. */
+    it("no manda llave de idempotencia al consultar", async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => approvedMpResponse,
+      });
+      global.fetch = mockFetch;
+
+      await new MercadoPagoAdapter().getStatus("1234567890");
+
+      expect(
+        mockFetch.mock.calls[0][1].headers["X-Idempotency-Key"],
+      ).toBeUndefined();
     });
 
     it("traduce fallos de red a KitPagosError(CONNECTION_FAILED)", async () => {

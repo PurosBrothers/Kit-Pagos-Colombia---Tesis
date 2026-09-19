@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import {
   PaymentGatewayPort,
   CreatePaymentRequest,
@@ -176,6 +177,24 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
    *
    * Consolidada por la misma razón que en WompiAdapter: estaba duplicada entre
    * `createPayment` y `getStatus`, y con PSE habría quedado tres veces.
+   *
+   * ## `X-Idempotency-Key` en cada POST
+   *
+   * Mercado Pago **no crea nada sin ese header**, y es la única de las cuatro que lo exige.
+   * Medido con las pruebas de contra sandbox (`test/sandbox/`): `POST /v1/payments` responde
+   * `400 "Header X-Idempotency-Key can't be null"` y `POST /v1/orders`, que es por donde va
+   * PSE, `400 "Missing HTTP header: X-Idempotency-Key."`. O sea que sin esto el SDK no podía
+   * cobrar en Mercado Pago **por ningún método**, y no se había visto porque las mediciones a
+   * mano mandaban el header y el simulador no lo pedía.
+   *
+   * Es un valor nuevo por llamada y no derivado de `orderReference`, que era la alternativa
+   * tentadora: con la referencia como llave, dos intentos de cobrar la misma orden producirían
+   * un solo cobro, lo cual suena a más seguridad. El problema es que Mercado Pago devuelve la
+   * respuesta original para una llave repetida, así que un cobro rechazado quedaría
+   * incobrable: reintentarlo con otra tarjeta sobre la misma orden devolvería el rechazo
+   * viejo. La protección contra el doble débito en este SDK es otra y ya está tomada:
+   * `createPayment()` es la única operación que **no** se envuelve en `RetryHandler`
+   * (punto 35 del `architecture-log.md`).
    */
   private async request(url: string, method: string, body?: string): Promise<unknown> {
     const headers: Record<string, string> = {
@@ -183,6 +202,9 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
     };
     if (this.credentials?.privateKey) {
       headers["Authorization"] = `Bearer ${this.credentials.privateKey}`;
+    }
+    if (method === "POST") {
+      headers["X-Idempotency-Key"] = randomUUID();
     }
 
     let response: Response;
