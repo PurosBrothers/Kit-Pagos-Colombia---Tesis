@@ -40,8 +40,31 @@ Para probar la recepción de pagos únicos con tarjeta:
 | **Tarjeta Bloqueada** | `4349 0013 8678 1322` | `(023) Tarjeta bloqueada por el banco` |
 
 > **Nota:** Para todas las tarjetas de prueba, el CVV, Código Postal y Fecha de Expiración en el futuro son libres (cualquier valor es válido).
-> 
-> 
+
+### 1.1. El cobro medido contra la API real (19 de septiembre de 2026)
+
+El cobro con tarjeta son dos llamadas, y las tres cosas que el SDK tenía mal estaban en la
+segunda (punto 50 del `architecture-log.md`):
+
+| Paso | Llamada | Autenticación |
+| --- | --- | --- |
+| 1 | `POST /card/v1/tokens` con el objeto `card`, `totalAmount` y `currency` | `Public-Merchant-Id` |
+| 2 | `POST /card/v1/charges` con el token, el `amount` desglosado y `fullResponse: true` | `Private-Merchant-Id` |
+
+- **La ruta es `/card/v1/charges`.** `POST /charges` responde `403 Forbidden`, exactamente lo
+  mismo que una ruta inventada, así que ese 403 no dice nada sobre si la ruta existe.
+- **El token tiene que ser real.** Con el literal `"simulated-token"` responde
+  `400 K001 "Cuerpo de la petición inválido."`.
+- **Hace falta `fullResponse: true`.** Sin esa bandera la respuesta es
+  `{ticketNumber, transactionReference}` y nada más: no trae monto ni estado, así que no
+  alcanza para saber si el cobro salió. Con la bandera, el estado llega en
+  `details.transactionStatus` y el monto desarmado en campos sueltos (`subtotalIva0`,
+  `ivaValue`, `currencyCode`), no como el objeto `amount` que se envió.
+- **Las cuotas se llaman `months`** y son opcionales.
+- **La cuenta UAT aprueba todo.** Las tarjetas de rechazo de la tabla de arriba se cobraron y
+  respondieron `APPROVAL`, así que los desenlaces de rechazo no se pudieron observar.
+- **No se encontró cómo consultar un cobro con tarjeta.** `GET /card/v1/charges/{ticket}`
+  responde `403 "Missing Authentication Token"`. Sigue pendiente desde el punto 48.
 
 ---
 

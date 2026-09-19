@@ -50,6 +50,37 @@ Ingresa los siguientes valores en el campo **Nombre y Apellido del Titular** par
 | **No Soportado** | `UNSU` | `-` |
 | **Usado para Aplicar Regla de Montos** | `TEST` | `-` |
 
+### 1.1. El cobro medido contra la API real (19 de septiembre de 2026)
+
+Dos llamadas: `POST /v1/card_tokens?public_key=...` con los datos de la tarjeta, y
+`POST /v1/payments` con el token. Lo que apareció al medir (punto 50 del
+`architecture-log.md`):
+
+- **`installments` es obligatorio, incluso cuando es 1.** Sin el campo responde
+  `400 "Invalid installments"`, y se comprobó con tres tarjetas colombianas distintas. Es la
+  única de las cuatro pasarelas que lo exige siempre, y la razón de que las cuotas vivan en
+  `PaymentMethod` y no en un adaptador.
+- **`payment_method_id` no se manda: se deduce del token.** Omitir el token responde
+  `400 "payment_method_id attribute can't be null"`, que nombra un campo que el comercio no
+  tiene que escribir. Con token, la respuesta trae `payment_method_id: "visa"` o `"master"`.
+- **El token es de un solo uso.** Reusarlo en un segundo cobro responde `400 "bin_not_found"`,
+  que es un mensaje sobre el BIN y no sobre el token: fácil de perseguir por el lado
+  equivocado.
+- **Un rechazo viaja con `201`.** La cuenta de prueba rechazó con
+  `cc_rejected_high_risk`, `cc_rejected_max_attempts` y `pending_review_manual`, siempre con
+  HTTP `201`: el código HTTP no dice si el pago salió, solo que la transacción se creó.
+
+```json
+{
+  "transaction_amount": 150000,
+  "description": "ORDER-1042",
+  "external_reference": "ORDER-1042",
+  "token": "016e85e4a608bfb0c1787ae2f4ed91e0",
+  "installments": 1,
+  "payer": { "email": "comprador@example.com" }
+}
+```
+
 ---
 
 ## 2. PSE (Pagos Seguros en Línea)

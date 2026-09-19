@@ -1161,6 +1161,125 @@ Sin verificar: el desenlace. Llevar una transferencia hasta `approvedTransaction
 
 ---
 
+### 49. El alcance de métodos de pago queda en tarjeta y PSE, y `CASH` sale del dominio
+
+**Contexto.** El objeto de valor `PaymentMethod`, que entró con el PR #85, modelaba tres formas de pago: `CARD`, `PSE` y `CASH`. Las dos primeras las cobran las cuatro pasarelas. La tercera no la cobraba **ninguna**, y los cuatro adaptadores la rechazaban explícitamente con `UNSUPPORTED_OPERATION`.
+
+**Decisión.** El alcance del trabajo queda en **tarjeta y PSE**, que son los dos métodos dominantes en Colombia, y `CASH` se quita del tipo. El issue que pedía implementar efectivo en al menos una pasarela se cerró sin hacerse.
+
+**Por qué quitarlo y no dejarlo esperando.** Porque un valor que el tipo admite y que los cuatro adaptadores rechazan no es extensibilidad, es una promesa que el compilador deja escribir y que falla en ejecución. El comercio que lee `PaymentMethodType` ve tres opciones y solo dos existen, así que el tipo —que es la documentación que no se puede desactualizar— estaba desactualizado por construcción. Dejarlo "para más adelante" tenía un costo concreto y ningún beneficio: ninguna prueba lo ejercitaba contra una pasarela, porque no había nada que ejercitar.
+
+**Lo que no se quitó, y por qué.** La guarda `assertSupportedPaymentMethod` se queda, aunque con dos valores en el tipo y las cuatro pasarelas soportando los dos no tenga hoy nada que rechazar en tiempo de compilación. Sigue cubriendo dos casos reales: un comercio que integra desde JavaScript, sin tipos, y puede mandar cualquier cosa; y el día en que una pasarela soporte un método que otra no, que es la asimetría que el SDK existe para absorber. Su prueba pasó a construir el método inválido con un cast deliberado, porque es la única forma de escribir el caso que el compilador impide.
+
+**Estado:** Aplicado. `PaymentMethodType` pasó a `"CARD" | "PSE"`, se quitaron el constructor `cash()` y el campo `cashNetwork`, y la investigación sobre efectivo que ya estaba hecha se conserva en `docs/testing-data/` y en `ubiquitous-language.md`: sirve para el día en que se retome, y no afirma que el SDK lo soporte.
+
+---
+
+### 50. Medir el cobro con tarjeta en las cuatro pasarelas: ninguna lo cobraba, y el simulador decía que sí
+
+**Contexto.** La tarjeta fue el primer método que el SDK dijo soportar y el último que se midió. Los puntos 43, 44 y 48 habían medido PSE en las cuatro pasarelas y corregido diez defectos; tarjeta seguía siendo el camino "que ya funcionaba", con los cuatro ejemplos en verde contra la API de Simulación y 509 pruebas pasando. Se midió contra los cuatro sandboxes el 19 de septiembre de 2026, tokenizando una tarjeta de prueba en cada pasarela y cobrándola.
+
+**Lo que apareció.** **Ninguna de las cuatro podía cobrar una tarjeta.** No es una exageración retórica: cada una fallaba por su cuenta, y por motivos distintos.
+
+| # | Pasarela | Lo que el SDK hacía | Lo que la API responde | Consecuencia |
+| --- | --- | --- | --- | --- |
+| 1 | Wompi | No mandaba `payment_method` | `422 UNPROCESSABLE "No se especificó método de pago o fuente de pago"` | Ningún cobro con tarjeta salía |
+| 2 | Mercado Pago | No mandaba `token` | `400 "payment_method_id attribute can't be null"` | Ídem |
+| 3 | Mercado Pago | No mandaba `installments` | `400 "Invalid installments"` | Ídem, incluso con token |
+| 4 | Kushki | Cobraba en `POST /charges` | `403 Forbidden`, igual que una ruta inventada | Ídem |
+| 5 | Kushki | Mandaba el literal `"simulated-token"` | `400 K001 "Cuerpo de la petición inválido."` | Ídem |
+| 6 | Kushki | Leía `amount` y estado de la raíz | Sin `fullResponse` la respuesta es `{ticketNumber, transactionReference}` y nada más | `MALFORMED_RESPONSE`, sin poder armar la `Transaction` |
+| 7 | Rapyd | Cobraba el token en `POST /v1/payments` | `CREATE_CARD_TYPE_REQUIRES_ONLY_ONE_OF_FIELDS_OR_TOKEN`; con los datos de la tarjeta, `MISSING_PAYMENT_METHOD_REQUIRED_FIELD` | Ídem |
+| 8 | Rapyd | Consultaba el checkout en `/payments/{id}` | `400 ERROR_GET_PAYMENT` | El estado del cobro era inconsultable |
+
+El patrón es el de siempre, y ya es la cuarta vez: **el dato que hace falta para cobrar —el token de la tarjeta— no viajaba en ninguna de las cuatro**, y aun así todo estaba en verde, porque los cuatro mocks lo aceptaban ausente. Un mock que acepta más que la pasarela no es un mock permisivo: es una prueba que afirma lo contrario de la verdad.
+
+---
+
+#### Lo que cada pasarela pide para cobrar una tarjeta, medido
+
+| | Ruta | Token | Cuotas | Respuesta al crear |
+| --- | --- | --- | --- | --- |
+| Wompi | `POST /transactions` | en `payment_method.token` | `installments`, opcional | `201` con `status: "PENDING"` y `finalized_at: null` |
+| Mercado Pago | `POST /v1/payments` | `token` en la raíz | `installments`, **obligatorio** | `201`, con el resultado en el cuerpo |
+| Kushki | `POST /card/v1/charges` | `token` en la raíz | `months`, opcional | `201`, con `details` anidado si se pide `fullResponse` |
+| Rapyd | `POST /v1/checkout` | **no lleva token** | las elige el pagador | `200` con `status: "NEW"` y el pago en `null` |
+
+Cuatro rutas distintas, tres nombres para las cuotas, dos códigos HTTP de creación y un caso donde el token no existe. Es exactamente la clase de diferencia que el SDK existe para absorber, y ninguna era deducible de la documentación: las ocho filas de la tabla anterior salieron de llamar.
+
+---
+
+#### Las cuotas tuvieron que subir al dominio
+
+Mercado Pago **no cobra sin `installments`**, ni siquiera cuando son una: sin el campo responde `400 "Invalid installments"`, y se comprobó tres veces con tres tarjetas colombianas distintas. Wompi las acepta y no las exige, Kushki las llama `months`, y Rapyd se las pregunta al pagador en su página.
+
+Eso deja una decisión: o cada adaptador inventa un valor por omisión —y el comercio no sabe en cuántas cuotas cobró—, o el dato es parte de lo que el comercio declara. Se eligió lo segundo: `PaymentMethod.card(token, { installments })`, entero y mayor o igual a 1, validado en el constructor, con 1 por omisión. Que el valor por omisión sea explícito y esté en un solo lugar es lo que permite que cada adaptador lo traduzca a su nombre nativo sin decidir nada.
+
+---
+
+#### El token es opcional, y es por Rapyd
+
+`PaymentMethod.card()` admite construirse **sin token**, lo cual parece un agujero en el tipo y es lo contrario: es la única forma honesta de expresar lo que Rapyd hace.
+
+Rapyd no cobra tarjetas servidor-a-servidor sin que el número de la tarjeta pase por el servidor del comercio. Medido: un método de tarjeta con token responde `CREATE_CARD_TYPE_REQUIRES_ONLY_ONE_OF_FIELDS_OR_TOKEN`, y la variante que la API sí acepta exige `number`, `expiration_month`, `cvv` y el nombre del titular en el cuerpo de la petición. Recibir eso metería al comercio dentro del alcance de PCI DSS, que es justamente lo que un SDK de pagos debería evitarle.
+
+El camino que sí funciona es la página de pago alojada, `POST /v1/checkout`: el comercio manda monto, divisa, país y la categoría `card`, y recibe una URL a la que redirigir. La tarjeta la escribe el pagador en un dominio de Rapyd. Por eso el cobro con tarjeta de Rapyd devuelve `REDIRECT_REQUIRED`, **la misma rama del contrato de retorno que usa PSE en las cuatro pasarelas**, y el código del comercio no cambia. Las tres pasarelas que sí cobran con token lo exigen antes de salir a la red, con un error que dice qué falta y en qué endpoint se tokeniza.
+
+Y una consecuencia que no se ve hasta consultar: la página de pago tiene su propio identificador, con prefijo `checkout_` en vez de `payment_`, y consultarlo en `/payments/{id}` responde `400 ERROR_GET_PAYMENT`. El adaptador elige la ruta de consulta por el prefijo. Es discriminar por la forma del identificador, que es frágil por naturaleza, pero acá está medido y es el propio esquema de Rapyd: prefija todos sus recursos.
+
+---
+
+#### Kushki: la ruta era otra, y la respuesta no alcanzaba
+
+Tres de los ocho defectos son de Kushki, y los tres estaban en la misma llamada.
+
+La ruta que el SDK usaba, `POST /charges`, responde `403 Forbidden`. Conviene detenerse en ese código: no es un `404`, así que **no se distingue de una ruta que no existe**, y es la misma respuesta que da una ruta inventada de control. La ruta real es `POST /card/v1/charges`. Es el mismo problema que el punto 48 documentó para la consulta de estado, y la misma conclusión: contra Kushki, un 403 no dice nada sobre si la ruta existe.
+
+El token `"simulated-token"` estaba escrito en el código del adaptador, no en una prueba. Contra la API real responde `400 K001`, y contra el mock funcionaba perfecto.
+
+Y la forma de la respuesta: `POST /card/v1/charges` devuelve `{ticketNumber, transactionReference}` a secas, sin monto y sin estado, así que no alcanza para construir una `Transaction`. Hay que pedir `fullResponse: true`, y entonces el estado y el monto llegan **anidados en `details` y con otros nombres**: `details.transactionStatus` en camelCase, y el monto desarmado en campos sueltos (`subtotalIva0`, `ivaValue`, `currencyCode`) en vez del objeto `amount` que se mandó. Eso se traduce en un módulo aparte, `kushki-card.ts`, que aplana la respuesta antes de normalizarla; el normalizador reconoce la forma por la presencia del objeto `details`, que es lo único que la distingue de las otras dos formas que Kushki produce.
+
+---
+
+#### Wompi cobra la tarjeta de forma asíncrona, y el mock lo escondía
+
+`POST /transactions` con tarjeta responde `201` con `status: "PENDING"` y `finalized_at: null`, y la transacción pasa a `APPROVED` sola, unos cientos de milisegundos después, sin que nadie haga nada. O sea que **el resultado de un cobro con tarjeta no está en la respuesta de creación**: el comercio tiene que consultarlo.
+
+El mock devolvía `APPROVED` de una. No era una simplificación inocua: le escondía al comercio el único paso que no puede saltarse. El mock ahora crea el cobro `PENDING` y lo resuelve en la primera consulta, y el ejemplo de Wompi recorre el ciclo completo.
+
+Apareció además algo que no es de tarjeta pero que se encontró midiéndola: **Wompi no crea ninguna transacción sin la firma de integridad**. Tarjeta y PSE sin el campo `signature` responden `422 "Firma de integridad requerida no enviada"`. El SDK firma solo si el comercio configuró `integritySecret`, así que quien lo omita recibe ese 422 en vez de un error del SDK. Se intentó exigirlo acá y se desistió: la validación arrastra al token de aceptación, que es condicional por la misma razón y se obtiene de otra llamada, y mezclarlo con el trabajo de tarjeta dejaba las dos cosas a medias. Queda declarado, con issue propio.
+
+---
+
+#### Qué cambió en el simulador, y por qué eso es la mitad del trabajo
+
+Corregir los ocho defectos sin tocar los mocks habría dejado el repositorio en el peor estado posible: el código correcto y las pruebas afirmando la forma equivocada. Así que cada mock pasó a exigir lo que exige su pasarela y a devolver lo que devuelve:
+
+| Pasarela | El mock ahora |
+| --- | --- |
+| Wompi | Responde `422` sin `payment_method`, y crea el cobro `PENDING` |
+| Mercado Pago | Responde `400 "payment_method_id attribute can't be null"` sin token y `400 "Invalid installments"` sin cuotas |
+| Kushki | Cobra en `/card/v1/charges` con `201`, responde `400 K001` sin token o con `"simulated-token"`, y devuelve la forma anidada en `details` |
+| Rapyd | Expone `POST /v1/checkout` con `200` y `GET /checkout/{id}`, y la página se paga cuando el pagador la visita |
+
+La ruta de consulta de transferencias de Kushki además dejó de contestar por un ticket de tarjeta: antes respondía a cualquier identificador, así que un cobro con tarjeta se reportaba con el vocabulario de transferencia y el orden de las dos rutas nunca se ejercitaba.
+
+---
+
+#### Qué quedó verificado y qué no
+
+Verificado, contra los cuatro sandboxes: la tokenización, el cobro, y la forma exacta de cada respuesta de las tablas de arriba. Y contra la API de Simulación, los cuatro ejemplos de tarjeta de punta a punta, incluido el de Rapyd, que ahora recorre crear, redirigir, pagar y consultar.
+
+Sin verificar, y conviene que esté escrito:
+
+- **La consulta de estado de un cobro con tarjeta en Kushki.** Sigue sin ruta medida: es el pendiente que dejó el punto 48, y esta vez se confirmó que `GET /card/v1/charges/{ticket}` tampoco es, porque responde `403 "Missing Authentication Token"`.
+- **El desenlace de un cobro en Mercado Pago.** La cuenta de prueba rechaza con `cc_rejected_high_risk` y `cc_rejected_max_attempts`, así que se verificó que la transacción se crea (`201`) y no que se apruebe. De paso confirmó una decisión vieja: Mercado Pago responde `201` con `status: "rejected"`, o sea que el código HTTP no dice si el pago salió.
+- **La guarda del secreto de integridad de Wompi**, arriba.
+
+**Estado:** Corregido. Los ocho defectos tienen prueba de regresión con la forma medida como dato de entrada, y las cuatro pasarelas quedan al mismo nivel de evidencia para tarjeta que para PSE, que era la asimetría que quedaba abierta. Pendientes, los tres de la lista anterior.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum

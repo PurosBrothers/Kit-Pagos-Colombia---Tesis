@@ -20,6 +20,7 @@ import {
   Currency,
   OrderReference,
   Payer,
+  PaymentMethod,
   KitPagosError,
   KitPagosErrorCode,
   type SDKOptions,
@@ -28,12 +29,12 @@ import {
 /**
  * Endpoint del mock de Rapyd en la API de Simulación local.
  *
- * Es la URL de la colección de pagos: el SDK hace POST acá para crear y le
- * agrega `/{id}` para consultar. Contra el sandbox real de Rapyd el valor
- * equivalente sería `https://sandboxapi.rapyd.net/v1/payments`. Esto, igual que
- * las llaves, debería vivir en un archivo de configuración externo como un .env.
+ * Es la raíz de la API, no la colección de pagos: el adaptador le agrega la ruta de cada
+ * operación, y con tarjeta esa ruta es `/checkout` y no `/payments`. Contra el sandbox real
+ * el valor equivalente sería `https://sandboxapi.rapyd.net/v1`. Esto, igual que las llaves,
+ * debería vivir en un archivo de configuración externo como un .env.
  */
-const SIMULATOR_RAPYD_URL = "http://localhost:3000/v1/sim/rapyd/payments";
+const SIMULATOR_RAPYD_URL = "http://localhost:3000/v1/sim/rapyd";
 
 /**
  * Paso 1: Configurar el SDK para Rapyd.
@@ -85,12 +86,27 @@ async function main(): Promise<void> {
       email: "jaime.pavlich@example.com",
       fullName: "Jaime Pavlich",
     }),
+    /**
+     * Tarjeta **sin token**, y es lo correcto en Rapyd.
+     *
+     * Es la única de las cuatro pasarelas donde el comercio no tokeniza: Rapyd cobra la
+     * tarjeta en su propia página, y es ahí donde el pagador la escribe. El SDK acepta
+     * `PaymentMethod.card()` sin argumentos justamente para poder expresar esto, y las
+     * cuotas también las elige el pagador en esa página.
+     *
+     * No es una simplificación del ejemplo: cobrar un método de tarjeta guardado
+     * servidor-a-servidor responde `ERROR_CARD_NOT_AUTHENTICATED`, y la variante que sí
+     * cobra exige el número de la tarjeta en la petición, lo que metería al servidor del
+     * comercio dentro del alcance de PCI DSS. Ver el punto 50 del architecture-log.
+     */
+    paymentMethod: PaymentMethod.card(),
   };
 
   console.log("Solicitud de pago:");
   console.log(`  Monto:      ${request.amount.getValue()} ${request.currency.getCode()} (pesos con decimales, no centavos)`);
   console.log(`  Referencia: ${request.orderReference.getValue()}`);
-  console.log(`  Pagador:    ${request.payer.email}\n`);
+  console.log(`  Pagador:    ${request.payer.email}`);
+  console.log("  Tarjeta:    sin token, la pide la página de Rapyd\n");
 
   /**
    * Paso 3: Crear el pago en Rapyd.
@@ -106,65 +122,74 @@ async function main(): Promise<void> {
 
   /**
    * createPayment() devuelve o una transacción o una redirección pendiente, y hay
-   * que distinguir las dos antes de usar el resultado. Rapyd es la pasarela donde
-   * esto se nota: si el pago dispara 3DS, responde con una URL a la que el pagador
-   * tiene que ir, y el pago no avanza hasta que vaya. Un comercio que ignore esta
-   * rama deja el pago colgado hasta que expire.
+   * que distinguir las dos antes de usar el resultado.
    *
-   * El compilador obliga a escribir este bloque: `result.transaction` no existe
-   * hasta haber descartado el caso de redirección.
+   * **Con tarjeta, Rapyd siempre redirige.** No es 3DS ni un caso de borde: es que el
+   * cobro pasa por su página alojada, así que el comercio recibe una URL y un pago que
+   * todavía no existe. Un comercio que ignore esta rama deja el pago colgado hasta que
+   * expire, y el compilador lo obliga a escribirla: `result.transaction` no existe hasta
+   * haber descartado la redirección.
+   *
+   * Es la misma rama que toma el PSE de las cuatro pasarelas. Que tarjeta y PSE se
+   * resuelvan con el mismo código es el resultado que buscaba el contrato de retorno.
    */
-  if (result.outcome === "REDIRECT_REQUIRED") {
-    console.log("El pago requiere que el pagador complete un paso por fuera:");
-    console.log(`  Redirigir a:        ${result.redirect.redirectUrl}`);
-    console.log(`  ID en la pasarela:  ${result.redirect.gatewayTransactionId.value}`);
-    console.log(`  Estado nativo:      ${result.redirect.rawStatus}`);
-    console.log(
-      "  En una aplicación real, acá se responde con un redirect HTTP y el\n" +
-        "  estado final se conoce por webhook o consultando getPaymentStatus().",
+  if (result.outcome !== "REDIRECT_REQUIRED") {
+    throw new Error(
+      "Rapyd cobra la tarjeta en su página, así que este ejemplo espera una redirección.",
     );
-    return;
   }
 
-  const transaction = result.transaction;
-
-  console.log("Transacción creada exitosamente:");
-  console.log(`  ID en la pasarela:  ${transaction.gatewayTransactionId.value}`);
-  console.log(`  Pasarela de origen: ${transaction.gatewayTransactionId.gateway}`);
-  console.log(`  Estado normalizado: ${transaction.getStatus()}`);
-  console.log(`  Estado nativo:      ${transaction.rawStatus} (código propio de Rapyd, conservado para auditoría)`);
-  console.log(`  Monto:              ${transaction.amount.getValue()} ${transaction.currency.getCode()}`);
-  console.log(`  Referencia:         ${transaction.orderReference.getValue()}`);
-  console.log(`  Pagador:            ${transaction.payer.email}`);
-  console.log(`  Aprobada:           ${transaction.isApproved()}`);
-  console.log(`  Estado final:       ${transaction.isFinal()}\n`);
+  console.log("El pago requiere que el pagador pague en la página de Rapyd:");
+  console.log(`  Redirigir a:        ${result.redirect.redirectUrl}`);
+  console.log(`  ID en la pasarela:  ${result.redirect.gatewayTransactionId.value}`);
+  console.log(`  Estado nativo:      ${result.redirect.rawStatus}\n`);
 
   /**
-   * Paso 4: Consultar el estado del pago por su identificador.
+   * Paso 4: el pagador paga.
    *
-   * En Rapyd este flujo sí funciona contra el simulador. Vale notar que la
-   * consulta se firma igual que la creación: a diferencia de Wompi, Rapyd no
-   * tiene un esquema reducido de solo lectura donde bastara una llave pública.
+   * En una aplicación real acá se responde un redirect HTTP y este paso lo hace una
+   * persona en el navegador. Contra el simulador se representa visitando la URL, que es
+   * el único punto donde el cobro se concreta: una página creada y no visitada se queda
+   * en `NEW` para siempre, igual que contra el sandbox real.
+   */
+  console.log("Simulando que el pagador paga en la página...");
+  await fetch(result.redirect.redirectUrl);
+
+  /**
+   * Paso 5: Consultar el estado, que es la única forma de saber si pagó.
+   *
+   * El identificador que se consulta es el de la **página**, con prefijo `checkout_`, y
+   * el SDK elige la ruta por ese prefijo: consultarlo en `/payments/{id}` responde
+   * `400 ERROR_GET_PAYMENT`. La consulta se firma igual que la creación: a diferencia de
+   * Wompi, Rapyd no tiene un esquema reducido de solo lectura.
    */
   console.log("Consultando el estado de la transacción en Rapyd...");
   const consulted = await kitPagos.getPaymentStatus(
-    transaction.gatewayTransactionId.value
+    result.redirect.gatewayTransactionId.value,
   );
 
   console.log("Transacción consultada exitosamente:");
   console.log(`  ID consultado:      ${consulted.gatewayTransactionId.value}`);
   console.log(`  Estado normalizado: ${consulted.getStatus()}`);
-  console.log(`  Estado nativo:      ${consulted.rawStatus}\n`);
+  console.log(`  Estado nativo:      ${consulted.rawStatus} (código propio de Rapyd, conservado para auditoría)`);
+  console.log(`  Monto:              ${consulted.amount.getValue()} ${consulted.currency.getCode()}`);
+  console.log(`  Referencia:         ${consulted.orderReference.getValue()}`);
+  console.log(`  Aprobada:           ${consulted.isApproved()}`);
+  console.log(`  Estado final:       ${consulted.isFinal()}\n`);
 
   /**
    * Cierre: qué demostró el ejemplo.
    *
-   * El estado nativo que imprimió el paso 3 es "CLO", que en el catálogo de
-   * Rapyd significa "cerrado". El SDK lo tradujo a APPROVED, pero solo porque la
-   * respuesta además traía `paid: true`: un pago cerrado sin pagar no es una
-   * aprobación, y leer únicamente el estado daría por cobrado lo que no se cobró.
-   * Ese tipo de detalle por pasarela es lo que el comercio deja de tener que
-   * saber, y es la razón de existir del enum unificado.
+   * El estado nativo que imprimió la consulta es "CLO", que en el catálogo de Rapyd
+   * significa "cerrado". El SDK lo tradujo a APPROVED, pero solo porque la respuesta
+   * además traía `paid: true`: un pago cerrado sin pagar no es una aprobación, y leer
+   * únicamente el estado daría por cobrado lo que no se cobró. Ese tipo de detalle por
+   * pasarela es lo que el comercio deja de tener que saber.
+   *
+   * Y el ejemplo mostró algo que solo se ve comparando las cuatro: la misma tarjeta se
+   * cobra de tres maneras distintas —Wompi y Kushki con el token del comercio, Mercado
+   * Pago con token y cuotas, Rapyd sin token y por redirección— y el código del comercio
+   * es el mismo en todas.
    */
   console.log("=== Fin del ejemplo de Rapyd ===");
 }

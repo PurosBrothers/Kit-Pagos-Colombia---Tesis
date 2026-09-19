@@ -144,6 +144,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 - **Detalles de implementación:**
   - Autenticación: header `Authorization: Bearer {llave_privada}`.
   - Endpoint de creación: `POST /v1/transactions`.
+  - Cobro con tarjeta: `payment_method: {type: "CARD", token, installments}`. Sin ese campo responde `422 "No se especificó método de pago o fuente de pago"`, y **el cobro nace `PENDING`, no `APPROVED`**: se resuelve solo unos cientos de milisegundos después, así que el resultado nunca está en la respuesta de creación y el comercio tiene que consultarlo (punto 50 del `architecture-log.md`).
   - Mapeo de estado: campo `data.status` con valores `APPROVED`, `DECLINED`, `VOIDED`, `PENDING`.
   - Verificación de firma: SHA-256 sobre cadena de propiedades + timestamp + secreto de integridad.
 - **Prioridad:** Alta. Es el adaptador de referencia del proyecto, con implementación completa y validación exhaustiva en sandbox.
@@ -159,6 +160,8 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   - Autenticación: header `access_key` más firma calculada con `secret_key` (no hay `apiLogin`/`apiKey` como en la antigua API de PayU).
   - Firma de webhook: `Base64(HMAC-SHA256(url_path + salt + timestamp + access_key + secret_key + body_string))`, distinta de la fórmula que usaba PayU. **Implementada y validada** en `WebhookVerifier.ts` (ver sección 2.10).
   - Creación de pago y consulta de estado (endpoint, forma del payload, catálogo de `data.status`): investigado y documentado en `ubiquitous-language.md` (issue #23).
+  - **Tarjeta: `POST /v1/checkout`, no `POST /v1/payments`.** Es la única de las cuatro que no cobra la tarjeta servidor-a-servidor: con token responde `CREATE_CARD_TYPE_REQUIRES_ONLY_ONE_OF_FIELDS_OR_TOKEN`, y la variante que cobra exige el número de la tarjeta en la petición, lo que metería al comercio en el alcance de PCI DSS. Así que el cobro devuelve `REDIRECT_REQUIRED`, la misma rama que PSE, y la tarjeta la escribe el pagador en la página de Rapyd. El payload y la traducción de la respuesta viven en `rapyd-checkout.ts`.
+  - Consulta de estado por prefijo del identificador: `checkout_` va a `/checkout/{id}` y `payment_` a `/payments/{id}`. Un `checkout_` consultado como pago responde `400 ERROR_GET_PAYMENT`. Medido en el punto 50 del `architecture-log.md`.
   - **⚠️ PENDIENTE (requiere sandbox real, ver `architecture-log.md`, punto 19):** el esquema exacto de campos de identidad del pagador para PSE Colombia. Rapyd no expone PSE como un único método; lo modela como una familia `co_{banco}_bank` (uno por banco afiliado, ej. `co_bbva_colombia_bank`), cuyo catálogo completo y campos requeridos solo se pueden confirmar con credenciales de sandbox reales.
 - **Prioridad:** Media. La investigación del contrato ya cerró; **pendiente de implementación la clase `RapydAdapter.ts` en sí** (no existe todavía en `src/infrastructure/adapters/`, que solo tiene `WompiAdapter` en curso vía el issue #29).
 - **Modo simulación:** Redirige solicitudes al simulador en modo pruebas.
@@ -173,6 +176,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 - **Responsabilidad:** Implementa el `PaymentGatewayPort` y traduce su contrato hacia las convenciones de Mercado Pago.
 - **Detalles de implementación:**
   - Autenticación: header `Authorization: Bearer {access_token}`.
+  - Cobro con tarjeta: `token` e `installments` en la raíz del cuerpo. **Las cuotas son obligatorias incluso cuando son una**: sin el campo responde `400 "Invalid installments"`, y es la única de las cuatro que las exige siempre. No hace falta mandar `payment_method_id`: lo deduce del token, y sin token responde `400 "payment_method_id attribute can't be null"`.
   - Mapeo de estado: campo `status` y `status_detail`. Valores clave: `accredited` (aprobado), `cc_rejected_insufficient_amount` (fondos insuficientes), `cc_rejected_bad_filled_card_number` (número de tarjeta incorrecto).
   - Verificación de firma: HMAC-SHA256 sobre headers y body.
 - **Prioridad:** Media. Implementación funcional validada en sandbox.
@@ -186,12 +190,13 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 - **Responsabilidad:** Implementa el `PaymentGatewayPort` y traduce su contrato hacia las convenciones de Kushki.
 - **Detalles de implementación:**
   - Autenticación: header `Private-Merchant-Id`.
-  - Monto: objeto desglosado `amount` en pesos nominales para el mock (`subtotalIva0`, `subtotalIva`, `iva`, `ice`); no se desplaza a centavos como Wompi.
-  - HTTP: el mock devuelve 200 tanto para aprobación como para rechazo; el estado de negocio siempre se toma de `transaction_status`.
-  - Mapeo de estado: campo `transaction_status`. **Nota crítica:** Kushki usa `APPROVAL` en lugar de `APPROVED`, diferencia que el Response Normalizer gestiona explícitamente. El cobro con tarjeta es **sincrono** y solo documenta `APPROVAL` y `DECLINED`; el tercer valor `INITIALIZED` que el normalizador acepta **no está confirmado contra fuente pública de Kushki para tarjeta** (sí existe para efectivo y transferencias) y hoy solo lo emite el mock del simulador. Está soportado para que un estado intermedio no rompa el normalizador, no porque la API real lo devuelva en este flujo.
+  - Monto: objeto desglosado `amount` en pesos nominales (`subtotalIva0`, `subtotalIva`, `iva`, `ice`); no se desplaza a centavos como Wompi.
+  - Cobro con tarjeta: `POST /card/v1/charges`, **no `POST /charges`**, que responde `403` igual que una ruta inexistente. Lleva el token del comercio, las cuotas en `months` y `fullResponse: true`, sin el cual la respuesta no trae monto ni estado. La ruta, el token y esa bandera son tres de los ocho defectos del punto 50 del `architecture-log.md`; el payload lo arma `kushki-charge.ts`.
+  - HTTP: un rechazo viaja con el mismo código que una aprobación, así que el estado de negocio siempre se toma del cuerpo y nunca de `response.ok`.
+  - Mapeo de estado: `details.transactionStatus` con `fullResponse`, `transaction_status` en la forma plana. **Nota crítica:** Kushki usa `APPROVAL` en lugar de `APPROVED`, diferencia que el Response Normalizer gestiona explícitamente. El tercer valor `INITIALIZED` que el normalizador acepta **no está confirmado contra fuente pública de Kushki para tarjeta** (sí existe para efectivo y transferencias). Está soportado para que un estado intermedio no rompa el normalizador, no porque la API real lo devuelva en este flujo.
   - Verificación de firma: HMAC-SHA256.
-- **Prioridad:** Media. Implementación validada contra el contrato del simulador; no certificada aún contra sandbox UAT.
-- **Modo simulación:** Redirige solicitudes al simulador en modo pruebas y usa un token simulado.
+- **Prioridad:** Media. Cobro con tarjeta y PSE medidos contra el sandbox UAT (puntos 48 y 50); sin ruta medida para consultar el estado de un cobro con tarjeta.
+- **Modo simulación:** Redirige solicitudes al simulador, que exige el token real: el literal `"simulated-token"` que el adaptador usaba antes responde `400 K001` en la API real y ahora también en el mock.
 
 ---
 
@@ -203,7 +208,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   - `WompiResponseNormalizer` — monto en centavos (`amount_in_cents`), datos envueltos en `data`, divisa en `currency`.
   - `MercadoPagoResponseNormalizer` — monto en pesos (`transaction_amount`), pago en la raíz del payload, divisa en `currency_id`.
   - `RapydResponseNormalizer` — monto en pesos, datos envueltos en `data`, divisa en `currency_code`, y dos estados que exigen leer un segundo campo para desambiguarse (`CLO` necesita `paid`, `ERR` necesita `failure_code`).
-  - `KushkiResponseNormalizer` — suma el objeto tributario en pesos nominales y convierte respuestas incompletas a `KitPagosError(MALFORMED_RESPONSE)`. Es el único que atiende **dos formas de respuesta de la misma pasarela**: Kushki responde distinto una tarjeta y una transferencia de PSE, así que el normalizador decide cuál tiene enfrente —por el nombre del campo de estado— y delega la de transferencia en `kushki-transfer.ts`, un módulo de funciones. Por qué son dos formas y no una está medido en el punto 48 del `architecture-log.md`.
+  - `KushkiResponseNormalizer` — suma el objeto tributario en pesos nominales y convierte respuestas incompletas a `KitPagosError(MALFORMED_RESPONSE)`. Es el único que atiende **tres formas de respuesta de la misma pasarela**: Kushki responde distinto una transferencia de PSE, un cobro con tarjeta y un cobro con tarjeta pedido con `fullResponse`. El normalizador decide cuál tiene enfrente y delega: la de transferencia en `kushki-transfer.ts`, que se reconoce por el nombre del campo de estado, y la de tarjeta con `fullResponse` en `kushki-card.ts`, que se reconoce por el objeto `details` y hay que aplanar antes de leerla, porque ahí el estado viene en camelCase y el monto desarmado en campos sueltos. Por qué son tres formas y no una está medido en los puntos 48 y 50 del `architecture-log.md`.
   - `payload-utils.ts` — parseo del payload, validación del objeto de datos y mapeo de errores de objeto de valor, que las tres ramas repetían textualmente.
   
   Hasta el punto 34 las tres traducciones vivían como ramas de un `switch` dentro de `normalize()`, que medía 360 de las 371 líneas del archivo y tenía complejidad ciclomática 62. Agregar una pasarela significaba editar ese método; ahora significa agregar una clase y registrarla, sin tocar las otras traducciones.

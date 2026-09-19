@@ -23,6 +23,34 @@ Para probar la tokenización vía API (`POST /tokens/cards`) o mediante el Widge
 
 > **Nota:** Usar cualquier otro número de tarjeta generará un estado final **`ERROR`**.
 
+### 1.1. El cobro medido contra la API real (19 de septiembre de 2026)
+
+Tres cosas que solo aparecieron al llamar, y que están en el punto 50 del `architecture-log.md`:
+
+1. **El cobro nace `PENDING`, no `APPROVED`.** `POST /transactions` responde `201` con
+   `status: "PENDING"` y `finalized_at: null`, y la transacción pasa a `APPROVED` sola unos
+   cientos de milisegundos después. El resultado **no está en la respuesta de creación**.
+2. **Sin `payment_method` no hay cobro:** `422 UNPROCESSABLE` con
+   `"No se especificó método de pago o fuente de pago"`.
+3. **Sin firma de integridad tampoco**, ni con tarjeta ni con PSE: `422` con
+   `"Firma de integridad requerida no enviada"`. La firma es
+   `SHA256(referencia + monto en centavos + divisa + secreto de integridad)`.
+
+Las cuotas son opcionales: el cobro sin `installments` responde `201` igual, y la consulta
+posterior devuelve la transacción sin ese campo.
+
+```json
+{
+  "amount_in_cents": 15000000,
+  "currency": "COP",
+  "customer_email": "comprador@example.com",
+  "reference": "ORDER-1042",
+  "acceptance_token": "...",
+  "signature": "...",
+  "payment_method": { "type": "CARD", "token": "tok_test_...", "installments": 1 }
+}
+```
+
 ---
 
 ## 2. Nequi

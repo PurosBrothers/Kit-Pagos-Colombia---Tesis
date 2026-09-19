@@ -27,8 +27,32 @@ Para realizar transacciones de prueba exitosas en la API (`POST /v1/payments`) o
 | **Aprobada (`SUCCESS` / `CLO`)** | `4462 0300 0000 0000` | Cualquier fecha futura | 3 dígitos cualquiera (ej: `123`) |
 
 > **Nota:** Puedes usar cualquier fecha de expiración en el futuro y cualquier CVC de 3 dígitos.
-> 
-> 
+
+### 1.1. Por qué el SDK cobra la tarjeta con `POST /v1/checkout` y no con `POST /v1/payments`
+
+Medido el 19 de septiembre de 2026, y es la decisión del punto 50 del `architecture-log.md`:
+**Rapyd no cobra una tarjeta servidor-a-servidor sin recibir el número de la tarjeta.**
+
+| Intento | Respuesta |
+| --- | --- |
+| `POST /v1/payments` con un método de tarjeta y un token | `CREATE_CARD_TYPE_REQUIRES_ONLY_ONE_OF_FIELDS_OR_TOKEN` |
+| `POST /v1/payments` con el número de la tarjeta en `fields` | `MISSING_PAYMENT_METHOD_REQUIRED_FIELD - [NAME]`: pide además titular, expiración y CVV |
+| `POST /v1/checkout` con `payment_method_type_categories: ["card"]` | `200`, con `redirect_url` y la página lista |
+
+Recibir el número de la tarjeta metería al servidor del comercio dentro del alcance de PCI
+DSS, que es justo lo que el SDK evita. Así que la tarjeta la escribe el pagador en la página
+de Rapyd y el SDK devuelve una redirección, igual que en PSE.
+
+Detalles de la página que importan al integrar:
+
+- **Responde `200`, no `201`**, a diferencia de `POST /v1/payments`. La misma API usa los dos.
+- **Nace con el pago vacío:** `status: "NEW"`, `payment.id: null`, `payment.status: null`. El
+  identificador que sirve en ese momento es el de la página, con prefijo `checkout_`.
+- **Se consulta en su propia ruta.** `GET /v1/payments/{checkout_...}` responde
+  `400 ERROR_GET_PAYMENT`; hay que usar `GET /v1/checkout/{id}`, que devuelve el pago anidado
+  en cuanto el pagador paga.
+- **No se paga sola.** Una página creada y no visitada se queda en `NEW`, así que el desenlace
+  no se puede observar sin que una persona llene el formulario.
 
 ---
 

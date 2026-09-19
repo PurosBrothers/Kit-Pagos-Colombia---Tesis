@@ -18,6 +18,7 @@ import {
   Currency,
   OrderReference,
   Payer,
+  PaymentMethod,
   KitPagosError,
   KitPagosErrorCode,
   type SDKOptions,
@@ -79,6 +80,18 @@ async function main(): Promise<void> {
       email: "jaime.pavlich@example.com",
       fullName: "Jaime Pavlich",
     }),
+    /**
+     * The card token, and nothing about the card itself.
+     *
+     * The merchant obtains it from the gateway's own tokenization —for Wompi,
+     * `POST /v1/tokens/cards` from the browser— and the SDK treats it as an opaque
+     * string. The card number never reaches this code, which is what keeps the
+     * merchant's server out of PCI DSS scope. `installments` is the number of
+     * instalments ("cuotas"): one means a single charge.
+     */
+    paymentMethod: PaymentMethod.card("tok_test_ejemplo_no_real", {
+      installments: 1,
+    }),
   };
 
   console.log("Payment request:");
@@ -87,7 +100,8 @@ async function main(): Promise<void> {
   // to cents happens in the infrastructure layer, not written by the merchant.
   console.log(`  In cents:    ${request.amount.toMinorUnits(request.currency)} (what Wompi receives)`);
   console.log(`  Reference:   ${request.orderReference.getValue()}`);
-  console.log(`  Payer:       ${request.payer.email}\n`);
+  console.log(`  Payer:       ${request.payer.email}`);
+  console.log(`  Instalments: ${request.paymentMethod.installments}\n`);
 
   /**
    * Step 3: create the payment.
@@ -101,8 +115,9 @@ async function main(): Promise<void> {
 
   // createPayment() returns either a transaction or a pending redirect, and the
   // compiler forces the distinction: `result.transaction` does not exist until the
-  // redirect case is ruled out. Wompi's card flow always settles in the response,
-  // so this branch is unreachable here — it becomes reachable with PSE.
+  // redirect case is ruled out. A Wompi card charge never redirects —the merchant
+  // charges the token server to server— so this branch is unreachable here. It is
+  // the branch PSE takes, and Rapyd's card flow takes it too.
   if (result.outcome === "REDIRECT_REQUIRED") {
     console.log(`Payment requires redirect to: ${result.redirect.redirectUrl}`);
     return;
@@ -122,11 +137,15 @@ async function main(): Promise<void> {
   console.log(`  Final state:        ${transaction.isFinal()}\n`);
 
   /**
-   * Step 4: query the payment status.
+   * Step 4: query the payment status. **This step is not optional for a card.**
    *
-   * Now that the simulator remembers created transactions (issue #55), this
-   * query returns the same normalized transaction. The id passed is the native
-   * identifier returned by Wompi when the payment was created.
+   * The charge above came back `PENDING`, not `APPROVED`, and that is what Wompi
+   * really does: measured against `sandbox.wompi.co`, `POST /transactions` answers
+   * `PENDING` with `finalized_at: null` and the transaction settles about 600 ms
+   * later. So the outcome of a card charge is never in the creation response — the
+   * merchant has to query it, exactly as below.
+   *
+   * The id passed is the native identifier Wompi returned when creating the payment.
    */
   console.log("Querying transaction status...");
   try {
