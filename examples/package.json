@@ -10,11 +10,12 @@
     "simulate:mercadopago": "tsx simulate-mercadopago-payment.ts",
     "simulate:mercadopago-pse": "tsx simulate-mercadopago-pse.ts",
     "simulate:rapyd": "tsx simulate-rapyd-payment.ts",
-    "simulate:kushki": "tsx simulate-kushki-payment.ts",
-    "typecheck": "tsc --noEmit",
-    "simulate:pse-bancos": "tsx simulate-pse-bancos.ts",
     "simulate:rapyd-pse": "tsx simulate-rapyd-pse.ts",
-    "simulate:kushki-pse": "tsx simulate-kushki-pse.ts"
+    "simulate:kushki": "tsx simulate-kushki-payment.ts",
+    "simulate:kushki-pse": "tsx simulate-kushki-pse.ts",
+    "simulate:pse-bancos": "tsx simulate-pse-bancos.ts",
+    "simulate:interchangeability": "tsx gateway-interchangeability.ts",
+    "typecheck": "tsc --noEmit"
   },
   "author": "Andres Henao, Joan Orduz, Joshua Prieto, David Rodriguez",
   "license": "Apache-2.0",
