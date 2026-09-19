@@ -52,7 +52,7 @@ Dentro de la capa de dominio, el proyecto usa un subconjunto reducido pero preci
 
 Sobre la base hexagonal y de DDD, el proyecto usa tres patrones clásicos del catálogo Gang of Four, cada uno resolviendo un problema puntual:
 
-**Facade.** El patrón Facade oculta la complejidad interna de un subsistema detrás de una interfaz simple. `KitPagos` es el Facade del SDK: el desarrollador que lo consume nunca instancia un adaptador, nunca conoce el `GatewayFactory`, nunca maneja reintentos manualmente. Solo ve tres métodos (`createPayment`, `getPaymentStatus`, `validateWebhook`) y una entidad `Transaction` como resultado.
+**Facade.** El patrón Facade oculta la complejidad interna de un subsistema detrás de una interfaz simple. `KitPagos` es el Facade del SDK: el desarrollador que lo consume nunca instancia un adaptador, nunca conoce el `GatewayFactory`, nunca maneja reintentos manualmente. Solo ve cuatro métodos (`createPayment`, `getPaymentStatus`, `getPseBanks`, `validateWebhook`), y como resultado de un cobro un `PaymentResult`: o una entidad `Transaction` resuelta, o una redirección pendiente cuando el pagador todavía tiene que autenticarse en su banco.
 
 **Factory.** El patrón Factory centraliza la lógica de creación de objetos cuando esa lógica depende de una condición en tiempo de ejecución. `GatewayFactory` (todavía no implementado, ver sección 6) recibirá el valor del enum `Gateway` configurado por el desarrollador y devolverá la instancia del adaptador correspondiente, sin que el resto del sistema necesite un `switch` o un `if` repartido por varios archivos para saber qué adaptador usar.
 

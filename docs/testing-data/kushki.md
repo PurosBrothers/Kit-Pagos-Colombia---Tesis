@@ -2,6 +2,12 @@
 
 > Alcance actual: el SDK y la API de Simulación usan datos ficticios y un token simulado para pruebas de contrato. Estas credenciales y tarjetas solo aplican cuando se implemente la integración directa con el sandbox de Kushki.
 
+> **Las credenciales de API aparecieron el 18 de septiembre de 2026** (issue #64), en el dashboard
+> UAT del comercio *KIT PAGOS COLOMBIA Branch Colombia*, en Desarrolladores → Credenciales. Con ellas
+> se midió el flujo completo de Transfer In, y medirlo encontró cuatro defectos que las pruebas
+> unitarias no podían ver (sección 5.2 y punto 48 del `architecture-log.md`). Antes de eso solo había
+> credenciales de *dashboard*, y el SDK estaba escrito contra la documentación.
+
 El primer paso para probar la API es disponer de las credenciales de Sandbox y configurar las keys de entorno necesarias en el archivo `.env`:
 
 * **`KUSHKI_PUBLIC_MERCHANT_ID`**: Identificador público del comercio para entorno de pruebas.
@@ -136,10 +142,14 @@ A diferencia de la tarjeta, PSE en Kushki **exige pedir la lista de bancos antes
    `Public-Merchant-Id`. La referencia de Kushki es explícita: *"This endpoint is required only for
    Transfer In payment method in Colombia. In Chile, it is optional."* La lista se actualiza del
    lado de Kushki, no se cachea a mano.
-2. **Token.** Se pide con `bankId` (de la lista del paso 1), `callbackUrl`, `userType`,
-   `documentType`, `documentNumber`, `email`, `currency` (`COP`) y el objeto `amount` descompuesto.
-3. **Iniciar.** `POST /transfer/v1/init` con el token, autenticando con `Private-Merchant-Id`.
-   Devuelve `redirectUrl`.
+2. **Token.** `POST /transfer/v1/tokens`, **en plural** (ver la tabla de rutas de abajo),
+   autenticando con `Public-Merchant-Id`. Se pide con `bankId` (de la lista del paso 1),
+   `callbackUrl`, `userType`, `documentType`, `documentNumber`, `email`, `currency` (`COP`) y el
+   objeto `amount` descompuesto. **Acá viaja la URL de retorno del comercio**, en el paso previo al
+   cobro: es la única pasarela de las cuatro donde no va en la creación del pago, y la razón por la
+   que el adaptador de tarjeta de Kushki no tiene dónde poner `ReturnUrlConfig`.
+3. **Iniciar.** `POST /transfer/v1/init` con el token **y el monto otra vez**, autenticando con
+   `Private-Merchant-Id`. Devuelve `redirectUrl`.
 4. **Redirigir** al pagador a esa `redirectUrl`.
 5. **Resultado.** `GET /transfer/v1/status/{token}` con `Private-Merchant-Id`, o por webhook. El
    banco confirma a PSE, PSE notifica a Kushki y Kushki al comercio.
@@ -151,9 +161,90 @@ responde distinto en cada caso:
 | Ruta | Respuesta sin credencial | Lectura |
 | --- | --- | --- |
 | `GET /transfer/v1/bankList` | `403` — `no identity-based policy allows...` | **Existe** |
+| `POST /transfer/v1/tokens` | `403` — `no identity-based policy allows...` | **Existe** |
+| `POST /transfer/v1/token` (singular) | `403` — `Missing Authentication Token` | **No existe** |
 | `POST /transfer/v1/init` | `403` — `no identity-based policy allows...` | **Existe** |
 | `GET /transfer/v1/status/{token}` | `403` — `no identity-based policy allows...` | **Existe** |
 | `GET /transfer/v1/rutaQueNoExiste` (control) | `403` — `Missing Authentication Token` | **No existe** |
+
+Las dos filas del token se agregaron el **18 de septiembre de 2026** (issue #64) y cierran el hueco
+que el #68 había dejado: la ruta del paso 2 es la **plural**. El singular responde igual que la ruta
+de control, o sea que no existe.
+
+### 5.2.1. El flujo medido contra la API real (18 de septiembre de 2026)
+
+Con las credenciales de API se ejecutó el flujo entero. **Cuatro cosas no coincidían con la
+documentación**, y ninguna se podía ver desde el simulador, porque el simulador reproducía lo que el
+código esperaba en vez de lo que Kushki responde:
+
+**1. `POST /transfer/v1/init` no acepta solo el token.** Hay que repetirle el monto, aunque ya viajó
+al pedir el token y aunque la consulta de estado demuestra que Kushki lo tiene guardado:
+
+| Cuerpo enviado | Respuesta |
+| --- | --- |
+| `{ token }` | `400` — `{"code":"T001","message":"Cuerpo de la petición inválido."}` |
+| `{ token, amount }` | `201` — con `redirectUrl` |
+| Todo el cuerpo del token, más `token` | `400` — `T001` |
+
+O sea que no es "cuantos más campos, mejor": es exactamente el token y el monto.
+
+**2. La lista de bancos empieza con un elemento que no es un banco.** `GET /transfer/v1/bankList`
+devuelve 8 entradas en UAT, y la primera es el texto de relleno de un `<select>`:
+
+```json
+[{"code":"0","name":"A continuación seleccione su banco"},
+ {"code":"0001","name":"Kushki bank Colombia"},
+ {"code":"0002","name":"Kushki bank Ecuador"}, ... ]
+```
+
+Los bancos de UAT son ficticios (`Kushki bank Colombia`, `Kushki bank Ecuador`, ... hasta
+`Kushki bank USA`), así que **de acá no se puede sacar el catálogo real de entidades colombianas**:
+para eso hace falta el ambiente productivo. El SDK descarta el código `"0"`, porque es la primera
+entrada y quien tome el primer elemento de la lista cobraría contra un banco que no existe.
+
+**3. La consulta de estado devuelve otra forma, no la de un cobro con tarjeta.** No trae
+`ticketNumber`, ni `transaction_status`, ni `contactDetails.email`, que son los tres campos de los que
+el normalizador de tarjeta lee. Trae:
+
+```json
+{"status":"initializedTransaction","token":"7a93...","paymentDescription":"ORDER-PSE-1789775019380",
+ "email":"comprador@example.com","amount":{"subtotalIva0":50000,"subtotalIva":0,"iva":0,"ice":0,
+ "currency":"COP"},"transactionReference":"226e3ff4-...","bankId":"0001","documentType":"CC",
+ "documentNumber":"123456789","created":1789775795525,"country":"Colombia","merchantName":"...",
+ "callbackUrl":"...","userType":"0","userIp":"...","publicMerchantId":"...","trazabilityCode":"-"}
+```
+
+Dos detalles que importan para conciliar: **`paymentDescription` devuelve la referencia del comercio
+intacta**, así que es el campo del que hay que leerla, y no `transactionReference`, que lo genera
+Kushki. Y **una vez iniciada la transferencia la respuesta sí agrega `ticketNumber`** —más
+`entityCode`, `processorId`, `processorState`, `transferProcessor`, `returnCode` y `serviceCode`—, lo
+que hace que "tiene token y no tiene ticket" sea un criterio equivocado para distinguir las dos
+formas. El campo que sí las distingue siempre es el nombre del estado: `status` en transferencia,
+`transaction_status` en tarjeta.
+
+**4. Los estados de transferencia son otro vocabulario.** No son los de tarjeta en otro formato:
+
+| Momento | Estado nativo medido |
+| --- | --- |
+| Después de `POST /transfer/v1/tokens` | `requestedToken` |
+| Después de `POST /transfer/v1/init` | `initializedTransaction` |
+
+Los dos son **no finales**, y ninguno estaba en la tabla de traducción del SDK, así que una
+transferencia en curso se reportaba como `ERROR`. Es el defecto del punto 46 otra vez, esta vez
+encontrado midiendo.
+
+**La consulta de estado de tarjeta, en cambio, quedó en duda.** `GET /charges/{id}` responde
+`403 Forbidden` para cualquier identificador, **y también para una ruta de control inventada**, así
+que lo medido sugiere que no es la ruta de consulta de cobros con tarjeta. La técnica del #68 no
+ayuda acá: a nivel de la raíz del dominio, las rutas registradas y las inexistentes contestan igual.
+Encontrar la ruta real de consulta de tarjeta es trabajo aparte; el SDK la conserva como segunda
+opción porque es la que el simulador implementa.
+
+**Lo que sigue sin medir.** El desenlace: llevar una transferencia hasta `approvedTransaction` o
+`declinedTransaction` exige que una persona autorice en el portal del banco simulado, y los números
+de documento de prueba de la sección 5.4 **no cambian el estado por sí solos** —los cuatro quedan en
+`initializedTransaction` hasta que alguien complete la autorización—. Los estados finales de la tabla
+del SDK vienen de la documentación de Kushki y están marcados como tales.
 
 ### 5.3. Tipos de documento válidos en Colombia
 
@@ -165,7 +256,13 @@ no debe aceptarlos para una transacción colombiana solo porque la API los liste
 ### 5.4. Datos de prueba en Sandbox
 
 Al solicitar el token de `transfer in`, la simulación se controla mediante el número de
-identificación del usuario. El estado final se consulta llamando al endpoint de consulta de estado:
+identificación del usuario. El estado final se consulta llamando al endpoint de consulta de estado.
+
+> **Medido el 18 de septiembre de 2026:** los cuatro escenarios responden igual hasta que alguien
+> autoriza en el portal del banco. Se crearon cuatro transferencias, una por número de documento, y
+> las cuatro quedaron en `requestedToken` y pasaron a `initializedTransaction` al iniciarlas. O sea
+> que el número de documento **predetermina** el desenlace, pero no lo dispara: el estado final llega
+> cuando el flujo del banco se completa.
 
 | Estado Final / Escenario | Número de Identificación | Respuesta en Consulta de Estado |
 | --- | --- | --- |

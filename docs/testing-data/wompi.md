@@ -52,14 +52,37 @@ Para probar la tokenización vía API (`POST /tokens/cards`) o mediante el Widge
 
 ## 3. PSE (Pagos Seguros en Línea)
 
+### La lista de bancos se pide por API (`GET /pse/financial_institutions`)
+
+> **Medido contra el sandbox real (`https://sandbox.wompi.co/v1`) el 18 de septiembre de 2026, issue
+> #64.** Se autentica con la **llave pública**, no con la privada.
+
+Wompi es la única de las cuatro con un endpoint dedicado a esto. Devuelve
+`financial_institution_code` y `financial_institution_name`, y en sandbox **lo que devuelve no son
+bancos**: son tres entidades de prueba cuyo código fuerza el desenlace.
+
+| `financial_institution_code` | `financial_institution_name` (literal, de la API) |
+| --- | --- |
+| `"1"` | Banco que aprueba |
+| `"2"` | Banco que declina |
+| `"3"` | Banco que simula un error |
+
+El tercero no estaba documentado en este archivo y sí existe. Lo medido es la lista, no el desenlace:
+el nombre dice qué simula cada uno, pero solo los códigos `1` y `2` tienen su estado final
+confirmado en la tabla de abajo, que venía de antes. Vale la pena no maquillar estos
+nombres al mostrarlos: un comercio que ve "Banco que declina" en su selector sabe al instante contra
+qué entorno está apuntando.
+
 ### Integración API Directa (`POST /transactions`)
 
-Se debe pasar el código de institución financiera (`financial_institution_code`):
+Se debe pasar el código de institución financiera (`financial_institution_code`), tomado de la lista
+de arriba:
 
 | Estado Final | `financial_institution_code` |
 | --- | --- |
 | **Aprobada (`APPROVED`)** | `"1"` |
 | **Declinada (`DECLINED`)** | `"2"` |
+| Error simulado (sin confirmar cuál es el estado resultante) | `"3"` |
 
 ### Integración con Widget
 

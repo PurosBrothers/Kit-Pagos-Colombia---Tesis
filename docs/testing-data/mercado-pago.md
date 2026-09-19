@@ -96,6 +96,12 @@ Ingresa los siguientes valores en el campo **Nombre y Apellido del Titular** par
 > resto, junto con `min_allowed_amount: 1600` y `max_allowed_amount: 340000000`.
 > Un código inexistente **no** se rechaza al crear: pasa la validación y el pago
 > muere después en `processing_error`.
+>
+> Son **47 entidades**, contadas contra la API real el 18 de septiembre de 2026 — el
+> mismo número que devuelve Rapyd, porque las dos leen el registro de ACH Colombia.
+> El SDK las expone con `kitPagos.getPseBanks()`, que filtra esa entrada del
+> catálogo; el comercio no tiene que conocer que la lista viene anidada dentro de
+> todos los métodos de pago del país.
 
 ### Paso a paso de implementación en Sandbox (Orders API)
 
