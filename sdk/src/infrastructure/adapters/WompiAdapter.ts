@@ -9,6 +9,7 @@ import {
   transactionResult,
 } from "../../domain/value-objects/PaymentResult";
 import {
+  buildCardFieldsFor,
   buildPseFieldsFor,
   buildWompiPayload,
   extractAcceptanceToken,
@@ -90,8 +91,10 @@ export class WompiAdapter implements PaymentGatewayPort {
    * contra el sandbox real y por qué PSE necesita un sondeo.
    */
   async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
-    // Wompi es hoy la única que sabe cobrar por PSE. `CASH` (Efecty y
-    // equivalentes) sigue sin implementarse en ninguna.
+    // El alcance del SDK son tarjeta y PSE, y las cuatro pasarelas cobran los dos
+    // desde el issue #64. La guarda queda igual: defiende contra un método que llegue
+    // desde JavaScript sin tipos, y contra el día en que una pasarela soporte un
+    // método que otra no.
     assertSupportedPaymentMethod(request.paymentMethod, Gateway.WOMPI, ["CARD", "PSE"]);
 
     // `toMinorUnits()` devuelve una cadena de dígitos y Wompi espera un entero
@@ -110,6 +113,7 @@ export class WompiAdapter implements PaymentGatewayPort {
       reference,
       customerEmail: request.payer.email,
       pseFields: buildPseFieldsFor(request.paymentMethod, request.payer, reference),
+      cardFields: buildCardFieldsFor(request.paymentMethod),
       // Wompi acepta una sola URL de retorno, mientras que ReturnUrlConfig
       // admite una por resultado. Se resuelve con "PENDING" porque es el estado
       // en el que la transacción está cuando se redirige al pagador. Si el

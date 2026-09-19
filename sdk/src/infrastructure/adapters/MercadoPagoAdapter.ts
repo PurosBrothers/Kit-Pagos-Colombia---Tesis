@@ -13,7 +13,11 @@ import { Credentials } from "../../domain/value-objects/Credentials";
 import { ResponseNormalizer } from "../../application/services/ResponseNormalizer";
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
-import { assertSupportedPaymentMethod } from "./payment-method-support";
+import {
+  assertSupportedPaymentMethod,
+  requireCardToken,
+  resolveInstallments,
+} from "./payment-method-support";
 import {
   assertPseRequirements,
   buildPseOrderPayload,
@@ -100,10 +104,23 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
     // Mapeo de objetos de valor del dominio a campos nativos de Mercado Pago.
     // A diferencia de Wompi, el monto viaja en pesos en `transaction_amount`,
     // por lo que se usa getValue() en lugar de toMinorUnits().
+    //
+    // `token` e `installments` son obligatorios y están medidos contra la API real: sin
+    // token responde `400 "payment_method_id attribute can't be null"` y sin cuotas
+    // `400 "Invalid installments"`. Lo que **no** hace falta es `payment_method_id`: con
+    // el token, Mercado Pago deduce la marca y la devuelve resuelta en la respuesta
+    // (`"visa"`). Por eso el SDK no le pide al comercio un dato de pasarela que la
+    // pasarela ya sabe: sería el primer campo específico de proveedor en la API pública.
     const payload = {
       transaction_amount: Number(request.amount.getValue()),
       description: request.orderReference.getValue(),
       external_reference: request.orderReference.getValue(),
+      token: requireCardToken(
+        request.paymentMethod,
+        Gateway.MERCADOPAGO,
+        "POST /v1/card_tokens",
+      ),
+      installments: resolveInstallments(request.paymentMethod),
       payer: {
         email: request.payer.email,
       },

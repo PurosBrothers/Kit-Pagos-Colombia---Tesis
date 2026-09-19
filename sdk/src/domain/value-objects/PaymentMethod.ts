@@ -34,8 +34,19 @@
  * con esa propiedad, y está documentado en `docs/testing-data/`.
  */
 
-/** Formas de pago que el contrato sabe expresar. */
-export type PaymentMethodType = "CARD" | "PSE" | "CASH";
+/**
+ * Formas de pago que el contrato sabe expresar.
+ *
+ * Son dos, y eso es una decisión de alcance, no una etapa intermedia: el trabajo
+ * unifica **tarjeta y PSE**, que son los dos métodos dominantes en Colombia.
+ * Hubo un tercer valor, `CASH`, agregado en el PR #85 pensando en Efecty y
+ * equivalentes; se quitó al cerrar el issue #64 porque ninguna de las cuatro
+ * pasarelas lo implementaba y ninguna iba a implementarlo. Un valor que el tipo
+ * admite y que los cuatro adaptadores rechazan no es extensibilidad: es una
+ * promesa que el compilador deja escribir y que falla en ejecución. Ver el punto
+ * 49 del `architecture-log.md`.
+ */
+export type PaymentMethodType = "CARD" | "PSE";
 
 /**
  * Naturaleza jurídica del pagador, que PSE exige distinguir por regulación
@@ -56,7 +67,7 @@ export class PaymentMethod {
     public readonly cardToken?: string,
     public readonly bankCode?: string,
     public readonly payerKind?: PayerKind,
-    public readonly cashNetwork?: string,
+    public readonly installments?: number,
   ) {}
 
   /**
@@ -65,12 +76,38 @@ export class PaymentMethod {
    * El SDK nunca recibe el número de tarjeta: tokenizar es responsabilidad del
    * frontend contra la pasarela, y aceptar el número acá metería al SDK y a todo
    * lo que lo integre dentro del alcance de PCI DSS.
+   *
+   * **`cardToken` es opcional, y no por comodidad.** Tres de las cuatro pasarelas
+   * cobran con un token que el comercio consigue antes: Wompi en `POST /tokens/cards`,
+   * Mercado Pago en `POST /v1/card_tokens` y Kushki en `POST /card/v1/tokens`. Rapyd
+   * no: cobrar un token de tarjeta guardado responde `ERROR_CARD_NOT_AUTHENTICATED`, y
+   * su único camino servidor-a-servidor que funciona exige el número de tarjeta en la
+   * petición, que es exactamente lo que este SDK no acepta. Así que en Rapyd la tarjeta
+   * se cobra por su página y no hay token que mandar. Las tres que lo exigen fallan con
+   * `INVALID_REQUEST` si falta, así que la omisión no se descubre como un HTTP 400 de
+   * la pasarela. Ver el punto 50 del `architecture-log.md`.
+   *
+   * `installments` son las cuotas. Existe porque **Mercado Pago las exige**: un cobro
+   * sin ellas responde `400 Invalid installments`. Wompi las acepta y no las pide,
+   * Kushki las llama `months`, y en Rapyd las decide el pagador en la página. El valor
+   * por omisión es 1, que es un pago de una cuota, y no se admite 0 ni fracciones.
    */
-  static card(cardToken: string): PaymentMethod {
-    if (!cardToken) {
+  static card(
+    cardToken?: string,
+    attributes?: { installments?: number },
+  ): PaymentMethod {
+    if (cardToken !== undefined && !cardToken) {
       throw new Error("PaymentMethod.card requiere cardToken");
     }
-    return new PaymentMethod("CARD", cardToken);
+
+    const installments = attributes?.installments ?? 1;
+    if (!Number.isInteger(installments) || installments < 1) {
+      throw new Error(
+        "PaymentMethod.card requiere installments entero y mayor o igual a 1",
+      );
+    }
+
+    return new PaymentMethod("CARD", cardToken, undefined, undefined, installments);
   }
 
   /**
@@ -93,22 +130,6 @@ export class PaymentMethod {
       undefined,
       attributes.bankCode,
       attributes.payerKind ?? "NATURAL",
-    );
-  }
-
-  /**
-   * Efectivo en red física (Efecty, SuRed, MovilRed y equivalentes).
-   *
-   * `network` es opcional porque hay pasarelas que exponen una sola red y no
-   * piden elegir; cuando se omite, decide la pasarela.
-   */
-  static cash(attributes?: { network?: string }): PaymentMethod {
-    return new PaymentMethod(
-      "CASH",
-      undefined,
-      undefined,
-      undefined,
-      attributes?.network,
     );
   }
 

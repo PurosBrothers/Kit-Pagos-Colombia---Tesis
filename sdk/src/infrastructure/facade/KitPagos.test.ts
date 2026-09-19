@@ -4,6 +4,7 @@ import { Amount } from "../../domain/value-objects/Amount";
 import { Currency } from "../../domain/value-objects/Currency";
 import { OrderReference } from "../../domain/value-objects/OrderReference";
 import { Payer } from "../../domain/value-objects/Payer";
+import { PaymentMethod } from "../../domain/value-objects/PaymentMethod";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { Credentials } from "../../domain/value-objects/Credentials";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
@@ -24,6 +25,9 @@ describe("KitPagos", () => {
     currency: new Currency("COP"),
     orderReference: new OrderReference("ORDER-1042"),
     payer: new Payer({ email: "cliente@example.com" }),
+    // Cobrar con tarjeta exige el token en las tres pasarelas que cobran
+    // servidor-a-servidor, y el SDK lo exige antes de salir a la red (punto 50).
+    paymentMethod: PaymentMethod.card("tok_test_card_4242"),
   };
 
   const approvedWompiResponse = {

@@ -16,11 +16,19 @@ import { computeIntegritySignature } from "./wompi-pse";
 describe("WompiAdapter", () => {
   const originalFetch = global.fetch;
 
+  /**
+   * Pedido base de un cobro con tarjeta.
+   *
+   * Lleva token desde que se midió que Wompi no cobra sin método de pago: un
+   * `POST /transactions` sin `payment_method` responde
+   * `422 "No se especificó método de pago o fuente de pago"`.
+   */
   const validRequest: CreatePaymentRequest = {
     amount: new Amount("50000"),
     currency: new Currency("COP"),
     orderReference: new OrderReference("ord-12345"),
     payer: new Payer({ email: "cliente@example.com" }),
+    paymentMethod: PaymentMethod.card("tok_test_card_4242"),
   };
 
   const approvedWompiMockResponse = {
@@ -65,6 +73,11 @@ describe("WompiAdapter", () => {
             currency: "COP",
             reference: "ord-12345",
             customer_email: "cliente@example.com",
+            payment_method: {
+              type: "CARD",
+              token: "tok_test_card_4242",
+              installments: 1,
+            },
           }),
         },
       );
@@ -420,6 +433,88 @@ describe("WompiAdapter", () => {
    * que hay que consultar hasta que aparezca, y el resultado debe ser
    * REDIRECT_REQUIRED y no una transacción.
    */
+  describe("createPayment() con tarjeta", () => {
+    function mockCreated() {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => approvedWompiMockResponse,
+      });
+      global.fetch = mockFetch;
+      return mockFetch;
+    }
+
+    /**
+     * Wompi cobra la tarjeta con el token del comercio y las cuotas dentro de
+     * `payment_method`, que es el campo cuya ausencia responde
+     * `422 "No se especificó método de pago o fuente de pago"`.
+     */
+    it("should send the card token and installments as payment_method", async () => {
+      const mockFetch = mockCreated();
+
+      await new WompiAdapter().createPayment(validRequest);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.payment_method).toEqual({
+        type: "CARD",
+        token: "tok_test_card_4242",
+        installments: 1,
+      });
+    });
+
+    it("should send the requested installments", async () => {
+      const mockFetch = mockCreated();
+
+      await new WompiAdapter().createPayment({
+        ...validRequest,
+        paymentMethod: PaymentMethod.card("tok_test_card_4242", { installments: 12 }),
+      });
+
+      expect(JSON.parse(mockFetch.mock.calls[0][1].body).payment_method.installments).toBe(
+        12,
+      );
+    });
+
+    /** El número de la tarjeta no viaja nunca: el SDK solo acepta el token. */
+    it("should never send anything that looks like a card number", async () => {
+      const mockFetch = mockCreated();
+
+      await new WompiAdapter().createPayment(validRequest);
+
+      expect(mockFetch.mock.calls[0][1].body).not.toMatch(/\b\d{13,19}\b/);
+    });
+
+    /**
+     * Falla acá y no en la pasarela. Es una llamada de red que se ahorra, y sobre todo un
+     * mensaje que dice qué falta y dónde conseguirlo, en vez del 422 en castellano de
+     * Wompi sobre un campo que el comercio no escribió.
+     */
+    it("should refuse a card payment without a token before calling the gateway", async () => {
+      const mockFetch = jest.fn();
+      global.fetch = mockFetch;
+
+      await expect(
+        new WompiAdapter().createPayment({
+          ...validRequest,
+          paymentMethod: undefined,
+        }),
+      ).rejects.toMatchObject({
+        code: KitPagosErrorCode.INVALID_REQUEST,
+        gateway: Gateway.WOMPI,
+      });
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("should say where to get the token in the error message", async () => {
+      global.fetch = jest.fn();
+
+      await expect(
+        new WompiAdapter().createPayment({ ...validRequest, paymentMethod: undefined }),
+      ).rejects.toThrow("POST /v1/tokens/cards");
+    });
+  });
+
   describe("createPayment() con PSE", () => {
     const pseRequest: CreatePaymentRequest = {
       amount: new Amount("150000"),
@@ -552,13 +647,25 @@ describe("WompiAdapter", () => {
       expect(sentBody.redirect_url).toBe("https://comercio.example.com/retorno");
     });
 
-    it("should not send payment_method at all for a card payment", async () => {
+    /**
+     * Los dos métodos viajan en el mismo campo nativo, así que nunca se mandan juntos: un
+     * cobro con tarjeta lleva el token y ningún dato de PSE, y un PSE al revés.
+     *
+     * Esta prueba antes afirmaba que un cobro con tarjeta **no mandaba `payment_method`**,
+     * que era lo que el SDK hacía y lo que Wompi rechaza con
+     * `422 "No se especificó método de pago o fuente de pago"`. La prueba pasaba porque el
+     * simulador aceptaba el cobro sin método.
+     */
+    it("should send the card in payment_method, without any PSE field", async () => {
       const mockFetch = mockResponses(approvedWompiMockResponse);
 
       await new WompiAdapter().createPayment(validRequest);
 
       const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(sentBody.payment_method).toBeUndefined();
+      expect(sentBody.payment_method.type).toBe("CARD");
+      expect(sentBody.payment_method.token).toBe("tok_test_card_4242");
+      expect(sentBody.payment_method.financial_institution_code).toBeUndefined();
+      expect(sentBody.payment_method.user_legal_id).toBeUndefined();
     });
   });
 });

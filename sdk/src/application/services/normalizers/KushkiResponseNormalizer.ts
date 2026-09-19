@@ -23,19 +23,28 @@ import {
   isKushkiTransferResponse,
   normalizeKushkiTransfer,
 } from "./kushki-transfer";
+import {
+  flattenKushkiCharge,
+  isKushkiFullResponseCharge,
+} from "./kushki-card";
 
 const FALLBACK_EMAIL = "customer@kushki.com";
 
 export class KushkiResponseNormalizer implements GatewayResponseNormalizer {
   normalize(rawResponse: unknown): Transaction {
-    const payload = parsePayload(rawResponse, Gateway.KUSHKI, "Kushki");
+    const raw = parsePayload(rawResponse, Gateway.KUSHKI, "Kushki");
 
-    // Kushki responde con dos formas distintas según el método, y una consulta de
-    // transferencia no trae `ticketNumber` ni `transaction_status`. Ver
-    // `kushki-transfer.ts`, y el punto 48 del architecture-log para lo medido.
-    if (isKushkiTransferResponse(payload)) {
-      return normalizeKushkiTransfer(payload, rawResponse);
+    // Kushki responde con tres formas distintas según el método y la ruta. Una consulta
+    // de transferencia no trae `ticketNumber` ni `transaction_status` (`kushki-transfer.ts`,
+    // punto 48), y un cobro con tarjeta trae todo anidado en `details` y con otros nombres
+    // (`kushki-card.ts`, punto 50). Las dos formas se resuelven antes de leer nada: la de
+    // transferencia con su propio normalizador, porque no comparte ni los campos ni los
+    // estados, y la de tarjeta aplanándola, porque es la misma información con otra forma.
+    if (isKushkiTransferResponse(raw)) {
+      return normalizeKushkiTransfer(raw, rawResponse);
     }
+
+    const payload = isKushkiFullResponseCharge(raw) ? flattenKushkiCharge(raw) : raw;
 
     const ticketNumber = String(payload.ticketNumber ?? "");
 

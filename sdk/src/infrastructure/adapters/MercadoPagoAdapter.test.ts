@@ -20,6 +20,10 @@ describe("MercadoPagoAdapter", () => {
     currency: new Currency("COP"),
     orderReference: new OrderReference("ORDER-MP-123"),
     payer: new Payer({ email: "cliente.mp@example.com" }),
+    // Token y cuotas son obligatorios: medido contra la API real, un cobro sin token
+    // responde `400 "payment_method_id attribute can't be null"` y sin cuotas
+    // `400 "Invalid installments"`.
+    paymentMethod: PaymentMethod.card("a1b2c3d4e5f6"),
   };
 
   const approvedMpResponse = {
@@ -63,6 +67,8 @@ describe("MercadoPagoAdapter", () => {
             transaction_amount: 50000,
             description: "ORDER-MP-123",
             external_reference: "ORDER-MP-123",
+            token: "a1b2c3d4e5f6",
+            installments: 1,
             payer: { email: "cliente.mp@example.com" },
           }),
         }

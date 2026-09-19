@@ -68,3 +68,53 @@ export function assertSupportedPaymentMethod(
       `Métodos soportados: ${supported.join(", ")}.`,
   );
 }
+
+/**
+ * Devuelve el token de tarjeta, o falla si no vino.
+ *
+ * ## El defecto que esto corrige
+ *
+ * `PaymentMethod.card(cardToken)` existía desde el PR #85, estaba exportado y
+ * probado, y **ningún adaptador leía `cardToken`**: es el mismo defecto que el issue
+ * #64 ya registra para `ReturnUrlConfig`, en el otro método del alcance. Medido
+ * contra los sandboxes reales, un cobro con tarjeta sin token respondía:
+ *
+ *     Wompi:        422 "No se especificó método de pago o fuente de pago"
+ *     Mercado Pago: 400 "payment_method_id attribute can't be null"
+ *     Kushki:       400 K001, porque mandaba el literal "simulated-token"
+ *     Rapyd:        400 MISSING_FIELDS - [PAYMENT_METHOD]
+ *
+ * O sea que cobrar con tarjeta funcionaba **solo contra el simulador**, en las cuatro.
+ *
+ * Se valida antes de armar el payload, y no se deja que la pasarela conteste, por lo
+ * mismo que en PSE: un HTTP 400 de la pasarela no dice qué falta ni de dónde sacarlo,
+ * y acá sí se puede decir. `INVALID_REQUEST` y no `UNSUPPORTED_OPERATION` porque la
+ * pasarela sí sabe cobrar con tarjeta: lo que falta es un dato del comercio.
+ */
+export function requireCardToken(
+  paymentMethod: PaymentMethod | undefined,
+  gateway: Gateway,
+  tokenizationEndpoint: string,
+): string {
+  const cardToken = paymentMethod?.cardToken;
+  if (cardToken) {
+    return cardToken;
+  }
+
+  throw new KitPagosError(
+    KitPagosErrorCode.INVALID_REQUEST,
+    gateway,
+    null,
+    `${gateway} necesita un token de tarjeta para cobrar y no se informó ninguno. ` +
+      `Pedilo desde el frontend con ${tokenizationEndpoint} y pasalo en ` +
+      `PaymentMethod.card(cardToken). El SDK no acepta el número de tarjeta: recibirlo ` +
+      `metería al comercio dentro del alcance de PCI DSS.`,
+  );
+}
+
+/** Cuotas pedidas, o 1 si el método no las informó. */
+export function resolveInstallments(
+  paymentMethod: PaymentMethod | undefined,
+): number {
+  return paymentMethod?.installments ?? 1;
+}

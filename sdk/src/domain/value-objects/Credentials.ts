@@ -12,9 +12,14 @@ export interface Credentials {
    * pasa, el síntoma es un HTTP 422 con "La firma es inválida" y nada que
    * indique que el problema es de rotulado.
    *
-   * Opcional porque las otras tres pasarelas no lo tienen y porque la API de
-   * simulación no valida firmas, así que el SDK sigue siendo utilizable sin él.
-   * El `WompiAdapter` solo lo exige cuando hace falta firmar de verdad.
+   * **Obligatorio para cobrar con Wompi**, aunque el tipo lo declare opcional porque las
+   * otras tres pasarelas no lo tienen. Antes decía que era opcional "porque la API de
+   * simulación no valida firmas, así que el SDK sigue siendo utilizable sin él": medirlo
+   * mostró que eso solo valía contra el simulador. Contra `sandbox.wompi.co`, tanto un cobro
+   * con tarjeta como un PSE sin el campo `signature` responden
+   * `422 "Firma de integridad requerida no enviada"`. El `WompiAdapter` lo exige al crear un
+   * pago, con un error que nombra el dato y dónde se consigue; consultar el estado no lo
+   * necesita, porque esa llamada no lleva firma.
    */
   integritySecret?: string;
 }

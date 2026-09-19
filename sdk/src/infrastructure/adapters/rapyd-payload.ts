@@ -48,29 +48,3 @@ export function applyReturnUrls(
   }
 }
 
-/**
- * Arma el cuerpo de un cobro con tarjeta.
- *
- * El monto va en **pesos y no en centavos**: `toMinorUnits()` no se usa acá, y usarlo
- * multiplicaría el cobro por cien. Se envía como string con la escala fija de la
- * divisa por indicación explícita de Rapyd, que documenta que `JSON.stringify`
- * convierte `12.00` en `12` y que eso cambia el cuerpo sobre el que se calcula la
- * firma, invalidándola.
- */
-export function buildCardPaymentPayload(
-  request: CreatePaymentRequest,
-): Record<string, unknown> {
-  const payload: Record<string, unknown> = {
-    amount: request.amount.toFixedScale(request.currency.getMinorUnitExponent()),
-    currency: request.currency.getCode(),
-    merchant_reference_id: request.orderReference.getValue(),
-    // Rapyd no modela un correo de pagador obligatorio como las otras tres
-    // pasarelas; `receipt_email` (opcional) es el campo equivalente más cercano y
-    // sirve para que el pagador reciba el recibo.
-    receipt_email: request.payer.email,
-  };
-
-  applyReturnUrls(payload, request);
-
-  return payload;
-}

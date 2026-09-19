@@ -50,6 +50,10 @@ import type { PendingRedirect } from "../../domain/value-objects/PaymentResult";
 import type { PayerKind, PaymentMethod } from "../../domain/value-objects/PaymentMethod";
 import type { Payer } from "../../domain/value-objects/Payer";
 import type { PseBank } from "../../domain/value-objects/PseBank";
+import {
+  requireCardToken,
+  resolveInstallments,
+} from "./payment-method-support";
 
 /**
  * Tipos de documento que Wompi acepta en `user_legal_id_type`.
@@ -193,6 +197,23 @@ export function buildPseFields(attributes: {
   };
 }
 
+/**
+ * Campos nativos de Wompi para un cobro con tarjeta.
+ *
+ * Medido contra el sandbox: sin este objeto, `POST /transactions` responde
+ * `422 UNPROCESSABLE "No se especificó método de pago o fuente de pago"`. Con él
+ * responde `201` y la transacción nace en `PENDING`, no en `APPROVED`: el cobro con
+ * tarjeta de Wompi **es asíncrono** y se resolvió a `APPROVED` a los ~600 ms.
+ *
+ * `installments` es opcional para Wompi —un cobro sin cuotas responde `201` igual— y
+ * se manda siempre porque el dominio siempre tiene un valor, que por omisión es 1.
+ */
+export interface WompiCardFields {
+  readonly type: "CARD";
+  readonly token: string;
+  readonly installments: number;
+}
+
 /** Datos ya convertidos a formato de cable con los que se arma el cuerpo del POST. */
 export interface WompiPayloadAttributes {
   readonly amountInCents: number;
@@ -200,6 +221,7 @@ export interface WompiPayloadAttributes {
   readonly reference: string;
   readonly customerEmail: string;
   readonly pseFields?: WompiPseFields;
+  readonly cardFields?: WompiCardFields;
   readonly redirectUrl?: string;
   readonly acceptanceToken?: string;
   readonly integritySecret?: string;
@@ -208,10 +230,14 @@ export interface WompiPayloadAttributes {
 /**
  * Arma el cuerpo de `POST /transactions`.
  *
- * Los tres campos de autenticación se agregan solo si hay con qué: la API de
- * simulación no valida firmas ni token de aceptación, así que el SDK tiene que
- * seguir siendo usable sin credenciales. Contra Wompi real los tres son
- * obligatorios, y su ausencia se manifiesta como un 422 que no dice cuál falta.
+ * Los tres campos de autenticación se agregan solo si hay con qué, y conviene saber qué
+ * cuesta eso: se midió el 19 de septiembre de 2026 que **Wompi no crea ninguna transacción
+ * sin la firma de integridad** —tarjeta y PSE sin el campo `signature` responden
+ * `422 "Firma de integridad requerida no enviada"`—, así que un comercio que no configure
+ * `integritySecret` no recibe un error del SDK sino ese 422. Exigirlo acá arrastra también
+ * al token de aceptación, que es condicional por la misma razón y se obtiene de otra
+ * llamada, así que se dejó declarado en el punto 50 y con issue propio en vez de resolverlo
+ * a medias dentro del trabajo de tarjeta.
  */
 export function buildWompiPayload(
   attributes: WompiPayloadAttributes,
@@ -223,8 +249,12 @@ export function buildWompiPayload(
     customer_email: attributes.customerEmail,
   };
 
+  // Los dos métodos viajan en el mismo campo nativo, `payment_method`, así que nunca
+  // se mandan juntos: el que corresponda lo decide el adaptador según el método pedido.
   if (attributes.pseFields) {
     payload.payment_method = attributes.pseFields;
+  } else if (attributes.cardFields) {
+    payload.payment_method = attributes.cardFields;
   }
   if (attributes.redirectUrl) {
     payload.redirect_url = attributes.redirectUrl;
@@ -369,6 +399,28 @@ export function buildPseFieldsFor(
     payer,
     orderReference,
   });
+}
+
+/**
+ * Arma los campos de tarjeta, o nada si el cobro no es con tarjeta.
+ *
+ * Trata como tarjeta el caso en que el comercio no informó método, porque ese es el
+ * método por omisión de las cuatro pasarelas y es lo que el contrato declara. La
+ * consecuencia es deliberada: un cobro sin método y sin token ahora falla con
+ * `INVALID_REQUEST` en vez de salir a la red para que Wompi conteste `422`.
+ */
+export function buildCardFieldsFor(
+  paymentMethod: PaymentMethod | undefined,
+): WompiCardFields | undefined {
+  if (paymentMethod?.type === "PSE") {
+    return undefined;
+  }
+
+  return {
+    type: "CARD",
+    token: requireCardToken(paymentMethod, Gateway.WOMPI, "POST /v1/tokens/cards"),
+    installments: resolveInstallments(paymentMethod),
+  };
 }
 
 /**

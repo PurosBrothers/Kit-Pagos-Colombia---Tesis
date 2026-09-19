@@ -14,7 +14,8 @@ import { ResponseNormalizer } from "../../application/services/ResponseNormalize
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
 import { assertSupportedPaymentMethod } from "./payment-method-support";
-import { buildKushkiAmount, resolveTaxBreakdown } from "./kushki-amount";
+import { resolveTaxBreakdown } from "./kushki-amount";
+import { CARD_CHARGE_PATH, buildCardChargePayload } from "./kushki-charge";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import type { PseBank } from "../../domain/value-objects/PseBank";
@@ -90,27 +91,11 @@ export class KushkiAdapter implements PaymentGatewayPort {
       return this.createTransferPayment(request);
     }
 
-    const payload = {
-      token: "simulated-token",
-      /*
-       * Kushki recibe la referencia del comercio en `trackingCode`. Es
-       * distinta del `transactionReference` que Kushki genera y devuelve en la
-       * respuesta: si se toma ese como referencia de la orden, el comercio
-       * pierde la suya y no puede conciliar. Ver `ubiquitous-language.md`,
-       * fila `orderReference`.
-       */
-      trackingCode: request.orderReference.getValue(),
-      amount: buildKushkiAmount(request, resolveTaxBreakdown(request)),
-      contactDetails: {
-        email: request.payer.email,
-      },
-    };
-
     const rawResponse = await this.request(
-      "/charges",
+      CARD_CHARGE_PATH,
       "POST",
       "private",
-      payload,
+      buildCardChargePayload(request),
     );
 
     return transactionResult(

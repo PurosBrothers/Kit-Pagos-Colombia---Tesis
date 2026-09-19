@@ -8,6 +8,7 @@ import { Amount } from "../../domain/value-objects/Amount";
 import { Currency } from "../../domain/value-objects/Currency";
 import { OrderReference } from "../../domain/value-objects/OrderReference";
 import { Payer } from "../../domain/value-objects/Payer";
+import { PaymentMethod } from "../../domain/value-objects/PaymentMethod";
 import { MercadoPagoAdapter } from "../adapters/MercadoPagoAdapter";
 import { KushkiAdapter } from "../adapters/KushkiAdapter";
 
@@ -60,6 +61,7 @@ describe("GatewayFactory", () => {
         currency: new Currency("COP"),
         orderReference: new OrderReference("ord-1"),
         payer: new Payer({ email: "cliente@example.com" }),
+        paymentMethod: PaymentMethod.card("tok_test_card_4242"),
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
@@ -126,10 +128,11 @@ describe("GatewayFactory", () => {
         currency: new Currency("COP"),
         orderReference: new OrderReference("ord-1"),
         payer: new Payer({ email: "cliente@example.com" }),
+        paymentMethod: PaymentMethod.card("tok_test_card_4242"),
       });
 
       const [url, init] = mockFetch.mock.calls[0];
-      expect(url).toBe("https://sandboxapi.rapyd.net/v1/payments");
+      expect(url).toBe("https://sandboxapi.rapyd.net/v1/checkout");
       // Rapyd no usa Bearer: identifica al comercio con el header access_key y
       // una firma por peticion.
       expect(init.headers.access_key).toBe(credentials.publicKey);

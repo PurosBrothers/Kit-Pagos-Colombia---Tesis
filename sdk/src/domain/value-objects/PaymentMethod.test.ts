@@ -22,7 +22,6 @@ describe("PaymentMethod", () => {
 
       expect(method.bankCode).toBeUndefined();
       expect(method.payerKind).toBeUndefined();
-      expect(method.cashNetwork).toBeUndefined();
     });
   });
 
@@ -68,17 +67,40 @@ describe("PaymentMethod", () => {
     });
   });
 
-  describe("cash", () => {
-    it("construye un método de efectivo sin red", () => {
-      const method = PaymentMethod.cash();
-
-      expect(method.type).toBe("CASH");
-      expect(method.cashNetwork).toBeUndefined();
+  describe("cuotas y token opcional", () => {
+    it("una tarjeta sin cuotas informadas es un pago de una cuota", () => {
+      expect(PaymentMethod.card("tok").installments).toBe(1);
     });
 
-    it("construye un método de efectivo con red explícita", () => {
-      expect(PaymentMethod.cash({ network: "EFECTY" }).cashNetwork).toBe(
-        "EFECTY",
+    it("conserva las cuotas pedidas", () => {
+      expect(PaymentMethod.card("tok", { installments: 12 }).installments).toBe(12);
+    });
+
+    it("rechaza cuotas que no son un entero positivo", () => {
+      expect(() => PaymentMethod.card("tok", { installments: 0 })).toThrow(
+        "PaymentMethod.card requiere installments entero y mayor o igual a 1",
+      );
+      expect(() => PaymentMethod.card("tok", { installments: 1.5 })).toThrow();
+      expect(() => PaymentMethod.card("tok", { installments: -3 })).toThrow();
+    });
+
+    /**
+     * El token es opcional porque Rapyd cobra tarjeta en su propia página y no hay token
+     * que mandar: cobrar un token guardado responde `ERROR_CARD_NOT_AUTHENTICATED` y el
+     * único camino que funciona exige el número de la tarjeta, que el SDK no acepta.
+     * Las tres pasarelas que sí lo usan fallan con INVALID_REQUEST si falta.
+     */
+    it("permite una tarjeta sin token, para las pasarelas que cobran en su página", () => {
+      const method = PaymentMethod.card();
+
+      expect(method.type).toBe("CARD");
+      expect(method.cardToken).toBeUndefined();
+      expect(method.installments).toBe(1);
+    });
+
+    it("sigue rechazando un token vacío, que es un dato mal puesto y no una omisión", () => {
+      expect(() => PaymentMethod.card("")).toThrow(
+        "PaymentMethod.card requiere cardToken",
       );
     });
   });
@@ -92,7 +114,6 @@ describe("PaymentMethod", () => {
         true,
       );
       expect(PaymentMethod.card("tok").requiresPayerDocument()).toBe(false);
-      expect(PaymentMethod.cash().requiresPayerDocument()).toBe(false);
     });
   });
 });

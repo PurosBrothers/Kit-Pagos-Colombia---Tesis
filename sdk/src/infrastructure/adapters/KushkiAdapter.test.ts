@@ -22,6 +22,9 @@ describe("KushkiAdapter", () => {
     currency: new Currency("COP"),
     orderReference: new OrderReference("ord-12345"),
     payer: new Payer({ email: "cliente@example.com" }),
+    // Antes el adaptador mandaba el literal "simulated-token", que contra Kushki real
+    // responde `400 K001`. Ver el punto 50 del architecture-log.
+    paymentMethod: PaymentMethod.card("kushki-card-token-abc"),
   };
 
   beforeEach(() => {
@@ -61,14 +64,14 @@ describe("KushkiAdapter", () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3000/v1/sim/kushki/charges",
+        "http://localhost:3000/v1/sim/kushki/card/v1/charges",
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            token: "simulated-token",
+            token: "kushki-card-token-abc",
             trackingCode: "ord-12345",
             amount: {
               subtotalIva0: 50000,
@@ -80,6 +83,9 @@ describe("KushkiAdapter", () => {
             contactDetails: {
               email: "cliente@example.com",
             },
+            // Sin `fullResponse` la respuesta real es `{ticketNumber, transactionReference}`
+            // y no alcanza para construir una Transaction: falta el estado y el monto.
+            fullResponse: true,
           }),
         },
       );
@@ -279,7 +285,7 @@ describe("KushkiAdapter", () => {
       await adapter.createPayment(validRequest);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3000/v1/sim/kushki/charges",
+        "http://localhost:3000/v1/sim/kushki/card/v1/charges",
         expect.objectContaining({
           headers: {
             "Content-Type": "application/json",

@@ -9,13 +9,17 @@ import { ResponseNormalizer } from "../../application/services/ResponseNormalize
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
 import { buildRapydHeaders, serializeBody } from "./rapyd-signature";
-import { buildCardPaymentPayload } from "./rapyd-payload";
 import {
   PaymentResult,
   transactionResult,
   redirectRequired,
 } from "../../domain/value-objects/PaymentResult";
 import { extractRapydRedirect } from "../../application/services/normalizers/rapyd-redirect";
+import {
+  buildCheckoutPayload,
+  checkoutToPaymentResponse,
+  isRapydCheckoutId,
+} from "./rapyd-checkout";
 import { assertSupportedPaymentMethod } from "./payment-method-support";
 import {
   assertPseRequirements,
@@ -107,40 +111,43 @@ export class RapydAdapter implements PaymentGatewayPort {
       return this.createPsePayment(request);
     }
 
-    // 1. Mapeo del dominio a campos nativos de Rapyd, en rapyd-payload.ts.
-    const payload = buildCardPaymentPayload(request);
+    return this.createHostedCheckout(request);
+  }
 
-    // 2. Serializar una sola vez. Este mismo string se firma y se envía.
-    //    serializeBody usa JSON.stringify sin espacios, que es lo que Rapyd exige.
-    const bodyString = serializeBody(payload);
-    const url = `${this.baseUrl}/payments`;
-    const headers = buildRapydHeaders("post", url, bodyString, this.credentials);
+  /**
+   * Cobra con tarjeta por la página de pago de Rapyd.
+   *
+   * ## Por qué no es un cobro servidor-a-servidor como en las otras tres
+   *
+   * Porque Rapyd no lo permite sin la tarjeta en la mano. Se midió: cobrar un token de
+   * tarjeta guardado responde `400 ERROR_CARD_NOT_AUTHENTICATED`, con cliente y pidiendo
+   * 3DS también, y el único camino que responde `200` exige `payment_method.fields.number`,
+   * o sea el número de la tarjeta en la petición. Aceptarlo metería al SDK y a todo
+   * comercio que lo integre en alcance PCI DSS. Todo el razonamiento y lo medido están en
+   * `rapyd-checkout.ts`.
+   *
+   * El resultado es una redirección, igual que PSE: la misma rama del puerto, sin ningún
+   * campo nuevo en la API pública.
+   */
+  private async createHostedCheckout(
+    request: CreatePaymentRequest,
+  ): Promise<PaymentResult> {
+    const rawResponse = await this.send(
+      "post",
+      "/checkout",
+      buildCheckoutPayload(request),
+    );
 
-    // 3. Petición HTTP
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method: "POST",
-        headers,
-        body: bodyString,
-      });
-    } catch (networkError) {
-      const errorHandler = new ErrorHandler();
-      throw errorHandler.handle(networkError, Gateway.RAPYD);
-    }
-
-    // 4. Rapyd puede exigir un paso del pagador por fuera del SDK: 3DS devuelve
-    //    `status: "ACT"` con `next_action: "3d_verification"` y un `redirect_url`.
-    //    Antes del issue #64 ese `redirect_url` se descartaba en silencio, porque
-    //    el normalizador traduce "ACT" a PENDING y `Transaction` no tenía dónde
-    //    guardar la URL. El comercio recibía una transacción pendiente sin señal
-    //    de que faltaba redirigir, y el pago se quedaba colgado hasta expirar.
-    const rawResponse = await this.readRawResponse(response);
+    // `extractRapydRedirect` sirve tal cual para el checkout: lee `data.redirect_url` y
+    // `data.id`, que es lo que la respuesta trae, y no depende del `next_action` (punto 39).
     const redirect = extractRapydRedirect(rawResponse);
     if (redirect) {
       return redirectRequired(redirect);
     }
 
+    // Sin URL no hay página a la que mandar al pagador. Normalizar deja que el error se
+    // reporte como respuesta malformada, que es la verdad, en vez de devolver una
+    // transacción pendiente que nunca va a avanzar.
     return transactionResult(
       this.normalizer.normalize(rawResponse, Gateway.RAPYD),
     );
@@ -155,18 +162,26 @@ export class RapydAdapter implements PaymentGatewayPort {
    * el cuerpo firmado es un string vacío.
    */
   async getStatus(gatewayTransactionId: string): Promise<Transaction> {
-    const url = `${this.baseUrl}/payments/${gatewayTransactionId}`;
-    const headers = buildRapydHeaders("get", url, "", this.credentials);
-
-    let response: Response;
-    try {
-      response = await fetch(url, { method: "GET", headers });
-    } catch (networkError) {
-      const errorHandler = new ErrorHandler();
-      throw errorHandler.handle(networkError, Gateway.RAPYD);
+    // Un cobro con tarjeta devuelve el id de un checkout, no de un pago, y Rapyd los
+    // tiene en recursos distintos: se midió que un id de checkout en `/payments/{id}`
+    // responde `400 ERROR_GET_PAYMENT`. La ruta se elige por el prefijo, que Rapyd pone
+    // en todos sus identificadores.
+    if (isRapydCheckoutId(gatewayTransactionId)) {
+      const rawResponse = await this.send(
+        "get",
+        `/checkout/${gatewayTransactionId}`,
+      );
+      return this.normalizer.normalize(
+        checkoutToPaymentResponse(rawResponse),
+        Gateway.RAPYD,
+      );
     }
 
-    return this.readTransaction(response);
+    const rawResponse = await this.send(
+      "get",
+      `/payments/${gatewayTransactionId}`,
+    );
+    return this.normalizer.normalize(rawResponse, Gateway.RAPYD);
   }
 
   /**

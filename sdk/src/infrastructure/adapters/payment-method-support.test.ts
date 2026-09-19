@@ -40,7 +40,7 @@ describe("assertSupportedPaymentMethod", () => {
    */
   it("should reject an unsupported method as UNSUPPORTED_OPERATION", () => {
     try {
-      assertSupportedPaymentMethod(PaymentMethod.cash(), Gateway.WOMPI, ["CARD", "PSE"]);
+      assertSupportedPaymentMethod(metodoQueElTipoNoAdmite(), Gateway.WOMPI, ["CARD", "PSE"]);
       fail("debía lanzar");
     } catch (error) {
       expect(error).toBeInstanceOf(KitPagosError);
@@ -204,22 +204,38 @@ describe("pedir un método que la pasarela no implementa", () => {
   });
 
   /**
-   * `CASH` existe en el tipo desde #85 y ninguna pasarela lo implementa todavía,
-   * así que las cuatro tienen que rechazarlo.
+   * El alcance del trabajo son tarjeta y PSE, así que el tipo solo admite esos dos
+   * y el compilador ya rechaza cualquier otro. Esta prueba cubre el caso que el
+   * compilador **no** ve: un comercio en JavaScript, sin tipos, que manda un método
+   * inventado. La guarda tiene que responder lo mismo que si fuera un método futuro
+   * que esta pasarela no soporta, y sobre todo **no debe llegar a la red**: un cobro
+   * que la pasarela no puede atender no se intenta.
    */
   it.each([
     ["WompiAdapter", () => new WompiAdapter()],
     ["MercadoPagoAdapter", () => new MercadoPagoAdapter()],
     ["RapydAdapter", () => new RapydAdapter()],
     ["KushkiAdapter", () => new KushkiAdapter()],
-  ])("%s should refuse a CASH payment", async (_name, build) => {
+  ])("%s should refuse a method it cannot charge", async (_name, build) => {
     const mockFetch = jest.fn();
     global.fetch = mockFetch;
 
     await expect(
-      build().createPayment({ ...pseRequest, paymentMethod: PaymentMethod.cash() }),
+      build().createPayment({ ...pseRequest, paymentMethod: metodoQueElTipoNoAdmite() }),
     ).rejects.toMatchObject({ code: KitPagosErrorCode.UNSUPPORTED_OPERATION });
 
     expect(mockFetch).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Un método de pago que `PaymentMethodType` no admite, como llegaría desde
+ * JavaScript sin tipos.
+ *
+ * El cast es deliberado y es lo que se quiere probar: sin él no hay forma de
+ * escribir este caso, porque el compilador lo rechaza, y entonces la guarda de los
+ * adaptadores quedaría sin ninguna prueba que la ejercite.
+ */
+function metodoQueElTipoNoAdmite(): PaymentMethod {
+  return { type: "CASH" } as unknown as PaymentMethod;
+}

@@ -354,11 +354,19 @@ export function parseKushkiPseBanks(rawResponse: unknown): PseBank[] {
  * La de transferencia sí discrimina: devuelve `200` con el estado para un token que
  * conoce, y `400 T001` para uno que no. Así que es la única que puede ir primero.
  *
- * El corolario incómodo hay que decirlo: **la consulta de estado de tarjeta no está
- * verificada contra la API real de Kushki**, y lo medido sugiere que `/charges/{id}`
- * no es su ruta. Se deja en la lista porque es la que el simulador implementa y la
- * que el flujo de tarjeta usa hoy, pero encontrar la ruta real es trabajo aparte,
- * registrado en el punto 48 del `architecture-log.md`.
+ * El corolario incómodo hay que decirlo: **Kushki no expone ninguna ruta de consulta
+ * de cobros con tarjeta que se haya podido encontrar.** El 19 de septiembre se
+ * probaron catorce candidatas con un `ticketNumber` real recién emitido —entre ellas
+ * `/charges/{id}`, `/card/v1/charges/{id}`, `/card/v1/transaction/{id}`,
+ * `/analytics/v1/transaction/{id}` y `/card/v1/charges/{id}/status`— y **todas**
+ * respondieron como la ruta de control inventada: `403 Forbidden` las que están bajo
+ * la raíz, y `403 "Missing Authentication Token"` las que están bajo `/card/v1`.
+ *
+ * `/charges/{id}` se deja en la lista porque es la que el simulador implementa y con
+ * la que el ejemplo de tarjeta muestra el ciclo de vida completo. Contra Kushki real,
+ * el estado final de un cobro con tarjeta llega por webhook, y el cobro mismo ya trae
+ * su estado resuelto porque se pide con `fullResponse: true` (ver `kushki-charge.ts`).
+ * Lo medido está en el punto 50 del `architecture-log.md`.
  */
 export function kushkiStatusPaths(gatewayTransactionId: string): readonly string[] {
   return [
