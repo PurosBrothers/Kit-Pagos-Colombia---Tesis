@@ -1,12 +1,12 @@
 name: Publish SDK to npm
 
 on:
-  release:
-    types: [published]
   push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+    branches:
+      - main
+    paths:
+      - 'sdk/**'
+  workflow_dispatch: # Permite también dispararlo manualmente si se desea
 
 jobs:
   publish:
@@ -30,13 +30,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check if version is already published
+        id: check_version
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
+          if npm view kit-pagos-colombia@$CURRENT_VERSION version > /dev/null 2>&1; then
+            echo "already_published=true" >> $GITHUB_OUTPUT
+            echo "La versión $CURRENT_VERSION ya está publicada en npm. Omitiendo publicación."
+          else
+            echo "already_published=false" >> $GITHUB_OUTPUT
+            echo "Nueva versión $CURRENT_VERSION detectada. Se procederá a publicar."
+          fi
+
       - name: Run tests
+        if: steps.check_version.outputs.already_published == 'false'
         run: npm test
 
       - name: Build SDK
+        if: steps.check_version.outputs.already_published == 'false'
         run: npm run build
 
-      - name: Publish package
+      - name: Publish to npm
+        if: steps.check_version.outputs.already_published == 'false'
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

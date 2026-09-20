@@ -41,7 +41,7 @@ const readmePath = path.join(sdkRoot, "README.md");
 /** Devuelve el contenido de cada bloque ```typescript (o ```ts) del README. */
 function bloquesTypeScript(markdown: string): string[] {
   const bloques: string[] = [];
-  const patron = /```(?:typescript|ts)\n([\s\S]*?)```/g;
+  const patron = /```(?:typescript|ts)\r?\n([\s\S]*?)```/g;
   let coincidencia: RegExpExecArray | null;
 
   while ((coincidencia = patron.exec(markdown)) !== null) {
@@ -160,10 +160,11 @@ function main(): void {
   );
 
   try {
+    const tscBin = path.join(sdkRoot, "node_modules", ".bin", process.platform === "win32" ? "tsc.cmd" : "tsc");
     execFileSync(
-      path.join(sdkRoot, "node_modules", ".bin", "tsc"),
+      tscBin,
       ["-p", configPath],
-      { stdio: "inherit" },
+      { stdio: "inherit", shell: process.platform === "win32" },
     );
     console.log(`Los ${bloques.length} ejemplos de TypeScript del README compilan.`);
   } catch {
