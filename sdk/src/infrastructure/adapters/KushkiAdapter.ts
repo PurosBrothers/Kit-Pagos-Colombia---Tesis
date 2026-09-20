@@ -15,7 +15,11 @@ import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
 import { assertSupportedPaymentMethod } from "./payment-method-support";
 import { resolveTaxBreakdown } from "./kushki-amount";
-import { CARD_CHARGE_PATH, buildCardChargePayload } from "./kushki-charge";
+import {
+  CARD_CHARGE_PATH,
+  buildCardChargePayload,
+  extractCardChargeRedirect,
+} from "./kushki-charge";
 import type { PseBank } from "../../domain/value-objects/PseBank";
 import {
   assertPseRequirements,
@@ -96,6 +100,11 @@ export class KushkiAdapter implements PaymentGatewayPort {
       "private",
       buildCardChargePayload(request),
     );
+
+    const redirect = extractCardChargeRedirect(rawResponse);
+    if (redirect) {
+      return redirectRequired(redirect);
+    }
 
     return transactionResult(
       this.normalizer.normalize(rawResponse, Gateway.KUSHKI),

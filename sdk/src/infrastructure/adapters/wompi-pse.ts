@@ -305,6 +305,23 @@ export function extractRedirectSnapshot(rawResponse: unknown): WompiRedirectSnap
   };
 }
 
+/**
+ * Determina si la transacción de Wompi requiere redirección externa (sea por PSE
+ * o por desafío 3D Secure / OTP en cobros con tarjeta).
+ */
+export function requiresRedirect(rawResponse: unknown, paymentMethodType?: string): boolean {
+  if (paymentMethodType === "PSE") {
+    return true;
+  }
+  const snapshot = extractRedirectSnapshot(rawResponse);
+  if (snapshot.redirectUrl) {
+    return true;
+  }
+  const data = readObject(rawResponse, "data");
+  const extra = readObject(readObject(data, "payment_method"), "extra");
+  return Boolean(extra?.is_three_ds || extra?.three_ds_auth_type);
+}
+
 /** Token de aceptación de términos, que Wompi entrega firmado y de un solo uso. */
 /**
  * Exige el secreto de integridad, que es la mitad de lo que Wompi pide para crear.
