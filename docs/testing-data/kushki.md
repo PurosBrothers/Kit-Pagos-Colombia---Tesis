@@ -69,30 +69,55 @@ segunda (punto 50 del `architecture-log.md`):
   de la misma tabla sí tokenizan, así que no es la tabla entera, es esa fila para esta cuenta.
   Para probar conviene una Visa de prueba genérica (`4242 4242 4242 4242`), que tokeniza y
   aprueba.
-- **Kushki no expone cómo consultar un cobro con tarjeta, y la búsqueda quedó agotada.** El 19
-  de septiembre se sondearon nueve rutas candidatas con los dos identificadores que devuelve el
-  cobro —`ticketNumber` y `transactionId`— y con las dos llaves: treinta y seis sondeos, todos
-  `403`, y **ninguno distinguible de una ruta inventada**. Se usó el discriminador de la sección
-  5.2 y un control positivo (`/transfer/v1/bankList`) que confirma que el método sí encuentra
-  las rutas que existen.
+- **La única consulta de tarjeta que Kushki publica es la del flujo asíncrono, y el cobro
+  síncrono no está ahí.** Conviene leer cómo se llegó a esto, porque la primera conclusión fue
+  más fuerte de lo que la medición aguantaba.
+
+  El 19 de septiembre se sondearon nueve rutas candidatas con los dos identificadores del cobro
+  y las dos llaves —treinta y seis sondeos, todos `403` e indistinguibles de una ruta
+  inventada— y de ahí se concluyó que Kushki no expone **ninguna** consulta de tarjeta. La
+  conclusión estaba mal, y el error no fue de método sino de dónde se buscó: las nueve
+  candidatas eran nombres de recurso (`charges`, `transaction`, `transactions`) y ninguna era la
+  analogía directa de la ruta de PSE que sí existe, `/transfer/v1/status/{token}`.
+
+  Al medir el espacio `card-async`, la misma tarde, apareció:
 
   | Ruta | Privada | Pública | Veredicto |
   |---|---|---|---|
   | `/transfer/v1/bankList` (control positivo) | `401` de la aplicación | `200` | existe |
+  | `/card-async/v1/status/{id}` | `400 CAS004 "No existe la transacción"` | `401` | **existe** |
+  | `/card-async/v1/status` (sin identificador) | `403 "Missing Authentication Token"` | — | el id es parte de la ruta |
+  | `/transfer/v1/status/{id}` (la de PSE) | `400 T001` | `401` | existe |
+  | `/card/v1/status/{id}` | `403` sin ruta | `403` sin ruta | **no existe** |
   | `/card/v1/charges/{ticket}` | `403` sin ruta | `403` sin ruta | **no existe** |
   | `/charges/{ticket}` | `403 "Forbidden"` | `403 "Forbidden"` | **no existe** |
-  | `/card/v1/transaction/{id}`, `/card/v1/transactions/{id}`, `/analytics/v1/transaction/{id}`, `/transaction/v1/status/{id}`, `/card/v1/charges/{id}/status`, `/v1/charges/{id}`, `/card/v2/charges/{id}` | `403` sin ruta | `403` sin ruta | **no existen** |
+  | `/card/v1/transaction/{id}`, `/card/v1/transactions/{id}`, `/analytics/v1/transaction/{id}`, `/transaction/v1/status/{id}`, `/card/v1/charges/{id}/status`, `/v1/charges/{id}`, `/card/v2/charges/{id}`, `/card-async/v1/charges/{id}`, `/payouts/card/v1/status/{id}`, `/subscriptions/v1/card/status/{id}` | `403` sin ruta | `403` sin ruta | **no existen** |
   | `/rutaInventada/abc123` y `/card/v1/rutaInventada/{ticket}` (controles) | `403` sin ruta | `403` sin ruta | no existen |
+
+  `CAS004` es la aplicación contestando **después** del autorizador, igual que el `T001` de PSE:
+  la ruta está publicada. Lo que dice es que el cobro no está en ese almacén, y se probó con los
+  tres identificadores que devuelve la creación: `ticketNumber`, `transactionId` y
+  `transactionReference`. Los tres dan `CAS004`.
+
+  Encaja con lo que Kushki documenta: `card-async` es el flujo asíncrono de tarjeta
+  —preautorización y captura, Webpay sobre Transbank— y su propia referencia lo declara
+  disponible **solo en Chile**. El cobro de Colombia se crea en `/card/v1/charges`, que es
+  síncrono y no queda registrado ahí.
+
+  **Qué hace el SDK:** intenta la ruta asíncrona igual, porque la certeza de que el cobro no
+  está sale de preguntarle a Kushki en el momento y no de citar su documentación, y porque si
+  algún día registra los cobros síncronos ahí el SDK empieza a funcionar sin cambios. Cuando
+  contesta `CAS004`, `getPaymentStatus()` falla con `UNSUPPORTED_OPERATION` nombrando el flujo
+  asíncrono; antes devolvía `INVALID_CREDENTIALS`, que mandaba a rotar llaves que estaban bien.
 
   **Qué usar en su lugar:** el cobro **ya trae su estado final** en la respuesta de creación
   cuando se pide con `fullResponse: true`, que es lo que el SDK hace siempre, y los cambios
-  posteriores llegan por webhook. Desde el punto 53, `getPaymentStatus()` sobre un cobro con
-  tarjeta falla con `UNSUPPORTED_OPERATION` y un mensaje que dice esto; antes devolvía
-  `INVALID_CREDENTIALS`, que mandaba a rotar llaves que estaban bien.
+  posteriores llegan por webhook.
 
-  El sondeo con sus controles quedó como script ejecutable en
-  `sdk/test/sandbox/probe-kushki-status.ts`, para que esto se pueda volver a medir en vez de
-  creerle a este párrafo.
+  Los dos sondeos quedaron como scripts ejecutables, `probe-kushki-status.ts` (el barrido con
+  sus controles) y `probe-kushki-card-async.ts` (el detalle de la ruta que sí existe), en
+  `sdk/test/sandbox/`, para que esto se pueda volver a medir en vez de creerle a este párrafo.
+  Que la primera versión de este párrafo fuera falsa es el argumento de por qué están.
 
 ---
 

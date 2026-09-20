@@ -119,6 +119,31 @@ async function main(): Promise<void> {
       [`/v1/charges/${id}`, nombre],
       [`/card/v2/charges/${id}`, nombre],
       [`/transfer/v1/status/${id}`, nombre],
+      /*
+       * Segunda ronda. La primera medición dejó fuera las dos formas más plausibles, y no
+       * por azar: se buscaron rutas con nombre de recurso ("charges", "transaction") y no la
+       * que el propio Kushki usa para PSE, `/transfer/v1/status/{token}`. La analogía directa
+       * de esa es `/card/v1/status/{id}`, y nunca se había probado.
+       *
+       * `card-async` es el otro espacio: su endpoint de captura menciona un "Get status" y
+       * usa `ticketNumber`. La documentación dice que el servicio existe solo en Chile
+       * (procesador Transbank, Webpay), así que se mide con credenciales colombianas para
+       * ver si la ruta está publicada igual o si de verdad no está para Colombia.
+       */
+      [`/card/v1/status/${id}`, nombre],
+      [`/card-async/v1/status/${id}`, nombre],
+      [`/card-async/v1/charges/${id}`, nombre],
+      [`/payouts/card/v1/status/${id}`, nombre],
+      [`/subscriptions/v1/card/status/${id}`, nombre],
+    );
+  }
+
+  // Variantes con el identificador por query, no por ruta: si la ruta existe y el
+  // identificador va mal, el autorizador contesta distinto que la ausencia de ruta.
+  if (ticket) {
+    candidatas.push(
+      [`/card/v1/status?ticketNumber=${ticket}`, "query"],
+      [`/card-async/v1/status?ticketNumber=${ticket}`, "query"],
     );
   }
 

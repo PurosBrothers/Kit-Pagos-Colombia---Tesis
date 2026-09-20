@@ -235,8 +235,20 @@ describe("kushkiStatusPaths", () => {
   it("ofrece primero la ruta de transferencia, que es la que sabe decir que no conoce el id", () => {
     expect(kushkiStatusPaths("abc123")).toEqual([
       "/transfer/v1/status/abc123",
+      "/card-async/v1/status/abc123",
       "/charges/abc123",
     ]);
+  });
+
+  /*
+   * La consulta asíncrona de tarjeta está en la lista porque **existe**: se midió `400
+   * CAS004 "No existe la transacción"` con la llave privada y `401` con la pública, que es
+   * el mismo patrón de la ruta de PSE. La primera medición la pasó por alto buscando
+   * nombres de recurso en vez de la analogía de la ruta de PSE, y de ahí salió la
+   * afirmación —falsa— de que Kushki no publica ninguna consulta de tarjeta.
+   */
+  it("incluye la consulta asincrona de tarjeta, que es la que Kushki si publica", () => {
+    expect(kushkiStatusPaths("abc123")).toContain("/card-async/v1/status/abc123");
   });
 
   /**
@@ -244,8 +256,8 @@ describe("kushkiStatusPaths", () => {
    * esto de una heurística: no hay ningún formato que lo pueda hacer fallar.
    */
   it("no depende de la forma del identificador", () => {
-    expect(kushkiStatusPaths("123456789012345678")).toHaveLength(2);
-    expect(kushkiStatusPaths("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4")).toHaveLength(2);
+    expect(kushkiStatusPaths("123456789012345678")).toHaveLength(3);
+    expect(kushkiStatusPaths("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4")).toHaveLength(3);
   });
 });
 

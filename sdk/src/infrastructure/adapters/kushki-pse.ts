@@ -354,23 +354,47 @@ export function parseKushkiPseBanks(rawResponse: unknown): PseBank[] {
  * La de transferencia sí discrimina: devuelve `200` con el estado para un token que
  * conoce, y `400 T001` para uno que no. Así que es la única que puede ir primero.
  *
- * El corolario incómodo hay que decirlo: **Kushki no expone ninguna ruta de consulta
- * de cobros con tarjeta que se haya podido encontrar.** El 19 de septiembre se
- * probaron catorce candidatas con un `ticketNumber` real recién emitido —entre ellas
- * `/charges/{id}`, `/card/v1/charges/{id}`, `/card/v1/transaction/{id}`,
- * `/analytics/v1/transaction/{id}` y `/card/v1/charges/{id}/status`— y **todas**
- * respondieron como la ruta de control inventada: `403 Forbidden` las que están bajo
- * la raíz, y `403 "Missing Authentication Token"` las que están bajo `/card/v1`.
+ * ## `card-async`: la ruta que la primera medición no vio
  *
- * `/charges/{id}` se deja en la lista porque es la que el simulador implementa y con
- * la que el ejemplo de tarjeta muestra el ciclo de vida completo. Contra Kushki real,
- * el estado final de un cobro con tarjeta llega por webhook, y el cobro mismo ya trae
- * su estado resuelto porque se pide con `fullResponse: true` (ver `kushki-charge.ts`).
- * Lo medido está en el punto 50 del `architecture-log.md`.
+ * La primera medición concluyó que Kushki no expone **ninguna** consulta de tarjeta, y
+ * era una conclusión mal sacada: probó catorce formas de ruta y ninguna en el espacio
+ * `card-async`. Buscaba nombres de recurso —`charges`, `transaction`, `transactions`— y
+ * se le pasó la analogía directa de la ruta de PSE que sí existe.
+ *
+ * Medido el 19 de septiembre con un cobro real recién hecho, `/card-async/v1/status/{id}`
+ * **existe**, y se distingue sin ambigüedad de las que no:
+ *
+ * | Ruta | Llave privada | Llave pública |
+ * | --- | --- | --- |
+ * | `/card-async/v1/status/{id}` | `400 CAS004 "No existe la transacción"` | `401` |
+ * | `/transfer/v1/status/{id}` (existe, es la de PSE) | `400 T001` | `401` |
+ * | `/card/v1/status/{id}` | `403` igual que una inventada | `403` |
+ * | `/card-async/v1/status` (sin id) | `403 "Missing Authentication Token"` | — |
+ *
+ * `CAS004` es la aplicación de Kushki hablando después del autorizador, igual que el
+ * `T001` de PSE: la ruta está publicada. Lo que contesta es que **el cobro no está en
+ * ese almacén**, y se probó con los tres identificadores que devuelve la creación
+ * (`ticketNumber`, `transactionId` y `transactionReference`). Es coherente con lo que
+ * documenta Kushki: `card-async` es el flujo asíncrono de tarjeta —preautorización y
+ * captura, Webpay sobre Transbank— y su propia documentación lo declara disponible solo
+ * en Chile. El cobro de Colombia se crea en `/card/v1/charges`, que es síncrono.
+ *
+ * Se intenta igual, y por dos razones. La primera es que **la certeza sale de medir en
+ * el momento y no de citar una documentación**: si el comercio consulta y Kushki
+ * contesta `CAS004`, el SDK sabe que la ruta existe y que la transacción no es de ese
+ * tipo. La segunda es que si Kushki registra los cobros síncronos ahí alguna vez, el
+ * SDK empieza a funcionar sin cambiarle una línea.
+ *
+ * `/charges/{id}` se deja al final porque es la que el simulador implementa y con la
+ * que el ejemplo de tarjeta muestra el ciclo de vida completo. Contra Kushki real, el
+ * estado final de un cobro con tarjeta llega por webhook, y el cobro mismo ya trae su
+ * estado resuelto porque se pide con `fullResponse: true` (ver `kushki-charge.ts`).
+ * Lo medido está en los puntos 50 y 53 del `architecture-log.md`.
  */
 export function kushkiStatusPaths(gatewayTransactionId: string): readonly string[] {
   return [
     `/transfer/v1/status/${gatewayTransactionId}`,
+    `/card-async/v1/status/${gatewayTransactionId}`,
     `/charges/${gatewayTransactionId}`,
   ];
 }
@@ -442,12 +466,14 @@ export function kushkiStatusFailure(
       KitPagosErrorCode.UNSUPPORTED_OPERATION,
       Gateway.KUSHKI,
       null,
-      `Kushki no expone una ruta para consultar el estado de un cobro con tarjeta, así que ` +
-        `no se puede consultar ${gatewayTransactionId}. No te quedás sin el dato: el cobro ` +
-        `ya devuelve su estado final en la respuesta de createPayment(), y los cambios ` +
-        `posteriores llegan por webhook, que podés verificar con validateWebhook(). Esto no ` +
-        `es un problema de tus credenciales: la consulta de transferencias con estas mismas ` +
-        `llaves respondió bien.`,
+      `Kushki no permite consultar un cobro con tarjeta hecho por su flujo síncrono, así ` +
+        `que no se puede consultar ${gatewayTransactionId}. La única consulta de tarjeta que ` +
+        `publica es la del flujo asíncrono (/card-async, preautorización y captura), y ahí ` +
+        `este cobro no está registrado. No te quedás sin el dato: el cobro ya devuelve su ` +
+        `estado final en la respuesta de createPayment(), y los cambios posteriores llegan ` +
+        `por webhook, que podés verificar con validateWebhook(). Esto no es un problema de ` +
+        `tus credenciales: la consulta de transferencias con estas mismas llaves respondió ` +
+        `bien.`,
     );
   }
 

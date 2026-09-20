@@ -1202,7 +1202,7 @@ La ruta de tarjeta contesta lo mismo para todo, incluso para lo que no existe, a
 
 Hay un corolario incómodo que conviene dejar escrito en vez de tapar: lo medido sugiere que **`GET /charges/{id}` no es la ruta de consulta de cobros con tarjeta de Kushki**, y ese camino nunca se verificó contra su API real. Se conserva como segunda opción porque es la que el simulador implementa y la que el flujo de tarjeta usa hoy, pero encontrar la ruta real es trabajo pendiente, y la técnica del #68 no sirve para buscarla: a la altura de la raíz del dominio, las rutas registradas y las inexistentes responden igual.
 
-> **Cerrado en el punto 53** (issue #92), y la sospecha de este párrafo quedó confirmada: **esa ruta no existe, y ninguna de las veinticuatro candidatas probadas tampoco.** Lo que no se veía desde acá es que la ruta que se conservaba "por si acaso" tenía un precio medible: consultar un cobro con tarjeta aprobado devolvía `INVALID_CREDENTIALS` con las credenciales buenas. Hoy devuelve un `UNSUPPORTED_OPERATION` que dice qué usar en su lugar.
+> **Cerrado en el punto 53** (issue #92), y la sospecha de este párrafo quedó confirmada a medias: `/charges/{id}` no existe, pero la consulta de tarjeta del flujo asíncrono —`/card-async/v1/status/{id}`— sí, y las primeras mediciones no la habían probado. Ver la corrección al final del punto 53. Lo que no se veía desde acá es que la ruta que se conservaba "por si acaso" tenía un precio medible: consultar un cobro con tarjeta aprobado devolvía `INVALID_CREDENTIALS` con las credenciales buenas. Hoy devuelve un `UNSUPPORTED_OPERATION` que dice qué consulta sí existe y qué usar en su lugar.
 
 ---
 
@@ -1503,7 +1503,9 @@ Y el sondeo lleva tres controles, que es lo que convierte esto en una medición 
 | `/charges/{ticket real}` | `403 "Forbidden"` | `403 "Forbidden"` | **no existe** |
 | `/rutaInventada/abc123` (control) | `403 "Forbidden"` | `403 "Forbidden"` | no existe |
 
-O sea: el método distingue —encuentra las rutas de transferencia sin problema— y **ninguna candidata de tarjeta se distingue de una ruta inventada, con ninguna de las dos llaves**. Sumando la medición anterior, la búsqueda por sondeo está agotada: no queda señal que seguir.
+O sea: el método distingue —encuentra las rutas de transferencia sin problema— y ninguna de esas candidatas de tarjeta se distingue de una ruta inventada, con ninguna de las dos llaves.
+
+> **Corrección del mismo día.** De acá se concluyó que "la búsqueda por sondeo está agotada" y que Kushki no expone **ninguna** consulta de tarjeta. Las dos cosas eran falsas, y el error no fue de método sino de dónde se buscó: las nueve candidatas eran nombres de recurso —`charges`, `transaction`, `transactions`— y ninguna era la analogía de la ruta de PSE que sí existe. Al probar `/card-async/v1/status/{id}` apareció `400 CAS004 "No existe la transacción"` con la llave privada y `401` con la pública: el mismo patrón que la ruta de PSE, o sea que **existe**. Lo que no existe es el cobro síncrono dentro de ese almacén. El detalle está más abajo, en la corrección al final de este punto.
 
 **El defecto veinte del proyecto estaba escondido en esa conclusión.** Medir qué recibe hoy un comercio que cobra con tarjeta y consulta:
 
@@ -1514,13 +1516,34 @@ Con las credenciales buenas. El SDK lo mandaba a rotar unas llaves que no tenía
 
 **Lo que sí se puede afirmar, y por qué.** A la ruta de tarjeta solo se llega si la de transferencia contestó `400 T001` —"cuerpo de la petición inválido"—, que es la aplicación de Kushki hablando **después** del autorizador. Con credenciales inválidas la primera ruta responde `403` y el adaptador se rinde ahí mismo. Así que un `403` en la segunda ruta no puede ser de la llave: es la ruta. Ese razonamiento no se puede sacar mirando el error solo, y es todo el contenido del parámetro `credentialsAlreadyProven` de `kushkiStatusFailure()`.
 
-Así que la corrección no es una ruta nueva sino un error honesto: `UNSUPPORTED_OPERATION` que dice tres cosas —que Kushki no expone esa consulta, que **no es un problema de credenciales**, y qué usar en su lugar: el estado ya viene resuelto en la respuesta de `createPayment()`, porque el adaptador pide `fullResponse: true`, y los cambios posteriores llegan por webhook, que el SDK sí verifica para Kushki. El comercio no se queda sin el dato; se queda sin sondeo.
+Así que la corrección no es una ruta nueva sino un error honesto: `UNSUPPORTED_OPERATION` que dice tres cosas —cuál es la consulta que Kushki sí tiene y por qué este cobro no está ahí, que **no es un problema de credenciales**, y qué usar en su lugar: el estado ya viene resuelto en la respuesta de `createPayment()`, porque el adaptador pide `fullResponse: true`, y los cambios posteriores llegan por webhook, que el SDK sí verifica para Kushki. El comercio no se queda sin el dato; se queda sin sondeo.
 
-Queda además el instrumento, `test/sandbox/probe-kushki-status.ts`, que es el sondeo ejecutable con sus controles. Es la diferencia entre "se buscó y no está" escrito en prosa y una medición que cualquiera puede repetir, que es lo que el punto 51 reclamaba.
+Queda además el instrumento, `test/sandbox/probe-kushki-status.ts`, que es el sondeo ejecutable con sus controles. Es la diferencia entre "se buscó y no está" escrito en prosa y una medición que cualquiera puede repetir, que es lo que el punto 51 reclamaba. Y sirvió, aunque de la forma incómoda: lo que encontró el error de este punto fue volver a correrlo con rutas nuevas.
+
+#### Corrección: la ruta existía, y era la única que no se había probado
+
+La conclusión de arriba —"Kushki no expone ninguna consulta de tarjeta"— se cayó el mismo día, al pedir que se revisara contra la documentación en vez de solo contra la API. Vale la pena registrar el error completo porque es de una clase distinta a los otros diecinueve: no es un defecto del código sino **una conclusión negativa sacada de una búsqueda incompleta**, presentada con la autoridad de una medición de 36 sondeos.
+
+Los 36 sondeos eran reales y el discriminador era correcto. El problema es que las nueve rutas candidatas se eligieron buscando nombres de recurso —`charges`, `transaction`, `transactions`, `analytics`— y ninguna era la analogía directa de la única ruta de consulta que Kushki ya tenía funcionando en este mismo SDK: `/transfer/v1/status/{token}`. Ni `/card/v1/status/{id}` ni `/card-async/v1/status/{id}` estaban en la lista. Un sondeo grande no vuelve exhaustiva una lista mal elegida, y treinta y seis mediciones sobre nueve rutas equivocadas se leen igual de contundentes que sobre las correctas.
+
+Lo que apareció al medirlas:
+
+| Ruta | Llave privada | Llave pública | Veredicto |
+| --- | --- | --- | --- |
+| `/card-async/v1/status/{id}` | `400 CAS004 "No existe la transacción"` | `401` | **existe** |
+| `/transfer/v1/status/{id}` (la de PSE, referencia) | `400 T001` | `401` | existe |
+| `/card/v1/status/{id}` | `403` como una inventada | `403` | no existe |
+| `/card-async/v1/status` (sin identificador) | `403 "Missing Authentication Token"` | — | el id es parte de la ruta |
+
+`CAS004` es la aplicación de Kushki hablando después del autorizador, exactamente como el `T001` de PSE. La ruta está publicada. Lo que contesta es que el cobro **no está en ese almacén**, y se comprobó con los tres identificadores que devuelve la creación: `ticketNumber`, `transactionId` y `transactionReference`. Encaja con la documentación de Kushki: `card-async` es el flujo asíncrono de tarjeta —preautorización y captura, Webpay sobre Transbank— y su referencia lo declara disponible solo en Chile. El cobro de Colombia se crea en `/card/v1/charges`, que es síncrono.
+
+**Qué cambió en el SDK.** `kushkiStatusPaths()` intenta ahora la ruta asíncrona entre la de transferencia y la del simulador. No es para que funcione hoy —para un cobro síncrono va a dar `CAS004` siempre— sino por dos razones que sí valen: la certeza de que el cobro no está ahí pasa a salir de preguntarle a Kushki en el momento en vez de citar su documentación, y si Kushki registra los cobros síncronos ahí alguna vez, el SDK empieza a funcionar sin cambiarle una línea. El mensaje de `UNSUPPORTED_OPERATION` dejó de decir que Kushki no expone la consulta y ahora dice cuál expone y por qué este cobro no aparece; la prueba de contra el sandbox real afirma que el mensaje nombre `card-async`, para que nadie lo vuelva a endurecer.
+
+**La lección, que es sobre cómo se escribe este log.** "No existe" es una afirmación mucho más difícil de sostener que "existe", y en este proyecto se escribió con la misma confianza que las positivas. Una medición negativa solo es tan buena como la lista de candidatas, y la lista hay que justificarla —de dónde salió cada forma de ruta, y qué analogía se siguió— con el mismo cuidado con el que se justifica el discriminador. Acá la analogía que faltaba estaba a la vista: era la ruta de PSE que el propio adaptador ya llamaba tres líneas más arriba.
 
 ---
 
-**Estado:** Los cuatro aplicados. 577 pruebas del SDK y 16 de contrato contra los sandboxes reales, entre ellas una que cobra una tarjeta en Kushki y afirma que consultarla falla con `UNSUPPORTED_OPERATION`: si Kushki publica una ruta de consulta, esa prueba se pone roja y avisa que el SDK está diseñado alrededor de una restricción que ya no existe. Los otros dos huecos del punto 36 —protección contra reenvío, y distinguir cuerpo malformado de firma falsificada— se cerraron en paralelo sobre esta misma rama y no los toca este trabajo; el punto 54 cuenta cómo se juntaron las dos mitades.
+**Estado:** Los cuatro aplicados. 579 pruebas del SDK y 16 de contrato contra los sandboxes reales, entre ellas una que cobra una tarjeta en Kushki y afirma que consultarla falla con `UNSUPPORTED_OPERATION` nombrando el flujo asíncrono: si Kushki empieza a registrar los cobros síncronos en esa ruta, la consulta responde y la prueba se pone roja, avisando que el SDK está diseñado alrededor de una restricción que ya no existe. Los otros dos huecos del punto 36 —protección contra reenvío, y distinguir cuerpo malformado de firma falsificada— se cerraron en paralelo sobre esta misma rama y no los toca este trabajo; el punto 54 cuenta cómo se juntaron las dos mitades.
 
 ---
 

@@ -377,6 +377,13 @@ describe("KushkiAdapter", () => {
           status: 400,
           json: async () => ({ code: "T001", message: "Cuerpo de la peticion invalido." }),
         })
+        // La consulta del flujo asíncrono de tarjeta: existe, y contesta que no tiene
+        // registrado un cobro síncrono. Es el `CAS004` medido contra la UAT.
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 400,
+          json: async () => ({ code: "CAS004", message: "No existe la transaccion" }),
+        })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
@@ -409,6 +416,11 @@ describe("KushkiAdapter", () => {
       );
       expect(mockFetch).toHaveBeenNthCalledWith(
         2,
+        "http://localhost:3000/v1/sim/kushki/card-async/v1/status/kushki-mock-tx-123",
+        expect.objectContaining({ method: "GET" }),
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
         "http://localhost:3000/v1/sim/kushki/charges/kushki-mock-tx-123",
         {
           method: "GET",
@@ -619,6 +631,11 @@ describe("KushkiAdapter con PSE", () => {
           json: async () => ({ code: "T001", message: "Cuerpo de la peticion invalido." }),
         })
         .mockResolvedValueOnce({
+          ok: false,
+          status: 400,
+          json: async () => ({ code: "CAS004", message: "No existe la transaccion" }),
+        })
+        .mockResolvedValueOnce({
           ok: true,
           status: 200,
           json: async () => ({
@@ -633,9 +650,50 @@ describe("KushkiAdapter con PSE", () => {
         "123456789012345678",
       );
 
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(mockFetch.mock.calls[1][0]).toBe(
+        "https://api.example.com/card-async/v1/status/123456789012345678",
+      );
+      expect(mockFetch.mock.calls[2][0]).toBe(
+        "https://api.example.com/charges/123456789012345678",
+      );
+      expect(transaction.getStatus()).toBe("APPROVED");
+    });
+
+    /*
+     * La consulta del flujo asíncrono de tarjeta existe —se midió `400 CAS004` con la llave
+     * privada y `401` con la pública, el mismo patrón de la ruta de PSE que sí existe— y lo
+     * que contesta es que el cobro síncrono no está en ese almacén. Se intenta igual porque
+     * la certeza de que no está sale de preguntarle a Kushki en el momento, no de citar su
+     * documentación; y si algún día registra los cobros síncronos ahí, esto ya funciona.
+     */
+    it("devuelve la transacción cuando la consulta asíncrona de tarjeta sí la conoce", async () => {
+      const mockFetch = jest
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 400,
+          json: async () => ({ code: "T001", message: "Cuerpo de la peticion invalido." }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ticketNumber: "441571084222882291",
+            transaction_status: "APPROVAL",
+            amount: { subtotalIva0: 150000, subtotalIva: 0, iva: 0, ice: 0, currency: "COP" },
+          }),
+        });
+      global.fetch = mockFetch;
+
+      const transaction = await new KushkiAdapter("https://api.example.com").getStatus(
+        "441571084222882291",
+      );
+
+      // No llega a `/charges/{id}`: la resolvió la ruta asíncrona.
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockFetch.mock.calls[1][0]).toBe(
-        "https://api.example.com/charges/123456789012345678",
+        "https://api.example.com/card-async/v1/status/441571084222882291",
       );
       expect(transaction.getStatus()).toBe("APPROVED");
     });
