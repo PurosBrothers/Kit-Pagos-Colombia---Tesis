@@ -94,8 +94,11 @@ const sdk = new KitPagos({
   },
   maxRetries: 3,                 // Reintentos automáticos ante fallos transitorios
   webhookToleranceSeconds: 300,  // Tolerancia de 5 minutos contra ataques de replay
+  baseUrl: process.env.PAYMENT_GATEWAY_URL, // Opcional: URL productiva o sandbox (ver tabla de URLs abajo)
 });
 ```
+
+> **Entornos y URLs Base (`baseUrl`).** Por defecto, el SDK apunta a la API de simulación local (`http://localhost:3000/v1/sim/{gateway}`) para permitir desarrollo y pruebas sin costo. **Para conectar a producción o sandboxes reales**, es indispensable configurar el parámetro `baseUrl`.
 
 > **`webhookSecret` no es la llave de API.** En Wompi, Mercado Pago y Kushki el secreto que
 > firma los webhooks es un valor distinto, que se saca de otra parte del panel. Si lo omitís,
@@ -312,6 +315,32 @@ async function cobrarConDiagnostico(request: CreatePaymentRequest) {
 - `UNSUPPORTED_OPERATION`: Método o flujo no soportado por la pasarela seleccionada (por ejemplo, consultar un cobro con tarjeta en Kushki).
 - `MAX_RETRIES_EXCEEDED`: Se agotaron los reintentos configurados sin obtener respuesta.
 - `UNKNOWN_ERROR`: Error genérico no tipificado.
+
+---
+
+## 🚀 Despliegue a Producción y Consideraciones Reales
+
+Si vas a utilizar este SDK en un entorno real con dinero de verdad (o en los sandboxes oficiales de cada pasarela), ten en cuenta las siguientes consideraciones de arquitectura y normativa financiera:
+
+### 1. URLs Base: Producción vs. Simulador Local
+Por diseño de evaluación académica (RF-09), si omites `baseUrl`, el SDK apunta por defecto a la API de simulación local (`http://localhost:3000/v1/sim/{gateway}`) para permitir pruebas completas sin costo ni conexión a internet.
+
+**Para procesar pagos reales**, es indispensable configurar el parámetro `baseUrl` apuntando al endpoint oficial de la pasarela activa:
+
+| Pasarela | Entorno Sandbox (Pruebas) | Entorno Producción (Real) |
+|---|---|---|
+| **Wompi** | `https://sandbox.wompi.co/v1` | `https://production.wompi.co/v1` |
+| **Mercado Pago** | `https://api.mercadopago.com/v1` | `https://api.mercadopago.com/v1` |
+| **Kushki** | `https://api-uat.kushkipagos.com` | `https://api.kushkipagos.com` |
+| **Rapyd** | `https://sandboxapi.rapyd.net/v1` | `https://api.rapyd.net/v1` |
+
+### 2. Tokenización en Frontend y Cumplimiento PCI-DSS
+Por regulaciones bancarias internacionales (PCI-DSS) y de la Superintendencia Financiera de Colombia (SFC), **un servidor backend nunca debe recibir datos sensibles de tarjetas (número de 16 dígitos, fecha de expiración o CVV) en texto plano**, a menos que cuente con certificación PCI-DSS Nivel 1.
+
+Por esta razón, el SDK opera como un backend seguro que consume **tokens**:
+1. **En el Navegador (Frontend):** El usuario ingresa su tarjeta en un formulario web que utiliza la librería de tokenización oficial de la pasarela activa (ej. Wompi Widget/JS, Mercado Pago CardForm/SDK, Kushki.js o Rapyd Collect).
+2. **Generación del Token:** La pasarela valida la tarjeta directamente desde el navegador y devuelve un token temporal (ej. `tok_test_card_12345`).
+3. **Procesamiento en Backend:** Tu frontend envía ese token a tu servidor Node.js, donde `KitPagos` ejecuta el cobro de forma segura mediante `PaymentMethod.card(token, { installments })`.
 
 ---
 

@@ -1436,7 +1436,7 @@ El mock de Mercado Pago ahora exige el header en las dos rutas, y reproduce las 
 
 ---
 
-### 53. Los cuatro pendientes que bloqueaban publicar en npm: tres eran de diseño y el cuarto no tenía solución
+### 54. Los cuatro pendientes que bloqueaban publicar en npm: tres eran de diseño y el cuarto no tenía solución
 
 **Responsable de corregirlo en el SAD:** Joan (sección 9.1.1, fachada, por la firma nueva de `validateWebhook()`; sección 15.1, por el contrato de `Credentials`; sección 13, ADR, por la decisión de Kushki).
 
@@ -1557,7 +1557,7 @@ Lo que apareció al medirlas:
 
 ---
 
-### 54. Cerrar los cuatro huecos de seguridad en paralelo: el choque no fue de texto sino de la misma posición en la firma
+### 55. Cerrar los cuatro huecos de seguridad en paralelo: el choque no fue de texto sino de la misma posición en la firma
 
 **Responsable de corregirlo en el SAD:** Joan (sección 9.1.1, fachada, por la firma definitiva de `validateWebhook()`).
 
@@ -1587,6 +1587,24 @@ Se eligió sobre la alternativa obvia —cuatro parámetros posicionales, `(payl
 **Lo que ese síntoma deja anotado, y no se corrigió acá.** Un webhook rechazado por viejo y uno rechazado por falsificado devuelven los dos `WEBHOOK_SIGNATURE_INVALID`. Fallar cerrado es correcto y hay que conservarlo, pero el 36.6 se cerró para que el diagnóstico distinga lo que no se pudo interpretar de lo que no coincidió, y por dentro de "no coincidió" quedó una ambigüedad de la misma clase: al comercio cuyo servidor tiene el reloj desfasado el SDK le va a decir que le están falsificando webhooks. Distinguirlos exige decidir si "expiró" es información que se le puede dar a quien manda la petición, que es una decisión de seguridad y no de diagnóstico. Queda como pendiente declarado, no como hueco del 36.7, porque el rechazo es correcto: lo discutible es el mensaje.
 
 **Estado:** Resuelto. Los cuatro huecos del punto 36 quedan cerrados sobre una sola firma, con 577 pruebas del SDK en verde. Pendiente: decidir si un webhook expirado merece un diagnóstico propio.
+
+---
+
+### 56. Directrices de producción para el SDK: URLs de pasarelas reales y tokenización bajo PCI-DSS (issue #88)
+
+**Responsable:** Joshua (sección 1.2 del SAD y `sdk/README.md`).
+
+**Contexto:** Se realizó una auditoría de preparación para el despliegue del SDK en entornos de producción con pasarelas reales (Wompi, Mercado Pago, Kushki, Rapyd). La auditoría identificó dos consideraciones esenciales que deben quedar documentadas formalmente tanto en la arquitectura como en el manual de integración del SDK:
+
+1. **URLs Base: Simulación Local vs. Endpoints Productivos (RF-09):**
+   Por decisión de diseño de la tesis para satisfacer el requerimiento RF-09, los cuatro adaptadores tienen configurada por defecto una URL hacia la API de simulación local (`http://localhost:3000/v1/sim/{gateway}`). Esto permite que el jurado evaluador y los desarrolladores prueben la suite completa sin credenciales reales ni conexión a internet. Sin embargo, para procesar transacciones reales en producción o en los sandboxes oficiales, el comercio está **obligado** a configurar explícitamente el parámetro `baseUrl` hacia los endpoints productivos de cada proveedor (`https://production.wompi.co/v1`, `https://api.mercadopago.com/v1`, `https://api.kushkipagos.com`, `https://api.rapyd.net/v1`).
+
+2. **Frontera de Tokenización y Normativa PCI-DSS:**
+   El SDK es una librería de backend y no captura números de tarjeta en texto plano. De acuerdo con la normativa internacional PCI-DSS y las directrices de la Superintendencia Financiera de Colombia (SFC), la tokenización de tarjetas debe ejecutarse del lado del cliente (Frontend) mediante las librerías oficiales de cada pasarela (Wompi.js, Mercado Pago SDK JS, Kushki.js, Rapyd Collect). El backend del comercio recibe únicamente el token efímero y se lo delega al SDK mediante `PaymentMethod.card(token)`.
+
+**Decisión:** Se documentan exhaustivamente ambas directrices en `sdk/README.md` (incluyendo la tabla de URLs para sandbox y producción y la arquitectura del flujo de tokenización), dejando constancia en este registro para trazabilidad de la sustentación.
+
+**Estado:** Resuelto y documentado en `sdk/README.md` y `docs/architecture/architecture-log.md`.
 
 ---
 
