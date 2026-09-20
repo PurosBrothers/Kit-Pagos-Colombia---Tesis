@@ -272,7 +272,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   - String suelto y cualquier otro valor, resueltos en el propio despachador.
   
   Las funciones puras (`sanitize`, `formatGatewayName`, `mapHttpStatus`) viven a nivel de módulo, y los predicados `hasConnectionSignal` y `hasTimeoutSignal` quedaron compartidos con `classifyError`, que duplicaba esas mismas cadenas de condiciones. Antes del punto 34, `handle()` concentraba todo en complejidad ciclomática 35.
-- **Asimetría conocida entre `classifyError` y `handle()`:** un `Error` cuyo mensaje contenga `"network"` se clasifica como reintentable en `classifyError`, pero `handle()` no reconoce esa señal y lo traduce a `UNKNOWN_ERROR`, que vuelve a clasificarse como final. El mismo error es reintentable antes de pasar por `handle()` y final después. Es preexistente y no intencional; está registrada en `architecture-log.md`, punto 34, pendiente de decidir si se corrige.
+- **Simetría entre `classifyError` y `handle()` (Resuelto):** Los errores de red (mensajes conteniendo `"network"` o códigos como `ENETUNREACH`, `ECONNREFUSED`, etc.) son reconocidos por el predicado común `hasConnectionSignal()`, traduciéndose en `KitPagosErrorCode.CONNECTION_FAILED` y clasificándose consistentemente como reintentables (`RETRIABLE`).
 - **Estructura de SdkError:** extiende la clase `Error` nativa de JavaScript y añade tres atributos:
   - `code`: código normalizado del enum `SdkErrorCode` (valores: `INVALID_CREDENTIALS`, `GATEWAY_TIMEOUT`, `CONNECTION_FAILED`, `RATE_LIMIT_EXCEEDED`, `RESOURCE_NOT_FOUND`, `WEBHOOK_SIGNATURE_INVALID`, `MAX_RETRIES_EXCEEDED`, `MALFORMED_RESPONSE`, `UNSUPPORTED_OPERATION`, `UNKNOWN_ERROR`).
   - `gateway`: la pasarela (`Gateway`) que originó el error.

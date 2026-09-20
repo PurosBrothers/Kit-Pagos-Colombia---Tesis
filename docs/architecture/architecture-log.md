@@ -1960,7 +1960,7 @@ Las dos señales son necesarias porque responden preguntas distintas, y `Amount`
 
 3. **`ErrorHandler` → división por forma del error, no por pasarela.** Los fallos que traduce son de red y de protocolo HTTP, iguales para las cuatro pasarelas; lo que varía es la forma del fallo entrante. `handle()` delega en `fromHttpStatus` (respuesta con status) y `fromNativeError` (`Error` de Node), y las funciones puras `sanitize`, `formatGatewayName` y `mapHttpStatus` bajaron a nivel de módulo por el mismo criterio del punto 33. Los predicados `hasConnectionSignal` y `hasTimeoutSignal` quedaron compartidos con `classifyError`, que duplicaba esas mismas cadenas de condiciones.
 
-**Asimetría preexistente que se documenta sin corregir:** `classifyError` reconoce un mensaje que contenga "network" como reintentable, pero `handle()` no lo reconoce y lo traduce a `UNKNOWN_ERROR`, que vuelve a clasificarse como `FINAL`. El mismo error nativo es reintentable antes de pasar por `handle()` y final después. Se conservó el comportamiento tal cual para no mezclar un cambio de semántica con una reestructuración; queda anotado en el código y pendiente de decidir si es un defecto a corregir.
+**Asimetría resuelta:** Anteriormente, `classifyError` reconocía un mensaje que contuviera "network" como reintentable, pero `hasConnectionSignal()` no incluía "network" ni códigos como `ENETUNREACH`, provocando que `handle()` tradujera el error a `UNKNOWN_ERROR` (clasificado como `FINAL`). Se resolvió incorporando `"network"`, `ENETUNREACH`, `ENETDOWN` y `EAI_AGAIN` directamente en `hasConnectionSignal()`, logrando simetría total: un fallo con señal de red se traduce a `KitPagosErrorCode.CONNECTION_FAILED` y mantiene consistentemente su clasificación `RETRIABLE`.
 
 **Resultado:**
 

@@ -32,10 +32,14 @@ function hasConnectionSignal(errCode: string, msg: string): boolean {
     errCode === "ECONNREFUSED" ||
     errCode === "ECONNRESET" ||
     errCode === "ENOTFOUND" ||
+    errCode === "ENETUNREACH" ||
+    errCode === "ENETDOWN" ||
+    errCode === "EAI_AGAIN" ||
     msg.includes("econnrefused") ||
     msg.includes("econnreset") ||
     msg.includes("enotfound") ||
     msg.includes("fetch failed") ||
+    msg.includes("network") ||
     msg.includes("connect")
   );
 }
@@ -55,14 +59,10 @@ function nativeErrorCode(error: Error): string {
 }
 
 /**
- * Función auxiliar para clasificar un KitPagosError o KitPagosErrorCode en RETRIABLE o FINAL.
+ * Función auxiliar para clasificar un KitPagosError, KitPagosErrorCode o Error en RETRIABLE o FINAL.
  *
- * Reconoce una señal adicional que `ErrorHandler.handle()` no reconoce: un mensaje
- * que contenga "network". Es una asimetría preexistente, no intencional: significa
- * que un `Error` con ese mensaje se considera reintentable aquí, pero
- * `handle()` lo traduce a UNKNOWN_ERROR, que vuelve a clasificarse como FINAL.
- * Se conserva tal cual para no cambiar comportamiento junto con la
- * reestructuración; queda registrada en architecture-log.md, punto 34.
+ * Utiliza las señales de conexión (hasConnectionSignal) y timeout (hasTimeoutSignal),
+ * garantizando simetría total con ErrorHandler.handle().
  */
 export function classifyError(error: unknown): ErrorFamily {
   let code: KitPagosErrorCode | undefined;
@@ -87,8 +87,7 @@ export function classifyError(error: unknown): ErrorFamily {
     const errCode = nativeErrorCode(error);
     if (
       hasConnectionSignal(errCode, msg) ||
-      hasTimeoutSignal(errCode, msg) ||
-      msg.includes("network")
+      hasTimeoutSignal(errCode, msg)
     ) {
       return ErrorFamily.RETRIABLE;
     }
@@ -254,18 +253,18 @@ export class ErrorHandler {
     const msg = rawError.message.toLowerCase();
     const errCode = nativeErrorCode(rawError);
 
-    if (hasConnectionSignal(errCode, msg)) {
-      return {
-        code: KitPagosErrorCode.CONNECTION_FAILED,
-        originalPayload: rawError,
-        message: `Failed to connect to ${gatewayName} gateway: ${rawError.message}`,
-      };
-    }
     if (hasTimeoutSignal(errCode, msg)) {
       return {
         code: KitPagosErrorCode.GATEWAY_TIMEOUT,
         originalPayload: rawError,
         message: `Gateway request timed out for ${gatewayName}: ${rawError.message}`,
+      };
+    }
+    if (hasConnectionSignal(errCode, msg)) {
+      return {
+        code: KitPagosErrorCode.CONNECTION_FAILED,
+        originalPayload: rawError,
+        message: `Failed to connect to ${gatewayName} gateway: ${rawError.message}`,
       };
     }
     if (rawError instanceof SyntaxError || msg.includes("json")) {
