@@ -94,11 +94,11 @@ const sdk = new KitPagos({
   },
   maxRetries: 3,                 // Reintentos automáticos ante fallos transitorios
   webhookToleranceSeconds: 300,  // Tolerancia de 5 minutos contra ataques de replay
-  baseUrl: process.env.PAYMENT_GATEWAY_URL, // Opcional: URL productiva o sandbox (ver tabla de URLs abajo)
+  baseUrl: process.env.PAYMENT_GATEWAY_URL, // Opcional: URL productiva (ver tabla de URLs abajo)
 });
 ```
 
-> **Entornos y URLs Base (`baseUrl`).** Por defecto, el SDK apunta a la API de simulación local (`http://localhost:3000/v1/sim/{gateway}`) para permitir desarrollo y pruebas sin costo. **Para conectar a producción o sandboxes reales**, es indispensable configurar el parámetro `baseUrl`.
+> **Entornos y URLs Base (`baseUrl`).** Por defecto, el SDK apunta al simulador integrado (`http://localhost:3000/v1/sim/{gateway}`) para permitir desarrollo, pruebas y evaluación sin costo ni credenciales reales. **Para conectar a producción y procesar pagos reales**, es indispensable configurar el parámetro `baseUrl`.
 
 > **`webhookSecret` no es la llave de API.** En Wompi, Mercado Pago y Kushki el secreto que
 > firma los webhooks es un valor distinto, que se saca de otra parte del panel. Si lo omitís,
@@ -320,19 +320,19 @@ async function cobrarConDiagnostico(request: CreatePaymentRequest) {
 
 ## 🚀 Despliegue a Producción y Consideraciones Reales
 
-Si vas a utilizar este SDK en un entorno real con dinero de verdad (o en los sandboxes oficiales de cada pasarela), ten en cuenta las siguientes consideraciones de arquitectura y normativa financiera:
+Si vas a utilizar este SDK en un entorno de producción para procesar pagos reales con dinero de verdad, ten en cuenta las siguientes consideraciones de arquitectura y normativa financiera:
 
-### 1. URLs Base: Producción vs. Simulador Local
-Por diseño de evaluación académica (RF-09), si omites `baseUrl`, el SDK apunta por defecto a la API de simulación local (`http://localhost:3000/v1/sim/{gateway}`) para permitir pruebas completas sin costo ni conexión a internet.
+### 1. URLs Base: Producción vs. Simulador Integrado
+Por diseño de la arquitectura para soportar desarrollo ágil y evaluación académica (RF-09), el SDK incluye integración nativa con el componente `api-simulator`. Si omites `baseUrl`, el SDK apunta por defecto a `http://localhost:3000/v1/sim/{gateway}`, permitiendo probar todo el flujo de cobros y webhooks de forma determinista y sin costo.
 
-**Para procesar pagos reales**, es indispensable configurar el parámetro `baseUrl` apuntando al endpoint oficial de la pasarela activa:
+**Para procesar pagos reales en producción**, es indispensable configurar el parámetro `baseUrl` apuntando al endpoint oficial productivo de la pasarela activa:
 
-| Pasarela | Entorno Sandbox (Pruebas) | Entorno Producción (Real) |
-|---|---|---|
-| **Wompi** | `https://sandbox.wompi.co/v1` | `https://production.wompi.co/v1` |
-| **Mercado Pago** | `https://api.mercadopago.com/v1` | `https://api.mercadopago.com/v1` |
-| **Kushki** | `https://api-uat.kushkipagos.com` | `https://api.kushkipagos.com` |
-| **Rapyd** | `https://sandboxapi.rapyd.net/v1` | `https://api.rapyd.net/v1` |
+| Pasarela | Endpoint de Producción (Pagos Reales) |
+|---|---|
+| **Wompi** | `https://production.wompi.co/v1` |
+| **Mercado Pago** | `https://api.mercadopago.com/v1` |
+| **Kushki** | `https://api.kushkipagos.com` |
+| **Rapyd** | `https://api.rapyd.net/v1` |
 
 ### 2. Tokenización en Frontend y Cumplimiento PCI-DSS
 Por regulaciones bancarias internacionales (PCI-DSS) y de la Superintendencia Financiera de Colombia (SFC), **un servidor backend nunca debe recibir datos sensibles de tarjetas (número de 16 dígitos, fecha de expiración o CVV) en texto plano**, a menos que cuente con certificación PCI-DSS Nivel 1.

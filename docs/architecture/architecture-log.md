@@ -1596,13 +1596,13 @@ Se eligió sobre la alternativa obvia —cuatro parámetros posicionales, `(payl
 
 **Contexto:** Se realizó una auditoría de preparación para el despliegue del SDK en entornos de producción con pasarelas reales (Wompi, Mercado Pago, Kushki, Rapyd). La auditoría identificó dos consideraciones esenciales que deben quedar documentadas formalmente tanto en la arquitectura como en el manual de integración del SDK:
 
-1. **URLs Base: Simulación Local vs. Endpoints Productivos (RF-09):**
-   Por decisión de diseño de la tesis para satisfacer el requerimiento RF-09, los cuatro adaptadores tienen configurada por defecto una URL hacia la API de simulación local (`http://localhost:3000/v1/sim/{gateway}`). Esto permite que el jurado evaluador y los desarrolladores prueben la suite completa sin credenciales reales ni conexión a internet. Sin embargo, para procesar transacciones reales en producción o en los sandboxes oficiales, el comercio está **obligado** a configurar explícitamente el parámetro `baseUrl` hacia los endpoints productivos de cada proveedor (`https://production.wompi.co/v1`, `https://api.mercadopago.com/v1`, `https://api.kushkipagos.com`, `https://api.rapyd.net/v1`).
+1. **URLs Base: Simulador de la Solución (api-simulator) vs. Endpoints Productivos (RF-09):**
+   Por decisión de diseño de la solución para satisfacer el requerimiento RF-09, los cuatro adaptadores tienen configurada por defecto una URL hacia el componente `api-simulator` (`http://localhost:3000/v1/sim/{gateway}`). Esto permite que el jurado evaluador y los desarrolladores prueben la suite completa sin credenciales reales ni conexión a internet de forma 100% determinista. Sin embargo, para procesar transacciones reales en producción, el comercio está **obligado** a configurar explícitamente el parámetro `baseUrl` hacia los endpoints productivos de cada proveedor (`https://production.wompi.co/v1`, `https://api.mercadopago.com/v1`, `https://api.kushkipagos.com`, `https://api.rapyd.net/v1`).
 
 2. **Frontera de Tokenización y Normativa PCI-DSS:**
    El SDK es una librería de backend y no captura números de tarjeta en texto plano. De acuerdo con la normativa internacional PCI-DSS y las directrices de la Superintendencia Financiera de Colombia (SFC), la tokenización de tarjetas debe ejecutarse del lado del cliente (Frontend) mediante las librerías oficiales de cada pasarela (Wompi.js, Mercado Pago SDK JS, Kushki.js, Rapyd Collect). El backend del comercio recibe únicamente el token efímero y se lo delega al SDK mediante `PaymentMethod.card(token)`.
 
-**Decisión:** Se documentan exhaustivamente ambas directrices en `sdk/README.md` (incluyendo la tabla de URLs para sandbox y producción y la arquitectura del flujo de tokenización), dejando constancia en este registro para trazabilidad de la sustentación.
+**Decisión:** Se documentan exhaustivamente ambas directrices en `sdk/README.md` (incluyendo la tabla de URLs productivas y la arquitectura del flujo de tokenización), dejando constancia en este registro para trazabilidad de la sustentación y dando pleno protagonismo al `api-simulator` como entorno de simulación y evaluación del proyecto.
 
 **Estado:** Resuelto y documentado en `sdk/README.md` y `docs/architecture/architecture-log.md`.
 
