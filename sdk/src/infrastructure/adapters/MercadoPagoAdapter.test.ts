@@ -360,7 +360,7 @@ describe("MercadoPagoAdapter", () => {
       const secret = "test_mp_secret_key";
       const dataId = "1234567890";
       const requestId = "req-uuid-123";
-      const ts = "1602113476";
+      const ts = String(Math.floor(Date.now() / 1000));
 
       const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
       const v1 = crypto.createHmac("sha256", secret).update(manifest).digest("hex");

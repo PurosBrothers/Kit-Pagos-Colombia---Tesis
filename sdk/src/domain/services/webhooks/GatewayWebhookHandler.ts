@@ -21,19 +21,29 @@ import { WebhookEvent } from "../../value-objects/WebhookEvent";
  *
  * Ver architecture-log.md, punto 34.
  */
+export interface WebhookVerificationOptions {
+  /** Tolerancia en segundos respecto a la hora actual. Por defecto: 300 (5 minutos). 0 desactiva la validación. */
+  toleranceSeconds?: number;
+  /** Timestamp de referencia en segundos Unix. Por defecto: reloj actual. Útil para pruebas y tolerancia a desvíos. */
+  currentTimestamp?: number;
+}
+
 export interface GatewayWebhookHandler {
   /**
-   * Verifica la autenticidad del webhook contra la firma que envio la pasarela.
+   * Verifica la autenticidad del webhook contra la firma que envio la pasarela y valida
+   * la frescura del timestamp contra la tolerancia configurada para prevenir ataques de replay.
    *
    * @param payload Cuerpo crudo tal como llego, sin reserializar. Reserializarlo
    *                cambia el orden de las claves y rompe la firma.
    * @param headers Cabeceras de la peticion, en minusculas.
    * @param secret Secreto de webhooks configurado en el panel de la pasarela.
+   * @param options Opciones de verificación (tolerancia y timestamp de referencia).
    */
   verify(
     payload: string,
     headers: Record<string, string>,
     secret: string,
+    options?: WebhookVerificationOptions,
   ): boolean;
 
   /** Traduce el cuerpo del webhook al evento normalizado del dominio. */

@@ -234,7 +234,7 @@ describe("KitPagos", () => {
   describe("validateWebhook()", () => {
     describe("4 gateways with valid signatures", () => {
       it("should validate and parse a valid Wompi webhook event", () => {
-        const timestamp = 1602113476;
+        const timestamp = Math.floor(Date.now() / 1000);
         const txId = "wompi-tx-999";
         const status = "APPROVED";
         const secret = wompiCredentials.privateKey;
@@ -271,7 +271,7 @@ describe("KitPagos", () => {
         const rapydSecret = "rapyd_sec_key_456";
         const rapydAccessKey = "rapyd_access_123";
         const salt = "random_salt_xyz";
-        const timestamp = "1727001234";
+        const timestamp = String(Math.floor(Date.now() / 1000));
         const webhookUrl = "https://tienda.example.com/webhooks/rapyd";
 
         const payload = JSON.stringify({
@@ -315,7 +315,7 @@ describe("KitPagos", () => {
         const mpSecret = "mp_secret_key_789";
         const dataId = "mp-tx-555";
         const requestId = "req-mp-uuid";
-        const ts = "1702500000";
+        const ts = String(Math.floor(Date.now() / 1000));
 
         const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
         const v1 = crypto.createHmac("sha256", mpSecret).update(manifest).digest("hex");
@@ -347,7 +347,7 @@ describe("KitPagos", () => {
 
       it("should validate and parse a valid Kushki webhook event", () => {
         const kushkiSecret = "kushki_sig_id_321";
-        const kushkiId = "1702500000";
+        const kushkiId = String(Math.floor(Date.now() / 1000));
 
         const payload = JSON.stringify({
           transaction_status: "APPROVAL",
@@ -381,7 +381,7 @@ describe("KitPagos", () => {
 
     describe("security: tampered signatures and data leakage prevention", () => {
       it("should throw KitPagosError(WEBHOOK_SIGNATURE_INVALID) when signature is tampered by a single character", () => {
-        const timestamp = 1602113476;
+        const timestamp = Math.floor(Date.now() / 1000);
         const txId = "wompi-tx-999";
         const status = "APPROVED";
         const secret = wompiCredentials.privateKey;
@@ -501,6 +501,64 @@ describe("KitPagos", () => {
       });
     });
 
+    describe("replay protection: timestamp tolerance in validateWebhook()", () => {
+      const txId = "wompi-replay-tx";
+      const status = "APPROVED";
+      const secret = wompiCredentials.privateKey;
+      const now = Math.floor(Date.now() / 1000);
+
+      function createPayloadWithTimestamp(ts: number) {
+        const checksum = crypto
+          .createHash("sha256")
+          .update(`${txId}${status}${ts}${secret}`)
+          .digest("hex");
+
+        const payload = JSON.stringify({
+          event: "transaction.updated",
+          data: { transaction: { id: txId, status } },
+          timestamp: ts,
+          signature: {
+            properties: ["data.transaction.id", "data.transaction.status"],
+            checksum,
+          },
+        });
+        return { payload, headers: { "x-event-checksum": checksum } };
+      }
+
+      it("should throw KitPagosError(WEBHOOK_SIGNATURE_INVALID) when webhook timestamp is older than 300s", () => {
+        const sdk = buildConfiguredSdk();
+        const { payload, headers } = createPayloadWithTimestamp(now - 305);
+
+        try {
+          sdk.validateWebhook(payload, headers);
+          fail("Should have thrown replay error");
+        } catch (error) {
+          const sdkError = error as KitPagosError;
+          expect(sdkError.code).toBe(KitPagosErrorCode.WEBHOOK_SIGNATURE_INVALID);
+        }
+      });
+
+      it("should allow webhook when toleranceSeconds: 0 is configured on SDK", () => {
+        const sdk = new KitPagos({
+          gateway: Gateway.WOMPI,
+          credentials: { [Gateway.WOMPI]: wompiCredentials },
+          webhookToleranceSeconds: 0,
+        });
+        const { payload, headers } = createPayloadWithTimestamp(now - 10000);
+
+        const event = sdk.validateWebhook(payload, headers);
+        expect(event.gatewayTransactionId).toBe(txId);
+      });
+
+      it("should allow webhook when options override toleranceSeconds in validateWebhook() call", () => {
+        const sdk = buildConfiguredSdk();
+        const { payload, headers } = createPayloadWithTimestamp(now - 500);
+
+        const event = sdk.validateWebhook(payload, headers, { toleranceSeconds: 600 });
+        expect(event.gatewayTransactionId).toBe(txId);
+      });
+    });
+
     describe("configuration errors", () => {
       it("should throw native Error if no active gateway has been configured", () => {
         const unconfiguredSdk = new KitPagos();
@@ -533,7 +591,7 @@ describe("KitPagos", () => {
       const mpPublicKey = "mp_public_key_123";
       const dataId = "1234567890";
       const requestId = "req-mp-uuid-step";
-      const ts = "1702500000";
+      const ts = String(Math.floor(Date.now() / 1000));
 
       const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
       const v1 = crypto.createHmac("sha256", mpSecret).update(manifest).digest("hex");

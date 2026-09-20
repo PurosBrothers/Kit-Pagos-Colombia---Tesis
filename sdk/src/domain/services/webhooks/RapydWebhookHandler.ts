@@ -1,8 +1,8 @@
 import { Gateway } from "../../value-objects/Gateway";
 import { WebhookEvent } from "../../value-objects/WebhookEvent";
 import { TransactionStatus } from "../../value-objects/TransactionStatus";
-import { GatewayWebhookHandler } from "./GatewayWebhookHandler";
-import { safeCompare, hmacSha256 } from "./signature-utils";
+import { GatewayWebhookHandler, WebhookVerificationOptions } from "./GatewayWebhookHandler";
+import { safeCompare, hmacSha256, normalizeTimestamp, isTimestampWithinTolerance } from "./signature-utils";
 
 /**
  * Prefijo de `failure_code` que identifica un rechazo del procesador de tarjeta.
@@ -29,18 +29,28 @@ export class RapydWebhookHandler implements GatewayWebhookHandler {
     payload: string,
     headers: Record<string, string>,
     secret: string,
+    options?: WebhookVerificationOptions,
   ): boolean {
     const receivedSignature = headers["signature"] ?? "";
     const accessKey = headers["access_key"] ?? "";
     const salt = headers["salt"] ?? "";
-    const timestamp = headers["timestamp"] ?? "";
+    const rawTimestamp = headers["timestamp"] ?? "";
     const webhookUrl = headers["x-webhook-url"];
+
+    if (!rawTimestamp) {
+      throw new Error("Missing required header: timestamp");
+    }
 
     if (!webhookUrl) {
       throw new Error("Missing required header: x-webhook-url");
     }
 
-    const toSign = webhookUrl + salt + timestamp + accessKey + secret + payload;
+    const timestampNum = normalizeTimestamp(rawTimestamp);
+    if (!isTimestampWithinTolerance(timestampNum, options?.toleranceSeconds, options?.currentTimestamp)) {
+      return false;
+    }
+
+    const toSign = webhookUrl + salt + rawTimestamp + accessKey + secret + payload;
 
     return safeCompare(receivedSignature, hmacSha256(secret, toSign, "base64"));
   }

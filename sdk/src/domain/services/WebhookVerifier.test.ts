@@ -11,7 +11,7 @@ describe("WebhookVerifier", () => {
   describe("verify()", () => {
     describe("Wompi", () => {
       const secret = "test_events_secret_wompi";
-      const timestamp = 1602113476;
+      const timestamp = Math.floor(Date.now() / 1000);
       const transactionId = "1292-1602113476-10985";
       const status = "APPROVED";
 
@@ -66,7 +66,7 @@ describe("WebhookVerifier", () => {
       const secretKey  = "rapyd_secret_key_test";
       const accessKey  = "rapyd_access_key_test";
       const salt       = "random_salt_abc123";
-      const timestamp  = "1727001234";
+      const timestamp  = String(Math.floor(Date.now() / 1000));
       const webhookUrl = "https://comercio-ejemplo.com/webhooks/rapyd";
 
       const payload = JSON.stringify({
@@ -133,7 +133,7 @@ describe("WebhookVerifier", () => {
       const secret = "mp_webhook_secret_test";
       const dataId = "12345678";
       const requestId = "req-uuid-001";
-      const ts = "1702500000";
+      const ts = String(Math.floor(Date.now() / 1000));
 
       const v1 = crypto
         .createHmac("sha256", secret)
@@ -164,7 +164,7 @@ describe("WebhookVerifier", () => {
 
     describe("Kushki", () => {
       const secret = "kushki_signature_id";
-      const kushkiId = "1702500000";
+      const kushkiId = String(Math.floor(Date.now() / 1000));
 
       const payload = JSON.stringify({
         transaction_status: "APPROVAL",
@@ -191,6 +191,67 @@ describe("WebhookVerifier", () => {
           "x-kushki-id": kushkiId,
         };
         expect(verifier.verify(tampered, headers, secret, Gateway.KUSHKI)).toBe(false);
+      });
+    });
+
+    describe("replay protection: timestamp tolerance", () => {
+      const secret = "test_events_secret_wompi";
+      const txId = "tx-replay-1";
+      const status = "APPROVED";
+      const now = Math.floor(Date.now() / 1000);
+
+      function createWompiPayload(ts: number) {
+        const checksum = crypto
+          .createHash("sha256")
+          .update(`${txId}${status}${ts}${secret}`)
+          .digest("hex");
+
+        const body = JSON.stringify({
+          event: "transaction.updated",
+          data: { transaction: { id: txId, status } },
+          timestamp: ts,
+          signature: {
+            properties: ["data.transaction.id", "data.transaction.status"],
+            checksum,
+          },
+        });
+        return { body, headers: { "x-event-checksum": checksum } };
+      }
+
+      it("rechaza webhook si el timestamp tiene más de 300 segundos en el pasado (ataque de replay)", () => {
+        const oldTimestamp = now - 301;
+        const { body, headers } = createWompiPayload(oldTimestamp);
+        expect(verifier.verify(body, headers, secret, Gateway.WOMPI)).toBe(false);
+      });
+
+      it("rechaza webhook si el timestamp está más de 300 segundos en el futuro", () => {
+        const futureTimestamp = now + 305;
+        const { body, headers } = createWompiPayload(futureTimestamp);
+        expect(verifier.verify(body, headers, secret, Gateway.WOMPI)).toBe(false);
+      });
+
+      it("acepta webhook con timestamp fuera de ventana si se desactiva con toleranceSeconds: 0", () => {
+        const oldTimestamp = now - 10000;
+        const { body, headers } = createWompiPayload(oldTimestamp);
+        expect(
+          verifier.verify(body, headers, secret, Gateway.WOMPI, { toleranceSeconds: 0 })
+        ).toBe(true);
+      });
+
+      it("acepta webhook con timestamp antiguo si se configura una tolerancia extendida", () => {
+        const oldTimestamp = now - 800;
+        const { body, headers } = createWompiPayload(oldTimestamp);
+        expect(
+          verifier.verify(body, headers, secret, Gateway.WOMPI, { toleranceSeconds: 900 })
+        ).toBe(true);
+      });
+
+      it("acepta webhook antiguo si se provee currentTimestamp concordante", () => {
+        const oldTimestamp = 1602113476;
+        const { body, headers } = createWompiPayload(oldTimestamp);
+        expect(
+          verifier.verify(body, headers, secret, Gateway.WOMPI, { currentTimestamp: oldTimestamp + 10 })
+        ).toBe(true);
       });
     });
   });

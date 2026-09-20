@@ -14,6 +14,11 @@ export interface SDKOptions {
    */
   baseUrl?: string;
   maxRetries?: number;
+  /**
+   * Tolerancia en segundos para la verificación del timestamp de webhooks (replay protection).
+   * Por defecto: 300 segundos (5 minutos). Configurar 0 desactiva la validación.
+   */
+  webhookToleranceSeconds?: number;
 }
 
 export class SdkConfigurator {
@@ -21,6 +26,7 @@ export class SdkConfigurator {
   private credentialsMap: Map<Gateway, Credentials> = new Map();
   private baseUrl?: string;
   private maxRetries?: number;
+  private webhookToleranceSeconds?: number;
 
   configure(options: SDKOptions): void {
     const gateway = options.gateway;
@@ -37,6 +43,7 @@ export class SdkConfigurator {
     this.baseUrl = options.baseUrl;
     this.credentialsMap.clear();
     this.maxRetries = options.maxRetries;
+    this.webhookToleranceSeconds = options.webhookToleranceSeconds;
 
     Object.entries(credentials).forEach(([key, value]) => {
       this.credentialsMap.set(key as Gateway, value as Credentials);
@@ -62,6 +69,10 @@ export class SdkConfigurator {
 
   getMaxRetries(): number | undefined {
     return this.maxRetries;
+  }
+
+  getWebhookToleranceSeconds(): number | undefined {
+    return this.webhookToleranceSeconds;
   }
 
   getCredentials(gateway: Gateway): Credentials {

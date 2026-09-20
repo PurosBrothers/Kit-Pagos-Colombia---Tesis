@@ -2070,6 +2070,8 @@ La consecuencia es concreta: un webhook capturado una vez se puede reenviar inde
 
 La corrección es acotada y conocida: aceptar una ventana de tolerancia (el valor habitual en la industria es de cinco minutos) y rechazar lo que caiga fuera. Requiere decidir dos cosas que no son obvias: qué hacer cuando el reloj del servidor del comercio está desfasado, y si la ventana debe ser configurable por el comercio. **No está trackeado en ningún issue.** Es el hueco de seguridad más serio que tiene el SDK hoy.
 
+**Resolución:** Resuelto. Se implementó validación de tolerancia temporal contra ataques de replay en `signature-utils.ts` (`isTimestampWithinTolerance`), `GatewayWebhookHandler.ts`, los cuatro manejadores (`WompiWebhookHandler`, `RapydWebhookHandler`, `MercadoPagoWebhookHandler`, `KushkiWebhookHandler`), `WebhookVerifier.ts` y la fachada `KitPagos.ts`. La ventana de tolerancia por defecto es de 300 segundos (5 minutos) y es configurable tanto globalmente en `SDKOptions.webhookToleranceSeconds` (o desactivable con `0`) como puntualmente en `KitPagos.validateWebhook(payload, headers, { toleranceSeconds })`.
+
 #### 36.4. Hueco 2 — `Credentials` tiene dos campos y el secreto de webhook no es la llave de API
 
 El objeto de valor completo es este:
@@ -2141,12 +2143,12 @@ Desde el punto de vista de seguridad, fallar cerrado es la decisión correcta y 
 | Sanitización de credenciales en errores (RF-08) | ✓ Implementado y probado |
 | Secreto de Rapyd nunca viaja por la red | ✓ Correcto |
 | Los cuatro algoritmos de firma implementados | ✓ Las cuatro pasarelas verifican |
-| Protección contra replay | ✗ **Ausente en las cuatro** (36.3) |
+| Protección contra replay | ✓ **Resuelto con ventana configurable (default 300s)** (36.3) |
 | Secreto de webhook separado de la llave de API | ✗ **Imposible con el contrato actual** (36.4) |
 | Verificar webhooks de una pasarela no activa | ✗ **No soportado** (36.5) |
 | Distinguir cuerpo malformado de firma falsificada | ✓ **Resuelto** (36.6) |
 
-**Estado:** parcialmente resuelto. El hueco de distinción de error de webhook (36.6) queda resuelto; los huecos de replay (36.3), credenciales (36.4) y pasarela no activa (36.5) siguen documentados.
+**Estado:** parcialmente resuelto. Los huecos de protección contra replay (36.3) y distinción de error de webhook (36.6) quedan resueltos; los huecos de credenciales (36.4) y pasarela no activa (36.5) siguen documentados.
 
 ---
 

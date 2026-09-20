@@ -4,11 +4,13 @@ import { WebhookEvent } from "../../domain/value-objects/WebhookEvent";
 import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
 import { SdkConfigurator, SDKOptions } from "../config/SDKConfigurator";
 import { GatewayFactory } from "../factories/GatewayFactory";
-import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
+import { WebhookVerifier, WebhookVerificationOptions } from "../../domain/services/WebhookVerifier";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import { RetryHandler } from "../../application/services/RetryHandler";
 import { PseBank } from "../../domain/value-objects/PseBank";
+
+export { WebhookVerificationOptions } from "../../domain/services/WebhookVerifier";
 
 /**
  * Unica clase que el desarrollador que consume el SDK instancia directamente.
@@ -120,13 +122,18 @@ export class KitPagos {
   validateWebhook(
     payload: string,
     headers: Record<string, string>,
+    options?: WebhookVerificationOptions,
   ): WebhookEvent {
     const gateway = this.configurator.getActiveGateway();
     const credentials = this.configurator.getCredentials(gateway);
     const secret = credentials.privateKey;
+    const verificationOptions: WebhookVerificationOptions = {
+      toleranceSeconds: options?.toleranceSeconds ?? this.configurator.getWebhookToleranceSeconds(),
+      currentTimestamp: options?.currentTimestamp,
+    };
     let isValid: boolean;
     try {
-      isValid = this.verifier.verify(payload, headers, secret, gateway);
+      isValid = this.verifier.verify(payload, headers, secret, gateway, verificationOptions);
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Malformed webhook payload or headers";
       throw new KitPagosError(
