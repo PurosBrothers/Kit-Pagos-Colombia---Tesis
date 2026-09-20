@@ -4,16 +4,30 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm test && npm run build",
     "test": "jest",
     "test:sandbox": "jest --config jest.sandbox.config.js",
     "lint": "eslint .",
     "metrics": "ts-node --project tsconfig.json scripts/ck-metrics.ts"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["pagos", "colombia", "sdk", "wompi", "mercadopago", "kushki", "rapyd", "pse", "fintech", "pasarelas-de-pago"],
+  "author": "Grupo 22",
   "license": "Apache-2.0",
-  "description": "",
+  "description": "SDK unificado de pasarelas de pago para Colombia (Wompi, Mercado Pago, Kushki, Rapyd) con arquitectura hexagonal y tipos TypeScript estrictos.",
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis.git",
+    "directory": "sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/issues"
+  },
+  "homepage": "https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis#readme",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/big.js": "^7.0.0",
