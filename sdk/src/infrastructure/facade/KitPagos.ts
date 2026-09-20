@@ -9,6 +9,7 @@ import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import { RetryHandler } from "../../application/services/RetryHandler";
 import { PseBank } from "../../domain/value-objects/PseBank";
+import { Gateway } from "../../domain/value-objects/Gateway";
 
 /**
  * Unica clase que el desarrollador que consume el SDK instancia directamente.
@@ -117,13 +118,47 @@ export class KitPagos {
   }
 
 
+  /**
+   * Verifica la firma de un webhook y devuelve el evento normalizado (RF-04).
+   *
+   * El tercer parámetro es opcional y, cuando se omite, la pasarela es la activa. Existe
+   * porque sin él **este método no servía justo en el caso que el SDK dice resolver**: en
+   * una migración, el comercio cobra por la pasarela nueva y sigue recibiendo webhooks de
+   * la vieja durante semanas —pagos ya iniciados, conciliaciones, reembolsos— y todos esos
+   * llegan de una pasarela que no es la activa. La única salida era instanciar un segundo
+   * `KitPagos` con otra configuración, que es exactamente la contorsión que el framework
+   * existe para evitar.
+   *
+   * ```ts
+   * app.post("/webhooks/:pasarela", (req, res) => {
+   *   const evento = kit.validateWebhook(req.rawBody, req.headers, PASARELAS[req.params.pasarela]);
+   * });
+   * ```
+   *
+   * Es un parámetro y no una configuración porque **quién manda el webhook lo decide el
+   * endpoint que lo recibió, no el estado del SDK**: el comercio ya sabe de quién es, y
+   * hacerlo elegir por configuración obligaría a mutar el SDK entre dos peticiones HTTP
+   * concurrentes. La pasarela solo tiene que estar en `credentials`, no activa.
+   *
+   * Agregar un parámetro opcional no rompe a nadie que ya llame con dos argumentos, lo cual
+   * importa porque este cambio entra justo antes de publicar en npm.
+   */
   validateWebhook(
     payload: string,
     headers: Record<string, string>,
+    gateway: Gateway = this.configurator.getActiveGateway(),
   ): WebhookEvent {
-    const gateway = this.configurator.getActiveGateway();
     const credentials = this.configurator.getCredentials(gateway);
-    const secret = credentials.privateKey;
+
+    /*
+     * El secreto de webhooks no es la llave de API en tres de las cuatro pasarelas, así
+     * que se prefiere `webhookSecret` y se cae a `privateKey` cuando falta. El respaldo es
+     * correcto en Rapyd, que reutiliza su llave de verdad, y es solo compatibilidad hacia
+     * atrás en las otras tres, donde contra la pasarela real va a fallar la verificación.
+     * La tabla de dónde sale el valor en cada una está en `Credentials.webhookSecret`.
+     */
+    const secret = credentials.webhookSecret ?? credentials.privateKey;
+
     let isValid: boolean;
     try {
       isValid = this.verifier.verify(payload, headers, secret, gateway);

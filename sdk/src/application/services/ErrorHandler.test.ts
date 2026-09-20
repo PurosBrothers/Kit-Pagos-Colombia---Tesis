@@ -287,6 +287,24 @@ describe("ErrorHandler", () => {
       expect(error.message).toContain('apiKey: "[REDACTED]"');
     });
 
+    it("redacta los dos secretos de Wompi, que no son la llave privada ni son el mismo", () => {
+      // La lista de `sanitize()` es por nombre, así que **cada campo nuevo de
+      // `Credentials` hay que agregarlo o se filtra**. `webhookSecret` entró con el
+      // issue #92 y esta prueba es la que evita que el próximo campo se olvide:
+      // `integritySecret` firma lo que sale y `webhookSecret` valida lo que entra.
+      const error = errorHandler.handle(
+        new Error(
+          'Request failed with integritySecret: "int_wompi_abc" and webhookSecret: "evt_wompi_xyz"',
+        ),
+        Gateway.WOMPI,
+      );
+
+      expect(error.message).not.toContain("int_wompi_abc");
+      expect(error.message).not.toContain("evt_wompi_xyz");
+      expect(error.message).toContain('integritySecret: "[REDACTED]"');
+      expect(error.message).toContain('webhookSecret: "[REDACTED]"');
+    });
+
     it("preserva el errorBody original en originalPayload para auditoría sin exponerlo en message", () => {
       const rawPayload = {
         wompiError: "GWS_999",

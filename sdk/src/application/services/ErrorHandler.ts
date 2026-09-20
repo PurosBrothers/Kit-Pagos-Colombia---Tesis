@@ -120,7 +120,9 @@ function sanitize(message: string): string {
     .replace(/pub_[a-zA-Z0-9_-]+/gi, "[REDACTED_PUBLIC_KEY]")
     // Ocultar patrones comunes de API Keys o Secrets en JSON o strings
     .replace(
-      /(?:privateKey|secretKey|publicKey|apiKey|access_key|secret_key|integritySecret|acceptance_token)\s*[:=]\s*["']?[^"'\s,;]+["']?/gi,
+      // La lista es por nombre, así que **un campo nuevo en `Credentials` tiene que
+      // agregarse acá o se filtra**. `webhookSecret` entró por eso, con el campo.
+      /(?:privateKey|secretKey|publicKey|apiKey|access_key|secret_key|integritySecret|webhookSecret|acceptance_token)\s*[:=]\s*["']?[^"'\s,;]+["']?/gi,
       (match) => {
         const parts = match.split(/[:=]/);
         return `${parts[0]}: "[REDACTED]"`;
