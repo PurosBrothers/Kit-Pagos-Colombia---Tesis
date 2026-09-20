@@ -1,15 +1,15 @@
 /**
- * End-to-end example of a simulated Wompi payment (issue #31, updated in issue #55).
+ * Ejemplo de punta a punta de un pago simulado por Wompi (issue #31, actualizado en el #55).
  *
- * This file is written from the perspective of an external developer:
- * it lives outside the SDK package and imports it by its public name, just as
- * if it had been installed with `npm install kit-pagos-colombia`. It does not
- * use relative paths into `sdk/src` on purpose, because the goal is not to
- * test internal code but to demonstrate that the public surface of the package
- * is sufficient to integrate a complete payment.
+ * Este archivo está escrito desde la perspectiva de un desarrollador externo:
+ * vive por fuera del paquete del SDK y lo importa por su nombre público, igual
+ * que si lo hubiera instalado con `npm install kit-pagos-colombia`. No usa rutas
+ * relativas hacia `sdk/src` a propósito, porque el objetivo no es probar código
+ * interno sino demostrar que la superficie pública del paquete alcanza para
+ * integrar un pago completo.
  *
- * Prerequisite to run it: the Simulation API must be up on port 3000.
- * See the README in this folder.
+ * Prerrequisito para correrlo: la API de Simulación tiene que estar levantada en
+ * el puerto 3000. Ver el README de esta carpeta.
  */
 import {
   KitPagos,
@@ -24,21 +24,20 @@ import {
   type SDKOptions,
 } from "kit-pagos-colombia";
 
-/** Base URL of the Wompi mock exposed by the Simulation API. This, along with
- * the keys, should live in an external configuration file such as a .env. */
 // Raíz de la API de Wompi en el simulador. Desde el issue #64 es la raíz y no el
 // endpoint de transacciones: el adaptador le agrega la ruta que necesite, porque
-// PSE además consulta /merchants para el token de aceptación.
+// PSE además consulta /merchants para el token de aceptación. Esto, junto con las
+// llaves, debería vivir en configuración externa como un .env.
 const SIMULATOR_WOMPI_URL = "http://localhost:3000/v1/sim/wompi";
 
 /**
- * Step 1: configure the SDK.
+ * Paso 1: configurar el SDK.
  *
- * This is the only decision a merchant needs to make: which gateway to use and
- * with which credentials. `baseUrl` points to the simulator; in production it
- * is omitted and each Adapter uses its gateway's real endpoint. The credentials
- * in this example are fictional because the mock does not authenticate, but
- * they travel the same path as real ones.
+ * Es la única decisión que un comercio tiene que tomar: qué pasarela usar y con
+ * qué credenciales. `baseUrl` apunta al simulador; en producción se omite y cada
+ * adaptador usa el endpoint real de su pasarela. Las credenciales de este ejemplo
+ * son ficticias porque el mock no autentica, pero recorren el mismo camino que
+ * las reales.
  */
 const options: SDKOptions = {
   gateway: Gateway.WOMPI,
@@ -46,13 +45,13 @@ const options: SDKOptions = {
     [Gateway.WOMPI]: {
       publicKey: "pub_test_ejemplo_no_real",
       privateKey: "prv_test_ejemplo_no_real",
-      // Wompi signs every outgoing transaction with this secret and creates none
-      // without it: the real API answers `422 "Firma de integridad requerida no
-      // enviada"`. Since the issue #92 the SDK demands it up front, so a merchant
-      // that configures credentials gets a message naming the missing setting
-      // instead of that 422. It is a different value from the events secret used
-      // to verify webhooks: one signs what goes out, the other validates what
-      // comes in, and Wompi hands them over together in the same panel.
+      // Wompi firma cada transacción saliente con este secreto y no crea ninguna
+      // sin él: la API real responde `422 "Firma de integridad requerida no
+      // enviada"`. Desde el issue #92 el SDK lo exige por adelantado, así que un
+      // comercio que configura credenciales recibe un mensaje que nombra el ajuste
+      // que falta en lugar de ese 422. Es un valor distinto del secreto de eventos
+      // que verifica los webhooks: uno firma lo que sale, el otro valida lo que
+      // entra, y Wompi los entrega juntos en el mismo panel.
       integritySecret: "test_integrity_ejemplo_no_real",
     },
   },
@@ -62,23 +61,23 @@ const options: SDKOptions = {
 async function main(): Promise<void> {
   const kitPagos = new KitPagos(options);
 
-  console.log("=== Kit Pagos Colombia — simulated Wompi payment example ===\n");
-  console.log(`Active gateway: ${Gateway.WOMPI}`);
+  console.log("=== Kit Pagos Colombia — ejemplo de pago simulado por Wompi ===\n");
+  console.log(`Pasarela activa: ${Gateway.WOMPI}`);
   console.log(`Endpoint: ${SIMULATOR_WOMPI_URL}\n`);
 
   /**
-   * Step 2: describe the payment using domain vocabulary.
+   * Paso 2: describir el pago con vocabulario del dominio.
    *
-   * No native Wompi fields like `amount_in_cents` are written here. Value
-   * objects that validate in their own constructor are used instead: an amount
-   * with more than two decimals, a non-ISO 4217 currency or a payer without
-   * an email will fail here, before any network request exists.
+   * Acá no se escribe ningún campo nativo de Wompi como `amount_in_cents`. Se usan
+   * objetos de valor que validan en su propio constructor: un monto con más de dos
+   * decimales, una divisa que no sea ISO 4217 o un pagador sin correo fallan acá,
+   * antes de que exista cualquier petición de red.
    *
-   * The amount is written as a string, not a number. It is the only type that
-   * preserves scale: `new Amount("150000.00")` still reads as "150000.00",
-   * while `150000.00` in JavaScript is indistinguishable from `150000`. That
-   * difference matters because Rapyd computes the request signature over the
-   * serialized body, where "19.90" and "19.9" are not the same.
+   * El monto se escribe como string, no como number. Es el único tipo que preserva
+   * la escala: `new Amount("150000.00")` sigue leyéndose como "150000.00", mientras
+   * que `150000.00` en JavaScript es indistinguible de `150000`. Esa diferencia
+   * importa porque Rapyd calcula la firma de la petición sobre el cuerpo serializado,
+   * donde "19.90" y "19.9" no son lo mismo.
    */
   const request = {
     amount: new Amount("150000.00"),
@@ -89,103 +88,104 @@ async function main(): Promise<void> {
       fullName: "Jaime Pavlich",
     }),
     /**
-     * The card token, and nothing about the card itself.
+     * El token de la tarjeta, y nada sobre la tarjeta misma.
      *
-     * The merchant obtains it from the gateway's own tokenization —for Wompi,
-     * `POST /v1/tokens/cards` from the browser— and the SDK treats it as an opaque
-     * string. The card number never reaches this code, which is what keeps the
-     * merchant's server out of PCI DSS scope. `installments` is the number of
-     * instalments ("cuotas"): one means a single charge.
+     * El comercio lo obtiene de la tokenización de la propia pasarela —en Wompi,
+     * `POST /v1/tokens/cards` desde el navegador— y el SDK lo trata como una cadena
+     * opaca. El número de la tarjeta nunca llega a este código, que es lo que
+     * mantiene al servidor del comercio fuera del alcance de PCI DSS. `installments`
+     * son las cuotas: una significa un solo cobro.
      */
     paymentMethod: PaymentMethod.card("tok_test_ejemplo_no_real", {
       installments: 1,
     }),
   };
 
-  console.log("Payment request:");
-  console.log(`  Amount:      ${request.amount.getValue()} ${request.currency.getCode()}`);
-  // What the Adapter will send to Wompi. Printed to show that the conversion
-  // to cents happens in the infrastructure layer, not written by the merchant.
-  console.log(`  In cents:    ${request.amount.toMinorUnits(request.currency)} (what Wompi receives)`);
-  console.log(`  Reference:   ${request.orderReference.getValue()}`);
-  console.log(`  Payer:       ${request.payer.email}`);
-  console.log(`  Instalments: ${request.paymentMethod.installments}\n`);
+  console.log("Solicitud de pago:");
+  console.log(`  Monto:       ${request.amount.getValue()} ${request.currency.getCode()}`);
+  // Lo que el adaptador le va a mandar a Wompi. Se imprime para mostrar que la
+  // conversión a centavos ocurre en la capa de infraestructura, y no la escribe
+  // el comercio.
+  console.log(`  En centavos: ${request.amount.toMinorUnits(request.currency)} (lo que recibe Wompi)`);
+  console.log(`  Referencia:  ${request.orderReference.getValue()}`);
+  console.log(`  Pagador:     ${request.payer.email}`);
+  console.log(`  Cuotas:      ${request.paymentMethod.installments}\n`);
 
   /**
-   * Step 3: create the payment.
+   * Paso 3: crear el pago.
    *
-   * A single call. Internally the SDK resolves the active gateway, obtains its
-   * credentials, builds the Wompi Adapter, translates the value objects to the
-   * native format, makes the HTTP request and normalizes the response. None of
-   * that leaks out here.
+   * Una sola llamada. Por dentro el SDK resuelve la pasarela activa, obtiene sus
+   * credenciales, construye el adaptador de Wompi, traduce los objetos de valor al
+   * formato nativo, hace la petición HTTP y normaliza la respuesta. Nada de eso se
+   * filtra hasta acá.
    */
   const result = await kitPagos.createPayment(request);
 
-  // createPayment() returns either a transaction or a pending redirect, and the
-  // compiler forces the distinction: `result.transaction` does not exist until the
-  // redirect case is ruled out. A Wompi card charge never redirects —the merchant
-  // charges the token server to server— so this branch is unreachable here. It is
-  // the branch PSE takes, and Rapyd's card flow takes it too.
+  // createPayment() devuelve o una transacción o una redirección pendiente, y el
+  // compilador obliga a distinguirlas: `result.transaction` no existe hasta que se
+  // descarta el caso de redirección. Un cobro con tarjeta en Wompi nunca redirige
+  // —el comercio cobra el token de servidor a servidor— así que esta rama no se
+  // alcanza acá. Es la rama que toma PSE, y también el flujo de tarjeta de Rapyd.
   if (result.outcome === "REDIRECT_REQUIRED") {
-    console.log(`Payment requires redirect to: ${result.redirect.redirectUrl}`);
+    console.log(`El pago requiere redirigir a: ${result.redirect.redirectUrl}`);
     return;
   }
 
   const transaction = result.transaction;
 
-  console.log("Transaction created:");
-  console.log(`  Gateway ID:         ${transaction.gatewayTransactionId.value}`);
-  console.log(`  Source gateway:     ${transaction.gatewayTransactionId.gateway}`);
-  console.log(`  Normalized status:  ${transaction.getStatus()}`);
-  console.log(`  Native status:      ${transaction.rawStatus}`);
-  console.log(`  Amount:             ${transaction.amount.getValue()} ${transaction.currency.getCode()}`);
-  console.log(`  Reference:          ${transaction.orderReference.getValue()}`);
-  console.log(`  Payer:              ${transaction.payer.email}`);
-  console.log(`  Approved:           ${transaction.isApproved()}`);
-  console.log(`  Final state:        ${transaction.isFinal()}\n`);
+  console.log("Transacción creada:");
+  console.log(`  ID de la pasarela:   ${transaction.gatewayTransactionId.value}`);
+  console.log(`  Pasarela de origen:  ${transaction.gatewayTransactionId.gateway}`);
+  console.log(`  Estado normalizado:  ${transaction.getStatus()}`);
+  console.log(`  Estado nativo:       ${transaction.rawStatus}`);
+  console.log(`  Monto:               ${transaction.amount.getValue()} ${transaction.currency.getCode()}`);
+  console.log(`  Referencia:          ${transaction.orderReference.getValue()}`);
+  console.log(`  Pagador:             ${transaction.payer.email}`);
+  console.log(`  Aprobada:            ${transaction.isApproved()}`);
+  console.log(`  Estado final:        ${transaction.isFinal()}\n`);
 
   /**
-   * Step 4: query the payment status. **This step is not optional for a card.**
+   * Paso 4: consultar el estado del pago. **Con tarjeta este paso no es opcional.**
    *
-   * The charge above came back `PENDING`, not `APPROVED`, and that is what Wompi
-   * really does: measured against `sandbox.wompi.co`, `POST /transactions` answers
-   * `PENDING` with `finalized_at: null` and the transaction settles about 600 ms
-   * later. So the outcome of a card charge is never in the creation response — the
-   * merchant has to query it, exactly as below.
+   * El cobro de arriba volvió `PENDING` y no `APPROVED`, y eso es lo que Wompi hace
+   * de verdad: medido contra `sandbox.wompi.co`, `POST /transactions` responde
+   * `PENDING` con `finalized_at: null` y la transacción se resuelve unos 600 ms
+   * después. Así que el desenlace de un cobro con tarjeta nunca está en la respuesta
+   * de la creación: el comercio tiene que consultarlo, exactamente como acá abajo.
    *
-   * The id passed is the native identifier Wompi returned when creating the payment.
+   * El id que se pasa es el identificador nativo que Wompi devolvió al crear el pago.
    */
-  console.log("Querying transaction status...");
+  console.log("Consultando el estado de la transacción...");
   try {
     const consulted = await kitPagos.getPaymentStatus(
       transaction.gatewayTransactionId.value,
     );
-    console.log(`  Queried ID:      ${consulted.gatewayTransactionId.value}`);
-    console.log(`  Queried status:  ${consulted.getStatus()}`);
-    console.log(`  Approved:        ${consulted.isApproved()}\n`);
+    console.log(`  ID consultado:      ${consulted.gatewayTransactionId.value}`);
+    console.log(`  Estado consultado:  ${consulted.getStatus()}`);
+    console.log(`  Aprobada:           ${consulted.isApproved()}\n`);
   } catch (error) {
     if (error instanceof KitPagosError && error.code === KitPagosErrorCode.RESOURCE_NOT_FOUND) {
-      console.log(`  Transaction not found. Error code: ${error.code}`);
-      console.log(`  Detail: ${error.message}`);
+      console.log(`  No se encontró la transacción. Código de error: ${error.code}`);
+      console.log(`  Detalle: ${error.message}`);
     } else {
       throw error;
     }
   }
 
-  console.log("=== End of example ===");
+  console.log("=== Fin del ejemplo ===");
 }
 
 main().catch((error: unknown) => {
-  // The only expected failure when running this is that the Simulation API is
-  // not up. Translated to a concrete instruction instead of a raw stack trace.
+  // El único fallo esperable al correr esto es que la API de Simulación no esté
+  // levantada. Se traduce a una instrucción concreta en vez de un volcado de pila.
   if (error instanceof KitPagosError && error.code === KitPagosErrorCode.CONNECTION_FAILED) {
-    console.error("\nCould not connect to the Simulation API.");
-    console.error("Start it in another terminal and run the example again:\n");
+    console.error("\nNo se pudo conectar con la API de Simulación.");
+    console.error("Levantala en otra terminal y volvé a correr el ejemplo:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }
 
-  console.error("\nThe example failed unexpectedly:");
+  console.error("\nEl ejemplo falló de forma inesperada:");
   console.error(error);
   process.exit(1);
 });
