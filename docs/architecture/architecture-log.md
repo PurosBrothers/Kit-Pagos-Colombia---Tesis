@@ -1202,6 +1202,8 @@ La ruta de tarjeta contesta lo mismo para todo, incluso para lo que no existe, a
 
 Hay un corolario incómodo que conviene dejar escrito en vez de tapar: lo medido sugiere que **`GET /charges/{id}` no es la ruta de consulta de cobros con tarjeta de Kushki**, y ese camino nunca se verificó contra su API real. Se conserva como segunda opción porque es la que el simulador implementa y la que el flujo de tarjeta usa hoy, pero encontrar la ruta real es trabajo pendiente, y la técnica del #68 no sirve para buscarla: a la altura de la raíz del dominio, las rutas registradas y las inexistentes responden igual.
 
+> **Cerrado en el punto 53** (issue #92), y la sospecha de este párrafo quedó confirmada: **esa ruta no existe, y ninguna de las veinticuatro candidatas probadas tampoco.** Lo que no se veía desde acá es que la ruta que se conservaba "por si acaso" tenía un precio medible: consultar un cobro con tarjeta aprobado devolvía `INVALID_CREDENTIALS` con las credenciales buenas. Hoy devuelve un `UNSUPPORTED_OPERATION` que dice qué usar en su lugar.
+
 ---
 
 #### Qué quedó verificado y qué no
@@ -1331,11 +1333,11 @@ Verificado, contra los cuatro sandboxes: la tokenización, el cobro, y la forma 
 
 Sin verificar, y conviene que esté escrito:
 
-- **La consulta de estado de un cobro con tarjeta en Kushki.** Sigue sin ruta medida: es el pendiente que dejó el punto 48, y esta vez se confirmó que `GET /card/v1/charges/{ticket}` tampoco es, porque responde `403 "Missing Authentication Token"`.
-- **El desenlace de un cobro en Mercado Pago.** La cuenta de prueba rechaza con `cc_rejected_high_risk` y `cc_rejected_max_attempts`, así que se verificó que la transacción se crea (`201`) y no que se apruebe. De paso confirmó una decisión vieja: Mercado Pago responde `201` con `status: "rejected"`, o sea que el código HTTP no dice si el pago salió.
-- **La guarda del secreto de integridad de Wompi**, arriba.
+- **La consulta de estado de un cobro con tarjeta en Kushki.** Sigue sin ruta medida: es el pendiente que dejó el punto 48, y esta vez se confirmó que `GET /card/v1/charges/{ticket}` tampoco es, porque responde `403 "Missing Authentication Token"`. → **Cerrado en el punto 53:** la ruta no existe, y lo que se corrigió es el error que el SDK daba mientras fingía que sí.
+- **El desenlace de un cobro en Mercado Pago.** La cuenta de prueba rechaza con `cc_rejected_high_risk` y `cc_rejected_max_attempts`, así que se verificó que la transacción se crea (`201`) y no que se apruebe. De paso confirmó una decisión vieja: Mercado Pago responde `201` con `status: "rejected"`, o sea que el código HTTP no dice si el pago salió. → **Sigue abierto**, y depende de la cuenta de prueba, no del SDK.
+- **La guarda del secreto de integridad de Wompi**, arriba. → **Cerrada en el punto 53**, con el token de aceptación, que era el acoplamiento que la trababa.
 
-**Estado:** Corregido. Los ocho defectos tienen prueba de regresión con la forma medida como dato de entrada, y las cuatro pasarelas quedan al mismo nivel de evidencia para tarjeta que para PSE, que era la asimetría que quedaba abierta. Pendientes, los tres de la lista anterior.
+**Estado:** Corregido. Los ocho defectos tienen prueba de regresión con la forma medida como dato de entrada, y las cuatro pasarelas quedan al mismo nivel de evidencia para tarjeta que para PSE, que era la asimetría que quedaba abierta. De los tres pendientes de la lista anterior, dos quedaron cerrados en el punto 53 y el de Mercado Pago sigue abierto.
 
 ---
 
@@ -1421,6 +1423,104 @@ El mock de Mercado Pago ahora exige el header en las dos rutas, y reproduce las 
 **La lección de proceso.** Dos ramas que pasan sus pruebas por separado no pasan juntas, y la parte que lo detecta no es la que Git señala. Un conflicto resuelto sin correr los ejemplos de la otra rama habría entrado a `devops` con el cierre de la Iteración 2 roto y el `CI` en verde, porque el ejemplo no está en el `CI`: necesita el simulador arriba. Que el argumento central de la tesis dependa de un ejemplo que nadie corre automáticamente es el riesgo que este punto deja anotado.
 
 **Estado:** Resuelto en el código. El ejemplo corre contra el simulador y las cuatro pasarelas coinciden en estado normalizado, monto y referencia. Queda abierto meter los ejemplos al `CI` levantando el simulador, que hoy no está.
+
+---
+
+### 53. Los cuatro pendientes que bloqueaban publicar en npm: tres eran de diseño y el cuarto no tenía solución
+
+**Responsable de corregirlo en el SAD:** Joan (sección 9.1.1, fachada, por la firma nueva de `validateWebhook()`; sección 15.1, por el contrato de `Credentials`; sección 13, ADR, por la decisión de Kushki).
+
+**Contexto.** Antes de publicar el paquete (issue #88) quedaban cuatro pendientes que los puntos 36, 48 y 50 habían declarado y ninguno había resuelto. Los cuatro estaban marcados como "no se puede hacer todavía", y lo que los desbloqueó no fue el mismo motivo en cada caso: dos esperaban una decisión que nadie había tomado, uno esperaba credenciales, y el cuarto esperaba una respuesta que no existe.
+
+**Por qué justo ahora y no después.** Dos de los cuatro cambian la interfaz pública, y **antes de la primera publicación en npm eso es gratis**. Después, cada uno sería una versión mayor. Los dos quedaron compatibles hacia atrás igual —un campo opcional en `Credentials` y un tercer parámetro opcional en `validateWebhook()`—, así que el costo terminó siendo cero y la urgencia era real de todos modos: publicar un SDK que no puede verificar webhooks reales es publicar RF-04 roto.
+
+---
+
+#### El secreto de webhook no es la llave de API, y por eso el SDK no podía verificar tres de las cuatro
+
+Hueco 2 del punto 36. `validateWebhook()` usaba `credentials.privateKey` como secreto de firma, y en tres de las cuatro pasarelas ese valor **no es** el secreto con el que la pasarela firma: Wompi lo llama "secreto de eventos", Mercado Pago "clave secreta de webhooks" y Kushki "Webhook signature ID", y los tres se generan aparte. Solo Rapyd reutiliza su `secret_key`.
+
+O sea que el SDK verificaba webhooks de Rapyd y del simulador, y nada más. El comercio quedaba en un callejón sin salida: poner el secreto de eventos en `privateKey` le rompía la autenticación de la API, y dejarlo bien le rompía los webhooks.
+
+La corrección es un campo opcional `webhookSecret` que `validateWebhook()` prefiere, cayendo a `privateKey` cuando falta. **El respaldo significa dos cosas distintas y conviene no confundirlas:** en Rapyd es correcto, porque los dos valores coinciden de verdad; en las otras tres es solo compatibilidad hacia atrás, y contra la pasarela real va a fallar la verificación.
+
+Dos cosas que aparecieron al hacerlo y no estaban previstas:
+
+1. **`sanitize()` del `ErrorHandler` lista los campos por nombre.** Agregar un secreto a `Credentials` sin agregarlo a esa lista lo deja filtrándose en los mensajes de error, que es RF-08 roto por un campo nuevo. Quedó con prueba propia que nombra los dos secretos de Wompi, para que el próximo campo no se olvide.
+2. **Por qué las pruebas no veían el defecto.** Porque firmaban y verificaban con el mismo valor. Es el hallazgo de los puntos 43, 48 y 50 otra vez, en su forma más pura: si el doble usa un solo secreto, la separación de secretos es invisible por construcción. Las pruebas nuevas **firman con uno y configuran el otro**, que es la única forma de que la diferencia se note, e incluyen una que verifica que un webhook firmado con la llave de API sea rechazado cuando hay `webhookSecret`. Sin esa, un respaldo silencioso pasaría por verificación correcta.
+
+El simulador no participa de esto porque **no emite webhooks**: no hay nada que firmar ahí.
+
+---
+
+#### `validateWebhook()` solo servía para la pasarela activa, o sea que no servía en una migración
+
+Hueco 3 del punto 36, y el más incómodo de los cuatro, porque el caso que no soportaba **es el caso de uso central de la tesis**. Durante una migración el comercio cobra por la pasarela nueva y sigue recibiendo webhooks de la vieja durante semanas: pagos ya iniciados, conciliaciones, reembolsos. La firma anterior deducía la pasarela de la configuración, así que esos webhooks no se podían validar sin instanciar un segundo `KitPagos`, que es exactamente la contorsión que el framework existe para evitar.
+
+Ahora recibe la pasarela como tercer parámetro opcional. Dos decisiones dentro de eso:
+
+- **Es un parámetro y no una configuración** porque quién manda el webhook lo decide el endpoint que lo recibió, no el estado del SDK. El comercio ya sabe de quién es. Hacerlo elegir por configuración obligaría a mutar el SDK entre dos peticiones HTTP concurrentes, que es una condición de carrera servida en bandeja.
+- **La pasarela tiene que estar en `credentials`, no activa**, y si no está, el error nombra la pasarela pedida y no la activa. Nombrar la activa mandaría a revisar la configuración que está bien.
+
+De paso caducó el agravante que el punto 36.5 anotaba: decía que `WebhookVerifier` soportaba Kushki mientras `GatewayFactory` y `ResponseNormalizer` le lanzaban `UNSUPPORTED_OPERATION`, así que `validateWebhook()` funcionaba y `createPayment()` no. Kushki quedó implementada de punta a punta en los puntos 47 y 48, así que la asimetría ya no existe.
+
+---
+
+#### La guarda del secreto de integridad de Wompi: el acoplamiento que la trababa era real y se resolvió declarándolo
+
+Pendiente del punto 50. Wompi no crea **ninguna** transacción sin firma de integridad: tarjeta y PSE sin `signature` responden `422 "Firma de integridad requerida no enviada"`. El SDK firmaba solo si el comercio había configurado `integritySecret`, así que quien lo omitía recibía ese 422 de Wompi en vez de un error del SDK.
+
+El punto 50 desistió de exigirlo con un argumento que seguía siendo válido: **exigir el secreto sin exigir el token de aceptación deja al comercio igual de lejos de cobrar, con un error menos**, porque Wompi valida de a uno y contesta por el primero que falte. La salida no fue romper el acoplamiento sino aceptarlo: son dos guardas, `assertIntegritySecret()` y `assertAcceptanceToken()`, y se resuelven juntas.
+
+El orden importa y es lo único que hay que decidir ahí: la del secreto corre **antes** de pedir el token de aceptación, así que un comercio mal configurado se entera sin pagar ni una llamada HTTP.
+
+**El interruptor es haber configurado credenciales, no el método de pago.** El SDK tiene que seguir siendo usable sin configurar nada contra la API de Simulación, que no valida firmas; y si hay credenciales, se le está hablando a Wompi de verdad y va a hacer falta todo. Consultar el estado no pasa por la guarda porque esa llamada no lleva firma, y por eso `integritySecret` sigue siendo opcional en el tipo: quien solo consulte no lo necesita.
+
+**Lo que costó, que es la parte informativa.** Siete pruebas se pusieron rojas, y todas por lo mismo: configuraban credenciales de Wompi sin el secreto, o sea que afirmaban que un cobro sale con credenciales incompletas, algo que contra Wompi real nunca funcionó. Además obligó a que los dobles de `fetch` **distingan las dos llamadas** —el token de aceptación y la transacción—, porque un doble que contesta lo mismo a todo dejaba el token en `undefined` sin que ninguna prueba se quejara. Un mock cómodo esconde exactamente el defecto que se está corrigiendo.
+
+---
+
+#### La ruta de consulta de tarjeta en Kushki no existe, y el precio de fingir que sí era un error que acusaba al comercio
+
+Pendiente de los puntos 48 y 50, y el único de los cuatro que no se resolvió encontrando lo que faltaba. Con credenciales UAT nuevas se volvió a medir el 19 de septiembre de 2026: se cobró una tarjeta de verdad y se le preguntó a nueve rutas candidatas, con los dos identificadores que Kushki devuelve —el `ticketNumber` y el `transactionId`— y con las dos llaves, porque no está documentado con cuál se consultaría. Treinta y seis sondeos.
+
+**Todos respondieron 403.** Lo que hace que eso se pueda interpretar es el discriminador que había dejado la medición de PSE del punto 48, que esta vez se usó a propósito: los dos `403` de AWS API Gateway **no significan lo mismo**.
+
+| Respuesta | Qué significa |
+| --- | --- |
+| `403` con `"no identity-based policy allows..."` | la ruta **existe** y el autorizador rechazó la llave |
+| `403` con `"Missing Authentication Token"` | no hay ruta que autorizar |
+| `403 "Forbidden"` pelado | lo mismo que el anterior, en la raíz del dominio |
+
+Y el sondeo lleva tres controles, que es lo que convierte esto en una medición y no en una impresión: dos rutas inventadas, y **una que sabemos que existe**. El control positivo es el que valida el instrumento:
+
+| Ruta | Con la llave privada | Con la pública | Veredicto |
+| --- | --- | --- | --- |
+| `/transfer/v1/bankList` (control positivo) | `401` de la aplicación | `200` | existe, y el discriminador lo ve |
+| `/transfer/v1/status/{id}` | `400 T001` | `401` | existe |
+| `/card/v1/charges/{ticket real}` | `403` sin ruta | `403` sin ruta | **no existe** |
+| `/card/v1/rutaInventada/{ticket real}` (control) | `403` sin ruta | `403` sin ruta | no existe |
+| `/charges/{ticket real}` | `403 "Forbidden"` | `403 "Forbidden"` | **no existe** |
+| `/rutaInventada/abc123` (control) | `403 "Forbidden"` | `403 "Forbidden"` | no existe |
+
+O sea: el método distingue —encuentra las rutas de transferencia sin problema— y **ninguna candidata de tarjeta se distingue de una ruta inventada, con ninguna de las dos llaves**. Sumando la medición anterior, la búsqueda por sondeo está agotada: no queda señal que seguir.
+
+**El defecto veinte del proyecto estaba escondido en esa conclusión.** Medir qué recibe hoy un comercio que cobra con tarjeta y consulta:
+
+    cobro creado: 079461678007072049  estado APPROVED (APPROVAL)
+    consulta:     INVALID_CREDENTIALS — "Kushki gateway returned an HTTP error status 403"
+
+Con las credenciales buenas. El SDK lo mandaba a rotar unas llaves que no tenían nada, por un cobro que había salido aprobado.
+
+**Lo que sí se puede afirmar, y por qué.** A la ruta de tarjeta solo se llega si la de transferencia contestó `400 T001` —"cuerpo de la petición inválido"—, que es la aplicación de Kushki hablando **después** del autorizador. Con credenciales inválidas la primera ruta responde `403` y el adaptador se rinde ahí mismo. Así que un `403` en la segunda ruta no puede ser de la llave: es la ruta. Ese razonamiento no se puede sacar mirando el error solo, y es todo el contenido del parámetro `credentialsAlreadyProven` de `kushkiStatusFailure()`.
+
+Así que la corrección no es una ruta nueva sino un error honesto: `UNSUPPORTED_OPERATION` que dice tres cosas —que Kushki no expone esa consulta, que **no es un problema de credenciales**, y qué usar en su lugar: el estado ya viene resuelto en la respuesta de `createPayment()`, porque el adaptador pide `fullResponse: true`, y los cambios posteriores llegan por webhook, que el SDK sí verifica para Kushki. El comercio no se queda sin el dato; se queda sin sondeo.
+
+Queda además el instrumento, `test/sandbox/probe-kushki-status.ts`, que es el sondeo ejecutable con sus controles. Es la diferencia entre "se buscó y no está" escrito en prosa y una medición que cualquiera puede repetir, que es lo que el punto 51 reclamaba.
+
+---
+
+**Estado:** Los cuatro aplicados. 565 pruebas del SDK y 16 de contrato contra los sandboxes reales, entre ellas una que cobra una tarjeta en Kushki y afirma que consultarla falla con `UNSUPPORTED_OPERATION`: si Kushki publica una ruta de consulta, esa prueba se pone roja y avisa que el SDK está diseñado alrededor de una restricción que ya no existe. Los huecos 1 y 4 del punto 36 —protección contra reenvío, y distinguir cuerpo malformado de firma falsificada— siguen abiertos y no los toca este trabajo.
 
 ---
 
@@ -2101,6 +2201,8 @@ Es decir: **con el contrato de credenciales actual, el SDK no puede verificar un
 
 Esto no es un detalle de configuración: afecta a RF-04 ("validar firma de webhook y retornar evento normalizado") en producción, y es invisible en las pruebas actuales precisamente porque el simulador no reproduce la separación de secretos. La corrección natural es ensanchar `Credentials` con un campo opcional `webhookSecret` y que `validateWebhook` lo prefiera cuando esté presente, cayendo a `privateKey` para no romper a Rapyd ni al simulador. **No está trackeado en ningún issue.**
 
+> **Cerrado en el punto 53** (issue #92), con la corrección que este párrafo anticipaba. Dos cosas que no estaban previstas acá: que `sanitize()` del `ErrorHandler` lista los campos por nombre, así que el campo nuevo había que agregarlo ahí o se filtraba en los mensajes de error; y que la invisibilidad no venía del simulador —que no emite webhooks— sino de que las pruebas firmaban y verificaban con el mismo valor.
+
 #### 36.5. Hueco 3 — `validateWebhook` solo puede verificar la pasarela activa
 
 La firma pública no recibe la pasarela; la deduce de la configuración:
@@ -2115,6 +2217,8 @@ validateWebhook(payload: string, headers: Record<string, string>): WebhookEvent 
 Eso choca de frente con el caso de uso central de la tesis. Durante una migración de pasarela —que es exactamente el problema que el framework dice resolver— el comercio va a recibir webhooks de la pasarela vieja (pagos ya iniciados, conciliaciones pendientes, reembolsos) mientras cobra por la nueva. Con la firma actual no puede validar los de la pasarela que no esté activa, y no hay forma de sortearlo sin instanciar un segundo `KitPagos` con otra configuración, que es justo el tipo de contorsión que el SDK debería evitarle.
 
 Hay un agravante en la asimetría de lo implementado: `WebhookVerifier` **ya soporta las cuatro pasarelas**, Kushki incluida, mientras `GatewayFactory` y `ResponseNormalizer` lanzan `UNSUPPORTED_OPERATION` para Kushki. Si alguien configura `Gateway.KUSHKI` hoy, `validateWebhook()` funciona y `createPayment()` falla. La capacidad existe en el dominio y está inalcanzable desde la fachada.
+
+> **Cerrado en el punto 53** (issue #92): `validateWebhook()` recibe la pasarela como tercer parámetro opcional, así que un comercio en migración valida los webhooks de la pasarela vieja sin instanciar un segundo `KitPagos`. El agravante caducó por su cuenta: Kushki quedó implementada de punta a punta en los puntos 47 y 48.
 
 #### 36.6. Hueco 4 — Un cuerpo malformado y una firma falsificada producen el mismo error
 
@@ -2140,11 +2244,11 @@ Desde el punto de vista de seguridad, fallar cerrado es la decisión correcta y 
 | Secreto de Rapyd nunca viaja por la red | ✓ Correcto |
 | Los cuatro algoritmos de firma implementados | ✓ Las cuatro pasarelas verifican |
 | Protección contra replay | ✗ **Ausente en las cuatro** (36.3) |
-| Secreto de webhook separado de la llave de API | ✗ **Imposible con el contrato actual** (36.4) |
-| Verificar webhooks de una pasarela no activa | ✗ **No soportado** (36.5) |
+| Secreto de webhook separado de la llave de API | ✓ Resuelto en el punto 53 con `Credentials.webhookSecret` (36.4) |
+| Verificar webhooks de una pasarela no activa | ✓ Resuelto en el punto 53 con el tercer parámetro de `validateWebhook()` (36.5) |
 | Distinguir cuerpo malformado de firma falsificada | ✗ **No se distingue** (36.6) |
 
-**Estado:** documentado. Los cuatro huecos requieren issues propios que todavía no existen; el de replay (36.3) y el de credenciales (36.4) son los que bloquean un uso en producción.
+**Estado:** dos de los cuatro huecos quedaron cerrados en el punto 53 (issue #92), justo antes de publicar en npm, que es cuando cambiar la interfaz pública todavía era gratis. Siguen abiertos el de replay (36.3), que es el que bloquea un uso en producción, y el del diagnóstico indistinguible (36.6).
 
 ---
 

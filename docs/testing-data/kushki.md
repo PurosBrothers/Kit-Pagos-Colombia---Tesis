@@ -69,8 +69,30 @@ segunda (punto 50 del `architecture-log.md`):
   de la misma tabla sí tokenizan, así que no es la tabla entera, es esa fila para esta cuenta.
   Para probar conviene una Visa de prueba genérica (`4242 4242 4242 4242`), que tokeniza y
   aprueba.
-- **No se encontró cómo consultar un cobro con tarjeta.** `GET /card/v1/charges/{ticket}`
-  responde `403 "Missing Authentication Token"`. Sigue pendiente desde el punto 48.
+- **Kushki no expone cómo consultar un cobro con tarjeta, y la búsqueda quedó agotada.** El 19
+  de septiembre se sondearon nueve rutas candidatas con los dos identificadores que devuelve el
+  cobro —`ticketNumber` y `transactionId`— y con las dos llaves: treinta y seis sondeos, todos
+  `403`, y **ninguno distinguible de una ruta inventada**. Se usó el discriminador de la sección
+  5.2 y un control positivo (`/transfer/v1/bankList`) que confirma que el método sí encuentra
+  las rutas que existen.
+
+  | Ruta | Privada | Pública | Veredicto |
+  |---|---|---|---|
+  | `/transfer/v1/bankList` (control positivo) | `401` de la aplicación | `200` | existe |
+  | `/card/v1/charges/{ticket}` | `403` sin ruta | `403` sin ruta | **no existe** |
+  | `/charges/{ticket}` | `403 "Forbidden"` | `403 "Forbidden"` | **no existe** |
+  | `/card/v1/transaction/{id}`, `/card/v1/transactions/{id}`, `/analytics/v1/transaction/{id}`, `/transaction/v1/status/{id}`, `/card/v1/charges/{id}/status`, `/v1/charges/{id}`, `/card/v2/charges/{id}` | `403` sin ruta | `403` sin ruta | **no existen** |
+  | `/rutaInventada/abc123` y `/card/v1/rutaInventada/{ticket}` (controles) | `403` sin ruta | `403` sin ruta | no existen |
+
+  **Qué usar en su lugar:** el cobro **ya trae su estado final** en la respuesta de creación
+  cuando se pide con `fullResponse: true`, que es lo que el SDK hace siempre, y los cambios
+  posteriores llegan por webhook. Desde el punto 53, `getPaymentStatus()` sobre un cobro con
+  tarjeta falla con `UNSUPPORTED_OPERATION` y un mensaje que dice esto; antes devolvía
+  `INVALID_CREDENTIALS`, que mandaba a rotar llaves que estaban bien.
+
+  El sondeo con sus controles quedó como script ejecutable en
+  `sdk/test/sandbox/probe-kushki-status.ts`, para que esto se pueda volver a medir en vez de
+  creerle a este párrafo.
 
 ---
 

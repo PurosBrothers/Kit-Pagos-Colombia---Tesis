@@ -36,6 +36,19 @@ Tres cosas que solo aparecieron al llamar, y que están en el punto 50 del `arch
    `"Firma de integridad requerida no enviada"`. La firma es
    `SHA256(referencia + monto en centavos + divisa + secreto de integridad)`.
 
+   Wompi **valida de a uno y contesta por el primero que falte**, en este orden: formato del
+   token, token de aceptación, firma. Eso importa porque significa que exigir un requisito sin
+   el otro no acerca al comercio a poder cobrar: solo le cambia el mensaje. Desde el punto 53
+   el SDK exige los dos antes de salir a la red —primero el secreto, que es configuración, y
+   después el token de aceptación, que cuesta una llamada—, así que un comercio sin
+   `integritySecret` recibe un error que nombra el ajuste que falta en vez de este `422`, y sin
+   pagar ningún viaje.
+
+   **Wompi tiene dos secretos y no son intercambiables:** el de integridad firma lo que sale y
+   el de eventos valida los webhooks que entran. El panel los entrega juntos, intercambiarlos
+   es fácil, y el síntoma —`422 "La firma es inválida"`— no dice que el problema sea de
+   rotulado. En el SDK van en `integritySecret` y `webhookSecret`.
+
 Las cuotas son opcionales: el cobro sin `installments` responde `201` igual, y la consulta
 posterior devuelve la transacción sin ese campo.
 
