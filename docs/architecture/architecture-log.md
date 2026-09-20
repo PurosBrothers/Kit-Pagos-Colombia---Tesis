@@ -1422,6 +1422,16 @@ El mock de Mercado Pago ahora exige el header en las dos rutas, y reproduce las 
 
 **Estado:** Resuelto en el código. El ejemplo corre contra el simulador y las cuatro pasarelas coinciden en estado normalizado, monto y referencia. Queda abierto meter los ejemplos al `CI` levantando el simulador, que hoy no está.
 
+### 53. Versión inicial del SDK en npm como `0.1.0` bajo SemVer para evolución del contrato público (issue #88)
+
+**Responsable:** Joshua (sección 1.2 del SAD y `sdk/package.json`).
+
+**Contexto:** El `package.json` del SDK declaraba inicialmente `"version": "1.0.0"`. Bajo los principios de Versionado Semántico (SemVer), publicar `1.0.0` implica comprometerse contractualmente con la estabilidad total de la superficie pública, de modo que cualquier cambio incompatible posterior obliga a saltar a `2.0.0`. Sin embargo, tal como registraron los puntos 39, 42 y 47 de este registro, el contrato del puerto de pagos (`PaymentGatewayPort`) y los flujos con redirección bancaria (PSE en Wompi, Kushki y Rapyd) continúan en refinamiento activo (por ejemplo, pasarelas que requieren llamadas multifase antes o después de la redirección).
+
+**Decisión:** Se define publicar la primera versión oficial en el registro público de npm bajo la versión **`0.1.0`**. Esto comunica formalmente a los integradores externos que el SDK se encuentra en fase de desarrollo activo pre-estabilización, permitiendo iterar libremente en correcciones y mejoras (ej. `0.1.1`, `0.2.0`) sin incurrir en roturas prematuras de versión mayor. La versión `1.0.0` queda reservada para el hito final de cierre y sustentación de la tesis, una vez estabilizado por completo el contrato del hexágono.
+
+**Estado:** Resuelto en código y empaquetado (`sdk/package.json`, `sdk/package-lock.json`).
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
