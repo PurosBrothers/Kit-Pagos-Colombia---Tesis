@@ -976,6 +976,30 @@ describe("KitPagos", () => {
       await expect(sdk.createPayment(validRequest)).rejects.toThrow(KitPagosError);
       expect(callCount).toBe(1); // No reintenta: previene doble cobro
     });
+
+    it("permite configurar baseUrl como mapeo por pasarela y resuelve la URL de la pasarela activa", async () => {
+      const customWompiUrl = "https://production.wompi.co/v1";
+      const sdk = new KitPagos({
+        gateway: Gateway.WOMPI,
+        credentials: { [Gateway.WOMPI]: wompiCredentials },
+        baseUrl: {
+          [Gateway.WOMPI]: customWompiUrl,
+          [Gateway.RAPYD]: "https://api.rapyd.net/v1",
+        },
+      });
+
+      let requestedUrl = "";
+      global.fetch = jest.fn().mockImplementation(async (url: unknown) => {
+        requestedUrl = String(url);
+        if (requestedUrl.includes("/merchants/")) {
+          return { ok: true, status: 200, json: async () => wompiMerchantResponse };
+        }
+        return { ok: true, status: 201, json: async () => approvedWompiResponse };
+      });
+
+      await sdk.createPayment(validRequest);
+      expect(requestedUrl).toContain(customWompiUrl);
+    });
   });
 });
 

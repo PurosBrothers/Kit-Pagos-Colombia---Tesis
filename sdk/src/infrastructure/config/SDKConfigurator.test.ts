@@ -148,4 +148,44 @@ describe("SDKConfigurator", () => {
       }
     });
   });
+
+  describe("getBaseUrl()", () => {
+    it("should return undefined when baseUrl is not configured", () => {
+      configurator.configure({
+        gateway: Gateway.WOMPI,
+        credentials: { [Gateway.WOMPI]: wompiCredentials },
+      });
+      expect(configurator.getBaseUrl()).toBeUndefined();
+      expect(configurator.getBaseUrl(Gateway.WOMPI)).toBeUndefined();
+    });
+
+    it("should return the global string URL when baseUrl is configured as string", () => {
+      configurator.configure({
+        gateway: Gateway.WOMPI,
+        credentials: { [Gateway.WOMPI]: wompiCredentials },
+        baseUrl: "https://production.wompi.co/v1",
+      });
+      expect(configurator.getBaseUrl()).toBe("https://production.wompi.co/v1");
+      expect(configurator.getBaseUrl(Gateway.WOMPI)).toBe("https://production.wompi.co/v1");
+      expect(configurator.getBaseUrl(Gateway.RAPYD)).toBe("https://production.wompi.co/v1");
+    });
+
+    it("should return gateway-specific URL when baseUrl is configured as a map", () => {
+      configurator.configure({
+        gateway: Gateway.WOMPI,
+        credentials: {
+          [Gateway.WOMPI]: wompiCredentials,
+          [Gateway.RAPYD]: rapydCredentials,
+        },
+        baseUrl: {
+          [Gateway.WOMPI]: "https://production.wompi.co/v1",
+          [Gateway.RAPYD]: "https://api.rapyd.net/v1",
+        },
+      });
+      expect(configurator.getBaseUrl()).toBe("https://production.wompi.co/v1");
+      expect(configurator.getBaseUrl(Gateway.WOMPI)).toBe("https://production.wompi.co/v1");
+      expect(configurator.getBaseUrl(Gateway.RAPYD)).toBe("https://api.rapyd.net/v1");
+      expect(configurator.getBaseUrl(Gateway.MERCADOPAGO)).toBeUndefined();
+    });
+  });
 });

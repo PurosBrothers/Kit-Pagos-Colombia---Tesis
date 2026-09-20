@@ -73,7 +73,7 @@ export class KitPagos {
   private resolveAdapter() {
     const gateway = this.configurator.getActiveGateway();
     const credentials = this.configurator.getCredentials(gateway);
-    return this.factory.create(gateway, credentials, this.configurator.getBaseUrl());
+    return this.factory.create(gateway, credentials, this.configurator.getBaseUrl(gateway));
   }
 
   /**
