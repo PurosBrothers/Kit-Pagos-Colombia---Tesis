@@ -9,6 +9,8 @@ import {
   transactionResult,
 } from "../../domain/value-objects/PaymentResult";
 import {
+  assertAcceptanceToken,
+  assertIntegritySecret,
   buildCardFieldsFor,
   buildPseFieldsFor,
   buildWompiPayload,
@@ -107,6 +109,18 @@ export class WompiAdapter implements PaymentGatewayPort {
     const currency = request.currency.getCode();
     const reference = request.orderReference.getValue();
 
+    /*
+     * Wompi no crea nada sin firma ni sin token de aceptación, así que los dos se exigen
+     * juntos y en este orden: el secreto primero, porque es configuración y se puede
+     * revisar sin salir a la red, y el token después, que cuesta una llamada. Un comercio
+     * al que le falte el secreto no paga esa llamada.
+     */
+    const hasCredentials = Boolean(this.credentials);
+    assertIntegritySecret(hasCredentials, this.credentials?.integritySecret);
+
+    const acceptanceToken = await this.fetchAcceptanceToken();
+    assertAcceptanceToken(hasCredentials, acceptanceToken);
+
     const payload = buildWompiPayload({
       amountInCents,
       currency,
@@ -120,7 +134,7 @@ export class WompiAdapter implements PaymentGatewayPort {
       // comercio configuró URLs diferenciadas, las otras dos se pierden: es una
       // limitación de Wompi, no del SDK, y conviene que quede escrita.
       redirectUrl: request.returnUrlConfig?.resolveFor("PENDING") ?? undefined,
-      acceptanceToken: await this.fetchAcceptanceToken(),
+      acceptanceToken,
       integritySecret: this.credentials?.integritySecret,
     });
 
