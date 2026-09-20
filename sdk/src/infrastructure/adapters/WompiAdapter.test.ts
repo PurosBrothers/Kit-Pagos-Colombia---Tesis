@@ -392,7 +392,7 @@ describe("WompiAdapter", () => {
     it("should return true when webhook signature is valid", () => {
       const adapter = new WompiAdapter();
       const secret = "test_events_secret_wompi";
-      const timestamp = 1602113476;
+      const timestamp = Math.floor(Date.now() / 1000);
       const transactionId = "1292-1602113476-10985";
       const status = "APPROVED";
 
@@ -422,7 +422,7 @@ describe("WompiAdapter", () => {
     it("should return false when webhook signature is invalid", () => {
       const adapter = new WompiAdapter();
       const secret = "test_events_secret_wompi";
-      const timestamp = 1602113476;
+      const timestamp = Math.floor(Date.now() / 1000);
       const transactionId = "1292-1602113476-10985";
       const status = "APPROVED";
 

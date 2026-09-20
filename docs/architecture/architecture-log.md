@@ -1520,7 +1520,40 @@ Queda además el instrumento, `test/sandbox/probe-kushki-status.ts`, que es el s
 
 ---
 
-**Estado:** Los cuatro aplicados. 565 pruebas del SDK y 16 de contrato contra los sandboxes reales, entre ellas una que cobra una tarjeta en Kushki y afirma que consultarla falla con `UNSUPPORTED_OPERATION`: si Kushki publica una ruta de consulta, esa prueba se pone roja y avisa que el SDK está diseñado alrededor de una restricción que ya no existe. Los huecos 1 y 4 del punto 36 —protección contra reenvío, y distinguir cuerpo malformado de firma falsificada— siguen abiertos y no los toca este trabajo.
+**Estado:** Los cuatro aplicados. 577 pruebas del SDK y 16 de contrato contra los sandboxes reales, entre ellas una que cobra una tarjeta en Kushki y afirma que consultarla falla con `UNSUPPORTED_OPERATION`: si Kushki publica una ruta de consulta, esa prueba se pone roja y avisa que el SDK está diseñado alrededor de una restricción que ya no existe. Los otros dos huecos del punto 36 —protección contra reenvío, y distinguir cuerpo malformado de firma falsificada— se cerraron en paralelo sobre esta misma rama y no los toca este trabajo; el punto 54 cuenta cómo se juntaron las dos mitades.
+
+---
+
+### 54. Cerrar los cuatro huecos de seguridad en paralelo: el choque no fue de texto sino de la misma posición en la firma
+
+**Responsable de corregirlo en el SAD:** Joan (sección 9.1.1, fachada, por la firma definitiva de `validateWebhook()`).
+
+**Encontrado:** Al empujar el punto 53 a la rama de publicación. Los cuatro huecos del punto 36 se cerraron en paralelo y sin coordinar: por un lado el de reenvío (36.3) y el del diagnóstico indistinguible (36.6); por el otro el del secreto de webhook (36.4) y el de la pasarela no activa (36.5). Las dos mitades son complementarias y cada una pasaba sus pruebas, así que ninguna tenía motivo para sospechar de la otra.
+
+Seis archivos los tocaron las dos mitades y Git solo reportó dos conflictos. Los dos eran de texto y ninguno era el problema: la tabla del 36.7, donde cada mitad marcó como abiertos justo los huecos que la otra estaba cerrando, y la fachada. **El conflicto de verdad es que las dos mitades le agregaron un tercer parámetro distinto al mismo método:**
+
+| Mitad | Tercer parámetro | Para qué |
+| --- | --- | --- |
+| Reenvío y diagnóstico | `options?: WebhookVerificationOptions` | Ventana de frescura y reloj de referencia |
+| Secreto y pasarela no activa | `gateway?: Gateway` | Verificar webhooks de una pasarela que no es la activa |
+
+No es un choque que se resuelva eligiendo un lado: los dos parámetros son necesarios y los dos son opcionales, así que ninguno puede quedarse la tercera posición. Había además dos desacuerdos menores en el cuerpo del método, y esos sí tenían un lado correcto: de dónde sale el secreto (`privateKey` contra `webhookSecret ?? privateKey`) y de dónde sale la pasarela (siempre la activa contra la que pidan).
+
+**La decisión: una sola bolsa de opciones.** `validateWebhook(payload, headers, { gateway?, toleranceSeconds?, currentTimestamp? })`, con un tipo propio de la fachada que extiende el de verificación en vez de reemplazarlo:
+
+```ts
+export interface ValidateWebhookOptions extends WebhookVerificationOptions {
+  gateway?: Gateway;
+}
+```
+
+Se eligió sobre la alternativa obvia —cuatro parámetros posicionales, `(payload, headers, gateway?, options?)`— por tres razones. La primera es que no obliga a tocar ninguna llamada existente: las que ya pasaban opciones siguen compilando igual. La segunda es que **`gateway` no es una opción de verificación**, y la herencia lo dice en el tipo: los manejadores de firma reciben solo la frescura y siguen sin saber a qué pasarela pertenecen, mientras el enrutamiento se queda en la fachada, que es la única capa que conoce el mapa de credenciales. La tercera es que la próxima opción no va a volver a pelear por la posición. Que esto se pudiera decidir sin costo es otra vez el argumento del punto 53: la firma pública todavía no estaba publicada.
+
+**El defecto que la fusión creó y ningún marcador señaló.** Tres pruebas del secreto de webhook firmaban con un timestamp fijo de 2020, porque una firma reproducible necesita una entrada fija. Al juntarse con la protección contra reenvío empezaron a fallar, y el mensaje con el que fallaban era `Invalid webhook signature`: la firma estaba perfecta, lo viejo era el reloj. Se corrigieron fijando también el reloj con `currentTimestamp`, que es justo para lo que la otra mitad había puesto esa opción. Es la cuarta aparición del punto 51 y la segunda del punto 52: dos mitades verdes por separado, y lo que las delata no es lo que Git marca.
+
+**Lo que ese síntoma deja anotado, y no se corrigió acá.** Un webhook rechazado por viejo y uno rechazado por falsificado devuelven los dos `WEBHOOK_SIGNATURE_INVALID`. Fallar cerrado es correcto y hay que conservarlo, pero el 36.6 se cerró para que el diagnóstico distinga lo que no se pudo interpretar de lo que no coincidió, y por dentro de "no coincidió" quedó una ambigüedad de la misma clase: al comercio cuyo servidor tiene el reloj desfasado el SDK le va a decir que le están falsificando webhooks. Distinguirlos exige decidir si "expiró" es información que se le puede dar a quien manda la petición, que es una decisión de seguridad y no de diagnóstico. Queda como pendiente declarado, no como hueco del 36.7, porque el rechazo es correcto: lo discutible es el mensaje.
+
+**Estado:** Resuelto. Los cuatro huecos del punto 36 quedan cerrados sobre una sola firma, con 577 pruebas del SDK en verde. Pendiente: decidir si un webhook expirado merece un diagnóstico propio.
 
 ---
 
@@ -1937,7 +1970,7 @@ correspondiente por el PNG regenerado.
 
 **Decisión:** Se mantiene la matriz de equivalencias por pasarela (Wompi/Rapyd/Mercado Pago/Kushki) tal como está, porque es investigación de campo valiosa y en gran parte independiente de la reestructuración del dominio. Se corrige puntualmente el snippet de `SdkError` y se agrega una nota de vigencia al inicio del documento.
 
-**Estado:** Parcialmente resuelto (nota de vigencia y snippet de `SdkError` corregidos; columna Rapyd investigada y actualizada, ver puntos 15, 18 y 19). **Pendiente:** una pasada completa de reemplazo de `EstadoTransaccion` por `TransactionStatus` en las tablas, y decidir si vale la pena crear los archivos de contrato por flujo (creación, webhook, consulta, error) dentro de `application/ports/`, o si toda esa información debe vivir directamente como comentarios de implementación dentro de cada Adapter.
+**Estado:** Resuelto. Se ejecutó la pasada completa de sincronización en `docs/architecture/ubiquitous-language.md`, reemplazando el enum `EstadoTransaccion` por `TransactionStatus`, `SdkErrorCode` por `KitPagosErrorCode` y `SdkError` por `KitPagosError`. El lenguaje ubicuo queda 100% alineado con las entidades de dominio y el catálogo de errores tipados del SDK.
 
 ### 12. `sdk/package.json` sin scripts reales y con licencia incorrecta
 
@@ -2060,7 +2093,7 @@ Las dos señales son necesarias porque responden preguntas distintas, y `Amount`
 
 3. **`ErrorHandler` → división por forma del error, no por pasarela.** Los fallos que traduce son de red y de protocolo HTTP, iguales para las cuatro pasarelas; lo que varía es la forma del fallo entrante. `handle()` delega en `fromHttpStatus` (respuesta con status) y `fromNativeError` (`Error` de Node), y las funciones puras `sanitize`, `formatGatewayName` y `mapHttpStatus` bajaron a nivel de módulo por el mismo criterio del punto 33. Los predicados `hasConnectionSignal` y `hasTimeoutSignal` quedaron compartidos con `classifyError`, que duplicaba esas mismas cadenas de condiciones.
 
-**Asimetría preexistente que se documenta sin corregir:** `classifyError` reconoce un mensaje que contenga "network" como reintentable, pero `handle()` no lo reconoce y lo traduce a `UNKNOWN_ERROR`, que vuelve a clasificarse como `FINAL`. El mismo error nativo es reintentable antes de pasar por `handle()` y final después. Se conservó el comportamiento tal cual para no mezclar un cambio de semántica con una reestructuración; queda anotado en el código y pendiente de decidir si es un defecto a corregir.
+**Asimetría resuelta:** Anteriormente, `classifyError` reconocía un mensaje que contuviera "network" como reintentable, pero `hasConnectionSignal()` no incluía "network" ni códigos como `ENETUNREACH`, provocando que `handle()` tradujera el error a `UNKNOWN_ERROR` (clasificado como `FINAL`). Se resolvió incorporando `"network"`, `ENETUNREACH`, `ENETDOWN` y `EAI_AGAIN` directamente en `hasConnectionSignal()`, logrando simetría total: un fallo con señal de red se traduce a `KitPagosErrorCode.CONNECTION_FAILED` y mantiene consistentemente su clasificación `RETRIABLE`.
 
 **Resultado:**
 
@@ -2170,6 +2203,8 @@ La consecuencia es concreta: un webhook capturado una vez se puede reenviar inde
 
 La corrección es acotada y conocida: aceptar una ventana de tolerancia (el valor habitual en la industria es de cinco minutos) y rechazar lo que caiga fuera. Requiere decidir dos cosas que no son obvias: qué hacer cuando el reloj del servidor del comercio está desfasado, y si la ventana debe ser configurable por el comercio. **No está trackeado en ningún issue.** Es el hueco de seguridad más serio que tiene el SDK hoy.
 
+**Resolución:** Resuelto. Se implementó validación de tolerancia temporal contra ataques de replay en `signature-utils.ts` (`isTimestampWithinTolerance`), `GatewayWebhookHandler.ts`, los cuatro manejadores (`WompiWebhookHandler`, `RapydWebhookHandler`, `MercadoPagoWebhookHandler`, `KushkiWebhookHandler`), `WebhookVerifier.ts` y la fachada `KitPagos.ts`. La ventana de tolerancia por defecto es de 300 segundos (5 minutos) y es configurable tanto globalmente en `SDKOptions.webhookToleranceSeconds` (o desactivable con `0`) como puntualmente en `KitPagos.validateWebhook(payload, headers, { toleranceSeconds })`.
+
 #### 36.4. Hueco 2 — `Credentials` tiene dos campos y el secreto de webhook no es la llave de API
 
 El objeto de valor completo es este:
@@ -2234,6 +2269,8 @@ El `catch` sin filtro convierte cualquier excepción en "firma inválida". Eso i
 
 Desde el punto de vista de seguridad, fallar cerrado es la decisión correcta y hay que conservarla. Lo que falta es distinguir en el diagnóstico: `MALFORMED_RESPONSE` para lo que no se pudo interpretar y `WEBHOOK_SIGNATURE_INVALID` para lo que se interpretó y no coincidió. Sin esa distinción, un comercio que despliegue mal el middleware de Rapyd (sin inyectar `x-webhook-url`, ver 36.1) va a ver "firma inválida" en todos sus webhooks y no tiene ninguna pista de que el problema es su integración y no un ataque.
 
+**Resolución:** Resuelto en `KitPagos.validateWebhook()`. Las excepciones producidas al verificar cabeceras/estructura o al parsear el JSON son capturadas y traducidas a `KitPagosError(MALFORMED_RESPONSE)` con `originalPayload: null` (para evitar fugas de datos sensibles conforme a RF-08). `WEBHOOK_SIGNATURE_INVALID` se reserva exclusivamente para cuando la estructura es válida pero la firma no coincide. Asimismo, `RapydWebhookHandler.verify()` ahora valida explícitamente la presencia de `x-webhook-url` y lanza error si falta.
+
 #### 36.7. Resumen del estado de seguridad
 
 | Aspecto | Estado |
@@ -2243,12 +2280,12 @@ Desde el punto de vista de seguridad, fallar cerrado es la decisión correcta y 
 | Sanitización de credenciales en errores (RF-08) | ✓ Implementado y probado |
 | Secreto de Rapyd nunca viaja por la red | ✓ Correcto |
 | Los cuatro algoritmos de firma implementados | ✓ Las cuatro pasarelas verifican |
-| Protección contra replay | ✗ **Ausente en las cuatro** (36.3) |
-| Secreto de webhook separado de la llave de API | ✓ Resuelto en el punto 53 con `Credentials.webhookSecret` (36.4) |
-| Verificar webhooks de una pasarela no activa | ✓ Resuelto en el punto 53 con el tercer parámetro de `validateWebhook()` (36.5) |
-| Distinguir cuerpo malformado de firma falsificada | ✗ **No se distingue** (36.6) |
+| Protección contra replay | ✓ Ventana configurable, 300s por defecto (36.3) |
+| Secreto de webhook separado de la llave de API | ✓ `Credentials.webhookSecret` (36.4) |
+| Verificar webhooks de una pasarela no activa | ✓ `options.gateway` en `validateWebhook()` (36.5) |
+| Distinguir cuerpo malformado de firma falsificada | ✓ `MALFORMED_RESPONSE` vs. `WEBHOOK_SIGNATURE_INVALID` (36.6) |
 
-**Estado:** dos de los cuatro huecos quedaron cerrados en el punto 53 (issue #92), justo antes de publicar en npm, que es cuando cambiar la interfaz pública todavía era gratis. Siguen abiertos el de replay (36.3), que es el que bloquea un uso en producción, y el del diagnóstico indistinguible (36.6).
+**Estado:** los cuatro huecos cerrados, todos antes de publicar en npm, que es cuando cambiar la interfaz pública todavía era gratis. Se cerraron en paralelo y por separado: el de replay y el del diagnóstico por un lado, el del secreto y el de la pasarela no activa por el otro, sobre la misma rama. Las dos mitades chocaron al juntarse, y el punto 54 registra en qué y cómo se resolvió.
 
 ---
 

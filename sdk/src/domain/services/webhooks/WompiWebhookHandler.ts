@@ -1,8 +1,8 @@
 import { Gateway } from "../../value-objects/Gateway";
 import { WebhookEvent } from "../../value-objects/WebhookEvent";
 import { TransactionStatus } from "../../value-objects/TransactionStatus";
-import { GatewayWebhookHandler } from "./GatewayWebhookHandler";
-import { safeCompare, sha256Hex } from "./signature-utils";
+import { GatewayWebhookHandler, WebhookVerificationOptions } from "./GatewayWebhookHandler";
+import { safeCompare, sha256Hex, normalizeTimestamp, isTimestampWithinTolerance } from "./signature-utils";
 import { WOMPI_NATIVE_STATUS, lookupNativeStatus } from "../native-status";
 
 /** Tipo de evento por defecto cuando el cuerpo no lo declara. */
@@ -21,9 +21,23 @@ export class WompiWebhookHandler implements GatewayWebhookHandler {
     payload: string,
     headers: Record<string, string>,
     secret: string,
+    options?: WebhookVerificationOptions,
   ): boolean {
     const receivedChecksum = headers["x-event-checksum"];
     const body = JSON.parse(payload);
+
+    if (body.timestamp === undefined || body.timestamp === null) {
+      throw new Error("Missing timestamp in Wompi webhook payload");
+    }
+    if (!body.signature?.properties || !Array.isArray(body.signature.properties)) {
+      throw new Error("Missing signature.properties in Wompi webhook payload");
+    }
+
+    const timestamp = normalizeTimestamp(body.timestamp);
+    if (!isTimestampWithinTolerance(timestamp, options?.toleranceSeconds, options?.currentTimestamp)) {
+      return false;
+    }
+
     const properties: string[] = body.signature.properties;
 
     // Cada propiedad es una ruta con puntos ("transaction.amount_in_cents") que

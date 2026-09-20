@@ -1,8 +1,8 @@
 import { Gateway } from "../../value-objects/Gateway";
 import { WebhookEvent } from "../../value-objects/WebhookEvent";
 import { TransactionStatus } from "../../value-objects/TransactionStatus";
-import { GatewayWebhookHandler } from "./GatewayWebhookHandler";
-import { safeCompare, hmacSha256 } from "./signature-utils";
+import { GatewayWebhookHandler, WebhookVerificationOptions } from "./GatewayWebhookHandler";
+import { safeCompare, hmacSha256, normalizeTimestamp, isTimestampWithinTolerance } from "./signature-utils";
 import { MERCADOPAGO_NATIVE_STATUS, lookupNativeStatus } from "../native-status";
 
 /** Tipo de evento por defecto cuando el cuerpo no declara `action` ni `type`. */
@@ -21,13 +21,32 @@ export class MercadoPagoWebhookHandler implements GatewayWebhookHandler {
     payload: string,
     headers: Record<string, string>,
     secret: string,
+    options?: WebhookVerificationOptions,
   ): boolean {
     const xSignature = headers["x-signature"];
     const requestId = headers["x-request-id"];
+    if (!xSignature) {
+      throw new Error("Missing required header: x-signature");
+    }
+    if (!requestId) {
+      throw new Error("Missing required header: x-request-id");
+    }
+
     const body = JSON.parse(payload);
+    if (!body?.data?.id) {
+      throw new Error("Missing data.id in Mercado Pago webhook payload");
+    }
     const dataId = String(body.data.id);
 
     const parts = parseSignatureHeader(xSignature);
+    if (!parts["ts"] || !parts["v1"]) {
+      throw new Error("Invalid x-signature header format: missing ts or v1");
+    }
+    const timestamp = normalizeTimestamp(parts["ts"]);
+    if (!isTimestampWithinTolerance(timestamp, options?.toleranceSeconds, options?.currentTimestamp)) {
+      return false;
+    }
+
     const manifest = `id:${dataId};request-id:${requestId};ts:${parts["ts"]};`;
 
     return safeCompare(parts["v1"], hmacSha256(secret, manifest, "hex"));

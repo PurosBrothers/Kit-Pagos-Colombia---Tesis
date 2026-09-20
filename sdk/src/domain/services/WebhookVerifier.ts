@@ -1,10 +1,12 @@
 import { Gateway } from "../value-objects/Gateway";
 import { WebhookEvent } from "../value-objects/WebhookEvent";
-import { GatewayWebhookHandler } from "./webhooks/GatewayWebhookHandler";
+import { GatewayWebhookHandler, WebhookVerificationOptions } from "./webhooks/GatewayWebhookHandler";
 import { WompiWebhookHandler } from "./webhooks/WompiWebhookHandler";
 import { RapydWebhookHandler } from "./webhooks/RapydWebhookHandler";
 import { MercadoPagoWebhookHandler } from "./webhooks/MercadoPagoWebhookHandler";
 import { KushkiWebhookHandler } from "./webhooks/KushkiWebhookHandler";
+
+export { WebhookVerificationOptions } from "./webhooks/GatewayWebhookHandler";
 
 /**
  * Servicio de dominio sin estado propio.
@@ -36,19 +38,22 @@ export class WebhookVerifier {
   };
 
   /**
-   * Verifica la autenticidad de un webhook contra la firma de su pasarela.
+   * Verifica la autenticidad de un webhook contra la firma de su pasarela y su frescura temporal.
    *
    * @param payload Cuerpo crudo tal como llego, sin reserializar.
    * @param headers Cabeceras de la peticion, en minusculas.
    * @param secret Secreto de webhooks de la pasarela.
+   * @param gateway Pasarela emisora.
+   * @param options Opciones de verificación de frescura (replay protection).
    */
   verify(
     payload: string,
     headers: Record<string, string>,
     secret: string,
     gateway: Gateway,
+    options?: WebhookVerificationOptions,
   ): boolean {
-    return this.handlerFor(gateway, "verify").verify(payload, headers, secret);
+    return this.handlerFor(gateway, "verify").verify(payload, headers, secret, options);
   }
 
   /** Traduce el cuerpo de un webhook ya verificado al evento del dominio. */

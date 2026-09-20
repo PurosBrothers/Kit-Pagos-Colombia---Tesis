@@ -36,3 +36,36 @@ export function hmacSha256(
 ): string {
   return crypto.createHmac("sha256", secret).update(data).digest(encoding);
 }
+
+/**
+ * Normaliza un timestamp numérico o string a segundos Unix enteros.
+ * Soporta timestamps en milisegundos (> 1e11) convirtiéndolos a segundos.
+ */
+export function normalizeTimestamp(raw: unknown): number {
+  if (raw === null || raw === undefined || raw === "") return NaN;
+  const num = typeof raw === "string" ? Number(raw) : Number(raw);
+  if (isNaN(num)) return NaN;
+  return num > 1e11 ? Math.floor(num / 1000) : Math.floor(num);
+}
+
+/** Tolerancia por defecto en segundos para protección contra ataques de replay (5 minutos). */
+export const DEFAULT_WEBHOOK_TOLERANCE_SECONDS = 300;
+
+/**
+ * Valida que un timestamp caiga dentro de la ventana de tolerancia respecto a la hora actual.
+ * Previene ataques de replay (reenvío de webhooks capturados).
+ *
+ * @param timestampSeconds Timestamp del evento en segundos Unix.
+ * @param toleranceSeconds Tolerancia en segundos. Si es <= 0, se desactiva la validación.
+ * @param currentTimestampSeconds Timestamp actual de referencia en segundos.
+ */
+export function isTimestampWithinTolerance(
+  timestampSeconds: number,
+  toleranceSeconds: number = DEFAULT_WEBHOOK_TOLERANCE_SECONDS,
+  currentTimestampSeconds: number = Math.floor(Date.now() / 1000),
+): boolean {
+  if (toleranceSeconds <= 0) return true;
+  if (!timestampSeconds || isNaN(timestampSeconds)) return false;
+  return Math.abs(currentTimestampSeconds - timestampSeconds) <= toleranceSeconds;
+}
+

@@ -1,8 +1,8 @@
 import { Gateway } from "../../value-objects/Gateway";
 import { WebhookEvent } from "../../value-objects/WebhookEvent";
 import { TransactionStatus } from "../../value-objects/TransactionStatus";
-import { GatewayWebhookHandler } from "./GatewayWebhookHandler";
-import { safeCompare, hmacSha256 } from "./signature-utils";
+import { GatewayWebhookHandler, WebhookVerificationOptions } from "./GatewayWebhookHandler";
+import { safeCompare, hmacSha256, normalizeTimestamp, isTimestampWithinTolerance } from "./signature-utils";
 import { KUSHKI_NATIVE_STATUS, lookupNativeStatus } from "../native-status";
 
 /** Kushki no declara un tipo de evento en el cuerpo. */
@@ -23,9 +23,20 @@ export class KushkiWebhookHandler implements GatewayWebhookHandler {
     payload: string,
     headers: Record<string, string>,
     secret: string,
+    options?: WebhookVerificationOptions,
   ): boolean {
     const receivedSignature = headers["x-kushki-signature"];
     const kushkiId = headers["x-kushki-id"];
+
+    if (!kushkiId) {
+      throw new Error("Missing required header: x-kushki-id");
+    }
+
+    const timestamp = normalizeTimestamp(kushkiId);
+    if (!isTimestampWithinTolerance(timestamp, options?.toleranceSeconds, options?.currentTimestamp)) {
+      return false;
+    }
+
     const data = payload + "." + kushkiId;
 
     return safeCompare(receivedSignature, hmacSha256(secret, data, "hex"));

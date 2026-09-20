@@ -92,6 +92,22 @@ describe("ErrorHandler", () => {
       expect(result.message).toContain("Failed to connect to Wompi gateway");
     });
 
+    it("resuelve la asimetría traduciendo errores con mensaje 'network' o código ENETUNREACH a CONNECTION_FAILED retriable", () => {
+      const networkError = new Error("network error occurred during request");
+      expect(isRetriable(networkError)).toBe(true);
+
+      const handled = errorHandler.handle(networkError, Gateway.WOMPI);
+      expect(handled.code).toBe(KitPagosErrorCode.CONNECTION_FAILED);
+      expect(handled.gateway).toBe(Gateway.WOMPI);
+      expect(isRetriable(handled)).toBe(true);
+
+      const unreachableErr = Object.assign(new Error("Network is unreachable"), { code: "ENETUNREACH" });
+      expect(isRetriable(unreachableErr)).toBe(true);
+      const handledUnreachable = errorHandler.handle(unreachableErr, Gateway.RAPYD);
+      expect(handledUnreachable.code).toBe(KitPagosErrorCode.CONNECTION_FAILED);
+      expect(isRetriable(handledUnreachable)).toBe(true);
+    });
+
     it("traduce errores con código ECONNREFUSED / ENOTFOUND / ECONNRESET a CONNECTION_FAILED", () => {
       const error = Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
       const result = errorHandler.handle(error, Gateway.RAPYD);

@@ -249,7 +249,7 @@ describe("KitPagos", () => {
   describe("validateWebhook()", () => {
     describe("4 gateways with valid signatures", () => {
       it("should validate and parse a valid Wompi webhook event", () => {
-        const timestamp = 1602113476;
+        const timestamp = Math.floor(Date.now() / 1000);
         const txId = "wompi-tx-999";
         const status = "APPROVED";
         const secret = wompiCredentials.privateKey;
@@ -286,7 +286,7 @@ describe("KitPagos", () => {
         const rapydSecret = "rapyd_sec_key_456";
         const rapydAccessKey = "rapyd_access_123";
         const salt = "random_salt_xyz";
-        const timestamp = "1727001234";
+        const timestamp = String(Math.floor(Date.now() / 1000));
         const webhookUrl = "https://tienda.example.com/webhooks/rapyd";
 
         const payload = JSON.stringify({
@@ -330,7 +330,7 @@ describe("KitPagos", () => {
         const mpSecret = "mp_secret_key_789";
         const dataId = "mp-tx-555";
         const requestId = "req-mp-uuid";
-        const ts = "1702500000";
+        const ts = String(Math.floor(Date.now() / 1000));
 
         const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
         const v1 = crypto.createHmac("sha256", mpSecret).update(manifest).digest("hex");
@@ -362,7 +362,7 @@ describe("KitPagos", () => {
 
       it("should validate and parse a valid Kushki webhook event", () => {
         const kushkiSecret = "kushki_sig_id_321";
-        const kushkiId = "1702500000";
+        const kushkiId = String(Math.floor(Date.now() / 1000));
 
         const payload = JSON.stringify({
           transaction_status: "APPROVAL",
@@ -396,7 +396,7 @@ describe("KitPagos", () => {
 
     describe("security: tampered signatures and data leakage prevention", () => {
       it("should throw KitPagosError(WEBHOOK_SIGNATURE_INVALID) when signature is tampered by a single character", () => {
-        const timestamp = 1602113476;
+        const timestamp = Math.floor(Date.now() / 1000);
         const txId = "wompi-tx-999";
         const status = "APPROVED";
         const secret = wompiCredentials.privateKey;
@@ -455,6 +455,123 @@ describe("KitPagos", () => {
           expect(sdkError.message).not.toContain("card-number-1234");
         }
       });
+
+      it("should throw KitPagosError(MALFORMED_RESPONSE) when payload is not valid JSON", () => {
+        const sdk = buildConfiguredSdk();
+        const malformedPayload = "{ bad json";
+        const headers = { "x-event-checksum": "abc" };
+
+        try {
+          sdk.validateWebhook(malformedPayload, headers);
+          fail("Should have thrown KitPagosError");
+        } catch (error) {
+          const sdkError = error as KitPagosError;
+          expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
+          expect(sdkError.originalPayload).toBeNull();
+        }
+      });
+
+      it("should throw KitPagosError(MALFORMED_RESPONSE) when Rapyd webhook is missing x-webhook-url header", () => {
+        const rapydSecret = "rapyd_sec_999";
+        const sdk = new KitPagos({
+          gateway: Gateway.RAPYD,
+          credentials: {
+            [Gateway.RAPYD]: { publicKey: "rapyd_pub", privateKey: rapydSecret },
+          },
+        });
+
+        const payload = JSON.stringify({ type: "PAYMENT_COMPLETED", data: { id: "p-1" } });
+        const headers = {
+          signature: "some-sig",
+          access_key: "ak",
+          salt: "salt",
+          timestamp: "1727001234",
+          // missing x-webhook-url
+        };
+
+        try {
+          sdk.validateWebhook(payload, headers);
+          fail("Should have thrown KitPagosError");
+        } catch (error) {
+          const sdkError = error as KitPagosError;
+          expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
+          expect(sdkError.message).toContain("x-webhook-url");
+          expect(sdkError.originalPayload).toBeNull();
+        }
+      });
+
+      it("should throw KitPagosError(MALFORMED_RESPONSE) when Wompi webhook lacks signature properties", () => {
+        const sdk = buildConfiguredSdk();
+        const payload = JSON.stringify({ event: "transaction.updated" }); // lacks signature.properties
+        const headers = { "x-event-checksum": "abc" };
+
+        try {
+          sdk.validateWebhook(payload, headers);
+          fail("Should have thrown KitPagosError");
+        } catch (error) {
+          const sdkError = error as KitPagosError;
+          expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
+          expect(sdkError.originalPayload).toBeNull();
+        }
+      });
+    });
+
+    describe("replay protection: timestamp tolerance in validateWebhook()", () => {
+      const txId = "wompi-replay-tx";
+      const status = "APPROVED";
+      const secret = wompiCredentials.privateKey;
+      const now = Math.floor(Date.now() / 1000);
+
+      function createPayloadWithTimestamp(ts: number) {
+        const checksum = crypto
+          .createHash("sha256")
+          .update(`${txId}${status}${ts}${secret}`)
+          .digest("hex");
+
+        const payload = JSON.stringify({
+          event: "transaction.updated",
+          data: { transaction: { id: txId, status } },
+          timestamp: ts,
+          signature: {
+            properties: ["data.transaction.id", "data.transaction.status"],
+            checksum,
+          },
+        });
+        return { payload, headers: { "x-event-checksum": checksum } };
+      }
+
+      it("should throw KitPagosError(WEBHOOK_SIGNATURE_INVALID) when webhook timestamp is older than 300s", () => {
+        const sdk = buildConfiguredSdk();
+        const { payload, headers } = createPayloadWithTimestamp(now - 305);
+
+        try {
+          sdk.validateWebhook(payload, headers);
+          fail("Should have thrown replay error");
+        } catch (error) {
+          const sdkError = error as KitPagosError;
+          expect(sdkError.code).toBe(KitPagosErrorCode.WEBHOOK_SIGNATURE_INVALID);
+        }
+      });
+
+      it("should allow webhook when toleranceSeconds: 0 is configured on SDK", () => {
+        const sdk = new KitPagos({
+          gateway: Gateway.WOMPI,
+          credentials: { [Gateway.WOMPI]: wompiCredentials },
+          webhookToleranceSeconds: 0,
+        });
+        const { payload, headers } = createPayloadWithTimestamp(now - 10000);
+
+        const event = sdk.validateWebhook(payload, headers);
+        expect(event.gatewayTransactionId).toBe(txId);
+      });
+
+      it("should allow webhook when options override toleranceSeconds in validateWebhook() call", () => {
+        const sdk = buildConfiguredSdk();
+        const { payload, headers } = createPayloadWithTimestamp(now - 500);
+
+        const event = sdk.validateWebhook(payload, headers, { toleranceSeconds: 600 });
+        expect(event.gatewayTransactionId).toBe(txId);
+      });
     });
 
     describe("configuration errors", () => {
@@ -496,12 +613,20 @@ describe("KitPagos", () => {
     describe("webhook secret separate from the API key", () => {
       const eventsSecret = "wompi_events_secret_no_es_la_llave";
 
+      /*
+       * El timestamp del webhook es fijo para que la firma sea reproducible, así que las
+       * pruebas que esperan verificación exitosa tienen que fijar también el reloj con
+       * `currentTimestamp`: si no, la protección contra reenvío lo descarta por viejo y el
+       * fallo se lee como firma inválida, tapando lo que estas pruebas miden.
+       */
+      const eventTimestamp = 1602113476;
+
       /** Firma un webhook de Wompi con el secreto que se le pase. */
       function signWompiWebhook(secret: string): {
         payload: string;
         headers: Record<string, string>;
       } {
-        const timestamp = 1602113476;
+        const timestamp = eventTimestamp;
         const txId = "wompi-tx-secreto-de-eventos";
         const status = "APPROVED";
 
@@ -534,7 +659,9 @@ describe("KitPagos", () => {
           },
         });
 
-        const event = sdk.validateWebhook(payload, headers);
+        const event = sdk.validateWebhook(payload, headers, {
+          currentTimestamp: eventTimestamp,
+        });
 
         expect(event.gateway).toBe(Gateway.WOMPI);
         expect(event.gatewayTransactionId).toBe("wompi-tx-secreto-de-eventos");
@@ -561,7 +688,9 @@ describe("KitPagos", () => {
         // correcto. En las otras tres es solo no romper el código escrito antes del campo.
         const { payload, headers } = signWompiWebhook(wompiCredentials.privateKey);
 
-        const event = buildConfiguredSdk().validateWebhook(payload, headers);
+        const event = buildConfiguredSdk().validateWebhook(payload, headers, {
+          currentTimestamp: eventTimestamp,
+        });
 
         expect(event.gatewayTransactionId).toBe("wompi-tx-secreto-de-eventos");
       });
@@ -606,7 +735,11 @@ describe("KitPagos", () => {
           },
         });
 
-        const event = sdk.validateWebhook(payload, { "x-event-checksum": checksum }, Gateway.WOMPI);
+        const event = sdk.validateWebhook(
+          payload,
+          { "x-event-checksum": checksum },
+          { gateway: Gateway.WOMPI, currentTimestamp: timestamp },
+        );
 
         expect(event.gateway).toBe(Gateway.WOMPI);
         expect(event.gatewayTransactionId).toBe(txId);
@@ -632,9 +765,11 @@ describe("KitPagos", () => {
           },
         });
 
-        const event = buildConfiguredSdk().validateWebhook(payload, {
-          "x-event-checksum": checksum,
-        });
+        const event = buildConfiguredSdk().validateWebhook(
+          payload,
+          { "x-event-checksum": checksum },
+          { currentTimestamp: timestamp },
+        );
 
         expect(event.gateway).toBe(Gateway.WOMPI);
       });
@@ -648,7 +783,7 @@ describe("KitPagos", () => {
         });
 
         try {
-          sdk.validateWebhook("{}", {}, Gateway.KUSHKI);
+          sdk.validateWebhook("{}", {}, { gateway: Gateway.KUSHKI });
           fail("Should have thrown KitPagosError");
         } catch (error) {
           const sdkError = error as KitPagosError;
@@ -663,7 +798,7 @@ describe("KitPagos", () => {
       const mpPublicKey = "mp_public_key_123";
       const dataId = "1234567890";
       const requestId = "req-mp-uuid-step";
-      const ts = "1702500000";
+      const ts = String(Math.floor(Date.now() / 1000));
 
       const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
       const v1 = crypto.createHmac("sha256", mpSecret).update(manifest).digest("hex");
