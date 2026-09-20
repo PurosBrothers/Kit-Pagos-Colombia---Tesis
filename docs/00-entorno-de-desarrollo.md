@@ -1,237 +1,151 @@
-# Kit Pagos Colombia - Guía de Inicialización, Estructura y Decisiones Técnicas
+# Entorno de desarrollo: cómo se levanta y cómo se verifica
 
-Este documento describe la estructura inicial del proyecto de grado **Kit Pagos Colombia**, las tecnologías seleccionadas, la configuración de sus componentes principales y algunos inconvenientes encontrados durante la puesta en marcha.
+Este documento es lo primero que hay que leer para poder ejecutar cualquier cosa del repositorio. Explica qué hay dentro, qué se instala, en qué orden se arranca cada pieza y con qué comandos se verifica un cambio antes de abrir un pull request. No explica arquitectura ni lógica de negocio: para eso están las secciones [01-producto](01-producto/) y [02-arquitectura](02-arquitectura/).
 
-También se presentan las razones detrás de las decisiones técnicas tomadas, con el fin de dejar documentado el enfoque utilizado para el desarrollo del SDK y la API de simulación.
-
----
-
-## 1. Estructura general del proyecto
-
-El proyecto se organiza como un monorrepo compuesto por diferentes carpetas. Esto permite mantener el código fuente, la documentación y los distintos componentes en un mismo repositorio, sin perder la separación entre cada uno.
-
-```text
-Kit-Pagos-Colombia---Tesis/
-├── docs/                       # Documentación técnica, arquitectura y trabajo de grado
-│   ├── architecture/           # Diagramas C4, DDD, lenguaje ubicuo y especificaciones
-│   └── tesis/                  # Documento final del trabajo de grado
-├── sdk/                        # Librería cliente unificada desarrollada en TypeScript
-├── simulator-api/              # API REST utilizada para simular las pasarelas de pago
-└── README.md                   # Información general y punto de entrada del repositorio
-```
-
-La separación por módulos permite que el SDK y el simulador puedan desarrollarse y probarse de manera independiente. Al mismo tiempo, el uso de un único repositorio facilita el seguimiento de cambios y la organización general del proyecto.
+> **Nota de historial.** Este archivo reemplaza a `docs/architecture/setup-and-structure.md`, el documento de arranque más antiguo del repositorio, que describía una estructura de carpetas en español (`domain/enums/EstadoTransaccion.ts`, `domain/interfaces/IPuertoPasarela.ts`, `application/KitPagos.ts`) que nunca llegó a existir. El punto 8 del [architecture-log](architecture/architecture-log.md) registraba esa deuda; queda cerrada con esta reescritura.
 
 ---
 
-## 2. Configuración del SDK (`/sdk`)
+## 1. Qué hay en el repositorio
 
-### 2.1 Arquitectura y tecnologías utilizadas
+El proyecto es un monorepo. Kit Pagos Colombia se entrega como **tres componentes**, y hay dos carpetas más que existen para soportarlos:
 
-El SDK se desarrolla utilizando **TypeScript**, con compatibilidad para **ES2020** y **Node.js 18 LTS o versiones posteriores**.
+| Carpeta | Qué es | Se entrega |
+|---|---|---|
+| `sdk/` | La librería TypeScript, publicada en npm como `kit-pagos-colombia` | Componente 1 |
+| `simulator-api/` | La API de Simulación: un servidor Fastify que imita a las cuatro pasarelas | Componente 2 |
+| `docs/testing-data/` | La documentación de datos de prueba de cada pasarela | Componente 3 |
+| `examples/` | Paquete npm independiente que consume el SDK como lo haría un comercio | Soporte |
+| `docs/` | Toda la documentación del proyecto, incluida esta | Soporte |
 
-A diferencia de una aplicación web, el SDK no requiere un servidor propio. Por esta razón, no se utilizan frameworks como NestJS o Express. El objetivo es construir una librería que pueda ser instalada e integrada fácilmente en otros proyectos mediante npm.
+Los tres componentes no son tres carpetas que casualmente conviven: el SDK no se puede ejercitar sin un servidor al que llamar, y ni el SDK ni el simulador se pueden ejercitar sin saber qué tarjeta, qué banco y qué documento usar en cada pasarela. Eso está explicado en [01-producto/4-por-que-kit-pagos.md](01-producto/4-por-que-kit-pagos.md).
 
-El uso de TypeScript permite contar con tipado estático, mejorar la detección de errores durante el desarrollo y definir contratos claros para las operaciones relacionadas con las pasarelas de pago.
-
-El SDK utiliza la licencia **Apache 2.0**, lo que permite su uso, modificación y distribución como software de código abierto.
-
-### 2.2 Estructura interna
-
-Dentro de `sdk/src/` se utiliza una organización basada en la **Arquitectura Hexagonal**, también conocida como **Puertos y Adaptadores**.
-
-```text
-sdk/src/
-├── domain/             # Reglas, contratos y elementos principales del dominio
-│   ├── enums/          # EstadoTransaccion.ts
-│   ├── interfaces/     # IIntencionPago.ts, IPuertoPasarela.ts
-│   └── errors/         # ErrorNormalizado.ts
-├── infrastructure/     # Implementaciones relacionadas con servicios externos
-│   └── adapters/       # Adaptadores de Wompi, Rapyd, Mercado Pago y Kushki
-├── application/        # Servicios y fachada principal del SDK
-│   └── KitPagos.ts     # Clase principal expuesta al usuario
-└── index.ts            # Exportaciones públicas del paquete
-```
-
-Esta organización permite separar la lógica principal del SDK de las implementaciones específicas de cada pasarela.
-
-Por ejemplo, si una pasarela cambia la forma en que recibe una solicitud o modifica su mecanismo de autenticación, los cambios se pueden concentrar en el adaptador correspondiente. De esta manera, se busca reducir el impacto sobre el resto del sistema y mantener una interfaz unificada para los usuarios del SDK.
-
-### 2.3 Dependencias y pruebas
-
-Para las pruebas se utiliza **Jest** junto con **`ts-jest`**, lo que permite ejecutar pruebas automatizadas directamente sobre el código desarrollado en TypeScript.
-
-El proyecto cuenta con un umbral de cobertura del **80 %** para las siguientes métricas:
-
-* Statements
-* Branches
-* Functions
-* Lines
-
-La configuración se encuentra definida en el archivo `jest.config.js`.
-
-También se utiliza **`ts-morph`** para analizar la estructura sintáctica del código TypeScript. Esta herramienta será utilizada durante la fase de evaluación para obtener información relacionada con las métricas de calidad definidas para el proyecto.
-
-Por otra parte, **ESLint** y **Prettier** se utilizan para mantener un estilo de código consistente. La configuración de TypeScript incluye el modo estricto mediante la opción `strict: true`.
+Cada paquete de código tiene su propio `package.json` y su propio `node_modules`. No hay workspaces de npm: se instala por carpeta.
 
 ---
 
-## 3. Configuración de la API de simulación (`/simulator-api`)
+## 2. Requisitos
 
-### 3.1 Arquitectura y tecnologías utilizadas
+- **Node.js 20 o superior.** El CI corre sobre Node 20, así que ese es el piso garantizado. El SDK compila a `ES2020` y declara compatibilidad desde Node 18, pero el desarrollo se hace en 20.
+- **npm.** No se usa yarn ni pnpm en el repositorio; el `package-lock.json` versionado es de npm.
+- **Git.** Con la política de ramas de [CONTRIBUTING.md](../CONTRIBUTING.md): las ramas de trabajo salen de `devops`, no de `main`.
 
-La API de simulación se desarrolla utilizando:
+No se necesita nada más. Para lo que sí hace falta credenciales reales —las pruebas de contrato contra los sandboxes— ver la sección 6.
 
-* **Fastify**
-* **TypeScript**
-* **`ts-node-dev`**
+---
 
-Fastify fue seleccionado para construir la API debido a que es un framework ligero y ofrece un buen rendimiento. Además, cuenta con soporte para la validación de datos mediante JSON Schema, lo que facilita la definición y validación de las solicitudes y respuestas utilizadas en las pruebas.
+## 3. Puesta en marcha, en cuatro pasos
 
-La API tendrá como objetivo representar el comportamiento de las diferentes pasarelas de pago dentro de un entorno controlado. Esto permitirá ejecutar los escenarios definidos sin depender directamente de los servicios reales de cada proveedor.
-
-Para el desarrollo local se utiliza `ts-node-dev`, el cual permite reiniciar automáticamente el servidor cuando se detectan cambios en los archivos del proyecto.
-
-### 3.2 Scripts de ejecución
-
-Los scripts configurados para la API son los siguientes:
-
-* **`npm run dev`**: inicia el servidor en modo de desarrollo utilizando:
+El orden importa: el paquete de ejemplos consume el SDK desde `dist/`, así que si el SDK no está compilado, los ejemplos no arrancan.
 
 ```bash
-ts-node-dev --respawn --transpile-only src/server.ts
+# 1. El SDK: instalar y compilar
+cd sdk && npm install && npm run build
+
+# 2. La API de Simulación: instalar y dejarla corriendo en su propia terminal
+cd simulator-api && npm install && npm run dev
+#    Queda escuchando en http://localhost:3000 — probalo con GET /health
+
+# 3. Los ejemplos: instalar en otra terminal
+cd examples && npm install
+
+# 4. Correr cualquier ejemplo
+npm run simulate:wompi
 ```
 
-La opción `--respawn` reinicia el proceso cuando se realizan cambios, mientras que `--transpile-only` permite realizar la transpilación sin ejecutar la validación completa de tipos en cada reinicio.
+Dos cosas que conviene entender de este arranque, porque explican casi todos los errores de la primera vez:
 
-* **`npm run build`**: compila el código TypeScript y genera los archivos JavaScript dentro de la carpeta `dist`.
+- **`sdk/dist/` no está versionado.** Está en `.gitignore` y se genera con `npm run build`. Si acabás de clonar el repositorio, o si alguien cambió la superficie pública del SDK, hay que reconstruir antes de correr los ejemplos o el `typecheck`. Un `dist/` viejo hace que el `typecheck` de los ejemplos pase contra una API que ya no existe, y eso ya pasó.
+- **El paquete de ejemplos depende del SDK por ruta de archivo** (`"kit-pagos-colombia": "file:../sdk"`) y lo importa **por su nombre público**, nunca por rutas relativas hacia `sdk/src`. Es deliberado: así cualquier tipo que falte en `sdk/src/index.ts` rompe la compilación de los ejemplos de inmediato. Fue así como se descubrió que faltaban cuatro tipos en la superficie pública (punto 21 del architecture-log).
 
-* **`npm start`**: inicia la versión compilada de la aplicación mediante:
+---
+
+## 4. Qué script hace qué
+
+### `sdk/`
+
+| Comando | Qué hace |
+|---|---|
+| `npm test` | Las pruebas unitarias con Jest. Excluye las de sandbox. Umbral de cobertura del 80 % en ramas, funciones, líneas y sentencias |
+| `npm run test:sandbox` | Las pruebas de contrato contra los sandboxes reales. Necesita credenciales; sin ellas se saltan solas |
+| `npm run lint` | ESLint sobre todo el paquete |
+| `npm run build` | Borra `dist/` y compila con `tsconfig.build.json` (el de producción, que excluye las pruebas) |
+| `npm run metrics` | Las métricas CK (WMC, CBO, RFC, MAX_CC) con `ts-morph`. Sale con código 1 si alguna clase viola un umbral |
+| `npm run check:readme` | Extrae los bloques TypeScript del `README.md` y los compila contra `dist/`. **Requiere haber corrido `build` antes** |
+
+### `simulator-api/`
+
+| Comando | Qué hace |
+|---|---|
+| `npm run dev` | Levanta el servidor con `ts-node-dev`, que reinicia solo al guardar |
+| `npm test` | Las pruebas de las rutas, con `app.inject()` de Fastify (no abre puerto) |
+| `npm run lint` | ESLint |
+| `npm run build` y `npm start` | Compilar y correr la versión compilada, que es como se despliega |
+
+### `examples/`
+
+| Comando | Qué hace |
+|---|---|
+| `npm run typecheck` | `tsc --noEmit` contra los tipos publicados del SDK. No necesita el simulador |
+| `npm run simulate:*` | Cada uno de los diez ejemplos. Todos necesitan el simulador corriendo |
+
+Los diez comandos de simulación están listados uno por uno, con qué imprime cada uno, en [05-ejemplos/README.md](05-ejemplos/README.md).
+
+---
+
+## 5. Cómo se verifica un cambio antes del pull request
+
+Este es el bloque completo. Si algo de acá falla, el cambio no está listo, y no alcanza con que "las pruebas pasen": el `build` y el `typecheck` de los ejemplos son los que detectan que se rompió la superficie pública del paquete.
 
 ```bash
-node dist/server.js
+cd sdk && npx jest && npm run lint && npm run metrics && npm run build && npm run check:readme
+cd simulator-api && npx jest
+cd examples && npm run typecheck
 ```
 
-* **`npm run lint`**: ejecuta ESLint para identificar posibles problemas de estilo y calidad en el código.
+Y si el cambio toca un adaptador, además hay que correr el ejemplo correspondiente contra el simulador. No es ceremonia: ejecutar contra el simulador y contra los sandboxes reales encontró defectos que las pruebas unitarias no veían, y está documentado en los puntos 43, 44, 48, 50 y 52 del architecture-log. El caso más claro es el punto 52: dos ramas que pasaban sus pruebas por separado rompieron el ejemplo de intercambiabilidad al fusionarse, y el `typecheck` no lo vio porque el error era de comportamiento, no de tipos.
+
+### Qué corre en CI y qué no
+
+El CI ([.github/workflows/ci.yml](../.github/workflows/ci.yml)) tiene dos trabajos, ambos sobre Node 20:
+
+- **sdk:** `npm ci` → `lint` → `test -- --coverage` → `build` → `npm pack --dry-run`.
+- **simulator-api:** `npm ci` → `lint` → `test -- --coverage`.
+
+**Fuera de CI quedan cuatro cosas**, y hay que correrlas a mano: `npm run metrics`, `npm run check:readme`, `npm run test:sandbox` y todo lo de `examples/`. Vale la pena saberlo porque un pull request puede estar verde en GitHub y romper igual una métrica CK o un fragmento del README.
 
 ---
 
-## 4. Incidentes encontrados durante la configuración
+## 6. El `.env` de la raíz
 
-Durante la creación inicial del proyecto se presentaron algunos problemas relacionados con las herramientas de desarrollo y el entorno de Windows.
+En la raíz hay un `.env.example` que se copia a `.env` (que está en `.gitignore` y nunca se sube). Tiene dos secciones con propósitos distintos:
 
-### 4.1 Problema al inicializar TypeScript
+1. **Credenciales de los paneles** de cada proveedor. Son para administrar las cuentas y sacar las llaves; el código no las usa.
+2. **Llaves de sandbox de cada pasarela.** Estas sí las lee el código: son las que activan `npm run test:sandbox` en el SDK.
 
-Durante la ejecución del comando:
+Si el `.env` no tiene llaves de una pasarela, sus pruebas de contrato **se saltan en silencio en lugar de fallar**. Eso es a propósito, para que cualquiera pueda correr la suite completa sin credenciales, pero tiene una trampa: una suite que se salta entera se ve igual de verde que una que pasa. Cuando importe, hay que leer la salida y confirmar que corrió.
 
-```bash
-npx tsc --init
-```
-
-se presentó un problema relacionado con paquetes nativos de TypeScript para Windows, específicamente con `@typescript/typescript-win32-x64`.
-
-Como alternativa, el archivo `tsconfig.json` fue creado manualmente con la configuración requerida para el proyecto. Esto permitió continuar con la configuración sin depender del proceso automático de inicialización.
-
-La configuración manual también facilitó definir desde el inicio las opciones necesarias, incluyendo el uso del modo estricto de TypeScript.
-
-### 4.2 Problemas con `esbuild` y permisos en Windows
-
-Durante la configuración inicial de `tsx` se presentaron errores relacionados con permisos y diferencias entre versiones de `esbuild`.
-
-Entre los mensajes encontrados estaban:
-
-```text
-EPERM
-Expected "0.28.1" but got "0.20.2"
-```
-
-Estos problemas estaban relacionados con archivos bloqueados y con inconsistencias en los binarios instalados dentro de `node_modules`. El uso de sincronización en la nube mediante OneDrive también podía interferir con la modificación de algunos archivos durante la instalación.
-
-Inicialmente se realizaron procesos de limpieza de caché y eliminación de dependencias. Sin embargo, para evitar continuar dependiendo de los binarios utilizados por `esbuild`, se decidió reemplazar `tsx` por `ts-node-dev`.
-
-Con este cambio fue posible ejecutar el servidor de forma estable en el entorno de desarrollo utilizado para el proyecto.
+El detalle de qué variable corresponde a qué credencial de qué panel está en [03-sdk/4-guia-de-implementacion.md](03-sdk/4-guia-de-implementacion.md), que es la misma configuración que necesitaría un comercio.
 
 ---
 
-## 5. Justificación de las principales decisiones técnicas
+## 7. Decisiones de entorno que conviene conocer
 
-En esta sección se presentan las razones principales detrás de las decisiones tomadas durante la configuración del proyecto.
+**El SDK no usa ningún framework.** No hay NestJS ni Express, porque el SDK es una librería: no administra rutas, no levanta un servidor y no tiene ciclo de vida propio. Solo TypeScript, con una única dependencia de producción (`big.js`, para la aritmética decimal exacta). Cada dependencia que un SDK arrastra es una dependencia que le imponemos al comercio, y esa es la razón de fondo para mantener la lista en uno.
 
-### 5.1 Uso de TypeScript sin NestJS o Express en el SDK
+**TypeScript en modo estricto, apuntando a ES2020.** `strict: true`, `noImplicitAny`, `strictNullChecks`. La compilación de producción usa un `tsconfig.build.json` aparte que excluye las pruebas, para que los `.d.ts` publicados no arrastren tipos de Jest.
 
-El SDK se desarrolla como una librería y no como una aplicación web. Por esta razón, no necesita administrar rutas HTTP, ejecutar un servidor ni incluir componentes propios de frameworks como NestJS o Express.
+**Fastify en el simulador, no Express.** Es liviano, rinde bien y valida con JSON Schema, que es cómodo para armar escenarios controlados. Sus pruebas usan `app.inject()`, así que corren sin abrir un puerto y sin quedar colgadas esperando la red.
 
-El uso de TypeScript permite construir una solución más ligera y mantener contratos claros mediante interfaces, tipos y clases.
+**`ts-node-dev` en vez de `tsx` para el simulador.** Este cambio salió de un problema real y no de una preferencia: `tsx` depende de binarios de `esbuild`, y en el entorno Windows de uno de los integrantes eso daba `EPERM` y `Expected "0.28.1" but got "0.20.2"`, con archivos bloqueados dentro de `node_modules` y OneDrive sincronizando la carpeta en el medio. Limpiar caché no lo resolvió de forma estable, así que se reemplazó la herramienta. Los ejemplos sí usan `tsx`, porque ahí no dio problema.
 
-Además, al evitar dependencias que no son necesarias para el funcionamiento del SDK, se busca reducir la complejidad de la librería y facilitar su integración en diferentes proyectos.
-
-La interacción con las pasarelas se realizará mediante los adaptadores definidos dentro de la arquitectura, mientras que el usuario podrá acceder a las funcionalidades principales a través de una interfaz unificada.
-
-### 5.2 Uso de Arquitectura Hexagonal
-
-La Arquitectura Hexagonal permite separar la lógica principal del proyecto de las implementaciones específicas de servicios externos.
-
-En este caso, cada pasarela de pago puede tener diferentes endpoints, mecanismos de autenticación, estructuras de solicitud y formatos de respuesta. Estas diferencias se manejan mediante adaptadores independientes.
-
-Por ejemplo, si Wompi modifica una parte de su API, el cambio debería concentrarse principalmente en `WompiAdapter.ts`. El objetivo es evitar que una modificación específica de un proveedor afecte directamente el dominio o la interfaz utilizada por los clientes del SDK.
-
-Esta separación también facilita agregar nuevas pasarelas en el futuro, ya que se puede crear un nuevo adaptador que implemente el contrato definido por el puerto correspondiente.
-
-### 5.3 Uso de Fastify para la API de simulación
-
-Fastify fue seleccionado para la API de simulación debido a que proporciona una estructura ligera y un buen rendimiento para la creación de servicios HTTP.
-
-Además, su integración con JSON Schema permite definir y validar la estructura de las solicitudes y respuestas. Esto resulta útil para construir escenarios controlados y mantener un comportamiento consistente durante las pruebas.
-
-El simulador tendrá diferentes respuestas según la pasarela y el escenario evaluado. El uso de Fastify facilita la implementación de estos comportamientos sin agregar una estructura más compleja de la necesaria.
-
-### 5.4 Cambio de `tsx` a `ts-node-dev`
-
-Inicialmente se utilizó `tsx` para ejecutar los archivos TypeScript durante el desarrollo. Sin embargo, se presentaron problemas relacionados con los binarios de `esbuild`, permisos de archivos y diferencias entre versiones instaladas.
-
-Debido a estos inconvenientes, se decidió utilizar `ts-node-dev`.
-
-Esta herramienta permite ejecutar el proyecto y reiniciar automáticamente el servidor cuando se detectan cambios. Aunque el cambio se realizó principalmente para resolver problemas de compatibilidad en el entorno de desarrollo, también permitió mantener un flujo de trabajo estable para la API de simulación.
-
-### 5.5 Uso de métricas CK y `ts-morph`
-
-La evaluación del proyecto requiere obtener evidencia sobre el impacto del SDK en el desarrollo de las integraciones con pasarelas de pago.
-
-Para esto se utilizarán métricas relacionadas con la calidad y complejidad del código, incluyendo:
-
-* **WMC (Weighted Methods per Class):** suma de la complejidad ciclomática de todos los métodos y constructores de la clase. Acota cuánto hace la clase en total.
-* **MAX_CC:** la complejidad ciclomática más alta entre los métodos de la clase. Acota cuánto hace un método, que es la unidad en la que se lee y se corrige el código. Hace falta además de WMC porque una clase puede tener un total aceptable y esconder un método ilegible.
-* **CBO (Coupling Between Objects):** mide el nivel de acoplamiento entre las clases.
-* **RFC (Response For a Class):** representa la cantidad de métodos que pueden ser ejecutados como respuesta a una interacción con una clase.
-
-Las fórmulas exactas, sus umbrales y el registro de excepciones documentadas están en `docs/project-management/methodology.md` §6.1 y §6.2. Se fijaron ahí porque una misma métrica admite definiciones que dan números incomparables, y esa ambigüedad ya dejó pasar un método de 360 líneas con WMC 1 (ver `docs/architecture/architecture-log.md`, punto 34).
-
-La herramienta `ts-morph` permitirá analizar la estructura del código TypeScript y obtener información necesaria para calcular o apoyar la recolección de estas métricas.
-
-El propósito es comparar la implementación de una integración utilizando el SDK frente a una implementación realizada sin utilizarlo. Con estos resultados se busca obtener evidencia cuantitativa sobre el nivel de abstracción y simplificación proporcionado por la propuesta.
+**El `tsconfig.json` del SDK se escribió a mano.** `npx tsc --init` fallaba por un paquete nativo de TypeScript para Windows (`@typescript/typescript-win32-x64`). Escribirlo a mano además permitió dejar el modo estricto desde el primer commit, en vez de encenderlo después cuando ya cuesta.
 
 ---
 
-## 6. Próximos pasos
+## 8. Dónde seguir
 
-Las siguientes actividades corresponden a las tareas iniciales del ciclo de desarrollo:
-
-1. **Implementación del dominio unificado**
-
-Se desarrollarán los enums, tipos e interfaces definidos a partir de la matriz de equivalencias y del lenguaje ubicuo del proyecto.
-
-2. **Definición del puerto principal**
-
-Se creará la interfaz `IPuertoPasarela.ts`, la cual establecerá el contrato que deberán cumplir los adaptadores de las diferentes pasarelas.
-
-3. **Configuración de los endpoints iniciales del simulador**
-
-Se implementarán los endpoints de estado y salud de la API para verificar que el proyecto funcione correctamente en el entorno local.
-
-4. **Implementación inicial de los adaptadores**
-
-Se comenzará el desarrollo de los adaptadores correspondientes a las pasarelas seleccionadas para el proyecto.
-
-5. **Preparación de las pruebas**
-
-Se configurarán los casos de prueba necesarios para validar el comportamiento del SDK y los escenarios definidos dentro del simulador.
+- Si nunca viste el proyecto: [README de la documentación](README.md), que tiene el camino de lectura completo.
+- Si vas a tocar el SDK: [03-sdk/2-clase-por-clase.md](03-sdk/2-clase-por-clase.md).
+- Si vas a tocar el simulador: [02-arquitectura/3-api-de-simulacion.md](02-arquitectura/3-api-de-simulacion.md).
+- Si vas a abrir un pull request: [CONTRIBUTING.md](../CONTRIBUTING.md).

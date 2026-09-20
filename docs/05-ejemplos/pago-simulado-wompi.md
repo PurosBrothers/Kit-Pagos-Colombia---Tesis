@@ -1,52 +1,73 @@
-# Ejemplo end-to-end: un pago simulado con Wompi
+# Recorrido: un pago simulado con Wompi
 
-Este documento explica el ejemplo ejecutable que vive en [`examples/simulate-wompi-payment.ts`](../../examples/simulate-wompi-payment.ts): qué demuestra, cómo correrlo, qué ocurre por dentro y qué queda deliberadamente fuera de su alcance. Corresponde al issue #31, el primero en el que las piezas del SDK y de la API de Simulación se ejercitan juntas.
+El primer ejemplo del proyecto, de punta a punta. Es el más comentado de los diez y el mejor punto de entrada para entender qué hace el SDK por dentro.
+
+**Archivo:** [examples/simulate-wompi-payment.ts](../../examples/simulate-wompi-payment.ts) · **Comando:** `npm run simulate:wompi`
+
+---
 
 ## Qué demuestra
 
-El objetivo no es probar código, para eso están las pruebas unitarias. El objetivo es responder una pregunta concreta: cómo se ve, desde el teclado de un desarrollador colombiano, integrar un pago con este framework.
+Cuatro cosas, en este orden:
 
-De ahí sale la decisión más importante del ejemplo. Vive en un paquete npm independiente, fuera de `sdk/`, y declara `kit-pagos-colombia` como dependencia mediante `file:../sdk`. Importa el SDK por su nombre público, nunca por rutas relativas hacia `sdk/src`. Esa distinción no es cosmética: si el ejemplo importara por ruta relativa, compilaría contra el código fuente interno y no demostraría nada sobre lo que el paquete publicado realmente expone. Al consumirlo como dependencia, cualquier tipo o clase que falte en `sdk/src/index.ts` rompe la compilación del ejemplo de inmediato. De hecho fue así como se descubrió que faltaban `SdkError`, `SDKOptions`, `Credentials` y `CreatePaymentRequest` en la superficie pública (ver `architecture-log.md`, punto 21).
+1. Que la **superficie pública del paquete alcanza** para integrar un pago completo. El ejemplo vive fuera del SDK y lo importa por su nombre (`kit-pagos-colombia`), nunca por rutas relativas hacia `sdk/src`.
+2. Que el comercio **escribe vocabulario de dominio** y ningún campo nativo de Wompi.
+3. Que **con tarjeta hay que consultar el estado**: el cobro no vuelve resuelto.
+4. Que los errores llegan **tipificados** y no como texto.
+
+---
 
 ## Cómo correrlo
 
 ```bash
-# 1. Compilar el SDK, porque el paquete apunta a dist/
-cd sdk && npm install && npm run build
-
-# 2. Levantar la API de Simulación y dejarla corriendo
-cd simulator-api && npm install && npm run dev
-
-# 3. En otra terminal, instalar y correr el ejemplo
-cd examples && npm install && npm start
+cd sdk && npm run build          # el paquete de ejemplos consume dist/
+cd simulator-api && npm run dev  # dejarla corriendo en su propia terminal
+cd examples && npm install && npm run simulate:wompi
 ```
+
+---
 
 ## Lo que el desarrollador escribe
 
-Toda la integración cabe en dos bloques. El primero configura el SDK una sola vez:
+Configurar el SDK es una decisión: qué pasarela y con qué credenciales.
 
 ```ts
-const kitPagos = new KitPagos({
+const options: SDKOptions = {
   gateway: Gateway.WOMPI,
-  credentials: { [Gateway.WOMPI]: { publicKey: "pub_test_...", privateKey: "prv_test_..." } },
+  credentials: {
+    [Gateway.WOMPI]: {
+      publicKey: "pub_test_ejemplo_no_real",
+      privateKey: "prv_test_ejemplo_no_real",
+      integritySecret: "test_integrity_ejemplo_no_real",
+    },
+  },
   baseUrl: "http://localhost:3000/v1/sim/wompi",
-});
+};
 ```
 
-El segundo describe y ejecuta el pago:
+**`integritySecret` está ahí por un defecto medido.** Wompi real no crea ninguna transacción sin la firma de integridad: responde `422 "Firma de integridad requerida no enviada"`. El SDK lo exige por adelantado, así que un comercio al que le falte recibe un mensaje que nombra el ajuste faltante en lugar de ese 422 (punto 44). Es un valor distinto del secreto de eventos que verifica los webhooks: uno firma lo que sale, el otro valida lo que entra.
+
+Describir el pago usa objetos de valor:
 
 ```ts
-const transaction = await kitPagos.createPayment({
-  amount: new Amount(150000),
+const request = {
+  amount: new Amount("150000.00"),
   currency: new Currency("COP"),
-  orderReference: new OrderReference("ORDER-1042"),
-  payer: new Payer({ email: "ana.gomez@example.com", fullName: "Ana Gomez" }),
-});
+  orderReference: new OrderReference(`ORDER-${Date.now()}`),
+  payer: new Payer({ email: "jaime.pavlich@example.com", fullName: "Jaime Pavlich" }),
+  paymentMethod: PaymentMethod.card("tok_test_ejemplo_no_real", { installments: 1 }),
+};
 ```
 
-No aparece ninguna URL de Wompi, ningún `amount_in_cents`, ningún `fetch`, ningún parseo de JSON y ningún código de estado HTTP. El campo `baseUrl` existe precisamente para apuntar al simulador; en producción se omite y cada Adapter usa el endpoint real de su pasarela.
+**El monto va como cadena**, y el ejemplo lo explica en su propio comentario: `new Amount("150000.00")` sigue leyéndose como `"150000.00"`, mientras que `150000.00` en JavaScript es indistinguible de `150000`. Importa porque Rapyd calcula su firma sobre el cuerpo serializado.
 
-Vale la pena notar que el pago se describe con objetos de valor y no con datos primitivos. Un monto con más de dos decimales, una divisa que no cumpla ISO 4217 o un pagador sin correo fallan en el constructor del objeto de valor, antes de que exista cualquier petición de red.
+**No aparece `amount_in_cents` en ninguna parte.** El ejemplo lo imprime a propósito, para mostrar que la conversión a centavos ocurre en la capa de infraestructura y no la escribe el comercio:
+
+```ts
+console.log(`  En centavos: ${request.amount.toMinorUnits(request.currency)} (lo que recibe Wompi)`);
+```
+
+---
 
 ## Qué ocurre por dentro
 
@@ -57,40 +78,112 @@ sequenceDiagram
     participant Cfg as SdkConfigurator
     participant Fac as GatewayFactory
     participant WA as WompiAdapter
-    participant Sim as simulator-api
+    participant Sim as API de Simulación
     participant Norm as ResponseNormalizer
 
     Dev->>KP: createPayment(request)
-    KP->>Cfg: getActiveGateway()
-    KP->>Cfg: getCredentials(gateway)
-    KP->>Cfg: getBaseUrl()
+    KP->>Cfg: pasarela activa, credenciales, baseUrl
     KP->>Fac: create(gateway, credentials, baseUrl)
     Fac-->>KP: WompiAdapter
     KP->>WA: createPayment(request)
-    Note over WA: Traduce a amount_in_cents,<br/>reference, customer_email
-    WA->>Sim: "POST con Authorization Bearer"
-    Sim-->>WA: "201 con data.status APPROVED"
+    WA->>Sim: GET /merchants (token de aceptación)
+    Note over WA: Traduce a amount_in_cents,<br/>reference, customer_email<br/>y calcula la firma de integridad
+    WA->>Sim: POST /transactions
+    Sim-->>WA: 201 con data.status PENDING
     WA->>Norm: normalize(json, WOMPI)
     Norm-->>WA: Transaction inmutable
-    WA-->>KP: Transaction
-    KP-->>Dev: "Transaction APPROVED"
+    WA-->>KP: PaymentResult
+    KP-->>Dev: TRANSACTION + Transaction PENDING
 ```
 
-La fachada no conoce a `WompiAdapter`: le pide a la Factory una implementación de `PaymentGatewayPort` y delega en ella. Es lo que permite que migrar de pasarela sea cambiar `Gateway.WOMPI` por otro valor, sin tocar el resto del bloque. Las credenciales viajan resueltas desde el `SdkConfigurator` hasta el Adapter, que las usa como Bearer token porque así identifica Wompi al comercio; el Adapter nunca las lee del entorno por su cuenta.
+**La fachada no conoce a `WompiAdapter`:** le pide a la factoría una implementación del puerto y delega. Es lo que permite que cambiar de pasarela sea cambiar el valor de `gateway`.
 
-## Lo que el ejemplo muestra que todavía no funciona
+Las credenciales viajan resueltas desde el configurador hasta el adaptador, que las usa como Bearer token. **El adaptador nunca las lee del entorno por su cuenta**, y eso es deliberado: una librería que lea variables de entorno a espaldas del comercio es una librería que hace cosas que su configuración no declara.
 
-Después de crear el pago, el ejemplo llama a `getPaymentStatus()` dentro de un `try/catch`. Esa llamada falla, y está ahí a propósito:
+---
 
+## La salida real
+
+Esta es la salida verificada del ejemplo:
+
+```text
+  En centavos: 15000000 (lo que recibe Wompi)
+  Referencia:  ORDER-1789926029952
+  Pagador:     jaime.pavlich@example.com
+  Cuotas:      1
+
+Transacción creada:
+  ID de la pasarela:   99671995-73bf-4f5f-ae6d-c7194d5b11a1
+  Pasarela de origen:  WOMPI
+  Estado normalizado:  PENDING
+  Estado nativo:       PENDING
+  Monto:               150000.00 COP
+  Referencia:          ORDER-1789926029952
+  Pagador:             jaime.pavlich@example.com
+  Aprobada:            false
+  Estado final:        false
+
+Consultando el estado de la transacción...
+  ID consultado:      99671995-73bf-4f5f-ae6d-c7194d5b11a1
+  Estado consultado:  APPROVED
+  Aprobada:           true
 ```
-No disponible todavia. Codigo de error: UNSUPPORTED_OPERATION
-Detalle: WompiAdapter.getStatus: status query is not supported by the Wompi mock endpoint
+
+Dos detalles de esa salida que vale la pena mirar: **el monto vuelve como `150000.00`**, con el cero final intacto, que es la razón de que `Amount` sea una cadena; y **el pagador es el que se mandó**, no uno de relleno, que es el defecto de fidelidad de la sección siguiente.
+
+---
+
+## Lo más importante del ejemplo: con tarjeta hay que consultar
+
+Fijate en la secuencia de estados: **la creación devuelve `PENDING`, y la consulta devuelve `APPROVED`.**
+
+Eso no es una limitación del simulador: es lo que Wompi hace de verdad. Medido contra `sandbox.wompi.co`, `POST /transactions` responde `PENDING` con `finalized_at: null`, y la transacción se resuelve unos 600 ms después. **El desenlace de un cobro con tarjeta nunca está en la respuesta de la creación.**
+
+Un comercio que asumiera que el estado de la creación es el final estaría dejando pagos aprobados sin registrar. Por eso el paso 4 del ejemplo no es opcional, y por eso el simulador reproduce ese orden de eventos en lugar de responder `APPROVED` de una vez: si respondiera aprobado, el ejemplo enseñaría a integrar mal.
+
+> **Nota de historial.** Una versión anterior de este documento afirmaba que `getPaymentStatus()` fallaba con `UNSUPPORTED_OPERATION` porque el simulador no implementaba consulta de estado. Eso ya no es cierto: la consulta funciona, y es la que muestra el `APPROVED`.
+
+---
+
+## El manejo de errores, que también se demuestra
+
+El ejemplo envuelve la consulta en un `try/catch` que distingue un caso concreto:
+
+```ts
+if (error instanceof KitPagosError && error.code === KitPagosErrorCode.RESOURCE_NOT_FOUND) {
+  console.log(`  No se encontró la transacción. Código de error: ${error.code}`);
+}
 ```
 
-La API de Simulación solo implementa creación de pagos, no consulta de estado. El valor de dejarlo visible es doble: es honesto sobre el estado del proyecto, y demuestra el diseño de errores del SDK. El comercio no recibe un mensaje de texto que tendría que interpretar, sino un `SdkError` con un `code` del enum `SdkErrorCode`, comparable por código. El ejemplo también captura `CONNECTION_FAILED` para el caso de que el simulador no esté arriba, y en vez de una traza cruda imprime el comando que hay que correr.
+Y el manejador de nivel superior traduce el fallo más probable —que el simulador no esté levantado— a una instrucción concreta en lugar de un volcado de pila:
 
-Fuera de alcance en este ejemplo: la validación de webhooks y el comportamiento específico de cada pasarela. Los cuatro gateways tienen adaptador para el entorno de simulación; la integración directa con sus sandboxes productivos se mantiene fuera del alcance de este recorrido.
+```text
+No se pudo conectar con la API de Simulación.
+Levantala en otra terminal y volvé a correr el ejemplo:
 
-## Sobre la fidelidad del mock
+  cd simulator-api && npm run dev
+```
 
-Durante este trabajo se ajustó la respuesta del mock para que devuelva `customer_email`, como hace la API real de Wompi. Antes no lo hacía, y el `ResponseNormalizer` caía a un correo de relleno, así que la `Transaction` normalizada mostraba un pagador que nunca existió. Con un solo campo faltante el ejemplo habría sido engañoso justo en el dato más visible de la demo.
+Es el diseño de errores del SDK en miniatura: el comercio compara **códigos de un catálogo cerrado**, no textos de mensaje.
+
+---
+
+## Un detalle de fidelidad que vale la pena conocer
+
+En algún momento se ajustó la respuesta del mock para que devuelva `customer_email`, como hace la API real de Wompi. Antes no lo hacía, y el normalizador caía a un correo de relleno, así que la transacción normalizada mostraba **un pagador que nunca existió**.
+
+Con un solo campo faltante, el ejemplo habría sido engañoso justo en el dato más visible de la demostración. Es un buen recordatorio de que la fidelidad del simulador llega hasta donde llegó la medición, que es el tema de [02-arquitectura/3-api-de-simulacion.md](../02-arquitectura/3-api-de-simulacion.md) §5.
+
+---
+
+## Qué queda fuera de este ejemplo
+
+- **La validación de webhooks.** Está en el README del paquete y en [03-sdk/4-guia-de-implementacion.md](../03-sdk/4-guia-de-implementacion.md).
+- **El flujo de PSE**, que es el que ejercita la rama de redirección: `npm run simulate:wompi-pse`.
+- **La comparación entre pasarelas:** `npm run simulate:interchangeability`, documentado en [intercambiabilidad.md](intercambiabilidad.md).
+
+---
+
+## Qué sigue
+
+El [índice de los diez ejemplos](README.md).

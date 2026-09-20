@@ -1,6 +1,8 @@
-# Ejemplo ejecutable: intercambiabilidad de las cuatro pasarelas
+# Recorrido: la intercambiabilidad de las cuatro pasarelas
 
-Archivo: `examples/gateway-interchangeability.ts`. Cierra el issue #58 y con él la Iteración 2.
+El ejemplo que demuestra la tesis. Cierra el issue #58 y con él la Iteración 2.
+
+**Archivo:** [examples/gateway-interchangeability.ts](../../examples/gateway-interchangeability.ts) · **Comando:** `npm run simulate:interchangeability`
 
 ## Qué demuestra
 
@@ -8,13 +10,15 @@ Que el mismo pago, descrito una sola vez con objetos de dominio, se cobra por Wo
 Mercado Pago y Kushki sin que cambie una línea del código del comercio, y que las cuatro
 devuelven el mismo resultado normalizado.
 
-Los otros cuatro ejemplos de la carpeta muestran cada pasarela por separado. Este muestra lo que
-ninguno puede mostrar solo, porque la intercambiabilidad no es una propiedad de una pasarela sino
-de la relación entre las cuatro.
+Los otros nueve ejemplos de la carpeta muestran cada pasarela y cada método por separado. Este
+muestra lo que ninguno puede mostrar solo, porque la intercambiabilidad no es una propiedad de una
+pasarela sino de la relación entre las cuatro.
 
-Es el argumento central de la tesis convertido en algo que se ejecuta. También es insumo directo
-del prototipo de la Fase 5 descrito en `docs/project-management/prototypes-evaluation-plan.md`: la
-variable "conceptos nativos expuestos" se mide sobre código como este.
+Es el argumento central de la tesis convertido en algo que se ejecuta. También es insumo directo del
+experimento de la Fase 5 descrito en
+[prototypes-evaluation-plan.md](../project-management/prototypes-evaluation-plan.md): la variable
+"conceptos nativos expuestos" se mide sobre código como este, y el procedimiento está en
+[04-metricas-y-pruebas/4-medir-los-prototipos.md](../04-metricas-y-pruebas/4-medir-los-prototipos.md).
 
 ## Cómo correrlo
 
@@ -117,12 +121,15 @@ devolviera `PENDING`: el ejemplo salió con código 1 e imprimió
 
 Son del simulador, no del SDK, y conviene tenerlos presentes al leer la salida.
 
-- **`baseUrl` cambia por pasarela.** `SDKOptions.baseUrl` es un override escalar cuya razón de
-  ser es apuntar el SDK al simulador sin tocar código (RF-09). El simulador expone una ruta
-  distinta por pasarela, así que el ejemplo mantiene una tabla de endpoints indexada por
-  `Gateway`. **En producción esa tabla desaparece** y lo único que cambia es `gateway`, porque
-  cada adaptador conoce la URL real de su pasarela. Es una tabla de datos, no una cadena de
-  condicionales: agregar una quinta pasarela es agregar una fila.
+- **`baseUrl` cambia por pasarela.** Su razón de ser es apuntar el SDK al simulador sin tocar
+  código (RF-09), y el simulador expone una ruta distinta por pasarela, así que el ejemplo
+  mantiene una tabla de endpoints indexada por `Gateway`. **En producción esa tabla desaparece** y
+  lo único que cambia es `gateway`, porque cada adaptador conoce la URL real de su pasarela. Es
+  una tabla de datos, no una cadena de condicionales: agregar una quinta pasarela es agregar una
+  fila. Desde el punto 57 del architecture-log, `baseUrl` **admite directamente un mapa por
+  pasarela** además de una cadena, así que esa tabla se puede pasar tal cual en una sola
+  instancia del SDK: es lo que hacen las 16 pruebas de contrato para hablarle a los cuatro
+  sandboxes reales.
 - **Las credenciales se declaran una sola vez.** `SDKOptions.credentials` es un mapa por
   pasarela, así que el comercio registra las cuatro y el SDK usa las de la activa. No hace falta
   reconfigurar credenciales al cambiar de pasarela.
@@ -131,16 +138,26 @@ Son del simulador, no del SDK, y conviene tenerlos presentes al leer la salida.
   —Wompi y Rapyd— devuelven la referencia y el monto del pago creado, así que entran en la
   comparación sin distorsionarla.
 
-## Lo que este ejemplo todavía no puede demostrar
+## Lo que este ejemplo no demuestra, y dónde se demuestra
 
-PSE. La rama `REDIRECT_REQUIRED` del resultado ya se alcanza, pero por tarjeta y en una sola
-pasarela: Rapyd cobra la tarjeta en su propia página alojada, para dejar el servidor del comercio
-fuera del alcance de PCI DSS. Con PSE redirigen las cuatro, y ahí aparece el problema que el punto
- 39 dejó abierto: el número de llamadas previas a la redirección varía por pasarela (Wompi 1,
-Mercado Pago 1, Rapyd 2, Kushki 3), y el puerto sigue asumiendo una sola.
+**PSE.** Este ejemplo cobra con tarjeta en las cuatro pasarelas. El flujo de PSE tiene su propio
+ejemplo por pasarela —`simulate:wompi-pse`, `simulate:mercadopago-pse`, `simulate:rapyd-pse` y
+`simulate:kushki-pse`—, más `simulate:pse-bancos`, que compara las cuatro listas de bancos y
+muestra lo único que **no** es intercambiable: los códigos de banco.
 
-Este ejemplo quedó escrito antes de que el cobro con tarjeta se midiera contra los sandboxes
-reales, y lo que creía sobre la tarjeta resultó falso en dos puntos: daba por hecho que las cuatro
-resolvían en la respuesta del `POST`, y describía el pago sin token de tarjeta, que ninguna de las
-cuatro acepta de verdad. Las dos cosas pasaban el `typecheck`, así que lo que las encontró fue
-ejecutarlo. Está en los puntos 50 y 51 del [`architecture-log.md`](../architecture/architecture-log.md).
+Que PSE tenga un ejemplo por pasarela en lugar de uno comparativo es una consecuencia del propio
+hallazgo: el número de llamadas previas a la redirección varía por pasarela, y cada flujo tiene
+requisitos de datos distintos (Mercado Pago exige dirección IP, teléfono con indicativo separado y
+dirección; Wompi no). Un ejemplo comparativo de PSE tendría que armar un pagador distinto por
+pasarela, y eso contradiría lo que el ejemplo quiere demostrar.
+
+> **Nota de historial.** Una versión anterior de esta sección decía que los ejemplos de PSE
+> faltaban. Ya existen los cinco.
+
+**Y un aviso sobre este archivo en particular:** quedó escrito antes de que el cobro con tarjeta se
+midiera contra los sandboxes reales, y lo que creía sobre la tarjeta resultó falso en dos puntos.
+Daba por hecho que las cuatro resolvían en la respuesta del `POST`, y describía el pago sin token de
+tarjeta, que ninguna de las cuatro acepta de verdad. Las dos cosas pasaban el `typecheck`, así que
+lo que las encontró fue **ejecutarlo**. Está en los puntos 50 y 51 del
+[`architecture-log.md`](../architecture/architecture-log.md), y es el mejor argumento del
+repositorio a favor de correr los ejemplos y no solo compilarlos.

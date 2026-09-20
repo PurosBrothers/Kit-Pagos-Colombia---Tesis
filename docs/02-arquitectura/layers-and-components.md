@@ -6,49 +6,57 @@
 > **Metodología:** Design Science Research (DSR)  
 > **Versión:** 1.0.0
 
-> Las discrepancias detectadas entre este documento, el SAD original y los diagramas C4 se registran en [`architecture-log.md`](./architecture-log.md), con su estado de resolución y las correcciones pendientes en el documento fuente.
+> Las discrepancias detectadas entre este documento, el SAD original y los diagramas C4 se registran en [`architecture-log.md`](../architecture/architecture-log.md), con su estado de resolución y las correcciones pendientes en el documento fuente.
 >
-> Para una explicación conceptual de por qué se eligió esta arquitectura y una demostración directa de cómo se refleja en el código real de `sdk/src/` (incluyendo qué partes ya están implementadas y cuáles siguen pendientes), ver [`architecture-explained.md`](./architecture-explained.md).
+> Para una explicación conceptual de por qué se eligió esta arquitectura, ver [`1-arquitectura-hexagonal.md`](1-arquitectura-hexagonal.md). Para la demostración directa de cómo se refleja en el código real de `sdk/src/`, con los comandos que lo verifican y la lista de lo que sigue pendiente, ver [`2-hexagonal-en-kit-pagos.md`](2-hexagonal-en-kit-pagos.md).
 >
-> La cuarta pasarela originalmente era PayU. Rapyd adquirió la operación de PayU en Latinoamérica en 2025, y el registro de comercio nuevo para Colombia ya no otorga acceso a la API clásica de PayU, sino únicamente a la de Rapyd Collect. Este documento ya refleja ese cambio de nombre; ver el punto 15 de [`architecture-log.md`](./architecture-log.md) para el detalle de la decisión y el estado pendiente de investigación del contrato real de Rapyd.
+> La cuarta pasarela originalmente era PayU. Rapyd adquirió la operación de PayU en Latinoamérica en 2025, y el registro de comercio nuevo para Colombia ya no otorga acceso a la API clásica de PayU, sino únicamente a la de Rapyd Collect. Este documento ya refleja ese cambio de nombre; ver el punto 15 de [`architecture-log.md`](../architecture/architecture-log.md) para el detalle de la decisión y el estado pendiente de investigación del contrato real de Rapyd.
 
 ---
 
-## 1. Estructura de Directorios del Repositorio (`src/` y `api/`)
+## 1. Estructura de Directorios del Repositorio
+
+> **Vista de contenedores: tres, no dos.** Kit Pagos Colombia se entrega como un artefacto de tres componentes: el SDK, la API de Simulación y la documentación de datos de prueba. El tercero no es material de apoyo: sin las tarjetas, bancos, documentos y escenarios medidos de cada pasarela, ni el SDK ni el simulador se pueden ejercitar contra nada. Ver [01-producto/4-por-que-kit-pagos.md](../01-producto/4-por-que-kit-pagos.md).
 
 ```text
-kit-pagos-colombia/
-├── src/                                        <-- CONTENEDOR 1: SDK KIT PAGOS COLOMBIA
+Kit-Pagos-Colombia---Tesis/
+├── sdk/src/                                    <-- CONTENEDOR 1: SDK KIT PAGOS COLOMBIA
+│   ├── index.ts                                <-- Superficie pública del paquete npm
 │   ├── domain/                                 <-- Capa de Dominio (Núcleo Puro)
 │   │   ├── entities/
 │   │   │   └── Transaction.ts                  <-- Transaction Entity (única entidad con identidad propia)
 │   │   ├── value-objects/
-│   │   │   ├── Amount.ts                       <-- Value Object: monto, toMinorUnits(), equals()
+│   │   │   ├── Amount.ts                       <-- Value Object: monto como string canónico, toMinorUnits()
 │   │   │   ├── big-arithmetic.ts               <-- Único importador de `big.js`; opera solo sobre string (punto 33)
 │   │   │   ├── minor-units.ts                  <-- Conversión unidad mayor/menor por exponente ISO 4217 (punto 33)
 │   │   │   ├── TaxBreakdown.ts                 <-- Value Object: desglose de impuestos (IVA, base gravable)
 │   │   │   ├── Currency.ts                     <-- Value Object: código ISO 4217, "COP" por defecto
 │   │   │   ├── OrderReference.ts               <-- Value Object: referencia de orden del comercio
 │   │   │   ├── Payer.ts                        <-- Value Object: datos del pagador (email obligatorio)
+│   │   │   ├── PaymentMethod.ts                <-- Value Object: card(token) | pse(bankCode, payerKind)
+│   │   │   ├── PseBank.ts                      <-- Value Object: código opaco + nombre de banco PSE
+│   │   │   ├── Credentials.ts                  <-- Value Object: publicKey, privateKey, webhookSecret, integritySecret
+│   │   │   ├── PaymentResult.ts                <-- Unión discriminada: TRANSACTION | REDIRECT_REQUIRED (punto 39)
 │   │   │   ├── GatewayTransactionId.ts         <-- Value Object: id nativo + Gateway que lo originó
 │   │   │   ├── RejectionReason.ts              <-- Value Object: rejectionCode + rejectionCategory
 │   │   │   ├── ReturnUrlConfig.ts              <-- Value Object: resolveFor(status)
 │   │   │   ├── TransactionStatus.ts            <-- Enum: APPROVED, DECLINED, PENDING, EXPIRED, VOIDED, ERROR
 │   │   │   ├── RejectionCategory.ts            <-- Enum: INSUFFICIENT_FUNDS, INVALID_CARD_DATA, etc.
-│   │   │   ├── SdkErrorCode.ts                 <-- Enum: INVALID_CREDENTIALS, GATEWAY_TIMEOUT, etc.
+│   │   │   ├── KitPagosErrorCode.ts            <-- Enum: INVALID_CREDENTIALS, GATEWAY_TIMEOUT, etc.
 │   │   │   ├── Gateway.ts                      <-- Enum: WOMPI, RAPYD, MERCADOPAGO, KUSHKI
 │   │   │   └── WebhookEvent.ts                 <-- Value Object: evento normalizado de webhook (RF-04)
 │   │   ├── errors/
-│   │   │   └── SdkError.ts                     <-- Excepción tipada unificada (code, gateway, originalPayload)
+│   │   │   └── KitPagosError.ts                <-- Excepción tipada unificada (code, gateway, originalPayload)
 │   │   └── services/
 │   │       ├── WebhookVerifier.ts              <-- Webhook Verifier (despachador por pasarela, sin estado propio)
+│   │       ├── native-status.ts                <-- Tablas de estado nativo por pasarela y por método
 │   │       └── webhooks/                       <-- Una implementación por pasarela (punto 34)
 │   │           ├── GatewayWebhookHandler.ts    <-- Interfaz: verify() + parse() por pasarela
 │   │           ├── WompiWebhookHandler.ts      <-- SHA-256 sin clave, propiedades declaradas en el cuerpo
 │   │           ├── RapydWebhookHandler.ts      <-- HMAC-SHA256 base64, un tipo de evento por resultado
 │   │           ├── MercadoPagoWebhookHandler.ts <-- HMAC-SHA256 hex, notificación de 2 pasos
 │   │           ├── KushkiWebhookHandler.ts     <-- HMAC-SHA256 hex sobre cuerpo + x-kushki-id
-│   │           └── signature-utils.ts          <-- Único importador de `crypto`; comparación en tiempo constante
+│   │           └── signature-utils.ts          <-- Único importador de `crypto` en el dominio; comparación en tiempo constante
 │   │
 │   ├── application/                            <-- Capa de Aplicación (Puertos y Servicios)
 │   │   ├── ports/
@@ -59,43 +67,65 @@ kit-pagos-colombia/
 │   │       │   ├── GatewayResponseNormalizer.ts <-- Interfaz: normalize(rawResponse) : Transaction
 │   │       │   ├── WompiResponseNormalizer.ts  <-- Monto en centavos, datos envueltos en `data`
 │   │       │   ├── MercadoPagoResponseNormalizer.ts <-- Monto en pesos, pago en la raíz
-│   │       │   ├── RapydResponseNormalizer.ts  <-- Monto en pesos, estados ambiguos (CLO/ERR)
-│   │       │   └── payload-utils.ts            <-- Parseo y validación compartidos por las tres
-│   │       ├── RetryHandler.ts                 <-- Retry Handler (Resiliencia & Backoff)
+│   │       │   ├── KushkiResponseNormalizer.ts <-- Dos vocabularios: tarjeta y transferencia
+│   │       │   ├── kushki-card.ts              <-- Lectura del cobro síncrono de tarjeta
+│   │       │   ├── kushki-transfer.ts          <-- Lectura del flujo de transferencia (PSE)
+│   │       │   ├── RapydResponseNormalizer.ts  <-- Monto en pesos, estados ambiguos (CLO exige paid)
+│   │       │   ├── rapyd-redirect.ts           <-- Extracción de la redirección de checkout y PSE
+│   │       │   └── payload-utils.ts            <-- Parseo y validación compartidos por los cuatro
+│   │       ├── RetryHandler.ts                 <-- Retry Handler (backoff exponencial con jitter)
 │   │       └── ErrorHandler.ts                 <-- Error Handler (dividido por forma del error, no por pasarela)
 │   │
 │   └── infrastructure/                         <-- Capa de Infraestructura (Adaptadores y Facade)
 │       ├── config/
-│       │   └── SDKConfigurator.ts              <-- SDK Configurator
+│       │   └── SDKConfigurator.ts              <-- SDK Configurator (baseUrl admite mapa por pasarela, punto 57)
 │       ├── factories/
 │       │   └── GatewayFactory.ts               <-- Gateway Factory (Patrón GoF Factory)
 │       ├── adapters/
 │       │   ├── WompiAdapter.ts                 <-- Wompi Adapter
-│       │   ├── RapydAdapter.ts                 <-- Rapyd Adapter
-│       │   ├── rapyd-signature.ts              <-- Firma de requests salientes de Rapyd (punto 33)
+│       │   ├── wompi-pse.ts                    <-- Flujo PSE y firma de integridad de Wompi (punto 44)
 │       │   ├── MercadoPagoAdapter.ts           <-- Mercado Pago Adapter
-│       │   └── KushkiAdapter.ts                <-- Kushki Adapter
+│       │   ├── mercadopago-pse.ts              <-- Flujo PSE por la Orders API (punto 45)
+│       │   ├── KushkiAdapter.ts                <-- Kushki Adapter
+│       │   ├── kushki-charge.ts                <-- Cobro síncrono con tarjeta
+│       │   ├── kushki-pse.ts                   <-- Flujo de transferencia y rutas de estado (puntos 50 y 53)
+│       │   ├── kushki-amount.ts                <-- Objeto de monto con desglose de IVA
+│       │   ├── RapydAdapter.ts                 <-- Rapyd Adapter
+│       │   ├── rapyd-signature.ts              <-- Firma HMAC de cada request saliente (punto 33)
+│       │   ├── rapyd-checkout.ts               <-- Checkout alojado para tarjeta (punto 50)
+│       │   ├── rapyd-pse.ts                    <-- Flujo PSE: customer + payment
+│       │   ├── rapyd-payload.ts                <-- Construcción de cuerpos y URLs de retorno
+│       │   └── payment-method-support.ts       <-- Guarda compartida de métodos soportados
 │       └── facade/
 │           └── KitPagos.ts                     <-- KitPagos (Patrón GoF Facade — Punto de entrada público)
 │
-└── api/                                        <-- CONTENEDOR 2: API DE SIMULACIÓN (FASTIFY)
-    ├── routes/
-    │   └── router.ts                           <-- HTTP Router & Headers Middleware
-    ├── engine/
-    │   └── ScenarioEngine.ts                   <-- Scenario Execution Engine
-    ├── factories/
-    │   ├── GatewayMockFactory.ts               <-- Gateway Mock Factory (orquestador)
-    │   ├── WompiMockFactory.ts
-    │   ├── RapydMockFactory.ts
-    │   ├── MercadoPagoMockFactory.ts
-    │   └── KushkiMockFactory.ts
-    ├── security/
-    │   └── SignatureGenerator.ts               <-- Signature Generator
-    ├── endpoints/
-    │   └── WebhookTriggerEndpoint.ts           <-- Webhook Trigger Endpoint (POST /v1/sim/webhooks/trigger)
-    └── docs/
-        └── OpenAPIProvider.ts                  <-- OpenAPI Documentation Provider (Swagger UI /docs)
+├── simulator-api/src/                          <-- CONTENEDOR 2: API DE SIMULACIÓN (FASTIFY)
+│   ├── server.ts                               <-- Único llamador de listen()
+│   ├── app.ts                                  <-- buildApp(): instancia Fastify sin abrir puerto
+│   ├── routes/
+│   │   ├── health.ts                           <-- GET /health
+│   │   ├── wompi.ts                            <-- 4 rutas bajo /v1/sim/wompi/
+│   │   ├── mercadopago.ts                      <-- 5 rutas bajo /v1/sim/mercadopago/
+│   │   ├── rapyd.ts                            <-- 7 rutas bajo /v1/sim/rapyd/
+│   │   └── kushki.ts                           <-- 6 rutas bajo /v1/sim/kushki/
+│   ├── gateways/                               <-- Una GatewayMockFactory + types.ts por pasarela
+│   │   ├── wompi/  mercadopago/  rapyd/  kushki/
+│   ├── scenarios/
+│   │   └── ScenarioEngine.ts                   <-- Scenario Execution Engine (hoy solo APPROVED; RF-10 pendiente)
+│   └── store/
+│       └── TransactionStore.ts                 <-- Estado en memoria, efímero a propósito
+│
+└── docs/testing-data/                          <-- CONTENEDOR 3: DOCUMENTACIÓN DE DATOS DE PRUEBA
+    ├── README.md                               <-- Índice, nivel de evidencia y huecos por pasarela
+    ├── wompi.md                                <-- Tarjetas, bancos PSE y escenarios medidos
+    ├── mercado-pago.md
+    ├── kushki.md
+    └── rapyd.md
 ```
+
+> **Qué cambió respecto de la versión 1.0.0 de este árbol.** La versión anterior describía un contenedor `api/` con componentes (`router.ts`, `ScenarioEngine` en `engine/`, cinco factorías de mock en `factories/`, `SignatureGenerator`, `WebhookTriggerEndpoint`, `OpenAPIProvider`) que no corresponden a la implementación real en `simulator-api/src/`. También citaba `SdkError.ts` y `SdkErrorCode.ts`, renombrados a `KitPagosError`, y le faltaban el normalizador de Kushki, `PaymentResult`, `PaymentMethod`, `PseBank`, `Credentials`, `native-status.ts` y los once módulos auxiliares de adaptador. El árbol de arriba se generó contra el código y corresponde a 61 unidades de producción en `sdk/src` y 17 en `simulator-api/src`. La verificación de que la regla de dependencia se cumple está en [2-hexagonal-en-kit-pagos.md](2-hexagonal-en-kit-pagos.md) §2.
+>
+> Las secciones 3.1 a 3.6 describen el diseño previsto de la API de Simulación y conservan los nombres de componente del SAD. La correspondencia con los archivos que existen hoy, junto con los límites de fidelidad declarados y lo que falta para cerrar el componente, está en [3-api-de-simulacion.md](3-api-de-simulacion.md).
 
 ---
 
