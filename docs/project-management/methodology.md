@@ -42,9 +42,27 @@ Este es el bloque de trabajo donde vamos a vivir la mayoría del tiempo. La arqu
 |---|---|---|---|---|---|
 | 1 | `Iteración 1 – Núcleo del SDK` | Implementación del modelo de dominio y contratos de puerto; pruebas unitarias del núcleo (cobertura ≥80%); revisión técnica grupal | H3 parcial | Líder de arquitectura (Joshua) | TypeScript, Jest, GitHub (PR + CI), VS Code |
 | 2 | `Iteración 2 – Adaptadores de pasarela` | Adaptadores de Wompi, Rapyd, Mercado Pago y Kushki, cada uno con pruebas de integración; validación cruzada de los cuatro | H3 completo | Líder de integración (David); cada adaptador en par con otro integrante | TypeScript, Jest, sandboxes de las 4 pasarelas, GitHub |
-| 3 | `Iteración 3 – API de simulación y soporte de validación` | Escenarios de prueba de las pasarelas soportadas; despliegue en Render; documentación centralizada de datos de prueba; colección Postman versionada | H4 | Líder de integración (David); líder de arquitectura apoya en diseño de contratos | Fastify, TypeScript, Render, Postman, GitHub |
+| 3 | `Iteración 3 – API de simulación y soporte de validación` | Los cuatro entregables de la tabla siguiente | H4 | Líder de integración (David); líder de arquitectura apoya en diseño de contratos | Fastify, TypeScript, Render, Postman, GitHub |
 
 Importante: la revisión grupal obligatoria al cierre de la Iteración 1 es una condición explícita del SPMP antes de empezar la Iteración 2 ("revisión obligatoria de todos antes de iniciar Iter 2"). No es opcional saltarla aunque el equipo sienta presión de tiempo.
+
+### 2.1. Los cuatro entregables de la Iteración 3
+
+La Iteración 3 cierra el artefacto completo, no solo la API de Simulación. Son cuatro entregables, y el orden importa porque el cuarto depende de los tres primeros.
+
+| # | Entregable | Qué incluye | Por qué la Fase 5 lo necesita |
+|---|---|---|---|
+| 1 | **API de Simulación completa** | Los escenarios de rechazo, timeout y error, que hoy responden `501`; despliegue en Render; colección Postman versionada | Sin escenarios de fallo no se puede completar la lista de verificación funcional de los prototipos |
+| 2 | **Documentación de datos** | El tercer componente del Kit Pagos: `docs/testing-data/` presentado como artefacto, con su nivel de evidencia y sus huecos por pasarela | Es lo que hace reproducible el experimento por alguien que no sea el equipo |
+| 3 | **Página de presentación** | El sitio que muestra el artefacto sin necesidad de clonar el repositorio | Es cómo el jurado y un evaluador externo acceden al resultado |
+| 4 | **Proyectos prototípicos completos** | Los prototipos A (con SDK) y B (integración directa), ejecutables y medibles | **Son el objeto de medición del experimento**: sin ellos no hay Fase 5 |
+
+Dos cosas que hay que resolver **antes** de que el cuarto entregable sea medible, y que no son trabajo de los prototipos:
+
+1. **Parametrizar `ck-metrics.ts`.** Hoy resuelve la raíz de código de forma fija a `sdk/src` y sale con código 1 ante cualquier violación. Medir los prototipos exige un argumento para la raíz, otro para el `tsconfig.json`, y separar el modo guarda del modo medición — porque el prototipo B **va a** exceder los umbrales, y eso es el resultado esperado, no un fallo. Detalle en [`../04-metricas-y-pruebas/4-medir-los-prototipos.md`](../04-metricas-y-pruebas/4-medir-los-prototipos.md).
+2. **Cerrar el punto 59 del architecture-log:** si la API de Simulación sigue replicando el comportamiento medido de cada sandbox o pasa a proxiarlos. Afecta al primer entregable y conviene decidirlo antes de implementar los escenarios de fallo.
+
+La tesis presenta el Kit Pagos como **tres componentes**: el SDK, la API de Simulación y la documentación de datos. Los entregables 1 y 2 completan dos de los tres; el SDK quedó cerrado en la Iteración 2.
 
 ## 3. Convención de nombres para Milestones de GitHub
 
@@ -140,7 +158,15 @@ Tres consecuencias de estas definiciones que conviene tener presentes al leer un
 
 Una violación de umbral puede ser consecuencia directa de una decisión arquitectónica ya registrada y no un defecto de diseño. Para esos casos el script mantiene un registro de excepciones (`KNOWN_EXCEPTIONS` en `ck-metrics.ts`), y cada entrada debe enlazar al punto del `architecture-log.md` que la justifica. **Agregar una clase a ese registro sin ese registro previo no es una resolución válida:** deja el umbral verde en el reporte y rojo en la realidad.
 
-El criterio de admisión es que la violación no sea reorganizable sin romper una decisión de diseño deliberada. Las excepciones vigentes son el CBO de `Transaction` (punto 22) y el WMC de `Amount` (punto 34).
+El criterio de admisión es que la violación no sea reorganizable sin romper una decisión de diseño deliberada. Las excepciones vigentes son tres:
+
+| Excepción | Clases cubiertas | Justificación |
+|---|---|---|
+| CBO de `Transaction` | `Transaction` (CBO 7) | Punto 22. Es la única entidad del dominio y se construye a partir de siete objetos de valor; acoplarse a ellos es su razón de ser |
+| WMC de `Amount` | `Amount` (WMC 23) | Punto 34. Son doce métodos y ninguno complejo: el WMC alto es cantidad de operaciones aritméticas, no complejidad |
+| CBO por el tipo `PseBank` | Los cuatro adaptadores y `KitPagos` (CBO 6) | Devolver la lista de bancos de PSE obliga a cada adaptador a conocer el tipo `PseBank`, que suma un punto de acoplamiento a los cinco por igual |
+
+La tercera se agregó al implementar `getPseBanks()` y afecta a cinco clases a la vez, lo que la distingue de las dos primeras: no es una decisión sobre una clase, es el costo de un método del puerto.
 
 Si un valor de WMC, CBO, RFC o MAX_CC supera su umbral durante la revisión de un pull request, y no está cubierto por una excepción documentada, se registra como defecto y el código no se aprueba hasta resolver la violación. Si la violación persiste dos iteraciones consecutivas sobre la misma clase, se convoca una sesión técnica de refactorización.
 
@@ -226,7 +252,7 @@ La entrega final del proyecto (Hito H6: documento de grado y repositorio públic
 |---|---|---|---|---|
 | Iteración 1 – Núcleo del SDK | 2 semanas | 2 semanas (sin cambio) | 24 ago – 7 sep | H3 parcial |
 | Iteración 2 – Adaptadores de pasarela | 2 semanas | 2 semanas (sin cambio) | 8 sep – 21 sep | H3 completo |
-| Iteración 3 – API de simulación | 2 semanas | 2 semanas (sin cambio) | 22 sep – 5 oct | H4 |
+| Iteración 3 – API de simulación y soporte de validación | 2 semanas | 2 semanas (sin cambio) | 22 sep – 5 oct | H4 |
 | Fase 5 – Demostración y evaluación | 3 semanas | **2 semanas (comprimida)** | 5 oct – 19 oct | H5 |
 | Fase 6 – Comunicación | 2 semanas | **1 semana (comprimida)** | 19 oct – 26 oct | H6 (contenido) |
 | Colchón de entrega | — | 2 semanas | 26 oct – 9 nov | — |
@@ -238,7 +264,14 @@ Este plan no le quita tiempo a la Fase 4: la única fase con margen cero para at
 
 Comprimir la Fase 6 de 2 a 1 semana se sostiene siempre que el documento de grado se redacte en paralelo desde antes (usando lo que ya existe en `docs/`: SAD, ADRs, esta misma metodología), y no se deje para escribir de cero al llegar a esa semana.
 
-Comprimir la Fase 5 de 3 a 2 semanas es más riesgoso, porque ahí es donde se comparan los proyectos prototípicos (con y sin el framework) y se calculan las métricas CK (WMC, CBO, RFC) que sustentan la evaluación experimental del DSR. Esa semana solo alcanza si el tooling de métricas (`ts-morph`, ya presente en `sdk/package.json` pero sin script ni issue que lo use todavía) se prueba y queda funcionando **antes** de entrar a la Fase 5, no como parte de ella. Si eso no ocurre a tiempo, la única forma de que la fase quepa en 2 semanas es reduciendo qué se evalúa (menos escenarios, menos pasarelas comparadas), y eso deja de ser un ajuste de cronograma: se vuelve un cambio de alcance que, según la sección 7, sí requiere alineación con el director antes de aplicarse.
+Comprimir la Fase 5 de 3 a 2 semanas es más riesgoso, porque ahí es donde se comparan los proyectos prototípicos (con y sin el framework) y se calculan las métricas CK (WMC, CBO, RFC) que sustentan la evaluación experimental del DSR. **Dos condiciones tienen que cumplirse dentro de la Iteración 3, no dentro de la Fase 5:**
+
+1. **Los dos prototipos tienen que estar completos y ejecutables**, porque son el objeto de medición. Es el cuarto entregable de la sección 2.1, y es el que menos puede correrse: medir tarda poco, construir lo que se mide tarda semanas.
+2. **El script de métricas tiene que poder apuntarse a ellos.** El tooling ya existe y funciona —`sdk/scripts/ck-metrics.ts` mide las 31 clases del SDK en cada pull request—, pero resuelve la raíz de código de forma fija a `sdk/src` y falla ante cualquier violación de umbral. Medir un prototipo de integración directa con ese script es imposible por diseño: **va a** exceder los umbrales, y eso es precisamente el resultado que el experimento busca. Hacen falta tres cambios, detallados en [`../04-metricas-y-pruebas/4-medir-los-prototipos.md`](../04-metricas-y-pruebas/4-medir-los-prototipos.md).
+
+A eso se suma que los **escenarios de rechazo, timeout y error** de la API de Simulación son un prerrequisito de la lista de verificación funcional: hoy el simulador responde `501` a cualquier valor distinto de `APPROVED`, así que sin ellos la variable de paridad funcional entre los dos prototipos no se puede completar.
+
+Si alguna de esas condiciones no está lista al entrar a la Fase 5, la única forma de que la fase quepa en 2 semanas es reduciendo qué se evalúa (menos escenarios, menos pasarelas comparadas), y eso deja de ser un ajuste de cronograma: se vuelve un cambio de alcance que, según la sección 7, sí requiere alineación con el director antes de aplicarse.
 
 ### 10.4. Disparador para reevaluar el plan
 
@@ -248,5 +281,7 @@ Si al cierre de la Semana 1 de Iteración 1 (jueves antes del 31 de agosto) el t
 
 - `SPMP - Kit Pagos Colombia.md` (fuera del repositorio, en Google Drive/Downloads): el documento formal completo. Este archivo es un resumen operativo, no un remplazo.
 - `Descripción de la Arquitectura del Software (SAD).docx.md` (fuera del repositorio): la fuente de verdad de la arquitectura. Ver `docs/architecture/architecture-log.md` para el registro de discrepancias pendientes de corregir ahí.
-- `docs/architecture/layers-and-components.md` y `docs/architecture/ubiquitous-language.md`: la estructura de código vigente, sincronizada con las decisiones tomadas sobre el SAD.
+- `docs/README.md`: el índice de la documentación, con el camino de lectura por concepto y el mapa de los cuatro entregables de la Iteración 3.
+- `docs/02-arquitectura/layers-and-components.md` y `docs/02-arquitectura/ubiquitous-language.md`: la estructura de código vigente, sincronizada con las decisiones tomadas sobre el SAD.
+- `docs/04-metricas-y-pruebas/`: cómo se calculan las métricas CK, qué cubren las tres suites de pruebas y qué falta para poder medir los prototipos.
 - `CONTRIBUTING.md`: estándares de commits, política de ramas y pull requests.

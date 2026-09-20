@@ -1655,6 +1655,39 @@ El modelo de dominio ya definía desde el issue #64 el tipo de unión discrimina
 
 ---
 
+### 59. Decisión abierta: la API de Simulación, ¿sigue simulando o pasa a proxiar los sandboxes reales?
+
+**Responsable de corregirlo en el SAD:** Joshua (sección 6, vista de contenedores, y sección 12, entorno de pruebas). Queda pendiente hasta que la decisión se cierre.
+
+**Contexto.** La API de Simulación existe porque hay tres flujos que los sandboxes reales **no permiten ejercitar de punta a punta**, y los tres están medidos: el PSE de Wompi publica la URL de redirección en el mismo instante en que resuelve el pago, así que cuando la URL existe ya no sirve (punto 43); la Orders API de Mercado Pago responde `401` con credenciales de prueba y exige un token de producción (punto 45); y el desenlace de una transferencia de Kushki requiere que una persona autorice en el portal de un banco (punto 48).
+
+Hoy el simulador replica el comportamiento medido: 23 rutas repartidas en cuatro pasarelas, que devuelven las mismas formas de respuesta que se observaron contra los sandboxes reales, incluido el orden de los eventos —por ejemplo, Wompi devuelve `PENDING` al crear y resuelve en la consulta, igual que el sandbox (punto 50)—.
+
+**El problema.** La fidelidad del simulador llega hasta donde llegó la medición, y hay cuatro huecos conocidos donde acepta cosas que la pasarela real rechaza:
+
+1. **Rapyd:** el simulador no verifica la firma HMAC de las peticiones entrantes. Un adaptador que la calculara mal pasaría acá y fallaría en producción.
+2. **Kushki:** la ruta de estado de cargos con tarjeta responde a cualquier identificador, mientras la real responde `403` a todos, incluso a los inventados.
+3. **Wompi:** el simulador no exige la firma de integridad, y la real responde `422` sin ella (punto 44).
+4. **Mercado Pago:** el simulador no exige la clave de idempotencia, y la real la necesita (punto 48).
+
+Cada hueco es un lugar donde un ejemplo verde miente. Y cerrarlos a mano tiene un costo que crece: cada uno implica reimplementar en el simulador una validación que la pasarela real ya hace, y mantenerla al día cuando la pasarela la cambie.
+
+**Las tres opciones.**
+
+| Opción | Qué implica | A favor | En contra |
+|---|---|---|---|
+| **A. Seguir simulando y cerrar los cuatro huecos** | Implementar verificación de firma, idempotencia y los códigos de estado reales dentro del simulador | Determinista, sin red, sin credenciales, corre en CI | Reimplementa validaciones de cuatro pasarelas y hay que mantenerlas; nuevos huecos aparecerán |
+| **B. Proxiar los sandboxes reales** | El simulador reenvía a la pasarela y solo intercepta lo que el sandbox no puede hacer | Fidelidad máxima, cero mantenimiento de validaciones | Necesita credenciales, red y una cuenta viva; deja de ser determinista; no corre en CI; no resuelve los tres flujos que el sandbox no permite —que es la razón original de existir— |
+| **C. Híbrido: proxiar por defecto, simular los flujos inalcanzables** | Reenvío real donde el sandbox alcanza; simulación donde no | Fidelidad donde importa y cobertura donde el sandbox no llega | Dos modos que hay que mantener y documentar; la diferencia entre "esto lo verificó la pasarela" y "esto lo verificó el mock" se vuelve difícil de saber al leer un resultado |
+
+**Lo que inclina la decisión, y que conviene tener presente al cerrarla:** las 16 pruebas de contrato (`npm run test:sandbox`) **ya cubren la fidelidad** contra las pasarelas reales, y la mitad de ellas afirma que los defectos siguen presentes. O sea que el proyecto ya tiene un mecanismo que detecta divergencia entre lo que el simulador asume y lo que la pasarela hace, y ese mecanismo no depende de que el simulador sea fiel. Eso debilita el argumento principal de la opción B.
+
+**Estado: abierta.** No hay issue. Afecta directamente al primer entregable de la Iteración 3 (completar la API de Simulación), así que hay que cerrarla antes de implementar los escenarios de rechazo, timeout y error: hoy el simulador responde `501` a cualquier valor de `x-simulate-scenario` distinto de `APPROVED`, y esos escenarios son un prerrequisito de la lista de verificación funcional del experimento de la Fase 5.
+
+**Trabajo relacionado que la decisión no cubre y que también bloquea la Fase 5.** El script `sdk/scripts/ck-metrics.ts` resuelve la raíz de código a medir de forma fija (`__dirname/../src`) y sale con código 1 ante cualquier violación de umbral. Para medir los prototipos A y B de la Fase 5 hacen falta tres cambios: un argumento para la raíz de código, un argumento para el `tsconfig.json`, y separar el **modo guarda** (falla en violación, que es lo que corre en el flujo de trabajo) del **modo medición** (reporta sin fallar, que es lo que necesita el experimento, porque un prototipo de integración directa va a exceder los umbrales y eso **es el resultado**, no un error). Está detallado en [`04-metricas-y-pruebas/4-medir-los-prototipos.md`](../04-metricas-y-pruebas/4-medir-los-prototipos.md).
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum
@@ -2042,7 +2075,38 @@ correspondiente por el PNG regenerado.
 
 **Encontrado:** Este documento describe `domain/enums/EstadoTransaccion.ts`, `domain/interfaces/IIntencionPago.ts`, `domain/errors/ErrorNormalizado.ts` y el facade en `application/KitPagos.ts`. Ninguno de estos nombres ni rutas coincide con la estructura vigente (`domain/entities`, `domain/value-objects`, `domain/errors`, `domain/services`, `application/ports`, `infrastructure/facade/KitPagos.ts`).
 
-**Estado:** Pendiente. Es el documento de arranque más antiguo del repositorio; se recomienda actualizarlo o marcarlo explícitamente como histórico y redirigir a `layers-and-components.md` como referencia vigente de estructura.
+**Estado: resuelto.** El documento se reescribió completo como [`docs/00-entorno-de-desarrollo.md`](../00-entorno-de-desarrollo.md), verificado contra la estructura real del repositorio: los tres paquetes, el orden de instalación (el de ejemplos consume `dist/`, así que el SDK se construye primero), todos los scripts de npm por paquete, y la configuración del `.env`. La reescritura ocurrió dentro de la reorganización del punto 14.
+
+### 14. Reorganización de la documentación en un camino de lectura por concepto
+
+**Responsable:** No corresponde a ninguna sección del SAD; es estructura de repositorio.
+
+**Encontrado.** Los 19 archivos de `docs/` estaban agrupados por tipo de artefacto (`architecture/`, `examples/`, `project-management/`, `testing-data/`), que es una taxonomía útil para quien ya conoce el proyecto y no sirve para quien llega por primera vez: no había forma de saber en qué orden leerlos. Y tres de los documentos de arquitectura describían un SDK esqueleto que ya no existía —clases llamadas `SdkError` y `SdkErrorCode`, métodos que se anunciaban como no implementados, un solo adaptador— con dos meses de atraso frente al código.
+
+**Decisión.** Secciones numeradas que forman una ruta de lectura, de lo conceptual a lo verificable:
+
+| Sección | Contenido |
+|---|---|
+| `00-entorno-de-desarrollo.md` | Instalar, compilar y correr las tres partes |
+| `01-producto/` | Qué es una pasarela, los conceptos técnicos, las cuatro comparadas, por qué existe el proyecto |
+| `02-arquitectura/` | Fundamentos hexagonales, su verificación contra el código real, la API de Simulación |
+| `03-sdk/` | El recorrido de una llamada, las 31 clases, cada pasarela por dentro, la guía de implementación, la comparación con integración directa |
+| `04-metricas-y-pruebas/` | Las métricas CK, las tres suites, las pruebas de contrato, cómo medir los prototipos |
+| `05-ejemplos/` | El índice de los diez y dos recorridos comentados |
+| `06-landing/` | El alcance de la página de presentación |
+
+**Dos directorios no se movieron, y es deliberado:** este archivo (`architecture/architecture-log.md`) y `testing-data/`. Los dos están citados **por ruta completa desde comentarios de código y pruebas** —este por ocho archivos, incluidos `WebhookVerifier.ts` y `WebhookVerifier.test.ts`—, y un enlace roto dentro de un comentario no falla ninguna prueba: se descubriría meses después, si acaso. El mismo razonamiento por el que este archivo conservó la numeración de sus puntos al renombrarse (ver la nota al final).
+
+Los cuatro comentarios de código que sí citaban rutas movidas se corrigieron: `simulator-api/src/app.ts`, `simulator-api/src/routes/health.ts` y `simulator-api/src/routes/mercadopago.ts`, más `sdk/src/domain/value-objects/TaxBreakdown.ts`.
+
+**Dos afirmaciones falsas que la reescritura encontró y corrigió**, las dos en documentos de ejemplos:
+
+1. `pago-simulado-wompi.md` afirmaba que `getPaymentStatus()` fallaba con `UNSUPPORTED_OPERATION` porque el simulador no implementaba consulta de estado. Funciona, y es la llamada que devuelve el `APPROVED`. El documento decía además que la creación devolvía `APPROVED`, cuando devuelve `PENDING` — que es justamente lo que el ejemplo enseña, y lo que Wompi real hace (punto 50).
+2. `intercambiabilidad.md` decía que faltaban los ejemplos de PSE. Existen los cinco.
+
+El `README.md` de la raíz también tenía un ejemplo de código roto —`new Amount(150000)` con un número en vez de una cadena, y trataba el retorno de `createPayment()` como una `Transaction` en vez de un `PaymentResult`—. **No se corrigió: se eliminó**, y el README ahora enlaza al del SDK. La razón es que `npm run check:readme` solo compila `sdk/README.md`, así que una segunda copia del ejemplo rápido en la raíz es código sin guarda, y ya sabemos cómo termina eso: el episodio de los diez fragmentos rotos que motivó la guarda ocurrió exactamente así. Menos copias sin guarda es mejor que más copias correctas hoy.
+
+**Estado:** resuelto. Cierra la deuda del punto 8 y la del punto 11 en cuanto a ubicación.
 
 ### 9. Archivo de imagen suelto dentro del código fuente
 
@@ -2068,7 +2132,7 @@ correspondiente por el PNG regenerado.
 
 **Decisión:** Se mantiene la matriz de equivalencias por pasarela (Wompi/Rapyd/Mercado Pago/Kushki) tal como está, porque es investigación de campo valiosa y en gran parte independiente de la reestructuración del dominio. Se corrige puntualmente el snippet de `SdkError` y se agrega una nota de vigencia al inicio del documento.
 
-**Estado:** Resuelto. Se ejecutó la pasada completa de sincronización en `docs/architecture/ubiquitous-language.md`, reemplazando el enum `EstadoTransaccion` por `TransactionStatus`, `SdkErrorCode` por `KitPagosErrorCode` y `SdkError` por `KitPagosError`. El lenguaje ubicuo queda 100% alineado con las entidades de dominio y el catálogo de errores tipados del SDK.
+**Estado:** Resuelto. Se ejecutó la pasada completa de sincronización en `docs/architecture/ubiquitous-language.md`, reemplazando el enum `EstadoTransaccion` por `TransactionStatus`, `SdkErrorCode` por `KitPagosErrorCode` y `SdkError` por `KitPagosError`. El lenguaje ubicuo queda 100% alineado con las entidades de dominio y el catálogo de errores tipados del SDK. El archivo vive hoy en [`docs/02-arquitectura/ubiquitous-language.md`](../02-arquitectura/ubiquitous-language.md), por la reorganización del punto 14; su contenido no cambió al moverse.
 
 ### 12. `sdk/package.json` sin scripts reales y con licencia incorrecta
 
