@@ -259,7 +259,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         // comercio creó la orden. Inventar una sería peor que omitirla, porque el
         // normalizador cae entonces en el identificador de la orden, que sí es un
         // dato real. Es la limitación conocida del simulador, registrada en
-        // `docs/examples/gateway-interchangeability.md`.
+        // `docs/05-ejemplos/intercambiabilidad.md`.
         payer: { email: "customer@example.com", entity_type: "individual" },
         transactions: {
           payments: [

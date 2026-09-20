@@ -4,7 +4,7 @@ import { FastifyInstance } from "fastify";
  * Endpoint minimo de salud (GET /health).
  *
  * No forma parte de las rutas de simulacion descritas en
- * docs/architecture/layers-and-components.md (esas dependen del modelo de
+ * docs/02-arquitectura/layers-and-components.md (esas dependen del modelo de
  * dominio de la API de Simulacion, todavia pendiente). Existe unicamente
  * como el primer caso real y trivial contra el cual demostrar que el arnes
  * de pruebas (Jest + app.inject()) funciona de punta a punta.

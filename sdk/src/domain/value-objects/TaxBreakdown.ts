@@ -57,7 +57,7 @@ function assertSumsTo(breakdown: TaxBreakdown, total: Amount): void {
  *
  * Existe porque Kushki no acepta el monto como escalar: su API espera un objeto
  * con `subtotalIva0`, `subtotalIva`, `iva` e `ice` (ver
- * docs/architecture/ubiquitous-language.md, fila `amount`). Aun asi la clase
+ * docs/02-arquitectura/ubiquitous-language.md, fila `amount`). Aun asi la clase
  * vive en el dominio y no en el KushkiAdapter: descomponer un precio en base e
  * impuesto es una regla de dinero, no un detalle de una pasarela. Kushki
  * simplemente es la unica de las cuatro que la necesita explicita; el Adapter

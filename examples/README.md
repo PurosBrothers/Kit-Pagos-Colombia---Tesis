@@ -50,11 +50,14 @@ npm start
 ```
 
 * **Archivo:** `simulate-wompi-payment.ts`
-* **Descripción:** Construye una solicitud de pago unificada utilizando objetos de valor del dominio (`Amount`, `Currency`, `OrderReference`, `Payer`) y procesa el pago a través de Wompi.
-* **Qué esperar:** 
-  1. Imprime la solicitud de pago.
-  2. Muestra la `Transaction` creada con estado `APPROVED`.
-  3. Consulta exitosamente el estado por ID a través de `kitPagos.getPaymentStatus(...)` obteniendo la transacción con estado `APPROVED`.
+* **Descripción:** Construye una solicitud de pago unificada utilizando objetos de valor del dominio (`Amount`, `Currency`, `OrderReference`, `Payer`) y procesa el pago a través de Wompi. Es el ejemplo más comentado de la carpeta y el mejor punto de entrada.
+* **Qué esperar:**
+  1. Imprime la solicitud de pago, incluido el monto en centavos que recibe Wompi, para dejar ver que esa conversión no la escribe el comercio.
+  2. Muestra la `Transaction` creada con estado **`PENDING`**.
+  3. Consulta el estado por ID con `kitPagos.getPaymentStatus(...)` y ahí sí obtiene `APPROVED`.
+* **Por qué la creación no devuelve `APPROVED`:** porque Wompi real tampoco lo hace. Medido contra `sandbox.wompi.co`, `POST /transactions` responde `PENDING` con `finalized_at: null` y la transacción se resuelve unos 600 ms después. **El desenlace de un cobro con tarjeta nunca está en la respuesta de la creación**, así que el paso 3 no es opcional y el simulador reproduce ese orden a propósito. Está en el punto 50 del `architecture-log.md`.
+
+Recorrido completo, línea por línea, en [`docs/05-ejemplos/pago-simulado-wompi.md`](../docs/05-ejemplos/pago-simulado-wompi.md).
 
 ---
 
@@ -137,16 +140,6 @@ Dos detalles que se ven en la salida y vale la pena entender:
 
 ---
 
-### 4. Simulación de pago con Kushki
-
-```bash
-npm run simulate:kushki
-```
-
-* **Archivo:** `simulate-kushki-payment.ts`
-* **Qué demuestra:** Kushki requiere un monto desglosado en base gravable, IVA, parte exenta e impuesto al consumo. El comercio conserva el mismo `CreatePaymentRequest` unificado y usa `TaxBreakdown.fromTaxIncluded(...)` para generar un desglose que suma exactamente el total. El adaptador lo convierte al formato nativo y traduce `APPROVAL` a `APPROVED`.
-* **Qué esperar:** La creación y la consulta posterior imprimen el mismo identificador nativo (`ticketNumber`) y un estado unificado `APPROVED`; el estado nativo se conserva como `APPROVAL` para auditoría.
-
 ### 3b. Simulación de pago con PSE (Rapyd)
 
 ```bash
@@ -161,6 +154,18 @@ npm run simulate:rapyd-pse
   3. Consulta el estado después de la redirección y obtiene `APPROVED`.
 * **Lo que este ejemplo enseña y los otros no:** que la cantidad de llamadas HTTP antes de redirigir **no es la misma en todas las pasarelas y el comercio no se entera**. Esconderlo es una decisión, no un descuido, y tiene un costo medido: si la segunda llamada falla, el cliente ya quedó creado en Rapyd. Por eso el adaptador valida todos los datos obligatorios antes de la primera. El razonamiento está en el punto 47 del `architecture-log.md`.
 * **Datos que Rapyd exige y Wompi no:** nombre completo con solo letras y espacios, y teléfono celular colombiano. Van en el `customer`, no en los campos del pago: mandar el teléfono en `payment_method.fields` devuelve `UNKNOWN_PAYMENT_METHOD_FIELD - [PHONE_NUMBER]`.
+
+---
+
+### 4. Simulación de pago con Kushki
+
+```bash
+npm run simulate:kushki
+```
+
+* **Archivo:** `simulate-kushki-payment.ts`
+* **Qué demuestra:** Kushki requiere un monto desglosado en base gravable, IVA, parte exenta e impuesto al consumo. El comercio conserva el mismo `CreatePaymentRequest` unificado y usa `TaxBreakdown.fromTaxIncluded(...)` para generar un desglose que suma exactamente el total. El adaptador lo convierte al formato nativo y traduce `APPROVAL` a `APPROVED`.
+* **Qué esperar:** La creación y la consulta posterior imprimen el mismo identificador nativo (`ticketNumber`) y un estado unificado `APPROVED`; el estado nativo se conserva como `APPROVAL` para auditoría.
 
 ---
 
@@ -193,6 +198,9 @@ npm run simulate:pse-bancos
   1. Las cuatro listas, una debajo de otra, con el código y el nombre tal como los devuelve cada pasarela.
   2. Una demostración de que los códigos **no son intercambiables**: mandarle a Rapyd el `"1"` de Wompi falla con un `INVALID_REQUEST` del SDK que dice qué patrón espera y de dónde sacarlo, en vez del error genérico de Rapyd.
 * **Por qué existe:** porque es el paso inmediatamente anterior al cobro y, hasta que este método existió, era el único del flujo de PSE que el comercio tenía que resolver hablándole directo a la pasarela. Verlas al lado es también lo que hace evidente por qué el código de banco es opaco: en Wompi es `1`, en Mercado Pago `1007`, en Rapyd `co_pse_bancolombia_bank`. Un catálogo propio tendría que traducir en los dos sentidos y mantenerse al día con cuatro pasarelas, para resolver un problema que nadie tiene.
+
+---
+
 ### 6. Intercambiabilidad de las cuatro pasarelas
 
 ```bash
@@ -200,13 +208,13 @@ npm run simulate:interchangeability
 ```
 
 * **Archivo:** `gateway-interchangeability.ts`
-* **Qué demuestra:** el mismo pago, descrito **una sola vez**, cobrado por las cuatro pasarelas sin que cambie una línea del código del comercio. Es el cierre de la Iteración 2 y el argumento central de la tesis convertido en código ejecutable. Los cuatro ejemplos anteriores muestran una pasarela cada uno; este muestra lo que ninguno puede mostrar solo, porque la intercambiabilidad es una propiedad de la relación entre las cuatro.
+* **Qué demuestra:** el mismo pago, descrito **una sola vez**, cobrado por las cuatro pasarelas sin que cambie una línea del código del comercio. Es el cierre de la Iteración 2 y el argumento central de la tesis convertido en código ejecutable. Los nueve ejemplos anteriores muestran una pasarela o un método cada uno; este muestra lo que ninguno puede mostrar solo, porque la intercambiabilidad es una propiedad de la relación entre las cuatro.
 * **Qué esperar:** una tabla comparativa con el estado normalizado, el estado nativo, el monto y el identificador de cada pasarela. La columna que cambia es la del estado nativo — `APPROVED`, `CLO`, `approved` y `APPROVAL` son la misma cosa dicha de cuatro formas —; la del estado normalizado es una sola.
 * **La verificación no es visual.** El ejemplo compara por código que las cuatro coincidan en estado normalizado, monto y referencia de la orden, y **sale con código distinto de cero** si alguna no coincide. Romper a mano el mapeo de estados de cualquier adaptador lo pone rojo, así que funciona como prueba de regresión ejecutable.
 * **Detalle a tener en cuenta:** el monto se compara con `Amount.equals()` y no con `===` sobre la cadena, porque Wompi y Rapyd devuelven `150000.00` y Mercado Pago y Kushki `150000`. Es el mismo monto con distinta escala, y comparar cadenas daría un fallo que no es un fallo.
 * **Lo que el ejemplo absorbe sin que se note:** las cuatro necesitan **distinta cantidad de llamadas** para llegar al mismo estado —una Mercado Pago y Kushki, dos Wompi, que nace `PENDING`, y tres Rapyd, que cobra la tarjeta en su página alojada y redirige—. El código del comercio es el mismo para las cuatro: el resultado se consulta cuando `isFinal()` dice que todavía no es definitivo, sin preguntar qué pasarela es.
 
-Explicación completa, con los límites de la demostración, en [`docs/examples/gateway-interchangeability.md`](../docs/examples/gateway-interchangeability.md).
+Explicación completa, con los límites de la demostración, en [`docs/05-ejemplos/intercambiabilidad.md`](../docs/05-ejemplos/intercambiabilidad.md).
 
 ---
 

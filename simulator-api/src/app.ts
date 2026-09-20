@@ -14,7 +14,7 @@ import { kushkiRoutes } from "./routes/kushki";
  * produccion, sin necesidad de abrir un socket de red.
  *
  * A medida que se implementen los componentes descritos en
- * docs/architecture/layers-and-components.md (HTTPRouter, ScenarioEngine,
+ * docs/02-arquitectura/layers-and-components.md (HTTPRouter, ScenarioEngine,
  * etc.), sus plugins se registran aqui, no en server.ts.
  */
 export function buildApp(): FastifyInstance {
