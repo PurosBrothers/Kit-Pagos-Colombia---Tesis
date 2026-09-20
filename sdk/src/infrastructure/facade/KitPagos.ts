@@ -127,8 +127,14 @@ export class KitPagos {
     let isValid: boolean;
     try {
       isValid = this.verifier.verify(payload, headers, secret, gateway);
-    } catch {
-      isValid = false;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Malformed webhook payload or headers";
+      throw new KitPagosError(
+        KitPagosErrorCode.MALFORMED_RESPONSE,
+        gateway,
+        null,
+        `Malformed webhook: ${msg}`,
+      );
     }
 
     if (!isValid) {
@@ -139,6 +145,17 @@ export class KitPagos {
         "Invalid webhook signature",
       );
     }
-    return this.verifier.parse(payload, gateway);
+
+    try {
+      return this.verifier.parse(payload, gateway);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Failed to parse webhook payload";
+      throw new KitPagosError(
+        KitPagosErrorCode.MALFORMED_RESPONSE,
+        gateway,
+        null,
+        `Malformed webhook: ${msg}`,
+      );
+    }
   }
 }

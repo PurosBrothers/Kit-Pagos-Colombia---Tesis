@@ -34,7 +34,11 @@ export class RapydWebhookHandler implements GatewayWebhookHandler {
     const accessKey = headers["access_key"] ?? "";
     const salt = headers["salt"] ?? "";
     const timestamp = headers["timestamp"] ?? "";
-    const webhookUrl = headers["x-webhook-url"] ?? "";
+    const webhookUrl = headers["x-webhook-url"];
+
+    if (!webhookUrl) {
+      throw new Error("Missing required header: x-webhook-url");
+    }
 
     const toSign = webhookUrl + salt + timestamp + accessKey + secret + payload;
 

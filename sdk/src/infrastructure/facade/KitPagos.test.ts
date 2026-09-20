@@ -440,6 +440,65 @@ describe("KitPagos", () => {
           expect(sdkError.message).not.toContain("card-number-1234");
         }
       });
+
+      it("should throw KitPagosError(MALFORMED_RESPONSE) when payload is not valid JSON", () => {
+        const sdk = buildConfiguredSdk();
+        const malformedPayload = "{ bad json";
+        const headers = { "x-event-checksum": "abc" };
+
+        try {
+          sdk.validateWebhook(malformedPayload, headers);
+          fail("Should have thrown KitPagosError");
+        } catch (error) {
+          const sdkError = error as KitPagosError;
+          expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
+          expect(sdkError.originalPayload).toBeNull();
+        }
+      });
+
+      it("should throw KitPagosError(MALFORMED_RESPONSE) when Rapyd webhook is missing x-webhook-url header", () => {
+        const rapydSecret = "rapyd_sec_999";
+        const sdk = new KitPagos({
+          gateway: Gateway.RAPYD,
+          credentials: {
+            [Gateway.RAPYD]: { publicKey: "rapyd_pub", privateKey: rapydSecret },
+          },
+        });
+
+        const payload = JSON.stringify({ type: "PAYMENT_COMPLETED", data: { id: "p-1" } });
+        const headers = {
+          signature: "some-sig",
+          access_key: "ak",
+          salt: "salt",
+          timestamp: "1727001234",
+          // missing x-webhook-url
+        };
+
+        try {
+          sdk.validateWebhook(payload, headers);
+          fail("Should have thrown KitPagosError");
+        } catch (error) {
+          const sdkError = error as KitPagosError;
+          expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
+          expect(sdkError.message).toContain("x-webhook-url");
+          expect(sdkError.originalPayload).toBeNull();
+        }
+      });
+
+      it("should throw KitPagosError(MALFORMED_RESPONSE) when Wompi webhook lacks signature properties", () => {
+        const sdk = buildConfiguredSdk();
+        const payload = JSON.stringify({ event: "transaction.updated" }); // lacks signature.properties
+        const headers = { "x-event-checksum": "abc" };
+
+        try {
+          sdk.validateWebhook(payload, headers);
+          fail("Should have thrown KitPagosError");
+        } catch (error) {
+          const sdkError = error as KitPagosError;
+          expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
+          expect(sdkError.originalPayload).toBeNull();
+        }
+      });
     });
 
     describe("configuration errors", () => {

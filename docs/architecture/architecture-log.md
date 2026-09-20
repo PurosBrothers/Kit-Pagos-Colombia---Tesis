@@ -2130,6 +2130,8 @@ El `catch` sin filtro convierte cualquier excepción en "firma inválida". Eso i
 
 Desde el punto de vista de seguridad, fallar cerrado es la decisión correcta y hay que conservarla. Lo que falta es distinguir en el diagnóstico: `MALFORMED_RESPONSE` para lo que no se pudo interpretar y `WEBHOOK_SIGNATURE_INVALID` para lo que se interpretó y no coincidió. Sin esa distinción, un comercio que despliegue mal el middleware de Rapyd (sin inyectar `x-webhook-url`, ver 36.1) va a ver "firma inválida" en todos sus webhooks y no tiene ninguna pista de que el problema es su integración y no un ataque.
 
+**Resolución:** Resuelto en `KitPagos.validateWebhook()`. Las excepciones producidas al verificar cabeceras/estructura o al parsear el JSON son capturadas y traducidas a `KitPagosError(MALFORMED_RESPONSE)` con `originalPayload: null` (para evitar fugas de datos sensibles conforme a RF-08). `WEBHOOK_SIGNATURE_INVALID` se reserva exclusivamente para cuando la estructura es válida pero la firma no coincide. Asimismo, `RapydWebhookHandler.verify()` ahora valida explícitamente la presencia de `x-webhook-url` y lanza error si falta.
+
 #### 36.7. Resumen del estado de seguridad
 
 | Aspecto | Estado |
@@ -2142,9 +2144,9 @@ Desde el punto de vista de seguridad, fallar cerrado es la decisión correcta y 
 | Protección contra replay | ✗ **Ausente en las cuatro** (36.3) |
 | Secreto de webhook separado de la llave de API | ✗ **Imposible con el contrato actual** (36.4) |
 | Verificar webhooks de una pasarela no activa | ✗ **No soportado** (36.5) |
-| Distinguir cuerpo malformado de firma falsificada | ✗ **No se distingue** (36.6) |
+| Distinguir cuerpo malformado de firma falsificada | ✓ **Resuelto** (36.6) |
 
-**Estado:** documentado. Los cuatro huecos requieren issues propios que todavía no existen; el de replay (36.3) y el de credenciales (36.4) son los que bloquean un uso en producción.
+**Estado:** parcialmente resuelto. El hueco de distinción de error de webhook (36.6) queda resuelto; los huecos de replay (36.3), credenciales (36.4) y pasarela no activa (36.5) siguen documentados.
 
 ---
 
