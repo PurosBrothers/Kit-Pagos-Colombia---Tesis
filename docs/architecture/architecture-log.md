@@ -1608,6 +1608,34 @@ Se eligió sobre la alternativa obvia —cuatro parámetros posicionales, `(payl
 
 ---
 
+### 57. Soporte de `baseUrl` diferenciada por pasarela en `SDKOptions`: resolución de endpoints productivos simultáneos sin colisión (issue #88)
+
+**Responsable de corregirlo en el SAD:** Joshua (sección 9.1.1, fachada `KitPagos` y configuración `SDKOptions`).
+
+**Contexto:**
+Durante la auditoría de preparación para el despliegue del SDK en entornos productivos (Restricción 5), se identificó una limitación en el contrato de configuración `SDKOptions`: el parámetro `baseUrl` estaba tipado exclusivamente como `baseUrl?: string`.
+Si bien una URL global es suficiente para apuntar todo el SDK al componente `api-simulator` (`http://localhost:3000/v1/sim`) en desarrollo local, cuando un comercio configura credenciales para múltiples pasarelas en producción (por ejemplo Wompi y Mercado Pago para balanceo de carga, contingencia o migración gradual), no existía una manera de configurar los endpoints productivos oficiales de cada proveedor sin que colisionaran (`https://production.wompi.co/v1` vs `https://api.mercadopago.com/v1`). Al configurar la URL de una, las peticiones hacia la otra fallaban al invocar rutas inexistentes sobre el dominio equivocado.
+
+**Decisión:**
+1. Se extendió la firma de `SDKOptions.baseUrl` en `sdk/src/infrastructure/config/SDKConfigurator.ts` para admitir tanto un `string` global como un diccionario parcial por pasarela:
+   ```typescript
+   baseUrl?: string | Partial<Record<Gateway, string>>;
+   ```
+2. Se modificó el método `getBaseUrl(gateway?: Gateway): string | undefined` en `SdkConfigurator` para que:
+   - Si `baseUrl` es un `string`, retorne esa URL sin importar la pasarela solicitada (garantizando 100% de retrocompatibilidad con el `api-simulator` y proxies).
+   - Si `baseUrl` es un objeto, resuelva `baseUrl[gateway]` o `baseUrl[this.activeGateway]`. Si no está definido para esa pasarela, devuelve `undefined`, permitiendo que el adaptador respectivo utilice su endpoint predeterminado.
+3. En la fachada `KitPagos.ts`, el método interno `resolveAdapter()` ahora delega la pasarela a la configuración:
+   ```typescript
+   this.factory.create(gateway, credentials, this.configurator.getBaseUrl(gateway));
+   ```
+4. Se documentó su uso en el manual del desarrollador (`sdk/README.md`) y se incorporaron pruebas unitarias en `SDKConfigurator.test.ts` y `KitPagos.test.ts`.
+
+**Impacto en métricas:** Las 31 clases del SDK mantienen sus métricas CK dentro de los umbrales de la metodología (WMC ≤ 20, CBO ≤ 5, RFC ≤ 20). En particular, `SdkConfigurator` reporta WMC = 15, CBO = 2, RFC = 8, MaxCC = 6.
+
+**Estado:** Resuelto y probado con la suite unitaria (583 pruebas), la suite de sandbox real (16 pruebas) y los 10 ejemplos integrados de `examples/`.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum

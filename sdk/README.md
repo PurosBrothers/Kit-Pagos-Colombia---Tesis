@@ -98,7 +98,7 @@ const sdk = new KitPagos({
 });
 ```
 
-> **Entornos y URLs Base (`baseUrl`).** Por defecto, el SDK apunta al simulador integrado (`http://localhost:3000/v1/sim/{gateway}`) para permitir desarrollo, pruebas y evaluación sin costo ni credenciales reales. **Para conectar a producción y procesar pagos reales**, es indispensable configurar el parámetro `baseUrl`.
+> **Entornos y URLs Base (`baseUrl`).** Por defecto, el SDK apunta al simulador integrado (`http://localhost:3000/v1/sim/{gateway}`) para permitir desarrollo, pruebas y evaluación sin costo ni credenciales reales. **Para conectar a producción y procesar pagos reales**, es indispensable configurar el parámetro `baseUrl` (como cadena global o como diccionario mapeando cada pasarela a su URL productiva).
 
 > **`webhookSecret` no es la llave de API.** En Wompi, Mercado Pago y Kushki el secreto que
 > firma los webhooks es un valor distinto, que se saca de otra parte del panel. Si lo omitís,
@@ -333,6 +333,30 @@ Por diseño de la arquitectura para soportar desarrollo ágil y evaluación acad
 | **Mercado Pago** | `https://api.mercadopago.com/v1` |
 | **Kushki** | `https://api.kushkipagos.com` |
 | **Rapyd** | `https://api.rapyd.net/v1` |
+
+Puedes configurar `baseUrl` como una URL global (`string`) o como un diccionario para soportar múltiples pasarelas en el mismo servidor:
+
+```typescript
+import { KitPagos, Gateway } from "kit-pagos-colombia";
+
+const sdkMultiPasarela = new KitPagos({
+  gateway: Gateway.WOMPI,
+  credentials: {
+    [Gateway.WOMPI]: {
+      publicKey: process.env.WOMPI_PUBLIC_KEY!,
+      privateKey: process.env.WOMPI_PRIVATE_KEY!,
+    },
+    [Gateway.MERCADOPAGO]: {
+      publicKey: process.env.MP_PUBLIC_KEY!,
+      privateKey: process.env.MP_ACCESS_TOKEN!,
+    },
+  },
+  baseUrl: {
+    [Gateway.WOMPI]: "https://production.wompi.co/v1",
+    [Gateway.MERCADOPAGO]: "https://api.mercadopago.com/v1",
+  },
+});
+```
 
 ### 2. Tokenización en Frontend y Cumplimiento PCI-DSS
 Por regulaciones bancarias internacionales (PCI-DSS) y de la Superintendencia Financiera de Colombia (SFC), **un servidor backend nunca debe recibir datos sensibles de tarjetas (número de 16 dígitos, fecha de expiración o CVV) en texto plano**, a menos que cuente con certificación PCI-DSS Nivel 1.
