@@ -1688,6 +1688,34 @@ Cada hueco es un lugar donde un ejemplo verde miente. Y cerrarlos a mano tiene u
 
 ---
 
+### 60. El desglose tributario de Kushki se resolvió reusando `TaxBreakdown`, no armándolo a mano en el adaptador
+
+**Responsable:** Henao (issue #53, PR #86).
+
+**Contexto.** El issue #53 identificó que Kushki es la única de las cuatro pasarelas que no recibe un monto escalar: exige un objeto `amount` descompuesto por impuesto (`subtotalIva0`, `subtotalIva`, `iva`, `ice`). Como ese desglose depende de reglas tributarias colombianas que el proyecto explícitamente no modela, el issue proponía una salida mínima para esta iteración: mandar el total completo en `subtotalIva0`, dejar el resto de componentes en cero, construir ese objeto a mano dentro de `KushkiAdapter`, y dejarlo anotado con un comentario explicando que era una simplificación deliberada.
+
+**Lo que cambió antes de que este issue se implementara.** Para cuando se escribió `KushkiAdapter`, `TaxBreakdown` ya existía en el dominio (agregado junto con la migración de `Amount` a representación en string, punto 25) con cuatro constructores — `exempt()`, `fromTaxIncluded()`, `fromTaxExcluded()`, `fromComponents()` — y su invariante ya estaba garantizada por construcción: los cuatro componentes siempre suman exactamente el total, calculando un lado y derivando el otro por resta. `PaymentGatewayPort` ya declaraba `taxBreakdown?: TaxBreakdown` como campo opcional de `CreatePaymentRequest`.
+
+**Decisión.** Se descarta la solución del issue (objeto armado a mano, comentario explicando la simplificación) en favor de reusar el objeto de valor que ya resolvía exactamente este problema. La función `resolveTaxBreakdown(request)` en `sdk/src/infrastructure/adapters/kushki-amount.ts` concentra la regla:
+
+```ts
+const taxBreakdown =
+  request.taxBreakdown ??
+  TaxBreakdown.exempt(request.amount, request.currency);
+```
+
+- Cuando el comercio no informa `taxBreakdown`, se trata el monto completo como exento — el mismo resultado que el issue pedía (todo en `subtotalIva0`, resto en cero), sin construir el objeto campo por campo. El docblock de la función es explícito sobre por qué: el dominio no modela reglas tributarias colombianas, e inventar un IVA sería peor que no calcularlo, porque el error quedaría escondido dentro de un cobro que parece correcto.
+- Cuando el comercio sí lo informa, `resolveTaxBreakdown()` además **verifica que las partes sumen el total** (`taxBreakdown.getTotal().equals(request.amount)`) y lanza si no cuadra, porque un desglose que no cuadra hace que Kushki cobre un importe distinto del que el comercio pidió — un defecto que se descubriría conciliando, no cobrando. Esta verificación no la pedía el issue; es una consecuencia natural de centralizar la regla en un solo lugar en vez de confiar en que cada llamador la respete.
+- `examples/simulate-kushki-payment.ts` ejercita el camino informado con `TaxBreakdown.fromTaxIncluded(amount, "0.19", currency)`, derivando base gravable e IVA de un precio que ya incluye impuesto, sin perder centavos.
+
+**Por qué es una función de módulo y no un método del adaptador.** La lógica se escribió primero dentro de `KushkiAdapter` (inline en `createPayment()`, después como métodos privados), pero al llegar PSE —que necesita el mismo desglose para Transfer In— esos métodos empezaron a aparecer en más firmas y `TaxBreakdown` se sumó al acoplamiento de la clase, llevando su CBO a 7 contra el umbral de 5. Se extrajo a `kushki-amount.ts` como función de módulo, siguiendo el mismo criterio ya usado en `rapyd-signature.ts` y `payload-utils.ts` (punto 34): como función de módulo no le cuesta acoplamiento ni complejidad a ninguna clase, y de paso queda probable sin montar una petición HTTP. Es usada tanto por el cobro con tarjeta (`kushki-charge.ts`, vía `buildKushkiAmount()`) como por Transfer In (`createTransferPayment()`), consistente con que el mismo desglose lo exigen los dos métodos de pago.
+
+Es preferible al enfoque original por lo mismo que motivó crear `TaxBreakdown` en primer lugar (punto 25): un objeto armado a mano no protege ningún invariante, solo lo describe en un comentario que nadie hace cumplir. Con `TaxBreakdown` y `resolveTaxBreakdown()`, que los cuatro componentes sumen el total es una garantía verificada en un único lugar, no una promesa de texto repetida por cada llamador.
+
+**Estado:** Resuelto en código (`kushki-amount.ts`, `kushki-charge.ts`, `KushkiAdapter.ts`, `examples/simulate-kushki-payment.ts`) y probado (`KushkiAdapter.test.ts`: desglose completo, desglose informado por el comercio, totales de impuestos inválidos). No requiere cambios en el SAD: la justificación arquitectónica original del issue #53 — que el desglose tributario es una exigencia del formato de Kushki y no un concepto del dominio compartido — sigue vigente sin modificación; lo único que cambió fue el mecanismo dentro del adaptador, no la decisión de dónde vive el concepto.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum
