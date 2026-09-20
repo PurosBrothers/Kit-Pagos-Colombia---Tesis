@@ -18,6 +18,11 @@ describe("KitPagos", () => {
   const wompiCredentials: Credentials = {
     publicKey: "pub_test_wompi_123",
     privateKey: "prv_test_wompi_456",
+    // Wompi no crea ninguna transacción sin firma de integridad, y desde el issue #92
+    // el SDK lo exige antes de salir a la red en vez de dejar que conteste un 422. Un
+    // comercio con credenciales incompletas no llega a cobrar, así que la configuración
+    // de estas pruebas tampoco debería.
+    integritySecret: "int_test_wompi_789",
   };
 
   const validRequest: CreatePaymentRequest = {
@@ -41,6 +46,28 @@ describe("KitPagos", () => {
     },
   };
 
+  /**
+   * Respuesta de `GET /merchants/{llave pública}`, de donde sale el token de aceptación.
+   *
+   * Está aparte de la respuesta de la transacción porque **Wompi las distingue y el doble
+   * también tiene que distinguirlas**. Un doble que contestara lo mismo a todo dejaría al
+   * token de aceptación en `undefined` sin que ninguna prueba se queje, que es exactamente
+   * la clase de mock cómodo que este proyecto encontró tres veces escondiendo defectos.
+   */
+  const wompiMerchantResponse = {
+    data: { presigned_acceptance: { acceptance_token: "acc_tok_test_no_real" } },
+  };
+
+  /** Doble de `fetch` que responde según la ruta, como la API de Wompi. */
+  function mockWompiFetch(transactionResponse: unknown = approvedWompiResponse): jest.Mock {
+    return jest.fn().mockImplementation(async (url: unknown) => ({
+      ok: true,
+      status: 201,
+      json: async () =>
+        String(url).includes("/merchants/") ? wompiMerchantResponse : transactionResponse,
+    }));
+  }
+
   /** Configuración mínima y válida para consumir el mock de la API de Simulación. */
   function buildConfiguredSdk(baseUrl?: string): KitPagos {
     return new KitPagos({
@@ -60,11 +87,7 @@ describe("KitPagos", () => {
 
   describe("createPayment()", () => {
     it("should return an approved Transaction, going through the real chain", async () => {
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: true,
-        status: 201,
-        json: async () => approvedWompiResponse,
-      });
+      global.fetch = mockWompiFetch();
 
       const transaction = expectTransaction(await buildConfiguredSdk().createPayment(validRequest));
 
@@ -81,11 +104,7 @@ describe("KitPagos", () => {
     });
 
     it("should send the configured credentials as a Bearer token to the gateway", async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        status: 201,
-        json: async () => approvedWompiResponse,
-      });
+      const mockFetch = mockWompiFetch();
       global.fetch = mockFetch;
 
       await buildConfiguredSdk().createPayment(validRequest);
@@ -105,11 +124,7 @@ describe("KitPagos", () => {
       // Desde el issue #64 el baseUrl es la raíz de la API, no el endpoint de
       // transacciones: el adaptador le agrega la ruta que corresponda.
       const simulatorRoot = "http://localhost:4000/v1/sim/wompi";
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        status: 201,
-        json: async () => approvedWompiResponse,
-      });
+      const mockFetch = mockWompiFetch();
       global.fetch = mockFetch;
 
       await buildConfiguredSdk(simulatorRoot).createPayment(validRequest);
@@ -582,6 +597,198 @@ describe("KitPagos", () => {
           const sdkError = error as KitPagosError;
           expect(sdkError.code).toBe(KitPagosErrorCode.INVALID_CREDENTIALS);
           expect(sdkError.gateway).toBe(Gateway.WOMPI);
+        }
+      });
+    });
+
+    /*
+     * Hueco 2 del punto 36 del `architecture-log.md`, cerrado en el issue #92.
+     *
+     * En Wompi el secreto de eventos es un valor distinto de la llave privada, así que
+     * usar `privateKey` para verificar no era una simplificación: **era no poder verificar
+     * ningún webhook real de Wompi**. Estas pruebas firman con un secreto y configuran el
+     * otro, que es la única forma de distinguir cuál de los dos está usando el SDK: si se
+     * configuran iguales, como hacía el simulador, el defecto es invisible.
+     */
+    describe("webhook secret separate from the API key", () => {
+      const eventsSecret = "wompi_events_secret_no_es_la_llave";
+
+      /*
+       * El timestamp del webhook es fijo para que la firma sea reproducible, así que las
+       * pruebas que esperan verificación exitosa tienen que fijar también el reloj con
+       * `currentTimestamp`: si no, la protección contra reenvío lo descarta por viejo y el
+       * fallo se lee como firma inválida, tapando lo que estas pruebas miden.
+       */
+      const eventTimestamp = 1602113476;
+
+      /** Firma un webhook de Wompi con el secreto que se le pase. */
+      function signWompiWebhook(secret: string): {
+        payload: string;
+        headers: Record<string, string>;
+      } {
+        const timestamp = eventTimestamp;
+        const txId = "wompi-tx-secreto-de-eventos";
+        const status = "APPROVED";
+
+        const checksum = crypto
+          .createHash("sha256")
+          .update(`${txId}${status}${timestamp}${secret}`)
+          .digest("hex");
+
+        return {
+          payload: JSON.stringify({
+            event: "transaction.updated",
+            data: { transaction: { id: txId, status } },
+            timestamp,
+            signature: {
+              properties: ["data.transaction.id", "data.transaction.status"],
+              checksum,
+            },
+          }),
+          headers: { "x-event-checksum": checksum },
+        };
+      }
+
+      it("verifica con webhookSecret cuando está configurado", () => {
+        const { payload, headers } = signWompiWebhook(eventsSecret);
+
+        const sdk = new KitPagos({
+          gateway: Gateway.WOMPI,
+          credentials: {
+            [Gateway.WOMPI]: { ...wompiCredentials, webhookSecret: eventsSecret },
+          },
+        });
+
+        const event = sdk.validateWebhook(payload, headers, {
+          currentTimestamp: eventTimestamp,
+        });
+
+        expect(event.gateway).toBe(Gateway.WOMPI);
+        expect(event.gatewayTransactionId).toBe("wompi-tx-secreto-de-eventos");
+      });
+
+      it("rechaza un webhook firmado con la llave de API cuando hay webhookSecret", () => {
+        // El SDK no prueba los dos secretos: prefiere uno. Sin esta prueba, un
+        // respaldo silencioso a `privateKey` pasaría por verificación correcta.
+        const { payload, headers } = signWompiWebhook(wompiCredentials.privateKey);
+
+        const sdk = new KitPagos({
+          gateway: Gateway.WOMPI,
+          credentials: {
+            [Gateway.WOMPI]: { ...wompiCredentials, webhookSecret: eventsSecret },
+          },
+        });
+
+        expect(() => sdk.validateWebhook(payload, headers)).toThrow(KitPagosError);
+      });
+
+      it("cae a privateKey cuando no hay webhookSecret, que es lo correcto en Rapyd", () => {
+        // Rapyd firma sus webhooks con el mismo `secret_key` que autentica la API, así
+        // que para esa pasarela el respaldo no es compatibilidad sino el comportamiento
+        // correcto. En las otras tres es solo no romper el código escrito antes del campo.
+        const { payload, headers } = signWompiWebhook(wompiCredentials.privateKey);
+
+        const event = buildConfiguredSdk().validateWebhook(payload, headers, {
+          currentTimestamp: eventTimestamp,
+        });
+
+        expect(event.gatewayTransactionId).toBe("wompi-tx-secreto-de-eventos");
+      });
+
+    });
+
+    /*
+     * Hueco 3 del punto 36, cerrado en el issue #92.
+     *
+     * Durante una migración el comercio recibe webhooks de la pasarela vieja mientras
+     * cobra por la nueva, y ese es el caso de uso central de la tesis. Sin el tercer
+     * parámetro había que instanciar un segundo `KitPagos`.
+     */
+    describe("webhooks from a gateway that is not the active one", () => {
+      it("verifica un webhook de Wompi mientras la pasarela activa es Mercado Pago", () => {
+        const timestamp = 1602113476;
+        const txId = "wompi-tx-de-la-pasarela-vieja";
+        const status = "APPROVED";
+        const checksum = crypto
+          .createHash("sha256")
+          .update(`${txId}${status}${timestamp}${wompiCredentials.privateKey}`)
+          .digest("hex");
+
+        const payload = JSON.stringify({
+          event: "transaction.updated",
+          data: { transaction: { id: txId, status } },
+          timestamp,
+          signature: {
+            properties: ["data.transaction.id", "data.transaction.status"],
+            checksum,
+          },
+        });
+
+        const sdk = new KitPagos({
+          gateway: Gateway.MERCADOPAGO,
+          credentials: {
+            [Gateway.MERCADOPAGO]: {
+              publicKey: "mp_public_key_123",
+              privateKey: "mp_secret_key_789",
+            },
+            [Gateway.WOMPI]: wompiCredentials,
+          },
+        });
+
+        const event = sdk.validateWebhook(
+          payload,
+          { "x-event-checksum": checksum },
+          { gateway: Gateway.WOMPI, currentTimestamp: timestamp },
+        );
+
+        expect(event.gateway).toBe(Gateway.WOMPI);
+        expect(event.gatewayTransactionId).toBe(txId);
+      });
+
+      it("sigue usando la pasarela activa cuando no se le pasa ninguna", () => {
+        // Es lo que hace que agregar el parámetro no rompa a quien ya llamaba con dos
+        // argumentos, que importa porque el cambio entra justo antes de publicar en npm.
+        const timestamp = 1602113476;
+        const txId = "wompi-tx-por-defecto";
+        const checksum = crypto
+          .createHash("sha256")
+          .update(`${txId}APPROVED${timestamp}${wompiCredentials.privateKey}`)
+          .digest("hex");
+
+        const payload = JSON.stringify({
+          event: "transaction.updated",
+          data: { transaction: { id: txId, status: "APPROVED" } },
+          timestamp,
+          signature: {
+            properties: ["data.transaction.id", "data.transaction.status"],
+            checksum,
+          },
+        });
+
+        const event = buildConfiguredSdk().validateWebhook(
+          payload,
+          { "x-event-checksum": checksum },
+          { currentTimestamp: timestamp },
+        );
+
+        expect(event.gateway).toBe(Gateway.WOMPI);
+      });
+
+      it("exige credenciales de la pasarela que se le pide, no de la activa", () => {
+        // La pasarela tiene que estar en `credentials`, aunque no esté activa. Sin esto,
+        // el error señalaría a la pasarela equivocada y mandaría a revisar la config buena.
+        const sdk = new KitPagos({
+          gateway: Gateway.WOMPI,
+          credentials: { [Gateway.WOMPI]: wompiCredentials },
+        });
+
+        try {
+          sdk.validateWebhook("{}", {}, { gateway: Gateway.KUSHKI });
+          fail("Should have thrown KitPagosError");
+        } catch (error) {
+          const sdkError = error as KitPagosError;
+          expect(sdkError.code).toBe(KitPagosErrorCode.INVALID_CREDENTIALS);
+          expect(sdkError.gateway).toBe(Gateway.KUSHKI);
         }
       });
     });

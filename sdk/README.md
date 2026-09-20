@@ -27,8 +27,15 @@ Diseñado bajo los principios de **Arquitectura Hexagonal (Ports & Adapters)** y
 |---|:---:|:---:|:---:|:---:|
 | **Wompi** | ✅ | ✅ | ✅ | ✅ |
 | **Mercado Pago** | ✅ | ✅ | ✅ | ✅ |
-| **Kushki** | ✅ | ✅ | ✅ | ✅ |
+| **Kushki** | ✅ | ✅ | ✅ | Solo PSE |
 | **Rapyd** | ✅ | ✅ | ✅ | ✅ |
+
+> **Kushki y la consulta de tarjeta.** La única consulta de tarjeta que Kushki publica es la
+> de su flujo **asíncrono** (`/card-async`, preautorización y captura), y un cobro del flujo
+> síncrono no queda registrado ahí: responde `CAS004 "No existe la transacción"`. El SDK la
+> intenta y, cuando contesta eso, lanza `UNSUPPORTED_OPERATION` explicándolo, en vez de
+> acusar a tus credenciales. No te quedás sin el dato: el estado ya viene resuelto en la
+> respuesta de `createPayment()`, y los cambios posteriores llegan por webhook.
 
 ---
 
@@ -65,19 +72,24 @@ const sdk = new KitPagos({
     [Gateway.WOMPI]: {
       publicKey: process.env.WOMPI_PUBLIC_KEY!,
       privateKey: process.env.WOMPI_PRIVATE_KEY!,
-      integritySecret: process.env.WOMPI_INTEGRITY_SECRET,
+      integritySecret: process.env.WOMPI_INTEGRITY_SECRET, // Firma los cobros que creás
+      webhookSecret: process.env.WOMPI_EVENTS_SECRET,      // Verifica los webhooks que recibís
     },
     [Gateway.MERCADOPAGO]: {
       publicKey: process.env.MP_PUBLIC_KEY!,
       privateKey: process.env.MP_ACCESS_TOKEN!,
+      webhookSecret: process.env.MP_WEBHOOK_SECRET,
     },
     [Gateway.KUSHKI]: {
       publicKey: process.env.KUSHKI_PUBLIC_ID!,
       privateKey: process.env.KUSHKI_PRIVATE_ID!,
+      webhookSecret: process.env.KUSHKI_WEBHOOK_SECRET,
     },
     [Gateway.RAPYD]: {
       publicKey: process.env.RAPYD_ACCESS_KEY!,
       privateKey: process.env.RAPYD_SECRET_KEY!,
+      // Rapyd es la única que firma sus webhooks con la misma llave de la API,
+      // así que acá `webhookSecret` no hace falta.
     },
   },
   maxRetries: 3,                 // Reintentos automáticos ante fallos transitorios
@@ -85,26 +97,38 @@ const sdk = new KitPagos({
 });
 ```
 
+> **`webhookSecret` no es la llave de API.** En Wompi, Mercado Pago y Kushki el secreto que
+> firma los webhooks es un valor distinto, que se saca de otra parte del panel. Si lo omitís,
+> el SDK cae a `privateKey` por compatibilidad y **la verificación de webhooks reales de esas
+> tres va a fallar**, con un error de firma inválida que parece un ataque y es configuración.
+> En Wompi, además, `integritySecret` y `webhookSecret` son dos secretos distintos: el primero
+> firma lo que mandás, el segundo verifica lo que te llega.
+
 ---
 
 ### 2. Crear una Transacción con Tarjeta
 
 ```typescript
-import { Amount, Currency, PaymentMethod } from "kit-pagos-colombia";
+import { Amount, Currency, OrderReference, Payer, PaymentMethod } from "kit-pagos-colombia";
 
 async function cobrarConTarjeta() {
   const result = await sdk.createPayment({
     amount: new Amount("75000"), // $75.000 COP
     currency: new Currency("COP"),
-    orderReference: "ORD-2026-0901",
-    payerEmail: "cliente@ejemplo.com",
-    paymentMethod: PaymentMethod.card({
-      token: "tok_test_card_12345",
-      installments: 1,
+    orderReference: new OrderReference("ORD-2026-0901"),
+    payer: new Payer({
+      email: "cliente@ejemplo.com",
+      fullName: "Jaime Pavlich",
     }),
+    // El token lo emite la tokenización de la pasarela desde el navegador, y el SDK lo
+    // trata como cadena opaca: el número de la tarjeta nunca llega a tu servidor, que es
+    // lo que te mantiene fuera del alcance de PCI DSS.
+    paymentMethod: PaymentMethod.card("tok_test_card_12345", { installments: 1 }),
   });
 
-  if (result.type === "TRANSACTION") {
+  // El resultado es una unión discriminada por `outcome`: el campo `transaction` no
+  // existe hasta que descartás el caso de redirección, así que olvidarla no compila.
+  if (result.outcome === "TRANSACTION") {
     const tx = result.transaction;
     console.log(`Estado: ${tx.getStatus()}`); // APPROVED, DECLINED, PENDING...
     console.log(`ID Pasarela: ${tx.gatewayTransactionId.value}`);
@@ -112,34 +136,55 @@ async function cobrarConTarjeta() {
 }
 ```
 
+> Con tarjeta también podés recibir `REDIRECT_REQUIRED`: Rapyd cobra en su página alojada, y
+> cualquiera de las cuatro puede pedir autenticación 3DS. Tratá las dos ramas siempre.
+
 ---
 
 ### 3. Crear una Transacción con PSE (Redirección Bancaria)
 
 ```typescript
-import { Amount, Currency, PaymentMethod, ReturnUrlConfig } from "kit-pagos-colombia";
+import {
+  Amount,
+  Currency,
+  OrderReference,
+  Payer,
+  PaymentMethod,
+  ReturnUrlConfig,
+} from "kit-pagos-colombia";
 
 async function pagarConPSE() {
   const result = await sdk.createPayment({
     amount: new Amount("150000"),
     currency: new Currency("COP"),
-    orderReference: "ORD-PSE-8841",
-    payerEmail: "comprador@banco.com",
+    orderReference: new OrderReference("ORD-PSE-8841"),
+    payer: new Payer({
+      email: "comprador@banco.com",
+      fullName: "Jaime Pavlich",
+      // PSE exige el documento del pagador en las cuatro pasarelas. Si falta, el SDK
+      // corta antes de la llamada de red en vez de traducirte un HTTP 400.
+      documentType: "CC",
+      documentNumber: "1099888777",
+    }),
     paymentMethod: PaymentMethod.pse({
-      bankCode: "1022", // Código ACH del banco
-      userType: "0",    // 0: Persona natural, 1: Jurídica
-      userLegalIdType: "CC",
-      userLegalId: "1234567890",
+      bankCode: "1022",       // Código del banco, tal como lo dio getPseBanks()
+      payerKind: "NATURAL",   // "NATURAL" o "LEGAL". Por defecto: "NATURAL"
     }),
     returnUrlConfig: new ReturnUrlConfig("https://mitienda.com/checkout/resultado"),
   });
 
-  if (result.type === "REDIRECT_REQUIRED") {
+  if (result.outcome === "REDIRECT_REQUIRED") {
     // Redirige al pagador a la URL de su banco
-    console.log(`Redirigir a: ${result.redirectUrl}`);
+    console.log(`Redirigir a: ${result.redirect.redirectUrl}`);
+    // Guardá este identificador: es con lo que consultás el pago si el pagador no vuelve.
+    console.log(`ID Pasarela: ${result.redirect.gatewayTransactionId.value}`);
   }
 }
 ```
+
+> Los `bankCode` salen de `sdk.getPseBanks()` y **solo valen en la pasarela que los dio**:
+> cambiar de pasarela obliga a volver a pedir la lista. Es la consecuencia de que cada una
+> identifique los bancos a su manera; lo que el SDK garantiza es que no tengas que saber cómo.
 
 ---
 
@@ -152,7 +197,9 @@ async function verificarEstado(transactionId: string) {
   if (transaction.isApproved()) {
     console.log("¡Pago aprobado exitosamente!");
   } else if (transaction.getStatus() === "DECLINED") {
-    console.log(`Pago rechazado: ${transaction.rejectionReason?.message}`);
+    // El código nativo de la pasarela, más la categoría ya normalizada por el SDK.
+    console.log(`Rechazo: ${transaction.rejectionReason?.rejectionCategory}`);
+    console.log(`Código de la pasarela: ${transaction.rejectionReason?.rejectionCode}`);
   }
 }
 ```
@@ -191,6 +238,29 @@ app.post("/webhook", (req, res) => {
 });
 ```
 
+**Webhooks de una pasarela que no es la activa.** Durante una migración cobrás por la pasarela
+nueva y seguís recibiendo webhooks de la vieja por semanas: pagos ya iniciados, conciliaciones,
+reembolsos. Pasale la pasarela emisora y no necesitás un segundo `KitPagos`; alcanza con que
+esté en `credentials`, no hace falta que esté activa:
+
+```typescript
+const PASARELAS = {
+  wompi: Gateway.WOMPI,
+  mercadopago: Gateway.MERCADOPAGO,
+} as const;
+
+app.post("/webhooks/:pasarela", (req, res) => {
+  const event = sdk.validateWebhook(req.rawBody, req.headers as Record<string, string>, {
+    gateway: PASARELAS[req.params.pasarela as keyof typeof PASARELAS],
+  });
+  res.status(200).send("OK");
+});
+```
+
+> Si tu servidor tiene el reloj desfasado, la protección anti-replay va a rechazar webhooks
+> legítimos con `WEBHOOK_SIGNATURE_INVALID`. Podés ampliar la ventana con `toleranceSeconds`,
+> o desactivarla con `0`, pero lo correcto es sincronizar el reloj.
+
 ---
 
 ### 6. Manejo Unificado de Errores
@@ -198,27 +268,29 @@ app.post("/webhook", (req, res) => {
 Todos los fallos técnicos se transforman en instancias de `KitPagosError` con códigos homogéneos:
 
 ```typescript
-import { KitPagosError, KitPagosErrorCode } from "kit-pagos-colombia";
+import { CreatePaymentRequest, KitPagosError, KitPagosErrorCode } from "kit-pagos-colombia";
 
-try {
-  await sdk.createPayment({ /* ... */ });
-} catch (error) {
-  if (error instanceof KitPagosError) {
-    switch (error.code) {
-      case KitPagosErrorCode.CONNECTION_FAILED:
-        console.error("Error de conectividad de red con la pasarela.");
-        break;
-      case KitPagosErrorCode.GATEWAY_TIMEOUT:
-        console.error("La pasarela tardó demasiado en responder.");
-        break;
-      case KitPagosErrorCode.INVALID_CREDENTIALS:
-        console.error("Credenciales expiradas o no válidas.");
-        break;
-      case KitPagosErrorCode.RATE_LIMIT_EXCEEDED:
-        console.error("Límite de peticiones excedido (HTTP 429).");
-        break;
-      default:
-        console.error(`Error técnico (${error.code}): ${error.message}`);
+async function cobrarConDiagnostico(request: CreatePaymentRequest) {
+  try {
+    await sdk.createPayment(request);
+  } catch (error) {
+    if (error instanceof KitPagosError) {
+      switch (error.code) {
+        case KitPagosErrorCode.CONNECTION_FAILED:
+          console.error("Error de conectividad de red con la pasarela.");
+          break;
+        case KitPagosErrorCode.GATEWAY_TIMEOUT:
+          console.error("La pasarela tardó demasiado en responder.");
+          break;
+        case KitPagosErrorCode.INVALID_CREDENTIALS:
+          console.error("Credenciales expiradas o no válidas.");
+          break;
+        case KitPagosErrorCode.RATE_LIMIT_EXCEEDED:
+          console.error("Límite de peticiones excedido (HTTP 429).");
+          break;
+        default:
+          console.error(`Error técnico (${error.code}): ${error.message}`);
+      }
     }
   }
 }
@@ -237,7 +309,8 @@ try {
 - `GATEWAY_SERVER_ERROR`: Error interno en los servidores de la pasarela (HTTP 5xx).
 - `MALFORMED_RESPONSE`: Respuesta o webhook no interpretable como JSON válido.
 - `WEBHOOK_SIGNATURE_INVALID`: Firma digital de webhook inválida o timestamp caducado.
-- `UNSUPPORTED_OPERATION`: Método o flujo no soportado por la pasarela seleccionada.
+- `UNSUPPORTED_OPERATION`: Método o flujo no soportado por la pasarela seleccionada (por ejemplo, consultar un cobro con tarjeta en Kushki).
+- `MAX_RETRIES_EXCEEDED`: Se agotaron los reintentos configurados sin obtener respuesta.
 - `UNKNOWN_ERROR`: Error genérico no tipificado.
 
 ---

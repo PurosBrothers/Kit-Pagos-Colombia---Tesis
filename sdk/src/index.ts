@@ -58,3 +58,8 @@ export {
 // le pasa al constructor de KitPagos.
 export type { SDKOptions } from "./infrastructure/config/SDKConfigurator";
 export type { Credentials } from "./domain/value-objects/Credentials";
+
+// Por el mismo motivo, las opciones de validateWebhook(): el comercio que
+// declara el manejador de su endpoint en una variable aparte necesita el tipo.
+export type { ValidateWebhookOptions } from "./infrastructure/facade/KitPagos";
+export type { WebhookVerificationOptions } from "./domain/services/WebhookVerifier";

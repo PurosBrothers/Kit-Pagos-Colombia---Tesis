@@ -88,6 +88,14 @@ const CREDENTIALS: SDKOptions["credentials"] = {
   [Gateway.WOMPI]: {
     publicKey: "pub_test_ejemplo_no_real",
     privateKey: "prv_test_ejemplo_no_real",
+    /*
+     * Wompi es la única de las cuatro que pide un tercer valor, y no es opcional para
+     * cobrar: sin él no crea la transacción. Que esté acá y las otras tres no lo tengan
+     * es parte de lo que este ejemplo muestra: **las credenciales sí cambian entre
+     * pasarelas, y el código del pago no.** Lo que el SDK unifica es el cobro, no la
+     * cuenta que hay que abrir en cada pasarela.
+     */
+    integritySecret: "test_integrity_ejemplo_no_real",
   },
   [Gateway.RAPYD]: {
     publicKey: "rapyd_access_key_ejemplo_no_real",

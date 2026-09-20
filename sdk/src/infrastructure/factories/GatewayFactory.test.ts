@@ -38,21 +38,30 @@ describe("GatewayFactory", () => {
       const credentials = {
         publicKey: "pub_test_wompi_123",
         privateKey: "prv_test_wompi_456",
+        // Wompi no crea nada sin firma, y el adaptador lo exige cuando hay credenciales
+        // configuradas (issue #92). Lo que esta prueba verifica es el cableado de la
+        // fábrica, así que las credenciales tienen que ser de las que sí pueden cobrar.
+        integritySecret: "int_test_wompi_789",
       };
-      const mockFetch = jest.fn().mockResolvedValue({
+      // El doble responde por ruta porque el cobro son dos llamadas: el token de
+      // aceptación primero y la transacción después.
+      const mockFetch = jest.fn().mockImplementation(async (url: unknown) => ({
         ok: true,
         status: 201,
-        json: async () => ({
-          data: {
-            id: "wompi-tx-1",
-            status: "APPROVED",
-            amount_in_cents: 100000,
-            currency: "COP",
-            reference: "ord-1",
-            customer_email: "cliente@example.com",
-          },
-        }),
-      });
+        json: async () =>
+          String(url).includes("/merchants/")
+            ? { data: { presigned_acceptance: { acceptance_token: "tok_sim_factory" } } }
+            : {
+                data: {
+                  id: "wompi-tx-1",
+                  status: "APPROVED",
+                  amount_in_cents: 100000,
+                  currency: "COP",
+                  reference: "ord-1",
+                  customer_email: "cliente@example.com",
+                },
+              },
+      }));
       global.fetch = mockFetch;
 
       const adapter = factory.create(Gateway.WOMPI, credentials, customRoot);

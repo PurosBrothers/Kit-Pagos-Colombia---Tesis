@@ -10,9 +10,21 @@
     "test": "jest",
     "test:sandbox": "jest --config jest.sandbox.config.js",
     "lint": "eslint .",
-    "metrics": "ts-node --project tsconfig.json scripts/ck-metrics.ts"
+    "metrics": "ts-node --project tsconfig.json scripts/ck-metrics.ts",
+    "check:readme": "ts-node --project tsconfig.json scripts/check-readme.ts"
   },
-  "keywords": ["pagos", "colombia", "sdk", "wompi", "mercadopago", "kushki", "rapyd", "pse", "fintech", "pasarelas-de-pago"],
+  "keywords": [
+    "pagos",
+    "colombia",
+    "sdk",
+    "wompi",
+    "mercadopago",
+    "kushki",
+    "rapyd",
+    "pse",
+    "fintech",
+    "pasarelas-de-pago"
+  ],
   "author": "Grupo 22",
   "license": "Apache-2.0",
   "description": "SDK unificado de pasarelas de pago para Colombia (Wompi, Mercado Pago, Kushki, Rapyd) con arquitectura hexagonal y tipos TypeScript estrictos.",
