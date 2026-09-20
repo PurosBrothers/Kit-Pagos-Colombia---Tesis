@@ -1837,7 +1837,7 @@ correspondiente por el PNG regenerado.
 
 **Decisión:** Se mantiene la matriz de equivalencias por pasarela (Wompi/Rapyd/Mercado Pago/Kushki) tal como está, porque es investigación de campo valiosa y en gran parte independiente de la reestructuración del dominio. Se corrige puntualmente el snippet de `SdkError` y se agrega una nota de vigencia al inicio del documento.
 
-**Estado:** Parcialmente resuelto (nota de vigencia y snippet de `SdkError` corregidos; columna Rapyd investigada y actualizada, ver puntos 15, 18 y 19). **Pendiente:** una pasada completa de reemplazo de `EstadoTransaccion` por `TransactionStatus` en las tablas, y decidir si vale la pena crear los archivos de contrato por flujo (creación, webhook, consulta, error) dentro de `application/ports/`, o si toda esa información debe vivir directamente como comentarios de implementación dentro de cada Adapter.
+**Estado:** Resuelto. Se ejecutó la pasada completa de sincronización en `docs/architecture/ubiquitous-language.md`, reemplazando el enum `EstadoTransaccion` por `TransactionStatus`, `SdkErrorCode` por `KitPagosErrorCode` y `SdkError` por `KitPagosError`. El lenguaje ubicuo queda 100% alineado con las entidades de dominio y el catálogo de errores tipados del SDK.
 
 ### 12. `sdk/package.json` sin scripts reales y con licencia incorrecta
 
