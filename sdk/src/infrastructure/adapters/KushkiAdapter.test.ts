@@ -360,6 +360,31 @@ describe("KushkiAdapter", () => {
       expect(transaction.orderReference.getValue()).toBe("ord-12345");
       expect(transaction.payer.email).toBe("cliente@example.com");
     });
+
+    it("should return redirectRequired when card transaction requires 3DS/OTP challenge", async () => {
+      const response3ds = {
+        ticketNumber: "1234567890",
+        status: "PENDING",
+        redirectUrl: "https://sandbox-otp.kushkipagos.com/challenge?token=abc123xyz",
+      };
+
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => response3ds,
+      });
+
+      const adapter = new KushkiAdapter();
+      const result = await adapter.createPayment(validRequest);
+      expect(result.outcome).toBe("REDIRECT_REQUIRED");
+      if (result.outcome === "REDIRECT_REQUIRED") {
+        expect(result.redirect.redirectUrl).toBe(
+          "https://sandbox-otp.kushkipagos.com/challenge?token=abc123xyz",
+        );
+        expect(result.redirect.gatewayTransactionId.value).toBe("1234567890");
+        expect(result.redirect.gatewayTransactionId.gateway).toBe(Gateway.KUSHKI);
+      }
+    });
   });
 
   describe("getStatus()", () => {

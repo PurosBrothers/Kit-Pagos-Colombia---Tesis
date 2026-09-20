@@ -131,11 +131,15 @@ async function cobrarConTarjeta() {
 
   // El resultado es una unión discriminada por `outcome`: el campo `transaction` no
   // existe hasta que descartás el caso de redirección, así que olvidarla no compila.
-  if (result.outcome === "TRANSACTION") {
-    const tx = result.transaction;
-    console.log(`Estado: ${tx.getStatus()}`); // APPROVED, DECLINED, PENDING...
-    console.log(`ID Pasarela: ${tx.gatewayTransactionId.value}`);
+  if (result.outcome === "REDIRECT_REQUIRED") {
+    // Si la pasarela requiere autenticación 3D Secure / OTP o es Hosted Checkout (Rapyd):
+    console.log(`Redirigir a verificación/3DS: ${result.redirect.redirectUrl}`);
+    return;
   }
+
+  const tx = result.transaction;
+  console.log(`Estado: ${tx.getStatus()}`); // APPROVED, DECLINED, PENDING...
+  console.log(`ID Pasarela: ${tx.gatewayTransactionId.value}`);
 }
 ```
 

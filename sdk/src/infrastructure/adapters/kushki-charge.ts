@@ -28,6 +28,8 @@
  * tarjeta (se probaron catorce candidatas). Ver el punto 50 del `architecture-log.md`.
  */
 import { Gateway } from "../../domain/value-objects/Gateway";
+import { GatewayTransactionId } from "../../domain/value-objects/GatewayTransactionId";
+import type { PendingRedirect } from "../../domain/value-objects/PaymentResult";
 import type { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
 import { buildKushkiAmount, resolveTaxBreakdown } from "./kushki-amount";
 import {
@@ -78,4 +80,37 @@ export function buildCardChargePayload(
   }
 
   return payload;
+}
+
+/**
+ * Extrae la redirección de 3DS / OTP de un cobro con tarjeta en Kushki si el emisor la requiere.
+ */
+export function extractCardChargeRedirect(
+  rawResponse: unknown,
+): PendingRedirect | undefined {
+  if (typeof rawResponse !== "object" || rawResponse === null) return undefined;
+  const payload = rawResponse as Record<string, unknown>;
+  const details =
+    typeof payload.details === "object" && payload.details !== null
+      ? (payload.details as Record<string, unknown>)
+      : undefined;
+
+  const redirectUrl =
+    typeof payload.redirectUrl === "string" && payload.redirectUrl.length > 0
+      ? payload.redirectUrl
+      : typeof details?.redirectUrl === "string" && details.redirectUrl.length > 0
+      ? details.redirectUrl
+      : undefined;
+
+  if (redirectUrl) {
+    const ticket = String(payload.ticketNumber ?? details?.ticketNumber ?? "");
+    const rawStatus = String(details?.transactionStatus ?? payload.status ?? "PENDING");
+    return {
+      redirectUrl,
+      gatewayTransactionId: new GatewayTransactionId(ticket, Gateway.KUSHKI),
+      rawStatus,
+    };
+  }
+
+  return undefined;
 }

@@ -15,6 +15,7 @@ import {
   buildPseFieldsFor,
   buildWompiPayload,
   extractAcceptanceToken,
+  requiresRedirect,
   resolvePendingRedirect,
   parseWompiPseBanks,
 } from "./wompi-pse";
@@ -144,10 +145,10 @@ export class WompiAdapter implements PaymentGatewayPort {
       JSON.stringify(payload),
     );
 
-    if (request.paymentMethod?.type === "PSE") {
-      // La respuesta de creación de un PSE no trae la URL de redirección, así que
-      // hay que consultar hasta que aparezca. El lector se pasa como argumento
-      // para que la mecánica del sondeo no necesite saber de HTTP.
+    if (requiresRedirect(rawResponse, request.paymentMethod?.type)) {
+      // La respuesta de PSE o de un cobro con tarjeta con desafío 3DS exige redirección.
+      // Si la URL ya vino en la creación se devuelve de inmediato; si no, se sondea
+      // hasta que aparezca.
       return redirectRequired(
         await resolvePendingRedirect(rawResponse, (id) =>
           this.request(`${this.baseUrl}/transactions/${id}`, "GET"),

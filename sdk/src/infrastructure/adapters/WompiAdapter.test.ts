@@ -531,6 +531,38 @@ describe("WompiAdapter", () => {
         new WompiAdapter().createPayment({ ...validRequest, paymentMethod: undefined }),
       ).rejects.toThrow("POST /v1/tokens/cards");
     });
+
+    it("should return redirectRequired when card transaction requires 3DS authentication", async () => {
+      const response3ds = {
+        data: {
+          id: "wompi-3ds-tx-123",
+          status: "PENDING",
+          payment_method: {
+            type: "CARD",
+            extra: {
+              is_three_ds: true,
+              three_ds_auth_type: "CHALLENGE",
+              async_payment_url: "https://production.wompi.co/v1/3ds/challenge/123",
+            },
+          },
+        },
+      };
+
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => response3ds,
+      });
+
+      const result = await new WompiAdapter().createPayment(validRequest);
+      expect(result.outcome).toBe("REDIRECT_REQUIRED");
+      if (result.outcome === "REDIRECT_REQUIRED") {
+        expect(result.redirect.redirectUrl).toBe("https://production.wompi.co/v1/3ds/challenge/123");
+        expect(result.redirect.gatewayTransactionId.value).toBe("wompi-3ds-tx-123");
+        expect(result.redirect.gatewayTransactionId.gateway).toBe(Gateway.WOMPI);
+        expect(result.redirect.rawStatus).toBe("PENDING");
+      }
+    });
   });
 
   describe("createPayment() con PSE", () => {

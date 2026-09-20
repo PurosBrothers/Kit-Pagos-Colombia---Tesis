@@ -1636,6 +1636,25 @@ Si bien una URL global es suficiente para apuntar todo el SDK al componente `api
 
 ---
 
+### 58. Soporte de autenticación 3DS / OTP en cobros con tarjeta: propagación transparente de `REDIRECT_REQUIRED` en todas las pasarelas (issue #88)
+
+**Responsable de corregirlo en el SAD:** Joshua (sección 9.1.1, fachada `KitPagos` y sección 15.1, `PaymentResult`).
+
+**Contexto:**
+Durante la auditoría de preparación para producción (Restricción 3), se identificó que en cobros con tarjeta donde el banco emisor o la pasarela exigen un desafío de autenticación adicional (3D Secure 2.0, OTP o SMS de seguridad), los adaptadores de Wompi, Mercado Pago y Kushki asumían que la respuesta siempre correspondía a una transacción resuelta directa (`TransactionOutcome`), descartando la URL de redirección bancaria o tratando la transacción como pendiente pasiva.
+El modelo de dominio ya definía desde el issue #64 el tipo de unión discriminada `PaymentResult` con la variante `REDIRECT_REQUIRED` (`RedirectRequiredOutcome`), pero solo se utilizaba activamente para flujos PSE y para el Hosted Checkout de Rapyd.
+
+**Decisión:**
+1. **Wompi (`wompi-pse.ts` y `WompiAdapter.ts`):** Se introdujo la función `requiresRedirect(rawResponse, paymentMethodType)` que detecta si la respuesta nativa incluye `payment_method.extra.async_payment_url`, `is_three_ds` o `three_ds_auth_type: "CHALLENGE"`. En tales casos, se invoca `resolvePendingRedirect()` para retornar `redirectRequired()` inmediatamente (sin sondeo si la URL ya está presente).
+2. **Mercado Pago (`mercadopago-pse.ts` y `MercadoPagoAdapter.ts`):** Se implementó `extractPaymentRedirect()`, que inspecciona `point_of_interaction.transaction_data.ticket_url`, `three_ds_info.external_resource_url` o `transaction_details.external_resource_url`. Si existen, devuelve `redirectRequired()`.
+3. **Kushki (`kushki-charge.ts` y `KushkiAdapter.ts`):** Se implementó `extractCardChargeRedirect()`, que examina `redirectUrl` tanto en la raíz como anidado en `details` (retornado cuando un emisor dispara el desafío de tarjeta), construyendo el `redirectRequired()` con el número de ticket y estado.
+4. **Mantenimiento de límites CK y arquitectura:** Todas las funciones de extracción y detección se ubicaron en módulos de soporte (`wompi-pse.ts`, `mercadopago-pse.ts`, `kushki-charge.ts`), manteniendo las clases Adapter con CBO y WMC estrictamente dentro de los umbrales de metodología (WMC ≤ 19, MaxCC ≤ 8, CBO ≤ 6).
+5. Se añadieron pruebas unitarias para cada adaptador simulando respuestas con desafío 3DS/OTP.
+
+**Estado:** Resuelto y probado con 586 pruebas unitarias y validación en `check:readme`.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum
