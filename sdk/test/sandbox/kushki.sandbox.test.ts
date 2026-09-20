@@ -5,6 +5,9 @@ import { Currency } from "../../src/domain/value-objects/Currency";
 import { OrderReference } from "../../src/domain/value-objects/OrderReference";
 import { Payer } from "../../src/domain/value-objects/Payer";
 import { PaymentMethod } from "../../src/domain/value-objects/PaymentMethod";
+import { KushkiAdapter } from "../../src/infrastructure/adapters/KushkiAdapter";
+import { KitPagosErrorCode } from "../../src/domain/value-objects/KitPagosErrorCode";
+import { expectTransaction } from "../../src/test-support/payment-result";
 import { describeSandbox, uniqueReference } from "./sandbox-env";
 import { tokenizeKushkiCard } from "./tokenize";
 
@@ -95,6 +98,39 @@ describeSandbox(Gateway.KUSHKI, (credentials, baseUrl) => {
 
     expect(charge.status).toBe(403);
     expect(invented.status).toBe(403);
+  });
+
+  /**
+   * Consultar un cobro con tarjeta no se puede, y el error tiene que decir eso.
+   *
+   * Es el defecto veinte, medido el 19 de septiembre de 2026: el SDK devolvía
+   * `INVALID_CREDENTIALS` al consultar un cobro que Kushki acababa de aprobar, con las
+   * credenciales buenas. La prueba cobra de verdad y consulta de verdad, porque es el único
+   * modo de que esto siga siendo cierto: si Kushki publica mañana una ruta de consulta, esta
+   * prueba se pone roja y avisa que el SDK está diseñado alrededor de una restricción que ya
+   * no existe.
+   */
+  it("explica que no hay consulta de tarjeta, en vez de culpar a las credenciales", async () => {
+    const { token } = await tokenizeKushkiCard(credentials, 20000);
+    const adapter = new KushkiAdapter(baseUrl, credentials);
+
+    const result = await adapter.createPayment({
+      amount: new Amount("20000"),
+      currency: new Currency("COP"),
+      orderReference: new OrderReference(uniqueReference("KUSHKI-CONSULTA")),
+      payer: new Payer({ email: "sandbox@example.com", fullName: "Jaime Pavlich" }),
+      paymentMethod: PaymentMethod.card(token, { installments: 1 }),
+    });
+
+    const ticket = expectTransaction(result).gatewayTransactionId.value;
+
+    // El estado ya vino en la creación, que es justo lo que el mensaje del error propone
+    // usar. Sin esto, la prueba afirmaría una limitación sin mostrar la salida.
+    expect(expectTransaction(result).getStatus()).toBe("APPROVED");
+
+    await expect(adapter.getStatus(ticket)).rejects.toMatchObject({
+      code: KitPagosErrorCode.UNSUPPORTED_OPERATION,
+    });
   });
 
   /**

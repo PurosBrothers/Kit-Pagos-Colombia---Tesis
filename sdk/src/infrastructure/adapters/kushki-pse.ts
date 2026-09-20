@@ -374,3 +374,104 @@ export function kushkiStatusPaths(gatewayTransactionId: string): readonly string
     `/charges/${gatewayTransactionId}`,
   ];
 }
+
+/**
+ * Decide qué hacer con el fallo de una de las rutas de consulta: seguir probando, o con qué
+ * error rendirse.
+ *
+ * Devuelve `undefined` cuando la pasarela dijo que no conoce ese identificador, que es la
+ * señal para probar la siguiente ruta. Devuelve el error con el que hay que rendirse en
+ * cualquier otro caso.
+ *
+ * ## El defecto que esto corrige, que es el número veinte del proyecto
+ *
+ * Medido el 19 de septiembre de 2026 con credenciales UAT nuevas: un comercio que cobra con
+ * tarjeta en Kushki —`201`, estado `APPROVAL`— y después llama a `getPaymentStatus()` con el
+ * `ticketNumber` que Kushki le dio recibía **`INVALID_CREDENTIALS: "Kushki gateway returned
+ * an HTTP error status 403"`**. Con las credenciales buenas. O sea que el SDK lo mandaba a
+ * rotar llaves que no tenían nada.
+ *
+ * El 403 no era de autorización: era de una ruta que no existe. Se confirmó con dos rutas de
+ * control inventadas, y ahí está la parte que no se puede deducir leyendo:
+ *
+ * | Ruta | Respuesta |
+ * | --- | --- |
+ * | `/card/v1/charges/{ticket real}` | `403 "Missing Authentication Token"` |
+ * | `/card/v1/rutaInventada/{ticket real}` | `403 "Missing Authentication Token"` |
+ * | `/charges/{ticket real}` | `403 "Forbidden"` |
+ * | `/rutaInventada/abc123` | `403 "Forbidden"` |
+ *
+ * Una ruta candidata y una inventada contestan **lo mismo, carácter por carácter**, así que
+ * bajo esa raíz no hay forma de distinguir "no autorizado" de "no existe". Se probaron
+ * veinticuatro combinaciones de ruta e identificador entre las dos mediciones, con el
+ * `ticketNumber` y con el `transactionId`, y ninguna contestó distinto de una inventada.
+ *
+ * ## Por qué acá sí se puede afirmar que el 403 no es de credenciales
+ *
+ * Porque **a la segunda ruta solo se llega si la primera contestó desde la aplicación**. Con
+ * credenciales inválidas, `GET /transfer/v1/status/{id}` responde `403` y el adaptador se
+ * rinde ahí mismo, sin llegar acá. Si contestó `400 T001` —"cuerpo de la petición
+ * inválido"—, eso es la aplicación de Kushki hablando, o sea que la llave privada pasó el
+ * autorizador. Un `403` después de eso no puede ser de la llave: es la ruta.
+ *
+ * Ese razonamiento es todo el contenido del parámetro `credentialsAlreadyProven`, y por eso
+ * no se puede resolver mirando el error solo.
+ *
+ * ## Qué le queda al comercio
+ *
+ * No queda sin el dato, y el mensaje se lo dice: el cobro con tarjeta **ya trae su estado
+ * resuelto** en la respuesta de creación, porque el adaptador lo pide con `fullResponse:
+ * true`, y los cambios posteriores llegan por webhook, que el SDK sí verifica para Kushki.
+ * Lo que no hay es sondeo, y ahora el error lo nombra en vez de acusar a las credenciales.
+ */
+export function kushkiStatusFailure(
+  error: unknown,
+  credentialsAlreadyProven: boolean,
+  gatewayTransactionId: string,
+): unknown {
+  if (isUnknownToRoute(error)) {
+    return undefined;
+  }
+
+  const esForbidden =
+    error instanceof KitPagosError &&
+    error.code === KitPagosErrorCode.INVALID_CREDENTIALS;
+
+  if (credentialsAlreadyProven && esForbidden) {
+    return new KitPagosError(
+      KitPagosErrorCode.UNSUPPORTED_OPERATION,
+      Gateway.KUSHKI,
+      null,
+      `Kushki no expone una ruta para consultar el estado de un cobro con tarjeta, así que ` +
+        `no se puede consultar ${gatewayTransactionId}. No te quedás sin el dato: el cobro ` +
+        `ya devuelve su estado final en la respuesta de createPayment(), y los cambios ` +
+        `posteriores llegan por webhook, que podés verificar con validateWebhook(). Esto no ` +
+        `es un problema de tus credenciales: la consulta de transferencias con estas mismas ` +
+        `llaves respondió bien.`,
+    );
+  }
+
+  return error;
+}
+
+/**
+ * Distingue "esta ruta no sabe de ese identificador" de cualquier otro fallo.
+ *
+ * Acepta dos códigos porque Kushki y el simulador contestan distinto lo mismo: la API real
+ * responde `400` (`T001`, "cuerpo de la petición inválido") cuando el identificador no es de
+ * esa ruta, y el simulador responde `404`. Medido contra la API UAT el 18 de septiembre de
+ * 2026; antes solo se aceptaba `404`, así que contra Kushki real el respaldo no se activaba
+ * nunca.
+ *
+ * Deliberadamente **no** incluye `INVALID_CREDENTIALS`: un 401 o un 403 puede ser una llave
+ * mal configurada, y seguir probando rutas convertiría ese problema en un "no encontrado"
+ * que manda a buscar al lugar equivocado. El caso en que un 403 sí significa otra cosa lo
+ * resuelve `kushkiStatusFailure()`, que tiene el contexto para afirmarlo.
+ */
+function isUnknownToRoute(error: unknown): boolean {
+  return (
+    error instanceof KitPagosError &&
+    (error.code === KitPagosErrorCode.RESOURCE_NOT_FOUND ||
+      error.code === KitPagosErrorCode.INVALID_REQUEST)
+  );
+}
