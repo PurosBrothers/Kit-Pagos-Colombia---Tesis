@@ -11,6 +11,7 @@ import {
 } from "../../test-support/payment-result";
 import { PaymentMethod } from "../../domain/value-objects/PaymentMethod";
 import { ReturnUrlConfig } from "../../domain/value-objects/ReturnUrlConfig";
+import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import { Credentials } from "../../domain/value-objects/Credentials";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
 
@@ -359,6 +360,31 @@ describe("KushkiAdapter", () => {
       expect(transaction.orderReference.getValue()).toBe("ord-12345");
       expect(transaction.payer.email).toBe("cliente@example.com");
     });
+
+    it("should return redirectRequired when card transaction requires 3DS/OTP challenge", async () => {
+      const response3ds = {
+        ticketNumber: "1234567890",
+        status: "PENDING",
+        redirectUrl: "https://sandbox-otp.kushkipagos.com/challenge?token=abc123xyz",
+      };
+
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => response3ds,
+      });
+
+      const adapter = new KushkiAdapter();
+      const result = await adapter.createPayment(validRequest);
+      expect(result.outcome).toBe("REDIRECT_REQUIRED");
+      if (result.outcome === "REDIRECT_REQUIRED") {
+        expect(result.redirect.redirectUrl).toBe(
+          "https://sandbox-otp.kushkipagos.com/challenge?token=abc123xyz",
+        );
+        expect(result.redirect.gatewayTransactionId.value).toBe("1234567890");
+        expect(result.redirect.gatewayTransactionId.gateway).toBe(Gateway.KUSHKI);
+      }
+    });
   });
 
   describe("getStatus()", () => {
@@ -375,6 +401,13 @@ describe("KushkiAdapter", () => {
           ok: false,
           status: 400,
           json: async () => ({ code: "T001", message: "Cuerpo de la peticion invalido." }),
+        })
+        // La consulta del flujo asíncrono de tarjeta: existe, y contesta que no tiene
+        // registrado un cobro síncrono. Es el `CAS004` medido contra la UAT.
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 400,
+          json: async () => ({ code: "CAS004", message: "No existe la transaccion" }),
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -408,6 +441,11 @@ describe("KushkiAdapter", () => {
       );
       expect(mockFetch).toHaveBeenNthCalledWith(
         2,
+        "http://localhost:3000/v1/sim/kushki/card-async/v1/status/kushki-mock-tx-123",
+        expect.objectContaining({ method: "GET" }),
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
         "http://localhost:3000/v1/sim/kushki/charges/kushki-mock-tx-123",
         {
           method: "GET",
@@ -618,6 +656,11 @@ describe("KushkiAdapter con PSE", () => {
           json: async () => ({ code: "T001", message: "Cuerpo de la peticion invalido." }),
         })
         .mockResolvedValueOnce({
+          ok: false,
+          status: 400,
+          json: async () => ({ code: "CAS004", message: "No existe la transaccion" }),
+        })
+        .mockResolvedValueOnce({
           ok: true,
           status: 200,
           json: async () => ({
@@ -632,9 +675,50 @@ describe("KushkiAdapter con PSE", () => {
         "123456789012345678",
       );
 
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(mockFetch.mock.calls[1][0]).toBe(
+        "https://api.example.com/card-async/v1/status/123456789012345678",
+      );
+      expect(mockFetch.mock.calls[2][0]).toBe(
+        "https://api.example.com/charges/123456789012345678",
+      );
+      expect(transaction.getStatus()).toBe("APPROVED");
+    });
+
+    /*
+     * La consulta del flujo asíncrono de tarjeta existe —se midió `400 CAS004` con la llave
+     * privada y `401` con la pública, el mismo patrón de la ruta de PSE que sí existe— y lo
+     * que contesta es que el cobro síncrono no está en ese almacén. Se intenta igual porque
+     * la certeza de que no está sale de preguntarle a Kushki en el momento, no de citar su
+     * documentación; y si algún día registra los cobros síncronos ahí, esto ya funciona.
+     */
+    it("devuelve la transacción cuando la consulta asíncrona de tarjeta sí la conoce", async () => {
+      const mockFetch = jest
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 400,
+          json: async () => ({ code: "T001", message: "Cuerpo de la peticion invalido." }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ticketNumber: "441571084222882291",
+            transaction_status: "APPROVAL",
+            amount: { subtotalIva0: 150000, subtotalIva: 0, iva: 0, ice: 0, currency: "COP" },
+          }),
+        });
+      global.fetch = mockFetch;
+
+      const transaction = await new KushkiAdapter("https://api.example.com").getStatus(
+        "441571084222882291",
+      );
+
+      // No llega a `/charges/{id}`: la resolvió la ruta asíncrona.
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockFetch.mock.calls[1][0]).toBe(
-        "https://api.example.com/charges/123456789012345678",
+        "https://api.example.com/card-async/v1/status/441571084222882291",
       );
       expect(transaction.getStatus()).toBe("APPROVED");
     });
@@ -685,11 +769,14 @@ describe("KushkiAdapter con PSE", () => {
     });
 
     /**
-     * Es el caso que hace que una transferencia real se pueda consultar: si el
-     * respaldo se activara con el 403 de `/charges`, un problema de credenciales se
-     * veria como "no existe". Y al reves, el 403 de la segunda ruta no se traga.
+     * Defecto veinte del proyecto, medido el 19 de septiembre de 2026 con credenciales UAT
+     * nuevas: consultar un cobro con tarjeta que Kushki acababa de aprobar devolvía
+     * `INVALID_CREDENTIALS`, o sea que el SDK mandaba al comercio a rotar unas llaves que
+     * estaban bien. El 403 no era de autorización sino de una ruta que no existe, y eso se
+     * puede afirmar porque **a esta segunda ruta solo se llega si la primera contestó
+     * `400 T001`**, que es la aplicación de Kushki hablando después del autorizador.
      */
-    it("propaga el error si ninguna de las dos rutas reconoce el identificador", async () => {
+    it("no culpa a las credenciales cuando la primera ruta ya probó que sirven", async () => {
       const mockFetch = jest
         .fn()
         .mockResolvedValueOnce({
@@ -704,11 +791,43 @@ describe("KushkiAdapter con PSE", () => {
         });
       global.fetch = mockFetch;
 
-      await expect(
-        new KushkiAdapter("https://api.example.com").getStatus("id-de-nadie"),
-      ).rejects.toBeInstanceOf(KitPagosError);
+      try {
+        await new KushkiAdapter("https://api.example.com").getStatus("ticket-de-tarjeta");
+        fail("debía lanzar KitPagosError");
+      } catch (error) {
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
+        // El mensaje tiene que decir las dos cosas: que no es de credenciales, y qué usar
+        // en vez de la consulta, o el comercio queda sin saber cómo conciliar.
+        expect(sdkError.message).toContain("validateWebhook()");
+        expect(sdkError.message).toContain("no es un problema de tus credenciales");
+      }
 
       expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    /**
+     * La otra mitad del razonamiento, y la que evita que la corrección de arriba se coma un
+     * problema real: si las llaves están mal, la **primera** ruta ya responde 403 y el
+     * adaptador se rinde ahí, sin haber probado nada. Ese 403 sí es de credenciales y tiene
+     * que seguir diciéndolo.
+     */
+    it("sigue culpando a las credenciales cuando ninguna ruta llegó a contestar", async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 403,
+        json: async () => ({ message: "Forbidden" }),
+      });
+      global.fetch = mockFetch;
+
+      try {
+        await new KushkiAdapter("https://api.example.com").getStatus("ticket-de-tarjeta");
+        fail("debía lanzar KitPagosError");
+      } catch (error) {
+        expect((error as KitPagosError).code).toBe(KitPagosErrorCode.INVALID_CREDENTIALS);
+      }
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 

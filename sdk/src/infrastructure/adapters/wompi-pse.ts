@@ -230,14 +230,10 @@ export interface WompiPayloadAttributes {
 /**
  * Arma el cuerpo de `POST /transactions`.
  *
- * Los tres campos de autenticación se agregan solo si hay con qué, y conviene saber qué
- * cuesta eso: se midió el 19 de septiembre de 2026 que **Wompi no crea ninguna transacción
- * sin la firma de integridad** —tarjeta y PSE sin el campo `signature` responden
- * `422 "Firma de integridad requerida no enviada"`—, así que un comercio que no configure
- * `integritySecret` no recibe un error del SDK sino ese 422. Exigirlo acá arrastra también
- * al token de aceptación, que es condicional por la misma razón y se obtiene de otra
- * llamada, así que se dejó declarado en el punto 50 y con issue propio en vez de resolverlo
- * a medias dentro del trabajo de tarjeta.
+ * Los tres campos de autenticación se agregan solo si hay con qué. Quién garantiza que
+ * los haya es `assertWompiSigningRequirements()`, que corre antes: esta función se queda
+ * armando el cuerpo y no valida, para que el comercio reciba el error de configuración
+ * sin que el SDK gaste ninguna llamada.
  */
 export function buildWompiPayload(
   attributes: WompiPayloadAttributes,
@@ -309,7 +305,109 @@ export function extractRedirectSnapshot(rawResponse: unknown): WompiRedirectSnap
   };
 }
 
+/**
+ * Determina si la transacción de Wompi requiere redirección externa (sea por PSE
+ * o por desafío 3D Secure / OTP en cobros con tarjeta).
+ */
+export function requiresRedirect(rawResponse: unknown, paymentMethodType?: string): boolean {
+  if (paymentMethodType === "PSE") {
+    return true;
+  }
+  const snapshot = extractRedirectSnapshot(rawResponse);
+  if (snapshot.redirectUrl) {
+    return true;
+  }
+  const data = readObject(rawResponse, "data");
+  const extra = readObject(readObject(data, "payment_method"), "extra");
+  return Boolean(extra?.is_three_ds || extra?.three_ds_auth_type);
+}
+
 /** Token de aceptación de términos, que Wompi entrega firmado y de un solo uso. */
+/**
+ * Exige el secreto de integridad, que es la mitad de lo que Wompi pide para crear.
+ *
+ * ## Los dos requisitos son uno solo
+ *
+ * Medido contra `sandbox.wompi.co` el 19 de septiembre de 2026: Wompi **no crea ninguna
+ * transacción** sin la firma de integridad ni sin el token de aceptación de términos. Tarjeta
+ * y PSE sin `signature` responden `422 "Firma de integridad requerida no enviada"`, y sin
+ * `acceptance_token`, `422 "No está presente"` sobre ese campo. Y valida de a uno: contesta
+ * por el primero que falte y se calla el resto.
+ *
+ * Eso es justamente lo que hizo que el punto 50 desistiera de exigir solo el secreto: **exigir
+ * uno sin el otro deja al comercio igual de lejos de poder cobrar, con un error menos**. Se
+ * resuelven juntos o no se resuelve ninguno, y por eso esta función pide los dos.
+ *
+ * ## Por qué "hay credenciales" es el interruptor
+ *
+ * El SDK tiene que seguir siendo usable sin configurar nada contra la API de Simulación, que
+ * no valida firmas. Así que la regla no es "siempre exigir" sino: **si el comercio configuró
+ * credenciales, está hablándole a Wompi de verdad y le va a hacer falta todo**. Sin
+ * credenciales no hay a quién pedirle el token de aceptación ni con qué firmar, y tampoco
+ * nadie que lo reclame.
+ *
+ * ## Por qué antes de la red y no dejando que Wompi conteste
+ *
+ * Por lo mismo que el token de tarjeta y los datos de PSE: un 422 de Wompi dice que falta un
+ * campo del cuerpo, no qué configurar ni de dónde sacarlo, y el nombre del campo (`signature`)
+ * no se parece al del ajuste que falta (`integritySecret`). Acá sí se puede decir las dos
+ * cosas, y encima gratis: la guarda del secreto corre **antes** de pedir el token de
+ * aceptación, así que un comercio mal configurado no paga ni una llamada HTTP.
+ *
+ * Consultar el estado no pasa por acá, porque esa llamada no lleva firma. Por eso
+ * `integritySecret` sigue siendo opcional en el tipo: quien solo consulte no lo necesita.
+ */
+export function assertIntegritySecret(
+  hasCredentials: boolean,
+  integritySecret: string | undefined,
+): void {
+  if (!hasCredentials || integritySecret) {
+    return;
+  }
+
+  throw new KitPagosError(
+    KitPagosErrorCode.INVALID_CREDENTIALS,
+    Gateway.WOMPI,
+    null,
+    "Wompi exige firmar la transacción y falta el secreto de integridad. " +
+      "Configúralo en credentials[Gateway.WOMPI].integritySecret; lo encuentras en el " +
+      "panel de Wompi, y es un valor distinto del secreto de eventos con el que se " +
+      "verifican los webhooks. Sin él, Wompi responde 422 y no crea la transacción.",
+  );
+}
+
+/**
+ * La otra mitad de la guarda de arriba: el token de aceptación de términos.
+ *
+ * Va separada porque se comprueba en otro momento —después de la llamada que lo trae— y no
+ * porque sea otro requisito: las dos son el mismo, y la explicación de por qué está en
+ * `assertIntegritySecret()`.
+ *
+ * El código es `MALFORMED_RESPONSE` y no `INVALID_CREDENTIALS` porque acá el comercio sí
+ * configuró algo: lo que falló es que `GET /merchants/{llave pública}` no trajo el token
+ * donde debía. La causa típica sigue siendo de credenciales —una llave pública de otro
+ * comercio o de otro ambiente— y por eso el mensaje manda a revisarlas, pero el hecho
+ * observado es una respuesta que no tenía lo que tenía que tener.
+ */
+export function assertAcceptanceToken(
+  hasCredentials: boolean,
+  acceptanceToken: string | undefined,
+): void {
+  if (!hasCredentials || acceptanceToken) {
+    return;
+  }
+
+  throw new KitPagosError(
+    KitPagosErrorCode.MALFORMED_RESPONSE,
+    Gateway.WOMPI,
+    null,
+    "Wompi exige el token de aceptación de términos y no se pudo obtener de " +
+      "GET /merchants/{llave pública}. Revisa que la llave pública sea de este " +
+      "comercio y del mismo ambiente que la privada. Sin él, Wompi responde 422 y " +
+      "no crea la transacción.",
+  );
+}
+
 export function extractAcceptanceToken(rawResponse: unknown): string | undefined {
   const data = readObject(rawResponse, "data");
   const presigned = readObject(data, "presigned_acceptance");

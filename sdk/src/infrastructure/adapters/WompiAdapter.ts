@@ -9,10 +9,13 @@ import {
   transactionResult,
 } from "../../domain/value-objects/PaymentResult";
 import {
+  assertAcceptanceToken,
+  assertIntegritySecret,
   buildCardFieldsFor,
   buildPseFieldsFor,
   buildWompiPayload,
   extractAcceptanceToken,
+  requiresRedirect,
   resolvePendingRedirect,
   parseWompiPseBanks,
 } from "./wompi-pse";
@@ -107,6 +110,18 @@ export class WompiAdapter implements PaymentGatewayPort {
     const currency = request.currency.getCode();
     const reference = request.orderReference.getValue();
 
+    /*
+     * Wompi no crea nada sin firma ni sin token de aceptación, así que los dos se exigen
+     * juntos y en este orden: el secreto primero, porque es configuración y se puede
+     * revisar sin salir a la red, y el token después, que cuesta una llamada. Un comercio
+     * al que le falte el secreto no paga esa llamada.
+     */
+    const hasCredentials = Boolean(this.credentials);
+    assertIntegritySecret(hasCredentials, this.credentials?.integritySecret);
+
+    const acceptanceToken = await this.fetchAcceptanceToken();
+    assertAcceptanceToken(hasCredentials, acceptanceToken);
+
     const payload = buildWompiPayload({
       amountInCents,
       currency,
@@ -120,7 +135,7 @@ export class WompiAdapter implements PaymentGatewayPort {
       // comercio configuró URLs diferenciadas, las otras dos se pierden: es una
       // limitación de Wompi, no del SDK, y conviene que quede escrita.
       redirectUrl: request.returnUrlConfig?.resolveFor("PENDING") ?? undefined,
-      acceptanceToken: await this.fetchAcceptanceToken(),
+      acceptanceToken,
       integritySecret: this.credentials?.integritySecret,
     });
 
@@ -130,10 +145,10 @@ export class WompiAdapter implements PaymentGatewayPort {
       JSON.stringify(payload),
     );
 
-    if (request.paymentMethod?.type === "PSE") {
-      // La respuesta de creación de un PSE no trae la URL de redirección, así que
-      // hay que consultar hasta que aparezca. El lector se pasa como argumento
-      // para que la mecánica del sondeo no necesite saber de HTTP.
+    if (requiresRedirect(rawResponse, request.paymentMethod?.type)) {
+      // La respuesta de PSE o de un cobro con tarjeta con desafío 3DS exige redirección.
+      // Si la URL ya vino en la creación se devuelve de inmediato; si no, se sondea
+      // hasta que aparezca.
       return redirectRequired(
         await resolvePendingRedirect(rawResponse, (id) =>
           this.request(`${this.baseUrl}/transactions/${id}`, "GET"),

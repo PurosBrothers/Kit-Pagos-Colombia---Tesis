@@ -23,6 +23,7 @@ import {
   assertPseRequirements,
   buildPseOrderPayload,
   extractOrderRedirect,
+  extractPaymentRedirect,
   isOrderId,
   parseMercadoPagoPseBanks,
 } from "./mercadopago-pse";
@@ -132,6 +133,11 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
       "POST",
       JSON.stringify(payload),
     );
+
+    const redirect = extractPaymentRedirect(rawResponse);
+    if (redirect) {
+      return redirectRequired(redirect);
+    }
 
     return transactionResult(
       this.normalizer.normalize(rawResponse, Gateway.MERCADOPAGO),

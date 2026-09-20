@@ -15,9 +15,11 @@ import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
 import { assertSupportedPaymentMethod } from "./payment-method-support";
 import { resolveTaxBreakdown } from "./kushki-amount";
-import { CARD_CHARGE_PATH, buildCardChargePayload } from "./kushki-charge";
-import { KitPagosError } from "../../domain/errors/KitPagosError";
-import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
+import {
+  CARD_CHARGE_PATH,
+  buildCardChargePayload,
+  extractCardChargeRedirect,
+} from "./kushki-charge";
 import type { PseBank } from "../../domain/value-objects/PseBank";
 import {
   assertPseRequirements,
@@ -26,6 +28,7 @@ import {
   extractTransferToken,
   extractTransferRedirect,
   parseKushkiPseBanks,
+  kushkiStatusFailure,
   kushkiStatusPaths,
 } from "./kushki-pse";
 
@@ -97,6 +100,11 @@ export class KushkiAdapter implements PaymentGatewayPort {
       "private",
       buildCardChargePayload(request),
     );
+
+    const redirect = extractCardChargeRedirect(rawResponse);
+    if (redirect) {
+      return redirectRequired(redirect);
+    }
 
     return transactionResult(
       this.normalizer.normalize(rawResponse, Gateway.KUSHKI),
@@ -170,14 +178,25 @@ export class KushkiAdapter implements PaymentGatewayPort {
     const paths = kushkiStatusPaths(gatewayTransactionId);
     let lastError: unknown;
 
+    // Que una ruta haya contestado "no conozco ese identificador" prueba que la llave
+    // privada pasó el autorizador de Kushki, y eso cambia el significado de un 403 en la
+    // ruta siguiente. El razonamiento completo está en `kushkiStatusFailure()`.
+    let credentialsAlreadyProven = false;
+
     for (const path of paths) {
       try {
         const rawResponse = await this.request(path, "GET", "private");
         return this.normalizer.normalize(rawResponse, Gateway.KUSHKI);
       } catch (error) {
-        if (!isUnknownToRoute(error)) {
-          throw error;
+        const fatal = kushkiStatusFailure(
+          error,
+          credentialsAlreadyProven,
+          gatewayTransactionId,
+        );
+        if (fatal) {
+          throw fatal;
         }
+        credentialsAlreadyProven = true;
         lastError = error;
       }
     }
@@ -280,27 +299,3 @@ export class KushkiAdapter implements PaymentGatewayPort {
   }
 }
 
-/**
- * Distingue "esta ruta no sabe de ese identificador" de cualquier otro fallo.
- *
- * Acepta dos códigos porque Kushki y el simulador contestan distinto lo mismo: la
- * API real responde `400` (`T001`, "cuerpo de la petición inválido") cuando el
- * identificador no es de esa ruta, y el simulador responde `404`. Medido contra la
- * API UAT el 18 de septiembre de 2026; antes solo se aceptaba `404`, así que contra
- * Kushki real el respaldo no se activaba nunca.
- *
- * Deliberadamente **no** incluye `INVALID_CREDENTIALS`: un 401 o un 403 puede ser
- * una llave mal configurada, y seguir probando rutas convertiría ese problema en un
- * "no encontrado" que manda a buscar al lugar equivocado.
- *
- * Es una función de módulo y no un método privado porque no usa nada de la
- * instancia, y así no le suma complejidad ponderada a la clase (WMC), que es la
- * métrica que el umbral de la Definition of Done vigila.
- */
-function isUnknownToRoute(error: unknown): boolean {
-  return (
-    error instanceof KitPagosError &&
-    (error.code === KitPagosErrorCode.RESOURCE_NOT_FOUND ||
-      error.code === KitPagosErrorCode.INVALID_REQUEST)
-  );
-}

@@ -157,6 +157,37 @@ describe("MercadoPagoAdapter", () => {
       expect(primera).not.toBe(segunda);
     });
 
+    it("devuelve redirectRequired cuando el pago con tarjeta exige autenticación 3DS", async () => {
+      const response3ds = {
+        id: 987654321,
+        status: "pending",
+        status_detail: "pending_challenge",
+        point_of_interaction: {
+          transaction_data: {
+            ticket_url: "https://www.mercadopago.com.co/payments/987654321/ticket",
+          },
+        },
+      };
+
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => response3ds,
+      });
+
+      const adapter = new MercadoPagoAdapter();
+      const result = await adapter.createPayment(validRequest);
+      expect(result.outcome).toBe("REDIRECT_REQUIRED");
+      if (result.outcome === "REDIRECT_REQUIRED") {
+        expect(result.redirect.redirectUrl).toBe(
+          "https://www.mercadopago.com.co/payments/987654321/ticket",
+        );
+        expect(result.redirect.gatewayTransactionId.value).toBe("987654321");
+        expect(result.redirect.gatewayTransactionId.gateway).toBe(Gateway.MERCADOPAGO);
+        expect(result.redirect.rawStatus).toBe("pending");
+      }
+    });
+
     /** Una consulta no crea nada, así que no necesita llave. */
     it("no manda llave de idempotencia al consultar", async () => {
       const mockFetch = jest.fn().mockResolvedValue({
@@ -360,7 +391,7 @@ describe("MercadoPagoAdapter", () => {
       const secret = "test_mp_secret_key";
       const dataId = "1234567890";
       const requestId = "req-uuid-123";
-      const ts = "1602113476";
+      const ts = String(Math.floor(Date.now() / 1000));
 
       const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
       const v1 = crypto.createHmac("sha256", secret).update(manifest).digest("hex");

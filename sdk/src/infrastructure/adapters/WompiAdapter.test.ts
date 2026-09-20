@@ -42,6 +42,21 @@ describe("WompiAdapter", () => {
     },
   };
 
+  /**
+   * Doble de `fetch` que responde un cuerpo por llamada, en orden.
+   *
+   * Estaba dentro del `describe` de PSE y subió acá cuando el cobro con tarjeta también
+   * pasó a ser de dos llamadas: el token de aceptación primero y la transacción después.
+   */
+  function mockResponses(...bodies: unknown[]) {
+    const mockFetch = jest.fn();
+    for (const body of bodies) {
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => body });
+    }
+    global.fetch = mockFetch;
+    return mockFetch;
+  }
+
   beforeEach(() => {
     jest.restoreAllMocks();
   });
@@ -130,13 +145,14 @@ describe("WompiAdapter", () => {
       const credentials = {
         publicKey: "pub_test_wompi_123",
         privateKey: "prv_test_wompi_456",
+        // Con credenciales configuradas el adaptador exige firmar, así que unas
+        // credenciales sin este campo ya no llegan a la red (issue #92).
+        integritySecret: "int_test_wompi_789",
       };
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        status: 201,
-        json: async () => approvedWompiMockResponse,
-      });
-      global.fetch = mockFetch;
+      const mockFetch = mockResponses(
+        { data: { presigned_acceptance: { acceptance_token: "tok_sim_bearer" } } },
+        approvedWompiMockResponse,
+      );
 
       const adapter = new WompiAdapter(undefined, credentials);
       await adapter.createPayment(validRequest);
@@ -150,8 +166,10 @@ describe("WompiAdapter", () => {
           },
         }),
       );
-      // The private key must never travel in the payment creation request.
-      expect(JSON.stringify(mockFetch.mock.calls[0])).not.toContain(
+      // La llave privada no puede viajar en **ninguna** de las dos llamadas. Antes se
+      // revisaba solo la primera, que era la única que había; ahora la primera es la del
+      // token de aceptación y revisar solo esa dejaría el cobro sin mirar.
+      expect(JSON.stringify(mockFetch.mock.calls)).not.toContain(
         credentials.privateKey,
       );
     });
@@ -374,7 +392,7 @@ describe("WompiAdapter", () => {
     it("should return true when webhook signature is valid", () => {
       const adapter = new WompiAdapter();
       const secret = "test_events_secret_wompi";
-      const timestamp = 1602113476;
+      const timestamp = Math.floor(Date.now() / 1000);
       const transactionId = "1292-1602113476-10985";
       const status = "APPROVED";
 
@@ -404,7 +422,7 @@ describe("WompiAdapter", () => {
     it("should return false when webhook signature is invalid", () => {
       const adapter = new WompiAdapter();
       const secret = "test_events_secret_wompi";
-      const timestamp = 1602113476;
+      const timestamp = Math.floor(Date.now() / 1000);
       const transactionId = "1292-1602113476-10985";
       const status = "APPROVED";
 
@@ -513,6 +531,38 @@ describe("WompiAdapter", () => {
         new WompiAdapter().createPayment({ ...validRequest, paymentMethod: undefined }),
       ).rejects.toThrow("POST /v1/tokens/cards");
     });
+
+    it("should return redirectRequired when card transaction requires 3DS authentication", async () => {
+      const response3ds = {
+        data: {
+          id: "wompi-3ds-tx-123",
+          status: "PENDING",
+          payment_method: {
+            type: "CARD",
+            extra: {
+              is_three_ds: true,
+              three_ds_auth_type: "CHALLENGE",
+              async_payment_url: "https://production.wompi.co/v1/3ds/challenge/123",
+            },
+          },
+        },
+      };
+
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => response3ds,
+      });
+
+      const result = await new WompiAdapter().createPayment(validRequest);
+      expect(result.outcome).toBe("REDIRECT_REQUIRED");
+      if (result.outcome === "REDIRECT_REQUIRED") {
+        expect(result.redirect.redirectUrl).toBe("https://production.wompi.co/v1/3ds/challenge/123");
+        expect(result.redirect.gatewayTransactionId.value).toBe("wompi-3ds-tx-123");
+        expect(result.redirect.gatewayTransactionId.gateway).toBe(Gateway.WOMPI);
+        expect(result.redirect.rawStatus).toBe("PENDING");
+      }
+    });
   });
 
   describe("createPayment() con PSE", () => {
@@ -551,15 +601,6 @@ describe("WompiAdapter", () => {
         },
       },
     };
-
-    function mockResponses(...bodies: unknown[]) {
-      const mockFetch = jest.fn();
-      for (const body of bodies) {
-        mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => body });
-      }
-      global.fetch = mockFetch;
-      return mockFetch;
-    }
 
     it("should return REDIRECT_REQUIRED with the url found after polling", async () => {
       mockResponses(createdPse, pseWithUrl);
@@ -605,6 +646,95 @@ describe("WompiAdapter", () => {
       ).rejects.toMatchObject({ code: KitPagosErrorCode.INVALID_REQUEST });
 
       expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    /*
+     * Issue #92. Wompi no crea ninguna transacción sin firma de integridad ni sin token de
+     * aceptación: sin `signature` responde `422 "Firma de integridad requerida no enviada"`
+     * y sin `acceptance_token`, `422 "No está presente"`. Antes el SDK mandaba la
+     * transacción incompleta y dejaba que Wompi contestara, con un mensaje que nombra el
+     * campo del cuerpo (`signature`) y no el ajuste que falta (`integritySecret`).
+     */
+    describe("guarda de lo que Wompi exige para crear", () => {
+      it("exige el secreto de integridad y no gasta ni una llamada", async () => {
+        const mockFetch = jest.fn();
+        global.fetch = mockFetch;
+
+        await expect(
+          new WompiAdapter(undefined, {
+            publicKey: "pub_test_1",
+            privateKey: "prv_test_1",
+          }).createPayment(validRequest),
+        ).rejects.toMatchObject({ code: KitPagosErrorCode.INVALID_CREDENTIALS });
+
+        // La guarda del secreto corre antes de pedir el token de aceptación, así que un
+        // comercio mal configurado se entera sin pagar el viaje a la red.
+        expect(mockFetch).not.toHaveBeenCalled();
+      });
+
+      it("nombra el ajuste que falta y lo distingue del secreto de eventos", async () => {
+        // El 422 de Wompi habla de `signature`, que no se parece a `integritySecret`, y
+        // Wompi entrega los dos secretos juntos en el panel. El mensaje tiene que decir
+        // cuál de los dos es, o manda a revisar el que está bien.
+        global.fetch = jest.fn();
+
+        try {
+          await new WompiAdapter(undefined, {
+            publicKey: "pub_test_1",
+            privateKey: "prv_test_1",
+          }).createPayment(validRequest);
+          fail("debía lanzar KitPagosError");
+        } catch (error) {
+          const sdkError = error as KitPagosError;
+          expect(sdkError.message).toContain("integritySecret");
+          expect(sdkError.message).toContain("secreto de eventos");
+        }
+      });
+
+      it("falla con un diagnóstico propio si el token de aceptación no viene en la respuesta", async () => {
+        // Si la llave pública es de otro comercio o de otro ambiente, `merchants` responde
+        // 200 sin `presigned_acceptance`. Mandar la transacción igual da un 422 que habla
+        // de un campo que el comercio nunca escribió.
+        const mockFetch = mockResponses({ data: {} });
+
+        await expect(
+          new WompiAdapter(undefined, {
+            publicKey: "pub_test_1",
+            privateKey: "prv_test_1",
+            integritySecret: "int_test_1",
+          }).createPayment(validRequest),
+        ).rejects.toMatchObject({ code: KitPagosErrorCode.MALFORMED_RESPONSE });
+
+        // Alcanzó a pedir el token, y se detuvo antes de crear la transacción.
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        expect(mockFetch.mock.calls[0][0]).toContain("/merchants/");
+      });
+
+      it("no exige nada cuando no hay credenciales, para seguir sirviendo contra el simulador", async () => {
+        // La API de Simulación no valida firmas, y el SDK tiene que poder usarse sin
+        // configurar nada. El interruptor de la guarda es haber configurado credenciales:
+        // si las hay, se le está hablando a Wompi de verdad y va a hacer falta todo.
+        const mockFetch = mockResponses(approvedWompiMockResponse);
+
+        const result = await new WompiAdapter().createPayment(validRequest);
+
+        expect(expectTransaction(result).isApproved()).toBe(true);
+        // Una sola llamada: sin credenciales no hay a quién pedirle el token de aceptación.
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+      });
+
+      it("no exige el secreto para consultar, porque esa llamada no lleva firma", async () => {
+        // Por eso `integritySecret` sigue siendo opcional en el tipo: un comercio que solo
+        // consulte estados en Wompi no tiene por qué configurarlo.
+        mockResponses(approvedWompiMockResponse);
+
+        const transaction = await new WompiAdapter(undefined, {
+          publicKey: "pub_test_1",
+          privateKey: "prv_test_1",
+        }).getStatus("wompi-tx-1");
+
+        expect(transaction.isApproved()).toBe(true);
+      });
     });
 
     it("should sign the transaction and attach the acceptance token when configured", async () => {

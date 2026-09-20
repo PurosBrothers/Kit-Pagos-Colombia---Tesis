@@ -287,6 +287,44 @@ export function extractOrderRedirect(rawResponse: unknown): PendingRedirect {
 }
 
 /**
+ * Extrae la redirección de 3D Secure o autenticación externa de un cobro con tarjeta en Mercado Pago.
+ * Mercado Pago entrega la URL del desafío en `point_of_interaction.transaction_data.ticket_url`
+ * o en `three_ds_info.external_resource_url` o en `transaction_details.external_resource_url`.
+ */
+export function extractPaymentRedirect(rawResponse: unknown): PendingRedirect | undefined {
+  if (typeof rawResponse !== "object" || rawResponse === null) return undefined;
+  const payload = rawResponse as Record<string, unknown>;
+
+  const id = payload.id !== undefined ? String(payload.id) : "";
+  const rawStatus = typeof payload.status === "string" ? payload.status : "";
+
+  const poi = readObject(payload, "point_of_interaction");
+  const transactionData = readObject(poi, "transaction_data");
+  const ticketUrl = transactionData?.ticket_url;
+
+  const threeDs = readObject(payload, "three_ds_info");
+  const threeDsUrl = threeDs?.external_resource_url;
+
+  const transactionDetails = readObject(payload, "transaction_details");
+  const detailsUrl = transactionDetails?.external_resource_url;
+
+  const redirectUrl =
+    (typeof ticketUrl === "string" && ticketUrl.length > 0 && ticketUrl) ||
+    (typeof threeDsUrl === "string" && threeDsUrl.length > 0 && threeDsUrl) ||
+    (typeof detailsUrl === "string" && detailsUrl.length > 0 && detailsUrl);
+
+  if (redirectUrl) {
+    return {
+      redirectUrl,
+      gatewayTransactionId: new GatewayTransactionId(id, Gateway.MERCADOPAGO),
+      rawStatus,
+    };
+  }
+
+  return undefined;
+}
+
+/**
  * Si un identificador corresponde a una orden y no a un pago.
  *
  * Existe porque Mercado Pago tiene dos familias de recursos con endpoints

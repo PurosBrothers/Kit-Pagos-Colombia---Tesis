@@ -92,6 +92,22 @@ describe("ErrorHandler", () => {
       expect(result.message).toContain("Failed to connect to Wompi gateway");
     });
 
+    it("resuelve la asimetría traduciendo errores con mensaje 'network' o código ENETUNREACH a CONNECTION_FAILED retriable", () => {
+      const networkError = new Error("network error occurred during request");
+      expect(isRetriable(networkError)).toBe(true);
+
+      const handled = errorHandler.handle(networkError, Gateway.WOMPI);
+      expect(handled.code).toBe(KitPagosErrorCode.CONNECTION_FAILED);
+      expect(handled.gateway).toBe(Gateway.WOMPI);
+      expect(isRetriable(handled)).toBe(true);
+
+      const unreachableErr = Object.assign(new Error("Network is unreachable"), { code: "ENETUNREACH" });
+      expect(isRetriable(unreachableErr)).toBe(true);
+      const handledUnreachable = errorHandler.handle(unreachableErr, Gateway.RAPYD);
+      expect(handledUnreachable.code).toBe(KitPagosErrorCode.CONNECTION_FAILED);
+      expect(isRetriable(handledUnreachable)).toBe(true);
+    });
+
     it("traduce errores con código ECONNREFUSED / ENOTFOUND / ECONNRESET a CONNECTION_FAILED", () => {
       const error = Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
       const result = errorHandler.handle(error, Gateway.RAPYD);
@@ -285,6 +301,24 @@ describe("ErrorHandler", () => {
       expect(error.message).not.toContain("api_999");
       expect(error.message).toContain('privateKey: "[REDACTED]"');
       expect(error.message).toContain('apiKey: "[REDACTED]"');
+    });
+
+    it("redacta los dos secretos de Wompi, que no son la llave privada ni son el mismo", () => {
+      // La lista de `sanitize()` es por nombre, así que **cada campo nuevo de
+      // `Credentials` hay que agregarlo o se filtra**. `webhookSecret` entró con el
+      // issue #92 y esta prueba es la que evita que el próximo campo se olvide:
+      // `integritySecret` firma lo que sale y `webhookSecret` valida lo que entra.
+      const error = errorHandler.handle(
+        new Error(
+          'Request failed with integritySecret: "int_wompi_abc" and webhookSecret: "evt_wompi_xyz"',
+        ),
+        Gateway.WOMPI,
+      );
+
+      expect(error.message).not.toContain("int_wompi_abc");
+      expect(error.message).not.toContain("evt_wompi_xyz");
+      expect(error.message).toContain('integritySecret: "[REDACTED]"');
+      expect(error.message).toContain('webhookSecret: "[REDACTED]"');
     });
 
     it("preserva el errorBody original en originalPayload para auditoría sin exponerlo en message", () => {

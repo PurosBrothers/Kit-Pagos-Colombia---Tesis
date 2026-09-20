@@ -33,6 +33,12 @@ jobs:
 
       - name: Run test with coverage
         run: npm test -- --coverage
+
+      - name: Build SDK
+        run: npm run build
+
+      - name: Verify package tarball
+        run: npm pack --dry-run
   
   simulator-api:
     name: Simulator API (Lint, Tests and Coverage)

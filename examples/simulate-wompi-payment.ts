@@ -46,6 +46,14 @@ const options: SDKOptions = {
     [Gateway.WOMPI]: {
       publicKey: "pub_test_ejemplo_no_real",
       privateKey: "prv_test_ejemplo_no_real",
+      // Wompi signs every outgoing transaction with this secret and creates none
+      // without it: the real API answers `422 "Firma de integridad requerida no
+      // enviada"`. Since the issue #92 the SDK demands it up front, so a merchant
+      // that configures credentials gets a message naming the missing setting
+      // instead of that 422. It is a different value from the events secret used
+      // to verify webhooks: one signs what goes out, the other validates what
+      // comes in, and Wompi hands them over together in the same panel.
+      integritySecret: "test_integrity_ejemplo_no_real",
     },
   },
   baseUrl: SIMULATOR_WOMPI_URL,
