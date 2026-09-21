@@ -31,8 +31,8 @@ WOMPI_EVENTS_SECRET=test_events_xxxxxxxx
 
 | Variable | De dónde sale | Para qué |
 |---|---|---|
-| `WOMPI_PUBLIC_KEY` | Panel de Wompi, sección de llaves | Tokenizar en el navegador y las lecturas |
-| `WOMPI_PRIVATE_KEY` | Misma sección | Crear transacciones |
+| `WOMPI_PUBLIC_KEY` | Panel de Wompi, sección de llaves | **Todas** las llamadas del SDK a Wompi usan esta llave como `Bearer`: token de aceptación, crear y consultar (`WompiAdapter.ts`, líneas 210 y 229) |
+| `WOMPI_PRIVATE_KEY` | Misma sección | Campo exigido por el tipo `Credentials`; el `WompiAdapter` **no lo envía** en ninguna llamada (ver `WompiAdapter.test.ts`, línea 169) y solo queda como respaldo al verificar webhooks si falta `WOMPI_EVENTS_SECRET` |
 | `WOMPI_INTEGRITY_SECRET` | Misma sección, valor aparte | Firmar lo que el comercio manda. **Sin esto Wompi responde `422` y no crea nada** |
 | `WOMPI_EVENTS_SECRET` | Configuración de eventos o webhooks | Verificar lo que llega |
 
