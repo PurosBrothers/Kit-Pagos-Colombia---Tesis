@@ -73,6 +73,62 @@ export class GatewayMockFactory {
   }
 
   /**
+   * Construye la respuesta de un pago expirado.
+   */
+  buildExpiredResponse(
+    requestBody: MercadoPagoCreatePaymentRequestBody,
+    customId?: number | string,
+  ): MercadoPagoPaymentResponse {
+    const now = new Date().toISOString();
+
+    return {
+      id: customId ?? this.generateId(),
+      status: "cancelled",
+      status_detail: "expired",
+      transaction_amount: requestBody.transaction_amount,
+      currency_id: "COP",
+      description: requestBody.description,
+      external_reference: requestBody.external_reference ?? requestBody.description,
+      payer: requestBody.payer,
+      date_created: now,
+      date_approved: null,
+    };
+  }
+
+  /**
+   * Respuesta nativa de timeout para Mercado Pago (HTTP 504).
+   */
+  buildTimeoutResponse() {
+    return {
+      message: "Gateway Timeout",
+      error: "gateway_timeout",
+      status: 504,
+    };
+  }
+
+  /**
+   * Respuesta nativa de rate limit para Mercado Pago (HTTP 429).
+   */
+  buildRateLimitResponse() {
+    return {
+      message: "Too many requests",
+      error: "rate_limit_exceeded",
+      status: 429,
+    };
+  }
+
+  /**
+   * Respuesta nativa de error de servidor para Mercado Pago (HTTP 5xx).
+   */
+  buildServerErrorResponse(status = 500) {
+    return {
+      message: "Internal Server Error",
+      error: "server_error",
+      status,
+    };
+  }
+
+  /**
    * Identificador de orden al estilo de la Orders API: un ULID con prefijo.
    *
    * El prefijo no es decorativo. El SDK distingue por él a qué endpoint

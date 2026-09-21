@@ -115,13 +115,150 @@ describe("mock de Kushki", () => {
       await app.close();
     });
 
+    it("devuelve EXPIRED para un cargo expirado", async () => {
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        headers: { "x-simulator-scenario": "EXPIRED" },
+        payload: validRequestBody,
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.details.transactionStatus).toBe("DECLINED");
+      expect(body.details.responseText).toBe("Transacción expirada");
+
+      await app.close();
+    });
+
+    it("responde 504 Gateway Timeout cuando el escenario es TIMEOUT", async () => {
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        headers: { "x-simulator-scenario": "TIMEOUT" },
+        payload: validRequestBody,
+      });
+
+      expect(response.statusCode).toBe(504);
+      expect(response.json().code).toBe("K504");
+
+      await app.close();
+    });
+
+    it("simula NETWORK_ERROR respondiendo con error 500", async () => {
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        headers: { "x-simulator-scenario": "NETWORK_ERROR" },
+        payload: validRequestBody,
+      });
+
+      expect(response.statusCode).toBe(500);
+
+      await app.close();
+    });
+
+    it("responde 429 Too Many Requests cuando el escenario es RATE_LIMIT", async () => {
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        headers: { "x-simulator-scenario": "RATE_LIMIT" },
+        payload: validRequestBody,
+      });
+
+      expect(response.statusCode).toBe(429);
+      expect(response.json().code).toBe("K429");
+
+      await app.close();
+    });
+
+    it("responde 500 cuando el escenario es SERVER_ERROR", async () => {
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        headers: { "x-simulator-scenario": "SERVER_ERROR" },
+        payload: validRequestBody,
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json().code).toBe("K500");
+
+      await app.close();
+    });
+
+    it("responde con flapping (503 en intentos iniciales, éxito en el siguiente)", async () => {
+      const app = buildApp();
+      const flapBody = { ...validRequestBody, token: "tok_kushki_flap_1" };
+
+      const res1 = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        headers: { "x-simulator-scenario": "FLAPPING" },
+        payload: flapBody,
+      });
+      expect(res1.statusCode).toBe(503);
+
+      const res2 = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        headers: { "x-simulator-scenario": "FLAPPING" },
+        payload: flapBody,
+      });
+      expect(res2.statusCode).toBe(503);
+
+      const res3 = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        headers: { "x-simulator-scenario": "FLAPPING" },
+        payload: flapBody,
+      });
+      expect(res3.statusCode).toBe(201);
+      expect(res3.json().details.transactionStatus).toBe("APPROVAL");
+
+      await app.close();
+    });
+
+    it("detecta pagos duplicados cuando el escenario es DUPLICATE_PAYMENT", async () => {
+      const app = buildApp();
+      const dupBody = { ...validRequestBody, token: "tok_kushki_dup_1" };
+
+      const res1 = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        headers: { "x-simulator-scenario": "DUPLICATE_PAYMENT" },
+        payload: dupBody,
+      });
+      expect(res1.statusCode).toBe(201);
+
+      const res2 = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        headers: { "x-simulator-scenario": "DUPLICATE_PAYMENT" },
+        payload: dupBody,
+      });
+      expect(res2.statusCode).toBe(409);
+      expect(res2.json().code).toBe("K409");
+
+      await app.close();
+    });
+
     it("responde 501 para escenarios aún no implementados", async () => {
       const app = buildApp();
 
       const response = await app.inject({
         method: "POST",
         url: "/v1/sim/kushki/card/v1/charges",
-        headers: { "x-simulate-scenario": "TIMEOUT" },
+        headers: { "x-simulate-scenario": "ESCENARIO_DESCONOCIDO_KUSHKI" },
         payload: validRequestBody,
       });
 

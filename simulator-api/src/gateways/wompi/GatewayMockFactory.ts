@@ -63,6 +63,84 @@ export class GatewayMockFactory {
   }
 
   /**
+   * Construye una respuesta de transacción rechazada (DECLINED / fondos insuficientes).
+   */
+  buildDeclinedResponse(
+    requestBody: WompiCreateTransactionRequestBody,
+  ): WompiTransactionResponse {
+    const transaction: WompiTransaction = {
+      id: randomUUID(),
+      status: "DECLINED",
+      amount_in_cents: requestBody.amount_in_cents,
+      currency: requestBody.currency,
+      reference: requestBody.reference,
+      customer_email: requestBody.customer_email,
+      payment_method: requestBody.payment_method,
+      redirect_url: requestBody.redirect_url,
+    };
+
+    this.store.save(transaction.id, transaction);
+    return { data: transaction };
+  }
+
+  /**
+   * Construye una respuesta de transacción expirada (VOIDED).
+   */
+  buildExpiredResponse(
+    requestBody: WompiCreateTransactionRequestBody,
+  ): WompiTransactionResponse {
+    const transaction: WompiTransaction = {
+      id: randomUUID(),
+      status: "VOIDED",
+      amount_in_cents: requestBody.amount_in_cents,
+      currency: requestBody.currency,
+      reference: requestBody.reference,
+      customer_email: requestBody.customer_email,
+      payment_method: requestBody.payment_method,
+      redirect_url: requestBody.redirect_url,
+    };
+
+    this.store.save(transaction.id, transaction);
+    return { data: transaction };
+  }
+
+  /**
+   * Respuesta nativa de timeout para Wompi (HTTP 504).
+   */
+  buildTimeoutResponse() {
+    return {
+      error: {
+        type: "GATEWAY_TIMEOUT",
+        reason: "Tiempo de espera agotado en la pasarela Wompi",
+      },
+    };
+  }
+
+  /**
+   * Respuesta nativa de saturación / límite de tasa (HTTP 429).
+   */
+  buildRateLimitResponse() {
+    return {
+      error: {
+        type: "RATE_LIMIT",
+        reason: "Demasiadas peticiones a Wompi (Rate limit exceeded)",
+      },
+    };
+  }
+
+  /**
+   * Respuesta nativa de error interno de pasarela (HTTP 5xx).
+   */
+  buildServerErrorResponse(code = 500) {
+    return {
+      error: {
+        type: "SERVER_ERROR",
+        reason: `Error interno de pasarela Wompi (${code})`,
+      },
+    };
+  }
+
+  /**
    * Crea un PSE tal como lo crea Wompi: PENDING y **sin** URL de redirección.
    *
    * Que la URL no esté es lo correcto, no una simplificación del mock. Se midió

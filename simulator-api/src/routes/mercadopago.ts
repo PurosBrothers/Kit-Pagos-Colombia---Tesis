@@ -4,6 +4,11 @@ import {
   MercadoPagoCreateOrderRequestBody,
   MercadoPagoCreatePaymentRequestBody,
 } from "../gateways/mercadopago/types";
+import {
+  getSimulatorScenario,
+  ScenarioEngine,
+} from "../scenarios/ScenarioEngine";
+import { transactionStore } from "../store/TransactionStore";
 
 const SCENARIO_HEADER = "x-simulate-scenario";
 export const DEFAULT_SCENARIO = "APPROVED";
@@ -42,6 +47,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
    * `400 "Missing HTTP header: X-Idempotency-Key."`, o sea que cada API se queja distinto del
    * mismo header. El mock las distingue porque el SDK no podía crear cobros en ninguna de las
    * dos y el mock los aceptaba en ambas: exactamente lo que este simulador no debe hacer.
+   * Mercado Pago no crea nada sin llave de idempotencia.
    */
   function rejectsWithoutIdempotencyKey(
     request: FastifyRequest,
@@ -82,10 +88,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/v1/sim/mercadopago/payments",
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const scenarioHeader = request.headers[SCENARIO_HEADER];
-      const scenario = Array.isArray(scenarioHeader)
-        ? scenarioHeader[0]
-        : (scenarioHeader ?? DEFAULT_SCENARIO);
+      let scenario = getSimulatorScenario(request);
 
       if (rejectsWithoutIdempotencyKey(request, reply, "payments")) {
         return reply;
@@ -102,6 +105,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
        * - sin `installments`: `400 "Invalid installments"`. Es la única de las cuatro
        *   pasarelas que exige las cuotas siempre, incluso cuando son una, y es la razón de
        *   que `installments` sea parte del dominio y no un extra de cada adaptador.
+       * Validaciones de cuerpo de petición
        */
       if (!requestBody?.token) {
         return reply.code(400).send({
@@ -121,9 +125,57 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      // ── Manejo de escenarios técnicos ──
+      if (scenario === "TIMEOUT" || scenario === "GATEWAY_TIMEOUT") {
+        return reply.code(504).send(mockFactory.buildTimeoutResponse());
+      }
+
+      if (scenario === "NETWORK_ERROR" || scenario === "CONNECTION_ERROR") {
+        return ScenarioEngine.handleNetworkError(request, reply);
+      }
+
+      if (scenario === "RATE_LIMIT" || scenario === "TOO_MANY_REQUESTS" || scenario === "429") {
+        return reply.code(429).send(mockFactory.buildRateLimitResponse());
+      }
+
+      if (scenario === "SERVER_ERROR" || scenario === "INTERNAL_ERROR" || scenario === "500") {
+        return reply.code(500).send(mockFactory.buildServerErrorResponse(500));
+      }
+
+      if (scenario === "BAD_GATEWAY" || scenario === "502") {
+        return reply.code(502).send(mockFactory.buildServerErrorResponse(502));
+      }
+
+      if (scenario === "SERVICE_UNAVAILABLE" || scenario === "503") {
+        return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+      }
+
+      if (scenario === "FLAPPING") {
+        const key = requestBody.external_reference ?? requestBody.description ?? "mp_flapping";
+        const isFailing = ScenarioEngine.handleFlapping(key);
+        if (isFailing) {
+          return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+        }
+        scenario = DEFAULT_SCENARIO;
+      }
+
+      if (scenario === "DUPLICATE_PAYMENT") {
+        const dupKey = `dup_mp_${requestBody.external_reference ?? requestBody.description}`;
+        if (transactionStore.findById(dupKey)) {
+          return reply.code(409).send({
+            message: "Payment with this external_reference already exists",
+            error: "conflict",
+            status: 409,
+          });
+        }
+        transactionStore.save(dupKey, true);
+        scenario = DEFAULT_SCENARIO;
+      }
+
       if (
         scenario === DEFAULT_SCENARIO ||
-        scenario.toUpperCase() === "APPROVED"
+        scenario.toUpperCase() === "APPROVED" ||
+        scenario === "APPROVAL"
       ) {
         const response = mockFactory.buildApprovedResponse(requestBody);
         return reply.code(201).send(response);
@@ -134,6 +186,11 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         scenario.toUpperCase() === "DECLINED"
       ) {
         const response = mockFactory.buildRejectedResponse(requestBody);
+        return reply.code(201).send(response);
+      }
+
+      if (scenario === "EXPIRED") {
+        const response = mockFactory.buildExpiredResponse(requestBody);
         return reply.code(201).send(response);
       }
 
@@ -164,11 +221,20 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (
-        scenario.toUpperCase() === "REJECTED" ||
-        scenario.toUpperCase() === "DECLINED"
-      ) {
+      if (scenario === "REJECTED" || scenario === "DECLINED") {
         const response = mockFactory.buildRejectedResponse(
+          {
+            transaction_amount: 50000,
+            description: `Consulta de pago ${id}`,
+            payer: { email: "customer@example.com" },
+          },
+          id,
+        );
+        return reply.code(200).send(response);
+      }
+
+      if (scenario === "EXPIRED") {
+        const response = mockFactory.buildExpiredResponse(
           {
             transaction_amount: 50000,
             description: `Consulta de pago ${id}`,
@@ -244,7 +310,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       const { id } = request.params;
       const scenario = readScenario(request);
 
-      if (scenario.toUpperCase() === "NOT_FOUND") {
+      if (scenario === "NOT_FOUND") {
         return reply.code(404).send({
           message: "Order not found",
           error: "not_found",

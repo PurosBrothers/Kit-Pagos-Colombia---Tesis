@@ -77,6 +77,47 @@ export class GatewayMockFactory {
   }
 
   /**
+   * Construye una respuesta de cobro expirado.
+   */
+  buildExpiredResponse(
+    requestBody: KushkiCreateChargeRequestBody,
+  ): KushkiChargeResponse {
+    const response = this.buildResponse(requestBody, "DECLINED");
+    response.details.responseText = "Transacción expirada";
+    return response;
+  }
+
+  /**
+   * Respuesta nativa de timeout para Kushki (HTTP 504).
+   */
+  buildTimeoutResponse() {
+    return {
+      code: "K504",
+      message: "Gateway Timeout en Kushki",
+    };
+  }
+
+  /**
+   * Respuesta nativa de rate limit para Kushki (HTTP 429).
+   */
+  buildRateLimitResponse() {
+    return {
+      code: "K429",
+      message: "Demasiadas peticiones a Kushki (Rate limit exceeded)",
+    };
+  }
+
+  /**
+   * Respuesta nativa de error de servidor para Kushki (HTTP 5xx).
+   */
+  buildServerErrorResponse(status = 500) {
+    return {
+      code: `K${status}`,
+      message: `Error interno de servidor en Kushki (${status})`,
+    };
+  }
+
+  /**
    * Lista de bancos de `GET /transfer/v1/bankList`.
    *
    * **Los nombres son de bancos colombianos reales pero la lista no es la de
