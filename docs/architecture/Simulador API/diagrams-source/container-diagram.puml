@@ -1,0 +1,37 @@
+@startuml Container Diagram - Simulador API
+title Diagrama de Contenedores — Flujo de Simulación Kit Pagos Colombia (Nivel 2)
+skinparam backgroundColor white
+skinparam rectangleFontSize 11
+skinparam wrapWidth 190
+skinparam rectangle {
+  BorderColor #666666
+  ArrowColor #666666
+  FontColor white
+}
+
+rectangle "**Desarrollador / Tester QA**\n\nInstala el SDK en modo\nsimulacion y valida flujos de\npago sin depender de\nentornos reales" as Dev #1F4E79
+
+rectangle "Kit Pagos Colombia\n[system]" as System #FFFFFF {
+  rectangle "**SDK Kit Pagos Colombia**\n<i>[TypeScript / Node.js 18+\nPaquete npm]</i>\n\nEn modo simulacion redirige\ntodas las solicitudes de sus\nadaptadores internos hacia\nla API de Simulacion. El\ncambio opera mediante\nconfiguracion de entorno sin\nmodificar el codigo de\nnegocio del llamador" as SDK #2E75B6
+  rectangle "**Documentacion Centralizada**\n<i>[Markdown / GitHub Pages\nRepositorio publico]</i>\n\nCentraliza datos de prueba\npor pasarela y la\nespecificacion OpenAPI 3.0\nde la API de Simulacion\ncomo archivos estaticos\naccesibles publicamente" as Docs #2E75B6
+  rectangle "**API de Simulacion**\n<i>[Fastify / Node.js 18+\nDesplegada en Render — URL\npublica HTTPS]</i>\n\nProcesa solicitudes\nredirigidas por el SDK,\nejecuta el escenario\nconfigurado mediante\nheaders de control,\nconstruye respuestas con\nformato nativo de cada\npasarela, calcula firmas\ncriptograficas y despacha\nwebhooks sinteticos. Expone\ndocumentacion OpenAPI 3.0\nen /docs" as SimAPI #2E75B6
+}
+
+rectangle "**Aplicacion del Comercio (Huesped)**\n\nAplicacion web o movil que\nintegra el SDK para aceptar\npagos. Recibe webhooks\nsinteticos en su endpoint de\nnotificaciones" as Comercio #A9A9A9
+rectangle "**Pasarelas Reales**\n(Wompi · Rapyd · Mercado\nPago · Kushki)\n\nAPIs productivas de\nreferencia. Sin conexion real\nen modo simulacion" as Pasarelas #A9A9A9
+
+Dev --> SDK : Instala y configura\nen modo simulacion\n[npm install / TypeScript\nAPI]
+Dev --> Docs : Consulta datos de\nprueba\n[HTTPS / Browser]
+Dev --> SimAPI : Consulta /docs y\nactiva webhooks\nmanualmente\n[HTTPS / Swagger UI]
+
+SDK --> SimAPI : Redirige solicitudes\nde adaptadores internos\n[HTTPS / JSON]
+SimAPI --> SDK : Retorna respuesta con\nformato nativo de\npasarela\n[HTTPS / JSON]
+SimAPI --> Comercio : Despacha webhook\nsintetico firmado\n(invocado manualmente\npor el tester)\n[HTTP POST Asincrono /\nJSON]
+SimAPI --> Pasarelas : Replica formatos de\nrespuesta\n(sin conexion real)\n[Referencia estructural]
+
+note bottom of Pasarelas
+  "PayU" reemplazado por "Rapyd" tras la adquisicion
+  (ver architecture-log.md, punto 15/17).
+end note
+
+@enduml

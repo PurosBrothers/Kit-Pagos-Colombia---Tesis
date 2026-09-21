@@ -1,0 +1,509 @@
+import { ResponseNormalizer } from "./ResponseNormalizer";
+import { Gateway } from "../../domain/value-objects/Gateway";
+import { KitPagosError } from "../../domain/errors/KitPagosError";
+import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
+
+describe("ResponseNormalizer", () => {
+  let normalizer: ResponseNormalizer;
+
+  beforeEach(() => {
+    normalizer = new ResponseNormalizer();
+  });
+
+  describe("normalize() with Wompi", () => {
+    it("should normalize an approved Wompi response matching simulator contract", () => {
+      const wompiRawResponse = {
+        data: {
+          id: "wompi-sim-12345",
+          status: "APPROVED",
+          amount_in_cents: 5000000,
+          currency: "COP",
+          reference: "ORDER-123",
+          customer_email: "cliente@example.com",
+          authorization_code: "AUTH-999",
+        },
+      };
+
+      const transaction = normalizer.normalize(wompiRawResponse, Gateway.WOMPI);
+
+      expect(transaction).toBeDefined();
+      expect(transaction.isApproved()).toBe(true);
+      expect(transaction.isPending()).toBe(false);
+      expect(transaction.isFinal()).toBe(true);
+      expect(transaction.getStatus()).toBe("APPROVED");
+      expect(transaction.rawStatus).toBe("APPROVED");
+      expect(transaction.gatewayTransactionId.value).toBe("wompi-sim-12345");
+      expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.WOMPI);
+      expect(transaction.amount.getValue()).toBe("50000.00");
+      expect(transaction.amount.toMinorUnits(transaction.currency)).toBe("5000000");
+      expect(transaction.currency.getCode()).toBe("COP");
+      expect(transaction.orderReference.getValue()).toBe("ORDER-123");
+      expect(transaction.payer.email).toBe("cliente@example.com");
+      expect(transaction.authorizationCode).toBe("AUTH-999");
+    });
+
+    it("should parse payload when passed as a valid JSON string", () => {
+      const wompiJsonString = JSON.stringify({
+        data: {
+          id: "wompi-sim-str-1",
+          status: "APPROVED",
+          amount_in_cents: 2500000,
+          currency: "COP",
+          reference: "REF-STR",
+        },
+      });
+
+      const transaction = normalizer.normalize(wompiJsonString, Gateway.WOMPI);
+      expect(transaction.gatewayTransactionId.value).toBe("wompi-sim-str-1");
+      expect(transaction.amount.getValue()).toBe("25000.00");
+    });
+
+    it("conserva el cero a la derecha al reconstruir el monto desde centavos", () => {
+      // La implementación anterior dividía entre 100, y 1990 / 100 da 19.9: el
+      // comercio cobraba 19.90 y recibía de vuelta un monto escrito distinto.
+      // Ahora el punto decimal se inserta sobre los dígitos.
+      const payload = {
+        data: {
+          id: "tx-trailing-zero",
+          status: "APPROVED",
+          amount_in_cents: 1990,
+          currency: "COP",
+          reference: "REF-TZ",
+        },
+      };
+
+      const transaction = normalizer.normalize(payload, Gateway.WOMPI);
+      expect(transaction.amount.getValue()).toBe("19.90");
+      expect(transaction.amount.toMinorUnits(transaction.currency)).toBe("1990");
+    });
+
+    it("lanza KitPagosError(MALFORMED_RESPONSE) si el monto no es un entero de centavos", () => {
+      // Un monto ilegible es una respuesta malformada, y debe llegar como error
+      // tipado igual que un JSON roto, no como el Error nativo del objeto de valor.
+      const payload = {
+        data: {
+          id: "tx-bad-amount",
+          status: "APPROVED",
+          amount_in_cents: "no-es-un-numero",
+          currency: "COP",
+          reference: "REF-BAD",
+        },
+      };
+
+      expect(() => normalizer.normalize(payload, Gateway.WOMPI)).toThrow(KitPagosError);
+
+      try {
+        normalizer.normalize(payload, Gateway.WOMPI);
+      } catch (error) {
+        expect((error as KitPagosError).code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
+      }
+    });
+
+    it("should map different Wompi transaction statuses properly", () => {
+      const statuses = [
+        { raw: "DECLINED", expected: "DECLINED" },
+        { raw: "PENDING", expected: "PENDING" },
+        { raw: "VOIDED", expected: "VOIDED" },
+        { raw: "ERROR", expected: "ERROR" },
+        { raw: "UNKNOWN_CUSTOM_STATUS", expected: "ERROR" },
+      ];
+
+      for (const { raw, expected } of statuses) {
+        const payload = {
+          data: {
+            id: `tx-${raw}`,
+            status: raw,
+            amount_in_cents: 100000,
+            currency: "COP",
+            reference: `ref-${raw}`,
+          },
+        };
+
+        const transaction = normalizer.normalize(payload, Gateway.WOMPI);
+        expect(transaction.getStatus()).toBe(expected);
+        expect(transaction.rawStatus).toBe(raw);
+      }
+    });
+
+    it("should throw KitPagosError(MALFORMED_RESPONSE) when JSON parsing fails", () => {
+      const invalidJson = "{ invalid json ";
+
+      expect(() => normalizer.normalize(invalidJson, Gateway.WOMPI)).toThrow(KitPagosError);
+
+      try {
+        normalizer.normalize(invalidJson, Gateway.WOMPI);
+      } catch (error) {
+        expect(error).toBeInstanceOf(KitPagosError);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
+        expect(sdkError.gateway).toBe(Gateway.WOMPI);
+        expect(sdkError.message).toContain("Failed to parse JSON response");
+      }
+    });
+
+    it("should throw KitPagosError(MALFORMED_RESPONSE) when data or data.id is missing", () => {
+      const missingData = {};
+      const missingId = { data: { status: "APPROVED" } };
+
+      expect(() => normalizer.normalize(missingData, Gateway.WOMPI)).toThrow(KitPagosError);
+      expect(() => normalizer.normalize(missingId, Gateway.WOMPI)).toThrow(KitPagosError);
+
+      try {
+        normalizer.normalize(missingId, Gateway.WOMPI);
+      } catch (error) {
+        expect(error).toBeInstanceOf(KitPagosError);
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
+        expect(sdkError.gateway).toBe(Gateway.WOMPI);
+        expect(sdkError.message).toContain("missing data.id");
+      }
+    });
+  });
+
+  describe("normalize() con Gateway.RAPYD", () => {
+    /** Construye una respuesta de Rapyd con el sobre `{ status, data }`. */
+    const rapydResponse = (data: Record<string, unknown>) => ({
+      status: {
+        error_code: "",
+        status: "SUCCESS",
+        message: "",
+        response_code: "",
+        operation_id: "op-1",
+      },
+      data: {
+        id: "payment_abc",
+        amount: "150000.00",
+        currency_code: "COP",
+        merchant_reference_id: "ord-1",
+        receipt_email: "cliente@example.com",
+        failure_code: "",
+        failure_message: "",
+        created_at: 1756292071,
+        ...data,
+      },
+    });
+
+    it("normaliza un pago cerrado y pagado a APPROVED", () => {
+      const transaction = normalizer.normalize(
+        rapydResponse({ status: "CLO", paid: true }),
+        Gateway.RAPYD
+      );
+
+      expect(transaction.getStatus()).toBe("APPROVED");
+      expect(transaction.isApproved()).toBe(true);
+      expect(transaction.gatewayTransactionId.value).toBe("payment_abc");
+      expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.RAPYD);
+    });
+
+    it("no normaliza a APPROVED un pago cerrado pero no pagado", () => {
+      // "CLO" es cerrado, no pagado: son dos campos distintos. Leer solo el
+      // estado daria por cobrado lo que no se cobro. Se degrada a ERROR y no a
+      // DECLINED porque afirmar un rechazo seria afirmar que el banco respondio.
+      const transaction = normalizer.normalize(
+        rapydResponse({ status: "CLO", paid: false }),
+        Gateway.RAPYD
+      );
+
+      expect(transaction.getStatus()).toBe("ERROR");
+      expect(transaction.isApproved()).toBe(false);
+    });
+
+    it("normaliza ACT a PENDING", () => {
+      const transaction = normalizer.normalize(
+        rapydResponse({ status: "ACT", paid: false }),
+        Gateway.RAPYD
+      );
+
+      expect(transaction.getStatus()).toBe("PENDING");
+    });
+
+    it("normaliza EXP a EXPIRED", () => {
+      const transaction = normalizer.normalize(
+        rapydResponse({ status: "EXP", paid: false }),
+        Gateway.RAPYD
+      );
+
+      expect(transaction.getStatus()).toBe("EXPIRED");
+    });
+
+    it("normaliza REV a VOIDED", () => {
+      // REV ("Reversed by Rapyd") es el codigo real de reversion. El lenguaje
+      // ubicuo lo tenia pendiente conjeturando "CAN".
+      const transaction = normalizer.normalize(
+        rapydResponse({ status: "REV", paid: false }),
+        Gateway.RAPYD
+      );
+
+      expect(transaction.getStatus()).toBe("VOIDED");
+    });
+
+    it("normaliza ERR a DECLINED cuando el fallo viene del procesador de tarjeta", () => {
+      // Rapyd usa "ERR" tanto para el rechazo de negocio como para el fallo
+      // tecnico; el prefijo de failure_code es lo que los separa. Es el mismo
+      // criterio que aplica WebhookVerifier, para que el mismo pago no se
+      // normalice distinto segun si llego por webhook o por consulta.
+      const transaction = normalizer.normalize(
+        rapydResponse({
+          status: "ERR",
+          paid: false,
+          failure_code: "ERROR_PROCESSING_CARD - [51]",
+        }),
+        Gateway.RAPYD
+      );
+
+      expect(transaction.getStatus()).toBe("DECLINED");
+    });
+
+    it("normaliza ERR a ERROR cuando el fallo es tecnico", () => {
+      const transaction = normalizer.normalize(
+        rapydResponse({
+          status: "ERR",
+          paid: false,
+          failure_code: "MISSING_AUTHENTICATION_HEADERS",
+        }),
+        Gateway.RAPYD
+      );
+
+      expect(transaction.getStatus()).toBe("ERROR");
+    });
+
+    it("normaliza un estado desconocido a ERROR sin romperse", () => {
+      const transaction = normalizer.normalize(
+        rapydResponse({ status: "XYZ", paid: false }),
+        Gateway.RAPYD
+      );
+
+      expect(transaction.getStatus()).toBe("ERROR");
+      // El estado nativo se preserva tal como llego, para auditoria.
+      expect(transaction.rawStatus).toBe("XYZ");
+    });
+
+    it("lee el monto en pesos, sin dividirlo entre cien", () => {
+      // Rapyd trabaja en unidad mayor. Si el normalizador usara
+      // fromMinorUnits(), 150000.00 volveria como 1500.00.
+      const transaction = normalizer.normalize(
+        rapydResponse({ status: "CLO", paid: true }),
+        Gateway.RAPYD
+      );
+
+      expect(transaction.amount.getValue()).toBe("150000.00");
+    });
+
+    it("acepta el monto cuando Rapyd lo envia como numero JSON", () => {
+      // Contra la pasarela real el monto puede llegar como number, y en ese caso
+      // la escala ya se perdio en el parseo del JSON. No es algo que el SDK pueda
+      // recuperar del lado entrante; se documenta y se acepta.
+      const transaction = normalizer.normalize(
+        rapydResponse({ status: "CLO", paid: true, amount: 150000 }),
+        Gateway.RAPYD
+      );
+
+      expect(transaction.amount.getValue()).toBe("150000");
+    });
+
+    it("lee la divisa de currency_code y no de currency", () => {
+      const transaction = normalizer.normalize(
+        rapydResponse({ status: "CLO", paid: true, currency_code: "USD" }),
+        Gateway.RAPYD
+      );
+
+      expect(transaction.currency.getCode()).toBe("USD");
+    });
+
+    it("acepta la respuesta como string JSON", () => {
+      const transaction = normalizer.normalize(
+        JSON.stringify(rapydResponse({ status: "CLO", paid: true })),
+        Gateway.RAPYD
+      );
+
+      expect(transaction.getStatus()).toBe("APPROVED");
+    });
+
+    it("lanza MALFORMED_RESPONSE si el JSON no se puede parsear", () => {
+      expect(() => normalizer.normalize("{no-es-json", Gateway.RAPYD)).toThrow(
+        KitPagosError
+      );
+      try {
+        normalizer.normalize("{no-es-json", Gateway.RAPYD);
+      } catch (error) {
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
+        expect(sdkError.gateway).toBe(Gateway.RAPYD);
+      }
+    });
+
+    it("lanza MALFORMED_RESPONSE si falta el sobre data", () => {
+      expect(() =>
+        normalizer.normalize({ status: { status: "SUCCESS" } }, Gateway.RAPYD)
+      ).toThrow(KitPagosError);
+    });
+
+    it("lanza MALFORMED_RESPONSE si el monto no es interpretable", () => {
+      try {
+        normalizer.normalize(
+          rapydResponse({ status: "CLO", paid: true, amount: "no-es-un-monto" }),
+          Gateway.RAPYD
+        );
+        fail("deberia haber lanzado");
+      } catch (error) {
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
+        expect(sdkError.message).toContain("Malformed amount in Rapyd response");
+      }
+    });
+
+    it("cae a la referencia nativa cuando el comercio no envio merchant_reference_id", () => {
+      const transaction = normalizer.normalize(
+        rapydResponse({ status: "CLO", paid: true, merchant_reference_id: "" }),
+        Gateway.RAPYD
+      );
+
+      expect(transaction.orderReference.getValue()).toBe("payment_abc");
+    });
+
+    it("usa un correo de relleno cuando receipt_email viene vacio", () => {
+      // Rapyd no expone un email de pagador obligatorio como las otras tres
+      // pasarelas, y Payer si lo exige.
+      const transaction = normalizer.normalize(
+        rapydResponse({ status: "CLO", paid: true, receipt_email: "" }),
+        Gateway.RAPYD
+      );
+
+      expect(transaction.payer.email).toBe("customer@rapyd.net");
+    });
+  });
+
+  describe("normalize() with KUSHKI", () => {
+    const kushkiResponse = {
+      ticketNumber: "kushki-ticket-123",
+      transaction_status: "APPROVAL",
+      amount: { subtotalIva0: 50000, subtotalIva: 0, iva: 0, ice: 0, currency: "COP" },
+      transactionReference: "kushki-reference-123",
+    };
+
+    it("normalizes nominal tax components and the native APPROVAL status", () => {
+      const transaction = normalizer.normalize(kushkiResponse, Gateway.KUSHKI);
+
+      expect(transaction.amount.getValue()).toBe("50000");
+      expect(transaction.getStatus()).toBe("APPROVED");
+      expect(transaction.rawStatus).toBe("APPROVAL");
+      expect(transaction.gatewayTransactionId.value).toBe("kushki-ticket-123");
+    });
+
+    it("throws KitPagosError(MALFORMED_RESPONSE) for an incomplete response", () => {
+      expect(() => normalizer.normalize({}, Gateway.KUSHKI)).toThrow(KitPagosError);
+      try {
+        normalizer.normalize({}, Gateway.KUSHKI);
+      } catch (error) {
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
+        expect(sdkError.gateway).toBe(Gateway.KUSHKI);
+      }
+    });
+
+  });
+
+  describe("normalize() with other gateways", () => {
+
+    it("should throw KitPagosError(UNSUPPORTED_OPERATION) for unknown gateway (default)", () => {
+      const unknown = "UNKNOWN_GATEWAY" as Gateway;
+      expect(() => normalizer.normalize({}, unknown)).toThrow(KitPagosError);
+      try {
+        normalizer.normalize({}, unknown);
+      } catch (error) {
+        const sdkError = error as KitPagosError;
+        expect(sdkError.code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
+        expect(sdkError.gateway).toBe(unknown);
+      }
+    });
+  });
+    describe("normalize() with Mercado Pago", () => {
+    const validMpResponse = {
+      id: 1234567890,
+      status: "approved",
+      status_detail: "accredited",
+      transaction_amount: 50000,
+      currency_id: "COP",
+      description: "ORDER-MP-123",
+      external_reference: "ORDER-MP-123",
+      payer: {
+        email: "cliente.mp@example.com",
+      },
+    };
+
+    it("normaliza un pago aprobado de Mercado Pago reflejando monto en pesos y estados nativos", () => {
+      const transaction = normalizer.normalize(validMpResponse, Gateway.MERCADOPAGO);
+
+      expect(transaction).toBeDefined();
+      expect(transaction.isApproved()).toBe(true);
+      expect(transaction.getStatus()).toBe("APPROVED");
+      expect(transaction.rawStatus).toBe("approved"); // Conserva minúsculas nativas
+      expect(transaction.gatewayTransactionId.value).toBe("1234567890");
+      expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.MERCADOPAGO);
+      expect(transaction.amount.getValue()).toBe("50000");
+      expect(transaction.currency.getCode()).toBe("COP");
+      expect(transaction.orderReference.getValue()).toBe("ORDER-MP-123");
+      expect(transaction.payer.email).toBe("cliente.mp@example.com");
+    });
+
+    it("normaliza cuando el payload viene como string JSON", () => {
+      const jsonString = JSON.stringify(validMpResponse);
+      const transaction = normalizer.normalize(jsonString, Gateway.MERCADOPAGO);
+
+      expect(transaction.gatewayTransactionId.value).toBe("1234567890");
+      expect(transaction.amount.getValue()).toBe("50000");
+    });
+
+    it("mapea correctamente todos los estados nativos en minúsculas", () => {
+      const testCases: Array<{ raw: string; expected: string }> = [
+        { raw: "approved", expected: "APPROVED" },
+        { raw: "rejected", expected: "DECLINED" },
+        { raw: "pending", expected: "PENDING" },
+        { raw: "in_process", expected: "PENDING" },
+        { raw: "cancelled", expected: "VOIDED" },
+        { raw: "other_unknown", expected: "ERROR" },
+      ];
+
+      for (const { raw, expected } of testCases) {
+        const payload = { ...validMpResponse, status: raw };
+        const transaction = normalizer.normalize(payload, Gateway.MERCADOPAGO);
+        expect(transaction.getStatus()).toBe(expected);
+        expect(transaction.rawStatus).toBe(raw);
+      }
+    });
+
+    it("usa valores por defecto cuando faltan payer.email o external_reference", () => {
+      const minimalPayload = {
+        id: "mp-tx-999",
+        status: "approved",
+        transaction_amount: 25000,
+        currency_id: "COP",
+      };
+
+      const transaction = normalizer.normalize(minimalPayload, Gateway.MERCADOPAGO);
+      expect(transaction.orderReference.getValue()).toBe("mp-tx-999");
+      expect(transaction.payer.email).toBe("customer@mercadopago.com");
+    });
+
+    it("lanza MALFORMED_RESPONSE si el JSON es inválido", () => {
+      expect(() => {
+        normalizer.normalize("not-a-valid-json", Gateway.MERCADOPAGO);
+      }).toThrow(KitPagosError);
+    });
+
+    it("lanza MALFORMED_RESPONSE si falta el id", () => {
+      const invalid = { status: "approved", transaction_amount: 10000 };
+      expect(() => {
+        normalizer.normalize(invalid, Gateway.MERCADOPAGO);
+      }).toThrow(KitPagosError);
+    });
+
+    it("lanza MALFORMED_RESPONSE si el monto es inválido", () => {
+      const invalid = { ...validMpResponse, transaction_amount: "monto-invalido" };
+      expect(() => {
+        normalizer.normalize(invalid, Gateway.MERCADOPAGO);
+      }).toThrow(KitPagosError);
+    });
+  });
+
+});

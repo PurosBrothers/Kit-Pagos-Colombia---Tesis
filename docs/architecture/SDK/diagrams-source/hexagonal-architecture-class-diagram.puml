@@ -1,0 +1,268 @@
+@startuml Hexagonal Architecture Class Diagram
+title Diagrama de Clases de la Arquitectura Hexagonal - SDK Kit Pagos Colombia
+skinparam backgroundColor white
+skinparam classFontSize 12
+skinparam packageFontSize 14
+skinparam packageStyle rectangle
+skinparam class {
+  BorderColor #666666
+  ArrowColor #666666
+}
+
+package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
+  class Transaction <<Entidad>> #FFE0B2 {
+    gatewayTransactionId : GatewayTransactionId
+    amount : Amount
+    currency : Currency
+    payer : Payer
+    rawStatus : string
+    authorizationCode : string | null
+    rejectionReason : RejectionReason | null
+    --
+    isApproved() : boolean
+    isPending() : boolean
+    isFinal() : boolean
+  }
+
+  class Amount <<Value Object>> #C8E6C9 {
+    value : number
+    --
+    toMinorUnits() : number
+    equals(other) : boolean
+  }
+
+  class Currency <<Value Object>> #C8E6C9 {
+    code : string
+  }
+
+  class Payer <<Value Object>> #C8E6C9 {
+    email : string
+    fullName : string | null
+    phone : string | null
+    documentType : string | null
+    documentNumber : string | null
+  }
+
+  class PaymentMethod <<Value Object>> #C8E6C9 {
+    type : PaymentMethodType
+    cardToken : string | null
+    bankCode : string | null
+    payerKind : PayerKind | null
+    --
+    card(cardToken) : PaymentMethod
+    pse(attributes) : PaymentMethod
+    cash(attributes) : PaymentMethod
+  }
+
+  class PseBank <<Value Object>> #C8E6C9 {
+    code : string
+    name : string
+  }
+
+  class PendingRedirect <<Value Object>> #C8E6C9 {
+    redirectUrl : string
+    gatewayTransactionId : GatewayTransactionId
+    rawStatus : string
+  }
+
+  class PaymentResult <<Union etiquetada>> #C8E6C9 {
+    outcome : "TRANSACTION" | "REDIRECT_REQUIRED"
+    transaction : Transaction
+    redirect : PendingRedirect
+  }
+
+  class GatewayTransactionId <<Value Object>> #C8E6C9 {
+    value : string
+    gateway : Gateway
+  }
+
+  class RejectionReason <<Value Object>> #C8E6C9 {
+    rejectionCode : string
+    rejectionCategory : RejectionCategory
+  }
+
+  class WebhookEvent <<Value Object>> #C8E6C9 {
+    eventType : string
+    gatewayTransactionId : string
+    newStatus : TransactionStatus
+    gateway : Gateway
+  }
+
+  class WebhookVerifier <<Servicio de Dominio>> #BBDEFB {
+    verify(payload, headers, secret, gateway) : boolean
+    parse(payload, gateway) : WebhookEvent
+  }
+
+  interface GatewayWebhookHandler <<Strategy>> #90CAF9 {
+    verify(payload, headers, secret) : boolean
+    parse(payload) : WebhookEvent
+  }
+
+  together {
+    class WompiWebhookHandler #BBDEFB
+    class RapydWebhookHandler #BBDEFB
+    class MercadoPagoWebhookHandler #BBDEFB
+    class KushkiWebhookHandler #BBDEFB
+  }
+
+  class SdkError <<Error>> #F8BBD0 {
+    code : SdkErrorCode
+    gateway : Gateway
+    originalPayload : unknown
+  }
+
+  enum TransactionStatus #E0E0E0 {
+    APPROVED
+    DECLINED
+    PENDING
+    EXPIRED
+    VOIDED
+    ERROR
+  }
+
+  enum PaymentMethodType #E0E0E0 {
+    CARD
+    PSE
+    CASH
+  }
+
+  enum Gateway #E0E0E0 {
+    WOMPI
+    RAPYD
+    MERCADOPAGO
+    KUSHKI
+  }
+
+  Transaction *-- Amount
+  Transaction *-- Currency
+  Transaction *-- Payer
+  Transaction *-- GatewayTransactionId
+  Transaction "0..1" *-- RejectionReason
+  Transaction --> TransactionStatus : estado
+  GatewayTransactionId --> Gateway
+  PaymentMethod --> PaymentMethodType : tipo
+  PaymentResult --> Transaction : o resuelve
+  PaymentResult --> PendingRedirect : o falta redirigir
+  PendingRedirect *-- GatewayTransactionId
+
+  WebhookVerifier o--> GatewayWebhookHandler : despacha por Gateway
+  WompiWebhookHandler ..|> GatewayWebhookHandler
+  RapydWebhookHandler ..|> GatewayWebhookHandler
+  MercadoPagoWebhookHandler ..|> GatewayWebhookHandler
+  KushkiWebhookHandler ..|> GatewayWebhookHandler
+}
+
+package "APLICACION (Puertos y Servicios)" #FFFFFF {
+  interface PaymentGatewayPort <<Puerto>> #90CAF9 {
+    createPayment(request) : Promise<PaymentResult>
+    getStatus(gatewayTransactionId) : Promise<Transaction>
+    getPseBanks() : Promise<PseBank[]>
+    verifySignature(payload, headers, secret) : boolean
+  }
+
+  class ResponseNormalizer <<Servicio de Aplicacion>> #2E75B6 {
+    normalize(rawResponse, gateway) : Transaction
+  }
+
+  interface GatewayResponseNormalizer <<Strategy>> #90CAF9 {
+    normalize(rawResponse) : Transaction
+  }
+
+  together {
+    class WompiResponseNormalizer #5B9BD5
+    class RapydResponseNormalizer #5B9BD5
+    class MercadoPagoResponseNormalizer #5B9BD5
+    class KushkiResponseNormalizer #5B9BD5
+  }
+
+  class RetryHandler <<Resilience Utility>> #2E75B6 {
+    execute(operation) : Promise<T>
+    isTransient(error) : boolean
+  }
+
+  class ErrorHandler <<Servicio de Aplicacion>> #2E75B6 {
+    handle(rawError, gateway) : SdkError
+    --
+    <i>divide por forma del error,</i>
+    <i>no por pasarela</i>
+  }
+
+  RetryHandler --> ErrorHandler : MAX_RETRIES_EXCEEDED
+  ResponseNormalizer o--> GatewayResponseNormalizer : despacha por Gateway
+  WompiResponseNormalizer ..|> GatewayResponseNormalizer
+  RapydResponseNormalizer ..|> GatewayResponseNormalizer
+  MercadoPagoResponseNormalizer ..|> GatewayResponseNormalizer
+  KushkiResponseNormalizer ..|> GatewayResponseNormalizer
+}
+
+package "INFRAESTRUCTURA (Facade, Factory y Adapters)" #FFFFFF {
+  class KitPagos <<Facade Pattern>> #1F4E79 {
+    createPayment(request) : Promise<PaymentResult>
+    getPaymentStatus(id) : Promise<Transaction>
+    getPseBanks() : Promise<PseBank[]>
+    validateWebhook(payload, headers) : WebhookEvent
+  }
+
+  class SDKConfigurator <<Configuration Module>> #2E75B6 {
+    configure(options) : void
+    getActiveGateway() : Gateway
+    getCredentials(gateway) : Credentials
+  }
+
+  class GatewayFactory <<Factory Pattern>> #2E75B6 {
+    create(gateway) : PaymentGatewayPort
+  }
+
+  together {
+    class WompiAdapter <<Adapter Pattern>> #5B9BD5
+    class RapydAdapter <<Adapter Pattern>> #5B9BD5
+    class MercadoPagoAdapter <<Adapter Pattern>> #5B9BD5
+    class KushkiAdapter <<Adapter Pattern>> #5B9BD5
+  }
+
+  KitPagos --> SDKConfigurator : consulta
+  KitPagos --> GatewayFactory : solicita adapter
+  KitPagos --> RetryHandler : envuelve llamada
+  KitPagos ..> WebhookVerifier : valida webhook
+  KitPagos --> ResponseNormalizer : normaliza respuesta
+  GatewayFactory ..> PaymentGatewayPort : instancia
+  WompiAdapter ..|> PaymentGatewayPort
+  RapydAdapter ..|> PaymentGatewayPort
+  MercadoPagoAdapter ..|> PaymentGatewayPort
+  KushkiAdapter ..|> PaymentGatewayPort
+}
+
+GatewayResponseNormalizer --> Transaction : construye
+
+note bottom of KitPagos
+  Diseno "facade directo": sin capa
+  explicita de UseCases ni Controller.
+  Reemplaza al diagrama anterior con
+  CrearPagoUseCase / WebhookController
+  (ver architecture-log.md, punto 7).
+end note
+
+note right of GatewayResponseNormalizer
+  Patron Strategy: el eje de variacion
+  del SDK es la pasarela, y se expresa
+  con una implementacion por pasarela
+  detras de una interfaz, no con ramas
+  de un condicional. Agregar Kushki es
+  agregar una clase, sin tocar las otras.
+  (ver architecture-log.md, punto 34).
+end note
+
+note right of PaymentGatewayPort
+  El puerto crecio de tres metodos a
+  cuatro: elegir banco no es un paso
+  opcional de PSE, es parte del metodo
+  de pago, y sin la lista el comercio
+  tiene que hablarle directo a la
+  pasarela. El codigo de PseBank es
+  opaco y con significado por pasarela:
+  sale de getPseBanks() y entra en
+  PaymentMethod.pse() sin transformarse.
+  (ver architecture-log.md, punto 47).
+end note
+
+@enduml

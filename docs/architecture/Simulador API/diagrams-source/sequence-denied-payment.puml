@@ -1,0 +1,39 @@
+@startuml Sequence Diagram - Denied Payment
+title Escenario 2 - Pago Rechazado (Simulator API)
+skinparam backgroundColor white
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #666666
+skinparam LifeLineBorderColor #666666
+
+participant "Comercio\n(Backend)" as Comercio
+participant "SDK KitPagos" as SDK
+participant "Simulator API\n(Fastify)" as SimAPI
+participant "Scenario Engine" as Engine
+
+Comercio -> SDK : createPayment(CreatePaymentRequest)
+SDK -> SimAPI : POST /simulate/{gateway}/payments
+SimAPI -> Engine : resolveScenario(orderReference) -> "decline"
+Engine --> SimAPI : payload nativo rechazado
+SimAPI --> SDK : GatewayCreateTransactionResult{rawStatus: nativo}
+note left of SDK
+  rawGatewayResponse trae el detalle nativo,
+  pero sin normalizar aun
+end note
+SDK --> Comercio : CreatePaymentResult{transactionStatus: DECLINED}
+
+SDK -> SimAPI : getTransactionStatus({gateway, gatewayTransactionId})
+SimAPI -> Engine : resolveScenario(...) -> mismo "decline"\n(deterministico)
+Engine --> SimAPI : payload nativo con motivo de rechazo
+SimAPI --> SDK : TransactionStatusResponse nativo
+SDK -> SDK : mapear rawStatus -> rejectionCode + rejectionCategory
+SDK --> Comercio : TransactionStatusResponse{DECLINED,\nrejectionCode, rejectionCategory}
+
+note right of Engine
+  Wompi: status_message (texto libre)
+  Rapyd: failure_code "ERROR_PROCESSING_CARD - [51]"
+  (ej. fondos insuficientes)
+  Mercado Pago: status_detail (cc_rejected_insufficient_amount)
+  Kushki: code + processorError
+end note
+
+@enduml

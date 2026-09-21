@@ -1,0 +1,42 @@
+@startuml Sequence Diagram - Webhook Notification
+title Escenario 4 - Notificacion Webhook (Simulator API)
+skinparam backgroundColor white
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #666666
+skinparam LifeLineBorderColor #666666
+
+participant "Scenario Engine" as Engine
+participant "Simulator API\n(Fastify)" as SimAPI
+participant "Comercio\n(Webhook Endpoint)" as Comercio
+participant "SDK KitPagos" as SDK
+
+note left of Engine
+  tras crear el pago con scenario "webhook",
+  SE agenda el evento asincrono
+end note
+Engine -> SimAPI : construir payload nativo + firma simulada
+SimAPI -> Comercio : POST {webhookUrl}(rawBody, headers)
+Comercio -> SDK : verifyWebhookSignature(VerifyWebhookRequest)
+
+alt firma valida
+  SDK --> Comercio : true
+  Comercio -> SDK : processWebhookEvent(VerifyWebhookRequest)
+  SDK -> SDK : parseWebhookEvent -> normalizar status
+  SDK --> Comercio : TransactionStatusResponse{transactionStatus,\nrawStatus}
+  Comercio -> Comercio : actualizar orden interna
+else firma invalida
+  SDK -->x Comercio : false
+  Comercio -->x Comercio : descartar evento\n(SdkError WEBHOOK_SIGNATURE_INVALID)
+end
+
+note over Engine, SDK
+  Wompi: header X-Event-Checksum + body signature.checksum (SHA-256)
+  Rapyd: header signature (Base64 HMAC-SHA256 sobre
+  url_path+salt+timestamp+access_key+secret_key+body);
+  salt/timestamp/access_key en headers separados
+  Mercado Pago: header x-signature ts=/v1= (HMAC-SHA256)
+  Kushki: mecanismo de firma (!) PENDIENTE (no documentado
+  en fuentes oficiales)
+end note
+
+@enduml

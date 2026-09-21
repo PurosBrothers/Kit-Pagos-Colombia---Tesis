@@ -1,0 +1,42 @@
+@startuml Context Diagram - SDK
+title Diagrama de Contexto — Kit Pagos Colombia (Nivel 1)
+skinparam backgroundColor white
+skinparam rectangleFontSize 12
+skinparam wrapWidth 220
+skinparam rectangle {
+  BorderColor #666666
+  ArrowColor #666666
+  FontColor white
+}
+
+rectangle "**Desarrollador Junior/Senior**\n\nIntegra pasarelas de pago\nen su aplicacion usando el\nframework" as Dev #1F4E79
+rectangle "**Tester / QA**\n\nValida flujos de pago sin\ndepender de entornos\nreales" as QA #1F4E79
+
+rectangle "**Kit Pagos Colombia**\n\nFramework open source que\nunifica la integracion de\nmultiples pasarelas de pago\ncolombianas bajo una\ninterfaz comun" as KitPagos #2E75B6
+
+rectangle "**Wompi**\n\nPasarela de pago de\nBancolombia. Procesa\ntransacciones en Colombia" as Wompi #A9A9A9
+rectangle "**Rapyd**\n\nPasarela que adquirio el\nnegocio de PayU Latam en\nColombia el 14 mar 2025.\nLas cuentas de comercio\nnuevas solo obtienen acceso\na esta plataforma" as Rapyd #A9A9A9
+rectangle "**Mercado Pago**\n\nPlataforma de pagos\ndigitales de Mercado Libre\npara Colombia" as MercadoPago #A9A9A9
+rectangle "**Kushki**\n\nPasarela de origen\nlatinoamericano con\noperacion activa en\nColombia" as Kushki #A9A9A9
+
+Dev --> KitPagos : Instala, configura y consume\n[npm / HTTPS]
+QA --> KitPagos : Simula escenarios de pago\ny valida respuestas\n[HTTPS / REST]
+
+KitPagos --> Wompi : Crea pagos, consulta estados\ny recibe webhooks\n[HTTPS / REST]
+Wompi --> KitPagos : Envia eventos asincronos\nde transaccion\n[Webhook / HTTPS]
+
+KitPagos --> Rapyd : Crea pagos, consulta estados\ny recibe webhooks\n[HTTPS / REST]
+Rapyd --> KitPagos : Envia eventos asincronos\nde transaccion\n[Webhook / HTTPS]
+
+KitPagos --> MercadoPago : Crea pagos, consulta estados\ny recibe webhooks\n[HTTPS / REST]
+MercadoPago --> KitPagos : Envia eventos asincronos\nde transaccion\n[Webhook / HTTPS]
+
+KitPagos --> Kushki : Crea pagos, consulta estados\ny recibe webhooks\n[HTTPS / REST]
+Kushki --> KitPagos : Envia eventos asincronos\nde transaccion\n[Webhook / HTTPS]
+
+note bottom of Rapyd
+  Reemplaza a "PayU Latam" tras la adquisicion
+  (ver architecture-log.md, punto 15).
+end note
+
+@enduml

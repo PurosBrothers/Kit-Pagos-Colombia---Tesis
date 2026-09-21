@@ -1,0 +1,38 @@
+@startuml Sequence Diagram - Network Error
+title Escenario 3 - Error de Red (Simulator API)
+skinparam backgroundColor white
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #666666
+skinparam LifeLineBorderColor #666666
+
+participant "Comercio\n(Backend)" as Comercio
+participant "SDK KitPagos" as SDK
+participant "Simulator API\n(Fastify)" as SimAPI
+participant "Scenario Engine" as Engine
+
+Comercio -> SDK : createPayment(CreatePaymentRequest)
+SDK -> SimAPI : POST /simulate/{gateway}/payments
+SimAPI -> Engine : resolveScenario(orderReference) -> "network_error"
+
+alt Timeout (SDK no responde dentro del umbral)
+  Engine -->x SDK : sin respuesta\n(latencia inyectada > timeout)
+  SDK -->x SDK : socket hang up / AbortError
+  SDK -> SDK : mapear a SdkError(GATEWAY_TIMEOUT\no CONNECTION_FAILED)
+else Error de servidor simulado
+  Engine --> SimAPI : 5xx (Wompi/MP/Rapyd) o 200 con\ncode="ERROR" (Kushki)
+  SimAPI --> SDK : respuesta de error nativa
+  SDK -> SDK : mapear codigo HTTP o body.code\n-> SdkErrorCode
+end
+
+SDK -->x Comercio : throw SdkError{code, friendlyMessage,\ngateway, httpStatus, originalError}
+
+note bottom
+  Kushki SIEMPRE devuelve HTTP 200: el adaptador debe leer
+  body.code/body.error, NO el status HTTP, para decidir
+  GATEWAY_SERVER_ERROR. Rapyd SI usa codigos HTTP
+  diferenciados (200/400/401), a diferencia de PayU/Kushki
+  (docs.rapyd.net/en/list-payments.html) — leer tambien
+  body.status.error_code para el detalle.
+end note
+
+@enduml

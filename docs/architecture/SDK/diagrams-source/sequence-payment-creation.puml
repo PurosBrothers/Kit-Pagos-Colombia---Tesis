@@ -1,0 +1,28 @@
+@startuml Sequence Diagram - Payment Creation
+title A - Creacion de Pago (pendiente + webhook)
+skinparam backgroundColor white
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #666666
+skinparam LifeLineBorderColor #666666
+
+participant "Comercio" as Comercio
+participant "KitPagos\n(Facade)" as Facade
+participant "Adapter\n(seleccionado por\nGatewayFactory)" as Adapter
+participant "Pasarela" as Pasarela
+
+Comercio -> Facade : createPayment(request)
+Facade -> Adapter : createPayment(request)
+Adapter -> Pasarela : POST /payments (nativo)
+Pasarela --> Adapter : 201 Created\n(estado nativo = pendiente, token)
+Adapter --> Facade : rawResponse
+Facade -> Facade : ResponseNormalizer.normalize(rawResponse, gateway)
+Facade --> Comercio : Transaction(PENDING)
+
+note over Comercio, Pasarela
+  Este flujo NO entrega el resultado final del pago.
+  La confirmacion (APROBADO, RECHAZADO, etc.) llega
+  despues mediante un webhook: ver diagrama
+  "Sequence Diagram - Webhook Conciliation".
+end note
+
+@enduml

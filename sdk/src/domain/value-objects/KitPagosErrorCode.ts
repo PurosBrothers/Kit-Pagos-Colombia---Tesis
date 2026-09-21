@@ -1,0 +1,21 @@
+/**
+ * Codigos de error tecnico normalizados por Kit Pagos Colombia, independientes
+ * de cualquier pasarela. Fuente: lenguaje ubicuo del proyecto y SAD,
+ * seccion 15.1 (Nucleo del dominio).
+ * Renombrado de SdkErrorCode a KitPagosErrorCode por decision de direccion de tesis
+ * (architecture-log.md, punto 23).
+ */
+export enum KitPagosErrorCode {
+  INVALID_CREDENTIALS = "INVALID_CREDENTIALS",
+  GATEWAY_TIMEOUT = "GATEWAY_TIMEOUT",
+  CONNECTION_FAILED = "CONNECTION_FAILED",
+  RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED",
+  INVALID_REQUEST = "INVALID_REQUEST",
+  RESOURCE_NOT_FOUND = "RESOURCE_NOT_FOUND",
+  GATEWAY_SERVER_ERROR = "GATEWAY_SERVER_ERROR",
+  MALFORMED_RESPONSE = "MALFORMED_RESPONSE",
+  WEBHOOK_SIGNATURE_INVALID = "WEBHOOK_SIGNATURE_INVALID",
+  UNSUPPORTED_OPERATION = "UNSUPPORTED_OPERATION",
+  MAX_RETRIES_EXCEEDED = "MAX_RETRIES_EXCEEDED",
+  UNKNOWN_ERROR = "UNKNOWN_ERROR",
+}

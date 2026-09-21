@@ -1,0 +1,892 @@
+import { createHmac } from "crypto";
+import { RapydAdapter } from "./RapydAdapter";
+import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
+import { Amount } from "../../domain/value-objects/Amount";
+import { Currency } from "../../domain/value-objects/Currency";
+import { OrderReference } from "../../domain/value-objects/OrderReference";
+import { Payer } from "../../domain/value-objects/Payer";
+import { ReturnUrlConfig } from "../../domain/value-objects/ReturnUrlConfig";
+import { Gateway } from "../../domain/value-objects/Gateway";
+import { Credentials } from "../../domain/value-objects/Credentials";
+import { KitPagosError } from "../../domain/errors/KitPagosError";
+import {
+  expectRedirect,
+  expectTransaction,
+} from "../../test-support/payment-result";
+import { PaymentMethod } from "../../domain/value-objects/PaymentMethod";
+
+describe("RapydAdapter", () => {
+  const originalFetch = global.fetch;
+
+  const credentials: Credentials = {
+    publicKey: "rapyd_access_key_test",
+    privateKey: "rapyd_secret_key_test",
+  };
+
+  const validRequest: CreatePaymentRequest = {
+    amount: new Amount("150000.00"),
+    currency: new Currency("COP"),
+    orderReference: new OrderReference("ord-12345"),
+    payer: new Payer({ email: "cliente@example.com" }),
+  };
+
+  /** Respuesta aprobada con el sobre `{ status, data }` que Rapyd usa siempre. */
+  const approvedRapydResponse = {
+    status: {
+      error_code: "",
+      status: "SUCCESS",
+      message: "",
+      response_code: "",
+      operation_id: "op-abc",
+    },
+    data: {
+      id: "payment_d31d3ca850419ab5e2f9f1a33f9c6eea",
+      status: "CLO",
+      paid: true,
+      amount: "150000.00",
+      currency_code: "COP",
+      merchant_reference_id: "ord-12345",
+      receipt_email: "cliente@example.com",
+      failure_code: "",
+      failure_message: "",
+      created_at: 1756292071,
+    },
+  };
+
+  const mockOk = (body: unknown = approvedRapydResponse) =>
+    jest.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => body,
+    });
+
+  beforeEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
+  });
+
+  describe("formato del monto", () => {
+    it("envia el monto en pesos y no en centavos", async () => {
+      // Es la diferencia central con Wompi y el error mas facil de cometer
+      // copiando WompiAdapter: si el adaptador llamara a toMinorUnits(), el
+      // monto saldria como "15000000" y el comercio cobraria cien veces mas.
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter().createPayment(validRequest);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.amount).toBe("150000.00");
+      expect(body.amount).not.toBe("15000000");
+    });
+
+    it("envia el monto como string, no como numero JSON", async () => {
+      // Rapyd documenta que JSON.stringify convierte 12.00 en 12 y que eso
+      // rompe el calculo de la firma, y recomienda enviar los montos como
+      // strings numericos. El cuerpo serializado debe llevar el monto entre
+      // comillas.
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter().createPayment(validRequest);
+
+      const rawBody: string = mockFetch.mock.calls[0][1].body;
+      expect(rawBody).toContain('"amount":"150000.00"');
+      expect(rawBody).not.toContain('"amount":150000');
+    });
+
+    it("conserva los ceros a la derecha que se perderian con un number", async () => {
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter().createPayment({
+        ...validRequest,
+        amount: new Amount("19.90"),
+      });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.amount).toBe("19.90");
+    });
+
+    it("completa la escala de la divisa cuando el monto viene sin decimales", async () => {
+      // COP tiene exponente 2 en ISO 4217, asi que "50000" se envia como
+      // "50000.00": la escala la fija la divisa, no como el comercio escribio
+      // el monto.
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter().createPayment({
+        ...validRequest,
+        amount: new Amount("50000"),
+      });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.amount).toBe("50000.00");
+    });
+  });
+
+  describe("firma de la peticion", () => {
+    /**
+     * Reimplementacion literal del algoritmo publicado en
+     * docs.rapyd.net/en/request-signatures.html, escrita aparte del codigo de
+     * produccion a proposito: si alguien "simplifica" sign() a
+     * digest("base64"), o deja de pasar el metodo en minusculas, estas pruebas
+     * fallan. Sin un vector independiente, una prueba de firma solo verificaria
+     * que el codigo coincide consigo mismo.
+     */
+    const referenceSignature = (
+      method: string,
+      urlPath: string,
+      salt: string,
+      timestamp: string,
+      body: string
+    ): string => {
+      const toSign =
+        method +
+        urlPath +
+        salt +
+        timestamp +
+        credentials.publicKey +
+        credentials.privateKey +
+        body;
+      const hmac = createHmac("sha256", credentials.privateKey);
+      hmac.update(toSign);
+      return Buffer.from(hmac.digest("hex")).toString("base64");
+    };
+
+    it("firma la creacion con la formula oficial de Rapyd", async () => {
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter(undefined, credentials).createPayment(validRequest);
+
+      const [, init] = mockFetch.mock.calls[0];
+      const headers = init.headers;
+
+      expect(headers.signature).toBe(
+        referenceSignature(
+          "post",
+          "/v1/sim/rapyd/checkout",
+          headers.salt,
+          headers.timestamp,
+          init.body
+        )
+      );
+    });
+
+    it("firma el cuerpo exacto que envia, sin volver a serializarlo", async () => {
+      // Si el adaptador serializara el payload una vez para firmar y otra para
+      // enviar, cualquier diferencia entre ambas cadenas produciria una firma
+      // que no corresponde al cuerpo. Esta prueba fija que se firma el mismo
+      // string que viaja.
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter(undefined, credentials).createPayment(validRequest);
+
+      const [, init] = mockFetch.mock.calls[0];
+      const firmaDelCuerpoEnviado = referenceSignature(
+        "post",
+        "/v1/sim/rapyd/checkout",
+        init.headers.salt,
+        init.headers.timestamp,
+        init.body
+      );
+
+      expect(init.headers.signature).toBe(firmaDelCuerpoEnviado);
+    });
+
+    it("firma la consulta de estado con metodo get y cuerpo vacio", async () => {
+      // Rapyd no tiene un esquema reducido de solo lectura: la consulta se firma
+      // igual que la creacion. Un cuerpo ausente se firma como string vacio, no
+      // como "{}".
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter(undefined, credentials).getStatus("payment_xyz");
+
+      const [, init] = mockFetch.mock.calls[0];
+      expect(init.headers.signature).toBe(
+        referenceSignature(
+          "get",
+          "/v1/sim/rapyd/payments/payment_xyz",
+          init.headers.salt,
+          init.headers.timestamp,
+          ""
+        )
+      );
+    });
+
+    it("no reutiliza el salt entre peticiones", async () => {
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      const adapter = new RapydAdapter(undefined, credentials);
+      await adapter.createPayment(validRequest);
+      await adapter.createPayment(validRequest);
+
+      const primerSalt = mockFetch.mock.calls[0][1].headers.salt;
+      const segundoSalt = mockFetch.mock.calls[1][1].headers.salt;
+      expect(primerSalt).not.toBe(segundoSalt);
+    });
+
+    it("envia los cuatro headers de autenticacion que Rapyd exige", async () => {
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter(undefined, credentials).createPayment(validRequest);
+
+      const headers = mockFetch.mock.calls[0][1].headers;
+      expect(headers.access_key).toBe("rapyd_access_key_test");
+      expect(headers.salt).toMatch(/^[0-9a-f]{16}$/);
+      expect(Number(headers.timestamp)).toBeGreaterThan(0);
+      expect(typeof headers.signature).toBe("string");
+      expect(headers["Content-Type"]).toBe("application/json");
+    });
+
+    it("nunca transmite la llave secreta en un header", async () => {
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter(undefined, credentials).createPayment(validRequest);
+
+      const [, init] = mockFetch.mock.calls[0];
+      const serializado = JSON.stringify(init.headers) + init.body;
+      expect(serializado).not.toContain(credentials.privateKey);
+    });
+
+    it("timestamp en segundos y no en milisegundos", async () => {
+      // Rapyd rechaza timestamps que se desvien mas de 60 segundos del reloj
+      // real. Enviarlo en milisegundos lo situaria decadas en el futuro.
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter(undefined, credentials).createPayment(validRequest);
+
+      const timestamp = Number(mockFetch.mock.calls[0][1].headers.timestamp);
+      const ahoraEnSegundos = Math.floor(Date.now() / 1000);
+      expect(Math.abs(ahoraEnSegundos - timestamp)).toBeLessThanOrEqual(5);
+    });
+
+    it("omite los headers de firma cuando no hay credenciales", async () => {
+      // El mock de la API de Simulacion no verifica la firma, y el adaptador
+      // debe seguir siendo instanciable sin configuracion, igual que el de Wompi.
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter().createPayment(validRequest);
+
+      const headers = mockFetch.mock.calls[0][1].headers;
+      expect(headers).toEqual({ "Content-Type": "application/json" });
+    });
+
+    it("firma el path real cuando la base apunta al sandbox de Rapyd", async () => {
+      // Contra el sandbox el path firmado es /v1/checkout, no el del simulador.
+      // Se deriva de la URL en vez de estar escrito a mano.
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter(
+        "https://sandboxapi.rapyd.net/v1",
+        credentials
+      ).createPayment(validRequest);
+
+      const [url, init] = mockFetch.mock.calls[0];
+      // La base es la raíz y el adaptador le agrega la ruta del recurso, así que
+      // el path firmado es el completo.
+      expect(url).toBe("https://sandboxapi.rapyd.net/v1/checkout");
+      expect(init.headers.signature).toBe(
+        referenceSignature(
+          "post",
+          "/v1/checkout",
+          init.headers.salt,
+          init.headers.timestamp,
+          init.body
+        )
+      );
+    });
+  });
+
+  describe("createPayment()", () => {
+    /**
+     * El cobro con tarjeta pasa por la página de pago de Rapyd y no por `/payments`.
+     * No es una preferencia: se midió que `/payments` sin `payment_method` responde
+     * `400 MISSING_FIELDS - [PAYMENT_METHOD]`, que un token de tarjeta guardado responde
+     * `400 ERROR_CARD_NOT_AUTHENTICATED`, y que el único camino que funciona exige el
+     * número de la tarjeta en la petición. Ver `rapyd-checkout.ts` y el punto 50.
+     */
+    it("mapea el dominio a los campos nativos del checkout de Rapyd", async () => {
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter().createPayment(validRequest);
+
+      const [url, init] = mockFetch.mock.calls[0];
+      expect(url).toBe("http://localhost:3000/v1/sim/rapyd/checkout");
+      expect(init.method).toBe("POST");
+      expect(JSON.parse(init.body)).toEqual({
+        amount: "150000.00",
+        currency: "COP",
+        country: "CO",
+        merchant_reference_id: "ord-12345",
+        payment_method_type_categories: ["card"],
+        receipt_email: "cliente@example.com",
+      });
+    });
+
+    /**
+     * El `cardToken` que el comercio haya conseguido no viaja: la página de Rapyd le pide
+     * la tarjeta al pagador otra vez. No se rechaza para que el comercio no tenga que
+     * escribir código distinto por pasarela, que es lo que el SDK existe para evitar.
+     */
+    it("no manda el token de tarjeta, porque la página de Rapyd pide la tarjeta", async () => {
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter().createPayment({
+        ...validRequest,
+        paymentMethod: PaymentMethod.card("card_1a2b3c"),
+      });
+
+      const cuerpo = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(cuerpo.payment_method).toBeUndefined();
+      expect(JSON.stringify(cuerpo)).not.toContain("card_1a2b3c");
+    });
+
+    it("cobra con tarjeta sin que el comercio tenga ningún token", async () => {
+      global.fetch = mockOk();
+
+      const resultado = await new RapydAdapter().createPayment({
+        ...validRequest,
+        paymentMethod: PaymentMethod.card(),
+      });
+
+      expect(resultado.outcome).toBeDefined();
+    });
+
+    it("devuelve una Transaction aprobada normalizada", async () => {
+      global.fetch = mockOk();
+
+      const transaction = expectTransaction(await new RapydAdapter().createPayment(validRequest));
+
+      expect(transaction.isApproved()).toBe(true);
+      expect(transaction.getStatus()).toBe("APPROVED");
+      expect(transaction.gatewayTransactionId.value).toBe(
+        "payment_d31d3ca850419ab5e2f9f1a33f9c6eea"
+      );
+      expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.RAPYD);
+      expect(transaction.amount.getValue()).toBe("150000.00");
+      expect(transaction.currency.getCode()).toBe("COP");
+      expect(transaction.orderReference.getValue()).toBe("ord-12345");
+    });
+
+    it("reporta redirección pendiente cuando Rapyd dispara 3DS, en vez de descartar la URL", async () => {
+      // Prueba de regresión del issue #64. Antes de ese cambio, este mismo pago
+      // devolvía una Transaction PENDING y el `redirect_url` se perdía: el
+      // normalizador traduce "ACT" a PENDING y Transaction no tenía dónde
+      // guardar la URL. El comercio hacía polling de un pago que nunca iba a
+      // avanzar, porque el paso que faltaba era una redirección que él no sabía
+      // que debía hacer.
+      global.fetch = mockOk({
+        status: { status: "SUCCESS", error_code: "" },
+        data: {
+          id: "payment_3ds_abc123",
+          status: "ACT",
+          paid: false,
+          amount: "150000.00",
+          currency_code: "COP",
+          merchant_reference_id: "ord-12345",
+          next_action: "3d_verification",
+          redirect_url: "https://sandbox.rapyd.net/v1/checkout/3ds/payment_3ds_abc123",
+        },
+      });
+
+      const result = await new RapydAdapter().createPayment(validRequest);
+
+      expect(result.outcome).toBe("REDIRECT_REQUIRED");
+      const redirect = expectRedirect(result);
+      expect(redirect.redirectUrl).toBe(
+        "https://sandbox.rapyd.net/v1/checkout/3ds/payment_3ds_abc123",
+      );
+      expect(redirect.gatewayTransactionId.value).toBe("payment_3ds_abc123");
+      expect(redirect.rawStatus).toBe("ACT");
+    });
+
+    it("sigue reportando transacción cuando el pago resuelve sin redirección", async () => {
+      global.fetch = mockOk();
+
+      const result = await new RapydAdapter().createPayment(validRequest);
+
+      expect(result.outcome).toBe("TRANSACTION");
+    });
+
+    it("mapea las URLs de retorno a los campos de Rapyd cuando se configuran", async () => {
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter().createPayment({
+        ...validRequest,
+        returnUrlConfig: new ReturnUrlConfig(undefined, {
+          success: "https://comercio.co/ok",
+          failure: "https://comercio.co/error",
+        }),
+      });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.complete_payment_url).toBe("https://comercio.co/ok");
+      expect(body.error_payment_url).toBe("https://comercio.co/error");
+    });
+
+    it("no incluye campos de redireccion cuando no se configuran", async () => {
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter().createPayment(validRequest);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body).not.toHaveProperty("complete_payment_url");
+      expect(body).not.toHaveProperty("error_payment_url");
+    });
+
+    it("traduce un fallo de red a KitPagosError via ErrorHandler", async () => {
+      global.fetch = jest.fn().mockRejectedValue(new Error("ECONNREFUSED"));
+
+      await expect(
+        new RapydAdapter().createPayment(validRequest)
+      ).rejects.toBeInstanceOf(KitPagosError);
+    });
+
+    it("traduce un error HTTP a KitPagosError via ErrorHandler", async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: async () => ({
+          status: { error_code: "UNAUTHENTICATED_API_CALL", status: "ERROR" },
+        }),
+      });
+
+      await expect(
+        new RapydAdapter().createPayment(validRequest)
+      ).rejects.toBeInstanceOf(KitPagosError);
+    });
+
+    it("traduce un error HTTP con cuerpo no JSON leyendolo como texto", async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        json: async () => {
+          throw new Error("no es JSON");
+        },
+        text: async () => "Bad Gateway",
+      });
+
+      await expect(
+        new RapydAdapter().createPayment(validRequest)
+      ).rejects.toBeInstanceOf(KitPagosError);
+    });
+
+    it("mapea solo la URL de exito cuando es la unica configurada", async () => {
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter().createPayment({
+        ...validRequest,
+        returnUrlConfig: new ReturnUrlConfig(undefined, {
+          success: "https://comercio.co/ok",
+        }),
+      });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.complete_payment_url).toBe("https://comercio.co/ok");
+      expect(body).not.toHaveProperty("error_payment_url");
+    });
+
+    it("usa la URL unica para ambos campos cuando se configura sin diferenciar", async () => {
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter().createPayment({
+        ...validRequest,
+        returnUrlConfig: new ReturnUrlConfig("https://comercio.co/retorno"),
+      });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.complete_payment_url).toBe("https://comercio.co/retorno");
+      expect(body.error_payment_url).toBe("https://comercio.co/retorno");
+    });
+
+    it("traduce un cuerpo no parseable a KitPagosError", async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => {
+          throw new Error("Unexpected end of JSON input");
+        },
+      });
+
+      await expect(
+        new RapydAdapter().createPayment(validRequest)
+      ).rejects.toBeInstanceOf(KitPagosError);
+    });
+  });
+
+  describe("tarjeta por la página de pago de Rapyd", () => {
+    /** Forma real de `POST /v1/checkout`, recortada a lo que el SDK lee. */
+    const respuestaDeCheckout = {
+      status: { status: "SUCCESS", error_code: "" },
+      data: {
+        id: "checkout_422fb0a43ac1ad77ffd9969f454d3ad6",
+        status: "NEW",
+        redirect_url:
+          "https://sandboxcheckout.rapyd.net/?token=checkout_422fb0a43ac1ad77ffd9969f454d3ad6",
+        payment: {
+          id: null,
+          amount: 150000,
+          currency_code: "COP",
+          merchant_reference_id: "ord-12345",
+          status: null,
+        },
+      },
+    };
+
+    it("devuelve una redirección a la página de Rapyd, con el id del checkout", async () => {
+      global.fetch = mockOk(respuestaDeCheckout);
+
+      const redirect = expectRedirect(
+        await new RapydAdapter().createPayment(validRequest),
+      );
+
+      expect(redirect.redirectUrl).toBe(
+        "https://sandboxcheckout.rapyd.net/?token=checkout_422fb0a43ac1ad77ffd9969f454d3ad6",
+      );
+      expect(redirect.gatewayTransactionId.value).toBe(
+        "checkout_422fb0a43ac1ad77ffd9969f454d3ad6",
+      );
+    });
+
+    /**
+     * Un id de checkout en `/payments/{id}` responde `400 ERROR_GET_PAYMENT`, así que la
+     * consulta tiene que ir al recurso que corresponde. La ruta se elige por el prefijo.
+     */
+    it("consulta el estado en /checkout y no en /payments", async () => {
+      const mockFetch = mockOk({
+        status: { status: "SUCCESS" },
+        data: respuestaDeCheckout.data,
+      });
+      global.fetch = mockFetch;
+
+      const transaction = await new RapydAdapter().getStatus(
+        "checkout_422fb0a43ac1ad77ffd9969f454d3ad6",
+      );
+
+      expect(mockFetch.mock.calls[0][0]).toBe(
+        "http://localhost:3000/v1/sim/rapyd/checkout/checkout_422fb0a43ac1ad77ffd9969f454d3ad6",
+      );
+      // Un checkout que nadie pagó es un cobro pendiente, no un error.
+      expect(transaction.getStatus()).toBe("PENDING");
+      expect(transaction.orderReference.getValue()).toBe("ord-12345");
+    });
+
+    it("devuelve el pago real en cuanto el pagador termina en la página", async () => {
+      global.fetch = mockOk({
+        status: { status: "SUCCESS" },
+        data: {
+          id: "checkout_422fb0a43ac1ad77ffd9969f454d3ad6",
+          status: "DON",
+          payment: {
+            id: "payment_d31d3ca850419ab5e2f9f1a33f9c6eea",
+            status: "CLO",
+            paid: true,
+            amount: 150000,
+            currency_code: "COP",
+            merchant_reference_id: "ord-12345",
+            receipt_email: "cliente@example.com",
+          },
+        },
+      });
+
+      const transaction = await new RapydAdapter().getStatus(
+        "checkout_422fb0a43ac1ad77ffd9969f454d3ad6",
+      );
+
+      expect(transaction.getStatus()).toBe("APPROVED");
+      expect(transaction.gatewayTransactionId.value).toBe(
+        "payment_d31d3ca850419ab5e2f9f1a33f9c6eea",
+      );
+    });
+
+    it("sigue consultando /payments cuando el identificador es de un pago", async () => {
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      await new RapydAdapter().getStatus("payment_d31d3ca850419ab5e2f9f1a33f9c6eea");
+
+      expect(mockFetch.mock.calls[0][0]).toBe(
+        "http://localhost:3000/v1/sim/rapyd/payments/payment_d31d3ca850419ab5e2f9f1a33f9c6eea",
+      );
+    });
+  });
+
+  describe("getStatus()", () => {
+    it("consulta el pago por su identificador y normaliza la respuesta", async () => {
+      const mockFetch = mockOk();
+      global.fetch = mockFetch;
+
+      const transaction = await new RapydAdapter().getStatus(
+        "payment_d31d3ca850419ab5e2f9f1a33f9c6eea"
+      );
+
+      const [url, init] = mockFetch.mock.calls[0];
+      expect(url).toBe(
+        "http://localhost:3000/v1/sim/rapyd/payments/payment_d31d3ca850419ab5e2f9f1a33f9c6eea"
+      );
+      expect(init.method).toBe("GET");
+      expect(init.body).toBeUndefined();
+      expect(transaction.getStatus()).toBe("APPROVED");
+    });
+
+    it("traduce un fallo de red durante la consulta", async () => {
+      global.fetch = jest.fn().mockRejectedValue(new Error("ETIMEDOUT"));
+
+      await expect(
+        new RapydAdapter().getStatus("payment_xyz")
+      ).rejects.toBeInstanceOf(KitPagosError);
+    });
+  });
+
+  describe("verifySignature()", () => {
+    it("delega en WebhookVerifier con Gateway.RAPYD", () => {
+      const verify = jest.fn().mockReturnValue(true);
+      const adapter = new RapydAdapter(undefined, undefined, {
+        verify,
+      } as never);
+
+      const resultado = adapter.verifySignature("{}", { salt: "s" }, "secreto");
+
+      expect(resultado).toBe(true);
+      expect(verify).toHaveBeenCalledWith(
+        "{}",
+        { salt: "s" },
+        "secreto",
+        Gateway.RAPYD
+      );
+    });
+  });
+});
+
+/**
+ * PSE en Rapyd, que es la prueba de fuego de la decision del puerto: son **dos
+ * llamadas** escondidas detras de un `createPayment()`, y lo que estas pruebas
+ * cuidan es que la secuencia ocurra en orden y que el resultado no delate que hubo
+ * dos.
+ *
+ * La forma de las respuestas es la medida contra el sandbox real el 18 de
+ * septiembre de 2026, incluido `next_action: "pending_confirmation"`, que **no** es
+ * el `"3d_verification"` del flujo de tarjeta.
+ */
+describe("RapydAdapter con PSE", () => {
+  const originalFetch = global.fetch;
+
+  const pseRequest: CreatePaymentRequest = {
+    amount: new Amount("150000.00"),
+    currency: new Currency("COP"),
+    orderReference: new OrderReference("ord-rapyd-pse-1"),
+    payer: new Payer({
+      email: "cliente@example.com",
+      fullName: "Jaime Pavlich Mariscal",
+      phone: "3001234567",
+      documentType: "CC",
+      documentNumber: "1099888777",
+    }),
+    paymentMethod: PaymentMethod.pse({ bankCode: "co_pse_bancolombia_bank" }),
+    returnUrlConfig: new ReturnUrlConfig("https://comercio.example.com/retorno"),
+  };
+
+  const customerResponse = {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      status: { status: "SUCCESS" },
+      data: { id: "cus_01f2f7ddace1fc8aa19ae9c535d7fb57" },
+    }),
+  };
+
+  const pseCreatedResponse = {
+    ok: true,
+    status: 201,
+    json: async () => ({
+      status: { status: "SUCCESS" },
+      data: {
+        id: "payment_353f1be65d4d9dc8bd2814aa45a8d117",
+        status: "ACT",
+        paid: false,
+        next_action: "pending_confirmation",
+        redirect_url:
+          "https://sandboxcheckout.rapyd.net/complete-bank-payment?token=payment_353f1be65d4d9dc8bd2814aa45a8d117",
+        amount: "150000.00",
+        currency_code: "COP",
+        merchant_reference_id: "ord-rapyd-pse-1",
+      },
+    }),
+  };
+
+  afterAll(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("crea el cliente antes del pago, en ese orden", async () => {
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce(customerResponse)
+      .mockResolvedValueOnce(pseCreatedResponse);
+    global.fetch = mockFetch;
+
+    await new RapydAdapter("https://api.example.com/v1").createPayment(pseRequest);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls[0][0]).toBe("https://api.example.com/v1/customers");
+    expect(mockFetch.mock.calls[1][0]).toBe("https://api.example.com/v1/payments");
+  });
+
+  /**
+   * Si el pago no llevara el cliente que devolvio la primera llamada, Rapyd lo
+   * rechazaria con `MISSING_PAYMENT_METHOD_REQUIRED_FIELD - [CUSTOMER]`. Esta prueba
+   * verifica que las dos llamadas estan encadenadas y no solo que ocurrieron.
+   */
+  it("le pasa al pago el cliente que devolvio la primera llamada", async () => {
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce(customerResponse)
+      .mockResolvedValueOnce(pseCreatedResponse);
+    global.fetch = mockFetch;
+
+    await new RapydAdapter("https://api.example.com/v1").createPayment(pseRequest);
+
+    const body = JSON.parse(mockFetch.mock.calls[1][1].body);
+    expect(body.customer).toBe("cus_01f2f7ddace1fc8aa19ae9c535d7fb57");
+    expect(body.payment_method.type).toBe("co_pse_bancolombia_bank");
+  });
+
+  it("devuelve la redireccion de la respuesta de creacion, sin sondear", async () => {
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce(customerResponse)
+      .mockResolvedValueOnce(pseCreatedResponse);
+    global.fetch = mockFetch;
+
+    const result = await new RapydAdapter(
+      "https://api.example.com/v1",
+    ).createPayment(pseRequest);
+
+    const redirect = expectRedirect(result);
+    expect(redirect.redirectUrl).toContain("complete-bank-payment");
+    expect(redirect.rawStatus).toBe("ACT");
+    expect(redirect.gatewayTransactionId.value).toBe(
+      "payment_353f1be65d4d9dc8bd2814aa45a8d117",
+    );
+    // Dos llamadas y ni una mas: Rapyd entrega la URL en la creacion, a diferencia
+    // de Wompi, que la hace aparecer despues.
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * El fallo de la primera llamada no debe intentar la segunda: un pago sin cliente
+   * es un rechazo garantizado, y hacerlo igual gastaria una llamada para producir un
+   * error peor.
+   */
+  it("no intenta el pago si falla la creacion del cliente", async () => {
+    const mockFetch = jest.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        status: { error_code: "INVALID_CUSTOMER_NAME", status: "ERROR" },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    await expect(
+      new RapydAdapter("https://api.example.com/v1").createPayment(pseRequest),
+    ).rejects.toBeInstanceOf(KitPagosError);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("el camino de tarjeta sigue haciendo una sola llamada, la del checkout", async () => {
+    const mockFetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({
+        status: { status: "SUCCESS" },
+        data: {
+          id: "payment_card_1",
+          status: "CLO",
+          paid: true,
+          amount: "150000.00",
+          currency_code: "COP",
+          merchant_reference_id: "ord-rapyd-pse-1",
+        },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await new RapydAdapter("https://api.example.com/v1").createPayment({
+      ...pseRequest,
+      paymentMethod: undefined,
+    });
+
+    expectTransaction(result);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][0]).toBe("https://api.example.com/v1/checkout");
+  });
+
+  describe("getPseBanks()", () => {
+    it("filtra los metodos de PSE del catalogo del pais", async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: { status: "SUCCESS" },
+          data: [
+            { type: "co_pse_bancolombia_bank", name: "Bancolombia" },
+            { type: "co_visa_card", name: "Visa" },
+          ],
+        }),
+      });
+      global.fetch = mockFetch;
+
+      const banks = await new RapydAdapter(
+        "https://api.example.com/v1",
+      ).getPseBanks();
+
+      expect(mockFetch.mock.calls[0][0]).toBe(
+        "https://api.example.com/v1/payment_methods/country?country=CO",
+      );
+      expect(banks).toEqual([
+        { code: "co_pse_bancolombia_bank", name: "Bancolombia" },
+      ]);
+    });
+
+    /**
+     * El codigo que devuelve la lista tiene que servir tal cual en
+     * `PaymentMethod.pse()`. Si hiciera falta transformarlo, la lista no resolveria
+     * el problema que vino a resolver.
+     */
+    it("devuelve codigos que PaymentMethod.pse acepta sin transformar", async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: { status: "SUCCESS" },
+          data: [{ type: "co_pse_bancolombia_bank", name: "Bancolombia" }],
+        }),
+      });
+
+      const [banco] = await new RapydAdapter("https://api.example.com/v1").getPseBanks();
+
+      expect(() => PaymentMethod.pse({ bankCode: banco.code })).not.toThrow();
+    });
+  });
+});
