@@ -426,6 +426,8 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 
 ## 5. Matriz de Trazabilidad entre Requisitos y Componentes
 
+> **Esta tabla es la *vista de arquitectura* de la trazabilidad:** dice qué componente implementa cada requisito. No dice el estado de implementación, el issue que cerró cada requisito, el PR o las pruebas que lo cubren; eso es la *vista de proceso* y vive en la [`Matriz de Trazabilidad`](../../project-management/traceability-matrix.md) (`docs/project-management/traceability-matrix.md`), que la condición 5 del DoD exige actualizar en cada PR. Los dos documentos se referencian mutuamente y no deben quedar desincronizados.
+
 | Requisito (SRS) | Componente del SDK | Componente de la API de Simulación |
 |:---|:---|:---|
 | **RF-01** Crear intención de pago | `KitPagos` → `GatewayFactory` → `Adapter` | `HTTPRouter` → `ScenarioEngine` → `GatewayMockFactory` |
