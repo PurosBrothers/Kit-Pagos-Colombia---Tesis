@@ -15,7 +15,7 @@ El resumen de cuántos viajes de red cuesta cada flujo:
 
 ## Wompi
 
-**Autenticación:** `Authorization: Bearer <llave>`. La privada para crear, la pública para las lecturas.
+**Autenticación:** `Authorization: Bearer <llave>`. El SDK usa la **pública** tanto para crear como para consultar: `WompiAdapter` envía `Bearer {credentials.publicKey}` en todas sus llamadas, y la llave privada jamás viaja por la red (medido en `architecture-log.md`, punto 50; ver `layers-and-components.md` §2.5).
 
 ### Cobrar con tarjeta — 2 peticiones
 
@@ -28,7 +28,7 @@ Devuelve el **token de aceptación** de términos. Es de un solo uso: hay que pe
 
 ```http
 POST {baseUrl}/transactions
-Authorization: Bearer prv_test_...
+Authorization: Bearer pub_test_...
 Content-Type: application/json
 
 {

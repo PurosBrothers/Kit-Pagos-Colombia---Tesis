@@ -15,6 +15,7 @@
     "simulate:kushki-pse": "tsx simulate-kushki-pse.ts",
     "simulate:pse-bancos": "tsx simulate-pse-bancos.ts",
     "simulate:interchangeability": "tsx gateway-interchangeability.ts",
+    "demo": "tsx interactive-demo.ts",
     "typecheck": "tsc --noEmit"
   },
   "author": "Andres Henao, Joan Orduz, Joshua Prieto, David Rodriguez",

@@ -90,7 +90,12 @@ El CI ([.github/workflows/ci.yml](../../.github/workflows/ci.yml)) tiene dos tra
 | `npm run metrics` | — | Un PR puede estar verde y violar un umbral CK |
 | `npm run check:readme` | — | Un PR puede estar verde con el README roto |
 | `npm run test:sandbox` | Necesita credenciales y red | Los defectos que solo aparecen contra las APIs reales no se detectan en el PR |
-| Todo lo de `examples/` | Necesita el simulador levantado | Un cambio en la superficie pública puede romper los ejemplos sin que CI se queje |
+| `npm run check:published` | Verifica el registro de npm, que va por detrás de la rama | Un paquete publicado que no se pueda instalar no se detecta hasta que alguien lo intente |
+| **Ejecutar** los ejemplos | Necesita el simulador levantado | Un ejemplo puede compilar y fallar al correr, que es lo que pasó con el estado de la creación en Wompi |
+
+Desde el issue #60, **compilar** los ejemplos sí está en CI: el job `Examples (Compile against SDK build)` construye el SDK y corre `npm run typecheck` de `examples/` contra ese `dist/`. Lo que sigue afuera es ejecutarlos, porque eso necesita la API de Simulación corriendo.
+
+Esa distinción importa más de lo que parece. Los ejemplos declaran `file:../sdk` justamente para que CI los compile contra el código del pull request y no contra la última versión publicada; si consumieran el paquete de npm, una ruptura de la superficie pública pasaría en verde hasta el próximo release. `check:published` cubre el otro lado —que lo ya publicado se pueda instalar y usar— y por eso los dos hacen falta.
 
 Vale la pena tenerlo presente: **el verde de GitHub no es la verificación completa.** El bloque completo está en [00-entorno-de-desarrollo.md](../00-entorno-de-desarrollo.md) §5.
 

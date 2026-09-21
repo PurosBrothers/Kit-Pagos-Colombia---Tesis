@@ -12,7 +12,7 @@ Casi todo lo que sigue está **medido contra los sandboxes reales** entre el 18 
 
 | | **Wompi** | **Mercado Pago** | **Kushki** | **Rapyd** |
 |---|---|---|---|---|
-| **Autenticación** | `Bearer` con llave privada | `Bearer` con access token | Header propio: `Private-Merchant-Id` o `Public-Merchant-Id` | Firma HMAC por petición, con `salt`, `timestamp` y `access_key` |
+| **Autenticación** | `Bearer` con llave pública | `Bearer` con access token | Header propio: `Private-Merchant-Id` o `Public-Merchant-Id` | Firma HMAC por petición, con `salt`, `timestamp` y `access_key` |
 | **Formato del monto** | `amount_in_cents`, entero en centavos | `transaction_amount`, pesos | Objeto con desglose de IVA | `amount`, pesos |
 | **Llamadas para cobrar con tarjeta** | 2 (token de aceptación + cobro) | 1 | 1 | 1, y devuelve redirección |
 | **Llamadas para PSE** | 1 + sondeo | 1 | 2 (token + init) | 2 (cliente + pago) |
@@ -32,7 +32,7 @@ La fila más reveladora es la de llamadas: el mismo cobro con tarjeta cuesta ent
 
 **Host de pruebas:** `https://sandbox.wompi.co/v1`
 
-**Autenticación.** Dos llaves: `pub_test_*` para el navegador y las lecturas, `prv_test_*` para cobrar, ambas como `Authorization: Bearer`. Y **dos secretos más**, que no son llaves de API: el de eventos, que firma los webhooks, y el de integridad, que firma lo que el comercio manda. Son cuatro valores distintos en un mismo panel, y confundirlos produce errores que parecen de otra cosa.
+**Autenticación.** El SDK autentica **todas** sus llamadas a Wompi con la llave **pública** (`pub_test_*`) como `Authorization: Bearer`: el `WompiAdapter` envía `Bearer {credentials.publicKey}` tanto al pedir el token de aceptación como al cobrar y consultar, y la llave privada nunca viaja por la red (medido en `architecture-log.md`, punto 50; ver `layers-and-components.md` §2.5). Wompi expone además **dos secretos más**, que no son llaves de API: el de eventos, que firma los webhooks, y el de integridad, que firma lo que el comercio manda. Son cuatro valores distintos en un mismo panel, y confundirlos produce errores que parecen de otra cosa.
 
 **Monto.** `amount_in_cents`, entero en centavos. Es la única de las cuatro que pide unidad menor.
 
