@@ -106,6 +106,5 @@ chore(repo): add commit message guidelines
   - **Related issues / ASR / ADR**: número de issue relacionado (`Closes #N` / `Refs #N`) y, si aplica, el identificador del ASR o ADR del SAD que motiva el cambio.
   - **Test plan**: cómo se verificó el cambio (pruebas automatizadas ejecutadas, pasos manuales, o ambos).
 - Un PR debe tener al menos una revisión aprobada antes de mergear a su rama base (`devops` para ramas de trabajo, `main` para el PR de cierre de iteración desde `devops`).
-- Si el PR implementa, modifica o cierra un requisito funcional (RF), debe actualizar la fila correspondiente en [`docs/project-management/traceability-matrix.md`](docs/project-management/traceability-matrix.md) dentro del mismo PR: estado, issue, PR y pruebas. Es la condición 5 del Definition of Done y sin esa fila actualizada el requerimiento no se considera implementado.
 - No se mergea un PR si el CI está en rojo o si tiene conflictos sin resolver con su rama base.
 - Se prefiere *squash merge* para ramas de trabajo con muchos commits intermedios ("wip", "fix typo", etc.), de forma que la rama base mantenga un historial limpio con un commit por cambio lógico.

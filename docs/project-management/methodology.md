@@ -130,7 +130,7 @@ Un requerimiento se considera implementado exitosamente solo cuando se cumplen *
 2. Las pruebas automatizadas relevantes pasan en el pipeline de CI con cobertura igual o superior al 80%.
 3. El ítem en el tablero de seguimiento está en estado completado.
 4. Los valores de WMC, CBO, RFC y MAX_CC de las clases modificadas están dentro de los umbrales definidos (WMC ≤ 20, CBO ≤ 5, RFC ≤ 20, MAX_CC ≤ 10).
-5. La [Matriz de Trazabilidad](traceability-matrix.md) ha sido actualizada para reflejar el requerimiento como implementado.
+5. La Matriz de Trazabilidad ha sido actualizada para reflejar el requerimiento como implementado.
 
 ### 6.1. Cómo se calcula cada métrica
 
@@ -174,7 +174,7 @@ Si la tasa de completitud al cierre de una semana es inferior al 60% de las tare
 
 ## 7. Control de cambios de requerimientos
 
-Cualquier integrante o el director puede proponer un cambio a los requerimientos. Se registra la propuesta con descripción, justificación e impacto estimado sobre cronograma y entregables; el equipo la evalúa en la reunión semanal y decide por consenso (aprobar, rechazar o posponer). Si el cambio lo pidió el director, su aprobación es obligatoria antes de proceder. Un cambio aprobado actualiza, en este orden: el SRS, la [Matriz de Trazabilidad](traceability-matrix.md), y el backlog de GitHub Projects. Ningún cambio sobre la rama principal se acepta sin que el SRS esté actualizado primero.
+Cualquier integrante o el director puede proponer un cambio a los requerimientos. Se registra la propuesta con descripción, justificación e impacto estimado sobre cronograma y entregables; el equipo la evalúa en la reunión semanal y decide por consenso (aprobar, rechazar o posponer). Si el cambio lo pidió el director, su aprobación es obligatoria antes de proceder. Un cambio aprobado actualiza, en este orden: el SRS, la Matriz de Trazabilidad, y el backlog de GitHub Projects. Ningún cambio sobre la rama principal se acepta sin que el SRS esté actualizado primero.
 
 No requieren aprobación del director: ajustes al cronograma que no afecten los hitos principales, actualización de la tabla de riesgos, correcciones menores de redacción, actualización de métricas de progreso. Sí requieren su alineación: cambios en la metodología de evaluación, y en general cualquier cambio que toque alcance o hitos.
 
@@ -282,7 +282,6 @@ Si al cierre de la Semana 1 de Iteración 1 (jueves antes del 31 de agosto) el t
 - `SPMP - Kit Pagos Colombia.md` (fuera del repositorio, en Google Drive/Downloads): el documento formal completo. Este archivo es un resumen operativo, no un remplazo.
 - `Descripción de la Arquitectura del Software (SAD).docx.md` (fuera del repositorio): la fuente de verdad de la arquitectura. Ver `docs/architecture/architecture-log.md` para el registro de discrepancias pendientes de corregir ahí.
 - `docs/README.md`: el índice de la documentación, con el camino de lectura por concepto y el mapa de los cuatro entregables de la Iteración 3.
-- `docs/project-management/traceability-matrix.md`: la [Matriz de Trazabilidad](traceability-matrix.md), el artefacto de proceso de la condición 5 del DoD que registra el estado de implementación de cada requisito con su evidencia (issue, PR y pruebas).
 - `docs/02-arquitectura/layers-and-components.md` y `docs/02-arquitectura/ubiquitous-language.md`: la estructura de código vigente, sincronizada con las decisiones tomadas sobre el SAD.
 - `docs/04-metricas-y-pruebas/`: cómo se calculan las métricas CK, qué cubren las tres suites de pruebas y qué falta para poder medir los prototipos.
 - `CONTRIBUTING.md`: estándares de commits, política de ramas y pull requests.
