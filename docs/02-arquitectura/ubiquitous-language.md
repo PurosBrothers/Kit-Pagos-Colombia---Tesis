@@ -10,7 +10,7 @@
 >
 > **Alcance de la implementación actual:** las rutas y el adaptador de Kushki se prueban contra el mock local. Sus componentes tributarios se expresan en pesos nominales (`50000` para COP 50.000), usa un token ficticio y el `GET /v1/sim/kushki/charges/:ticketNumber` es una extensión didáctica del simulador, no una afirmación de compatibilidad con el sandbox de Kushki.
 >
-> **Nota de transición PayU → Rapyd:** Este documento documentaba originalmente PayU Latam como cuarta pasarela. Desde 2026 el registro de comercio nuevo en Colombia solo otorga acceso a Rapyd Collect, no a la API clásica de PayU (ver `architecture-log.md`, punto 15). La columna "PayU Latam" fue reemplazada por "Rapyd" tras la investigación de campo del issue #23, contra `docs.rapyd.net`. La rama `Gateway.PAYU` implementada en `src/domain/services/WebhookVerifier.ts` durante la Iteración 1 usa el algoritmo de PayU (documentado más abajo solo como referencia histórica en los issues #11/#17) y debe migrarse al algoritmo de Rapyd documentado en este archivo antes de que `RapydAdapter` entre en producción.
+> **Nota de transición PayU → Rapyd:** Este documento documentaba originalmente PayU Latam como cuarta pasarela. Desde 2026 el registro de comercio nuevo en Colombia solo otorga acceso a Rapyd Collect, no a la API clásica de PayU (ver `architecture-log.md`, punto 15). La columna "PayU Latam" fue reemplazada por "Rapyd" tras la investigación de campo del issue #23, contra `docs.rapyd.net`. La migración ya está completa: `WebhookVerifier.ts` implementa el algoritmo de Rapyd (`Gateway.RAPYD`, HMAC-SHA256) desde los puntos 16 y 18 del `architecture-log.md`, y `RapydAdapter` existe (ver `layers-and-components.md`, sección 2.6). El algoritmo de firma de PayU ya no está en el código: el enum `Gateway` solo tiene `WOMPI`, `RAPYD`, `MERCADOPAGO` y `KUSHKI` (`sdk/src/domain/value-objects/Gateway.ts`).
 >
 > **Nota de vigencia y sincronización:** Este documento está alineado con el modelo de dominio y arquitectura hexagonal del SDK (`TransactionStatus`, `KitPagosErrorCode`, `KitPagosError`). Los nombres de archivo de interfaz citados como referencia conceptual (`IRequestCrearPago.ts`, `IWebhookPayload.ts`, etc.) se consolidan formalmente en `src/application/ports/PaymentGatewayPort.ts`. Ver `architecture-log.md` (punto 11).
 
@@ -18,7 +18,7 @@
 
 ## 1. Flujo de Inicialización / Creación del Pago
 
-**Contrato de Interfaz del Puerto:** `src/application/ports/IRequestCrearPago.ts` y `IResponseCrearPago.ts`
+**Contrato de Interfaz del Puerto:** `src/application/ports/PaymentGatewayPort.ts` (método `createPayment()`: entrada `CreatePaymentRequest`, salida `PaymentResult`). Los nombres `IRequestCrearPago.ts`/`IResponseCrearPago.ts` de la versión anterior quedan solo como referencia conceptual (ver nota de la portada, punto 11 del `architecture-log.md`).
 
 | Atributo SDK (Normalizado) | Tipo de Dato (TypeScript) | Descripción Conceptual (Contexto Colombiano) | Wompi (Nativo) | Rapyd (Nativo) | Mercado Pago (Nativo) | Kushki (Nativo) | Regla de Transformación / Caso Borde (Para el Adaptador) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -34,7 +34,7 @@
 
 ## 2. Flujo de Notificación Asíncrona (Webhooks)
 
-**Contrato de Interfaz del Puerto:** `src/application/ports/IWebhookPayload.ts`
+**Contrato de Interfaz del Puerto:** `src/application/ports/PaymentGatewayPort.ts` (método `validateWebhook()`: entrada `unknown` + headers, salida `WebhookEvent` de `src/domain/value-objects/WebhookEvent.ts`). El nombre `IWebhookPayload.ts` de la versión anterior queda solo como referencia conceptual (ver nota de la portada, punto 11 del `architecture-log.md`).
 
 | Atributo SDK (Normalizado) | Tipo de Dato (TypeScript) | Descripción Conceptual (Contexto Colombiano) | Wompi (Nativo) | Rapyd (Nativo) | Mercado Pago (Nativo) | Kushki (Nativo) | Regla de Transformación / Caso Borde (Para el Adaptador) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -46,7 +46,7 @@
 
 ## 3. Flujo de Consulta de Estado (Polling)
 
-**Contrato de Interfaz del Puerto:** `src/application/ports/IResponseConsultaPago.ts`
+**Contrato de Interfaz del Puerto:** `src/application/ports/PaymentGatewayPort.ts` (método `getStatus()`: entrada `gatewayTransactionId`, salida `Transaction` de `src/domain/entities/Transaction.ts`). El nombre `IResponseConsultaPago.ts` de la versión anterior queda solo como referencia conceptual (ver nota de la portada, punto 11 del `architecture-log.md`).
 
 | Atributo SDK (Normalizado) | Tipo de Dato (TypeScript) | Descripción Conceptual (Contexto Colombiano) | Wompi (Nativo) | Rapyd (Nativo) | Mercado Pago (Nativo) | Kushki (Nativo) | Regla de Transformación / Caso Borde (Para el Adaptador) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -57,7 +57,7 @@
 
 ## 4. Flujo de Manejo y Normalización de Errores Técnicos
 
-**Contrato de Interfaz del Puerto:** `src/domain/errors/ErrorNormalizado.ts`
+**Contrato de Interfaz del Puerto:** `src/domain/errors/KitPagosError.ts` (`KitPagosError` + enum `KitPagosErrorCode` en `src/domain/value-objects/KitPagosErrorCode.ts`). El nombre `ErrorNormalizado.ts` de la versión anterior queda solo como referencia conceptual (ver nota de la portada, punto 11 del `architecture-log.md`).
 
 | Atributo SDK (Normalizado) | Tipo de Dato (TypeScript) | Descripción Conceptual (Contexto Colombiano) | Wompi (Nativo) | Rapyd (Nativo) | Mercado Pago (Nativo) | Kushki (Nativo) | Regla de Transformación / Caso Borde (Para el Adaptador) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |

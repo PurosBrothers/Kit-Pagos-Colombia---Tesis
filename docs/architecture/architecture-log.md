@@ -2211,7 +2211,7 @@ El `README.md` de la raíz también tenía un ejemplo de código roto —`new Am
 
 **Encontrado:** `sdk/src/Hexagonal.png` está ubicado dentro del árbol de código fuente del SDK, no en `docs/architecture/`.
 
-**Estado:** Pendiente. Se recomienda moverlo a `docs/architecture/SDK/` o eliminarlo si es una copia duplicada, para que no quede empaquetado dentro del artefacto publicado a npm.
+**Estado:** Resuelto. `sdk/src/Hexagonal.png` se movió a `docs/architecture/SDK/Hexagonal.png` (commit `e52709a`), fuera del árbol de `sdk/` que se publica en npm. La imagen es la versión Nivel 3 del diagrama de arquitectura hexagonal del SDK (referenciada por `2-hexagonal-en-kit-pagos.md`).
 
 ### 10. Sin framework de pruebas en `simulator-api`
 
@@ -2398,7 +2398,7 @@ Cobertura: statements 99.85 % (idéntica), ramas 93.7 % → 93.13 %. La baja de 
 - **Sección 3 (Henao).** `WebhookVerifier` vive en `domain/services/`, así que si el `Domain Class Diagram.png` lo incluye, debe mostrar la interfaz y las cuatro implementaciones en vez de una clase con dos métodos grandes. Este diagrama sigue sin fuente PlantUML en el repositorio, así que se corrige manualmente.
 - **Sección 13 (Joan).** Reemplazar la figura por el `Hexagonal architecture class diagram.png` ya regenerado, y redactar el ADR del patrón Strategy, distinto del que el punto 33 propone para los módulos de funciones puras: aquí la decisión es que el eje de variación del SDK es la pasarela, y que ese eje se expresa con una implementación por pasarela detrás de una interfaz, no con ramas de un condicional. El ADR es lo único de este punto que sigue siendo trabajo de redacción y no de traslado.
 
-**Deriva de documentación detectada al pasar, que este punto no corrige:** `layers-and-components.md` y `component-diagram.puml` siguen nombrando `SdkError` y `SdkErrorCode`, renombrados a `KitPagosError` y `KitPagosErrorCode` desde el punto 23. No se tocó acá para no mezclar dos puntos con responsables distintos; corresponde al issue #66 (deriva entre documentación y código).
+**Deriva de documentación detectada al pasar, que este punto no corrige:** `layers-and-components.md` y `component-diagram.puml` seguían nombrando `SdkError` y `SdkErrorCode`, renombrados a `KitPagosError` y `KitPagosErrorCode` desde el punto 23. No se tocó acá para no mezclar dos puntos con responsables distintos. La mitad correspondía al issue #66 (deriva entre documentación y código): `layers-and-components.md` ya quedó corregido por el PR que cierra el #66 (secciones 2.1, 2.10 y 2.14 y la matriz RF-05). `component-diagram.puml`, como fuente de un diagrama del SAD, queda en el reparto pendiente de la sección correspondiente.
 
 **Estado:** Resuelto en el código, en la documentación del repositorio y en los dos diagramas con fuente PlantUML. Pendiente únicamente el traslado al documento del SAD y el ADR de la sección 13, según el reparto de arriba.
 

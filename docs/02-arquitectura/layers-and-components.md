@@ -125,7 +125,7 @@ Kit-Pagos-Colombia---Tesis/
 
 > **Qué cambió respecto de la versión 1.0.0 de este árbol.** La versión anterior describía un contenedor `api/` con componentes (`router.ts`, `ScenarioEngine` en `engine/`, cinco factorías de mock en `factories/`, `SignatureGenerator`, `WebhookTriggerEndpoint`, `OpenAPIProvider`) que no corresponden a la implementación real en `simulator-api/src/`. También citaba `SdkError.ts` y `SdkErrorCode.ts`, renombrados a `KitPagosError`, y le faltaban el normalizador de Kushki, `PaymentResult`, `PaymentMethod`, `PseBank`, `Credentials`, `native-status.ts` y los once módulos auxiliares de adaptador. El árbol de arriba se generó contra el código y corresponde a 61 unidades de producción en `sdk/src` y 17 en `simulator-api/src`. La verificación de que la regla de dependencia se cumple está en [2-hexagonal-en-kit-pagos.md](2-hexagonal-en-kit-pagos.md) §2.
 >
-> Las secciones 3.1 a 3.6 describen el diseño previsto de la API de Simulación y conservan los nombres de componente del SAD. La correspondencia con los archivos que existen hoy, junto con los límites de fidelidad declarados y lo que falta para cerrar el componente, está en [3-api-de-simulacion.md](3-api-de-simulacion.md).
+> Las secciones 3.1 a 3.6 describen la implementación real en `simulator-api/src/` con los nombres de archivo del código (la correspondencia con los nombres de componente del SAD se conserva en los encabezados). Los límites de fidelidad declarados y lo que falta para cerrar el componente están en [3-api-de-simulacion.md](3-api-de-simulacion.md).
 
 ---
 
@@ -140,7 +140,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 - **Patrón Arquitectónico:** GoF Facade.
 - **Responsabilidad:** Es el punto de entrada único del SDK y el único componente que el desarrollador que consume el SDK instancia directamente.
 - **Métodos Públicos:** Expone cuatro métodos: `createPayment(request)`, `getPaymentStatus(id)`, `getPseBanks()` y `validateWebhook(payload, headers, options?)`, donde `options` admite `gateway` —para verificar webhooks de una pasarela configurada que no es la activa, como pasa durante una migración— junto con `toleranceSeconds` y `currentTimestamp` de la protección contra reenvío (ver `architecture-log.md`, punto 54). Los tres primeros nombres coinciden con el Component Diagram C4 y la sección 9.1.1 del SAD; la sección 15.2 usa nombres distintos (`getStatus`, `verifyWebhook`), inconsistencia registrada en `architecture-log.md` (punto 1). `getPseBanks()` se agregó al implementar PSE en las cuatro pasarelas: el pagador elige su banco de una lista viva antes de que exista el pago, y sin este método el comercio tendría que pedirla directo a la pasarela (ver `architecture-log.md`, punto 47).
-- **Comportamiento:** Oculta la complejidad interna del sistema detrás de una interfaz simple y predecible. Mantiene una referencia a `SDKConfigurator` y a `GatewayFactory`; antes de ejecutar cualquier operación consulta al Configurator para determinar la pasarela activa y sus credenciales, solicita al Factory la instancia del adaptador correspondiente, y envuelve la llamada resultante con `RetryHandler`. Retorna entidades `Transaction` normalizadas al desarrollador o excepciones `SdkError` tipadas en caso de fallo. `validateWebhook()` retorna un `WebhookEvent` en lugar de un booleano, para cumplir RF-04 (ver sección 2.10).
+- **Comportamiento:** Oculta la complejidad interna del sistema detrás de una interfaz simple y predecible. Mantiene una referencia a `SDKConfigurator` y a `GatewayFactory`; antes de ejecutar cualquier operación consulta al Configurator para determinar la pasarela activa y sus credenciales, solicita al Factory la instancia del adaptador correspondiente, y envuelve la llamada resultante con `RetryHandler`. Retorna entidades `Transaction` normalizadas al desarrollador o excepciones `KitPagosError` tipadas en caso de fallo. `validateWebhook()` retorna un `WebhookEvent` en lugar de un booleano, para cumplir RF-04 (ver sección 2.10).
 
 ---
 
@@ -172,13 +172,13 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 - **Patrón Arquitectónico:** GoF Adapter.
 - **Responsabilidad:** Implementa el `PaymentGatewayPort` y traduce su contrato hacia las convenciones de Wompi.
 - **Detalles de implementación:**
-  - Autenticación: header `Authorization: Bearer {llave_privada}`.
+  - Autenticación: header `Authorization: Bearer {llave_publica}`. El adaptador envía siempre `credentials.publicKey` (líneas 210 y 229 de `WompiAdapter.ts`), y la prueba unitaria exige que la llave privada jamás viaje por la red (`WompiAdapter.test.ts`, línea 169). Es una corrección de esta nota: la versión anterior decía `{llave_privada}`. La llave pública basta para crear y consultar — contra el sandbox real el cobro respondió un `422` de negocio, no un `401` de autenticación (punto 50 del `architecture-log.md`; `docs/testing-data/wompi.md`, §1 y §3).
   - Endpoint de creación: `POST /v1/transactions`.
   - Cobro con tarjeta: `payment_method: {type: "CARD", token, installments}`. Sin ese campo responde `422 "No se especificó método de pago o fuente de pago"`, y **el cobro nace `PENDING`, no `APPROVED`**: se resuelve solo unos cientos de milisegundos después, así que el resultado nunca está en la respuesta de creación y el comercio tiene que consultarlo (punto 50 del `architecture-log.md`).
   - Mapeo de estado: campo `data.status` con valores `APPROVED`, `DECLINED`, `VOIDED`, `PENDING`.
   - Verificación de firma: SHA-256 sobre cadena de propiedades + timestamp + secreto de integridad.
-- **Prioridad:** Alta. Es el adaptador de referencia del proyecto, con implementación completa y validación exhaustiva en sandbox.
-- **Modo simulación:** Redirige solicitudes al simulador con headers `x-simulate-scenario` y `x-simulate-delay`.
+- **Prioridad:** Alta. Es el adaptador de referencia del proyecto: implementación completa y 16 pruebas de contrato contra el sandbox real (`sdk/test/sandbox/wompi.sandbox.test.ts`), además de los hallazgos medidos de los puntos 43, 44 y 50 del `architecture-log.md`.
+- **Modo simulación:** Redirige solicitudes al simulador con el header `x-simulate-scenario`. Es el **único** header que el simulador intercepta: el `x-simulate-delay` descrito en versiones anteriores no existe (ver sección 3.1).
 
 ---
 
@@ -192,8 +192,8 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   - Creación de pago y consulta de estado (endpoint, forma del payload, catálogo de `data.status`): investigado y documentado en `ubiquitous-language.md` (issue #23).
   - **Tarjeta: `POST /v1/checkout`, no `POST /v1/payments`.** Es la única de las cuatro que no cobra la tarjeta servidor-a-servidor: con token responde `CREATE_CARD_TYPE_REQUIRES_ONLY_ONE_OF_FIELDS_OR_TOKEN`, y la variante que cobra exige el número de la tarjeta en la petición, lo que metería al comercio en el alcance de PCI DSS. Así que el cobro devuelve `REDIRECT_REQUIRED`, la misma rama que PSE, y la tarjeta la escribe el pagador en la página de Rapyd. El payload y la traducción de la respuesta viven en `rapyd-checkout.ts`.
   - Consulta de estado por prefijo del identificador: `checkout_` va a `/checkout/{id}` y `payment_` a `/payments/{id}`. Un `checkout_` consultado como pago responde `400 ERROR_GET_PAYMENT`. Medido en el punto 50 del `architecture-log.md`.
-  - **⚠️ PENDIENTE (requiere sandbox real, ver `architecture-log.md`, punto 19):** el esquema exacto de campos de identidad del pagador para PSE Colombia. Rapyd no expone PSE como un único método; lo modela como una familia `co_{banco}_bank` (uno por banco afiliado, ej. `co_bbva_colombia_bank`), cuyo catálogo completo y campos requeridos solo se pueden confirmar con credenciales de sandbox reales.
-- **Prioridad:** Media. La investigación del contrato ya cerró; **pendiente de implementación la clase `RapydAdapter.ts` en sí** (no existe todavía en `src/infrastructure/adapters/`, que solo tiene `WompiAdapter` en curso vía el issue #29).
+  - **PSE Colombia (esquema confirmado, `architecture-log.md` punto 19, cerrado):** el esquema de campos de identidad del pagador ya está resuelto. Rapyd no expone PSE como un único método; lo modela como una familia de **47 métodos** `co_pse_{banco}_bank` (uno por banco afiliado, ej. `co_pse_bancolombia_bank`), con dos campos obligatorios por método: `customer_identification_type` y `customer_identification_number`. El detalle campo por campo está en `ubiquitous-language.md` y en `testing-data/rapyd.md` (sección 5).
+- **Prioridad:** Media. La investigación del contrato cerró y la implementación está completa: `RapydAdapter.ts` existe e integra `rapyd-signature.ts` (firma por petición), `rapyd-checkout.ts` (tarjeta por checkout alojado) y `rapyd-pse.ts` (PSE). Contrato medido contra el sandbox real (puntos 48 y 50 del `architecture-log.md`; `sdk/test/sandbox/rapyd.sandbox.test.ts`).
 - **Modo simulación:** Redirige solicitudes al simulador en modo pruebas.
 
 > **Nota histórica:** esta pasarela era originalmente PayU. `sdk/src/domain/services/WebhookVerifier.ts` implementó primero el algoritmo de firma de PayU (`Gateway.PAYU`, MD5/SHA-256) durante la Iteración 1, y ya se migró por completo a la fórmula de Rapyd (`Gateway.RAPYD`, HMAC-SHA256) — ver sección 2.10. Este párrafo se conserva únicamente para que quien lea el historial del proyecto entienda por qué existió esa rama de código intermedia.
@@ -209,7 +209,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   - Cobro con tarjeta: `token` e `installments` en la raíz del cuerpo. **Las cuotas son obligatorias incluso cuando son una**: sin el campo responde `400 "Invalid installments"`, y es la única de las cuatro que las exige siempre. No hace falta mandar `payment_method_id`: lo deduce del token, y sin token responde `400 "payment_method_id attribute can't be null"`.
   - Mapeo de estado: campo `status` y `status_detail`. Valores clave: `accredited` (aprobado), `cc_rejected_insufficient_amount` (fondos insuficientes), `cc_rejected_bad_filled_card_number` (número de tarjeta incorrecto).
   - Verificación de firma: HMAC-SHA256 sobre headers y body.
-- **Prioridad:** Media. Implementación funcional validada en sandbox.
+- **Prioridad:** Media. Cobro con tarjeta medido contra el sandbox real (punto 50 del `architecture-log.md`; `sdk/test/sandbox/mercadopago.sandbox.test.ts`). PSE no es testeable en sandbox: la Orders API responde `401` con credenciales de prueba y exige token de producción (punto 45).
 - **Modo simulación:** Redirige solicitudes al simulador en modo pruebas.
 
 ---
@@ -261,7 +261,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   - **Mercado Pago:** HMAC-SHA256 sobre headers y body. Implementación suficiente para validar webhooks del simulador.
   - **Kushki:** HMAC-SHA256. Implementación suficiente para validar webhooks del simulador.
 - **Segundo método público — `parse(payload, gateway): WebhookEvent`:** Construye el evento normalizado (`WebhookEvent`) a partir del payload ya verificado, para cumplir RF-04 ("retornar un evento normalizado si la firma es válida"). Este método no está en la sección 15.1 del SAD, que describe a `WebhookVerifier` con un único método público; es una desviación deliberada registrada en `architecture-log.md` (punto 6), porque ningún otro componente vigente del SAD define cómo se construye ese evento.
-- **Integración:** `KitPagos.validateWebhook()` llama primero a `verify()` y, si la firma es válida, a `parse()`, devolviendo el `WebhookEvent` resultante al comercio (o un `SdkError(WEBHOOK_SIGNATURE_INVALID)` si la firma no es válida).
+- **Integración:** `KitPagos.validateWebhook()` llama primero a `verify()` y, si la firma es válida, a `parse()`, devolviendo el `WebhookEvent` resultante al comercio (o un `KitPagosError(WEBHOOK_SIGNATURE_INVALID)` si la firma no es válida).
 
 ---
 
@@ -295,7 +295,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 
 ### 2.14. Error Handler (`src/application/services/ErrorHandler.ts`)
 
-- **Responsabilidad:** Convierte cualquier error no recuperable en una excepción `SdkError` tipada.
+- **Responsabilidad:** Convierte cualquier error no recuperable en una excepción `KitPagosError` tipada.
 - **Estructura — división por forma del error, no por pasarela:** a diferencia de `ResponseNormalizer` y `WebhookVerifier`, este componente **no** se divide por pasarela. Los fallos que traduce son de red y de protocolo HTTP, iguales para las cuatro; lo que varía es la **forma** del fallo entrante, y es por esa forma que reparte el trabajo:
   - `fromHttpStatus` — respuesta HTTP con status, de la forma `{ status, body? }`.
   - `fromNativeError` — instancia de `Error` de Node.js o JavaScript.
@@ -303,8 +303,8 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   
   Las funciones puras (`sanitize`, `formatGatewayName`, `mapHttpStatus`) viven a nivel de módulo, y los predicados `hasConnectionSignal` y `hasTimeoutSignal` quedaron compartidos con `classifyError`, que duplicaba esas mismas cadenas de condiciones. Antes del punto 34, `handle()` concentraba todo en complejidad ciclomática 35.
 - **Simetría entre `classifyError` y `handle()` (Resuelto):** Los errores de red (mensajes conteniendo `"network"` o códigos como `ENETUNREACH`, `ECONNREFUSED`, etc.) son reconocidos por el predicado común `hasConnectionSignal()`, traduciéndose en `KitPagosErrorCode.CONNECTION_FAILED` y clasificándose consistentemente como reintentables (`RETRIABLE`).
-- **Estructura de SdkError:** extiende la clase `Error` nativa de JavaScript y añade tres atributos:
-  - `code`: código normalizado del enum `SdkErrorCode` (valores: `INVALID_CREDENTIALS`, `GATEWAY_TIMEOUT`, `CONNECTION_FAILED`, `RATE_LIMIT_EXCEEDED`, `RESOURCE_NOT_FOUND`, `WEBHOOK_SIGNATURE_INVALID`, `MAX_RETRIES_EXCEEDED`, `MALFORMED_RESPONSE`, `UNSUPPORTED_OPERATION`, `UNKNOWN_ERROR`).
+- **Estructura de KitPagosError:** extiende la clase `Error` nativa de JavaScript y añade tres atributos (renombrado de `SdkError` según `architecture-log.md`, punto 23):
+  - `code`: código normalizado del enum `KitPagosErrorCode` (valores: `INVALID_CREDENTIALS`, `GATEWAY_TIMEOUT`, `CONNECTION_FAILED`, `RATE_LIMIT_EXCEEDED`, `INVALID_REQUEST`, `RESOURCE_NOT_FOUND`, `GATEWAY_SERVER_ERROR`, `MALFORMED_RESPONSE`, `WEBHOOK_SIGNATURE_INVALID`, `UNSUPPORTED_OPERATION`, `MAX_RETRIES_EXCEEDED`, `UNKNOWN_ERROR`).
   - `gateway`: la pasarela (`Gateway`) que originó el error.
   - `originalPayload`: tipado como `unknown` para forzar una verificación explícita antes de su uso, en lugar de `any`.
 - **Garantía:** El desarrollador nunca recibe excepciones no manejadas ni errores en formato nativo de ninguna pasarela.
@@ -313,68 +313,67 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 
 ## 3. Detalle de Componentes — API de Simulación (Fastify Container — Nivel 3)
 
-La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura interna sigue un flujo de procesamiento secuencial con responsabilidades claramente delimitadas entre seis componentes. El flujo avanza de izquierda a derecha desde la recepción de la solicitud hasta la generación de la respuesta firmada.
+La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura interna se reparte entre rutas por pasarela, el motor de escenarios y una fábrica de mocks por pasarela. El flujo avanza desde la recepción de la solicitud en el router correspondiente hasta la construcción del payload en el `GatewayMockFactory` de esa pasarela. **No existe un `router.ts` central** en `api/routes/`: los componentes se describen con los archivos reales.
 
 ---
 
-### 3.1. HTTP Router & Headers Middleware (`api/routes/router.ts`)
+### 3.1. HTTP Routers por pasarela (`simulator-api/src/routes/*.ts`)
 
-- **Responsabilidad:** Es la puerta de entrada del simulador, implementado como un plugin Fastify.
-- **Enrutamiento:** Identifica la pasarela de destino a partir de la URL: `/v1/sim/wompi/*`, `/v1/sim/payu/*`, `/v1/sim/mercadopago/*` o `/v1/sim/kushki/*`.
+- **Responsabilidad:** Son la puerta de entrada del simulador, un plugin Fastify por pasarela registrado desde `app.ts`: `wompi.ts`, `rapyd.ts`, `mercadopago.ts`, `kushki.ts` y `health.ts`.
+- **Enrutamiento:** Cada router replica la forma de las rutas nativas de su pasarela bajo `/v1/sim/<pasarela>/*` — 23 endpoints en total (4 de Wompi, 7 de Rapyd, 5 de Mercado Pago, 6 de Kushki y 1 de `health`), enumerados en [3-api-de-simulacion.md](3-api-de-simulacion.md). **No existe `/v1/sim/payu/*`**: PayU no es pasarela del proyecto (ver sección 2.6 y `architecture-log.md`, punto 15).
 - **Headers interceptados:**
-  - `x-simulate-scenario`: escenario a ejecutar (`APROBADO`, `RECHAZADO`, `FONDOS_INSUFICIENTES`, `TIMEOUT`, `ERROR_RED`).
-  - `x-simulate-delay`: milisegundos de latencia a introducir.
+  - `x-simulate-scenario`: escenario a ejecutar. El único valor implementado es `APPROVED` (por defecto); cualquier otro escenario (`RECHAZADO`, `FONDOS_INSUFICIENTES`, `TIMEOUT`, `ERROR_RED`) responde HTTP `501 Not Implemented` (RF-10, pendiente — issue #65).
+  - **No existe el header `x-simulate-delay`** que describían versiones anteriores de este documento.
 - **Fuentes de solicitud:** SDK Kit Pagos Colombia en modo simulación, o directamente el Desarrollador o Tester mediante herramientas REST (Postman, curl).
 
 ---
 
-### 3.2. Scenario Execution Engine (`api/engine/ScenarioEngine.ts`)
+### 3.2. Scenario Execution Engine (`simulator-api/src/scenarios/ScenarioEngine.ts`)
 
-- **Responsabilidad:** Es el componente de decisión del simulador.
+- **Responsabilidad:** Es el componente de decisión del simulador, tipado contra el cuerpo y la respuesta de Wompi.
 - **Lógica de ejecución por escenario:**
-  - `APROBADO` / `RECHAZADO` / `FONDOS_INSUFICIENTES`: delega la construcción del payload al `Gateway Mock Factory`.
-  - `TIMEOUT`: introduce la latencia especificada en `x-simulate-delay` mediante una promesa de espera antes de responder. Permite verificar que el `Retry Handler` del SDK maneja correctamente los tiempos de espera prolongados.
-  - `ERROR_RED`: retorna directamente HTTP 500 o 502 con cuerpo genérico de infraestructura, sin invocar al Mock Factory. Simula la caída del servidor del proveedor.
+  - `APPROVED` (valor por defecto): delega la construcción del payload al `GatewayMockFactory` de Wompi y devuelve `201` con `data.status: "APPROVED"` (para tarjeta) o `PENDING` (para PSE, que no se resuelve en el camino feliz — sección 2.5).
+  - Cualquier otro valor: lanza `UnsupportedScenarioError`, que el router traduce a HTTP `501`. Es una decisión deliberada: producir un `APPROVED` falso para un escenario no implementado invalidaría silenciosamente las pruebas de manejo de rechazos del SDK (RF-10, issue #65). Los routers de Rapyd, Mercado Pago y Kushki no pasan por este motor: resuelven el escenario en su propia fábrica de mocks, porque el motor hoy está acoplado al tipo de Wompi (ver comentario en `routes/rapyd.ts`).
+- **Responsabilidad y límite:** Detectar el escenario pedido es del router; decidir qué payload construir, de la fábrica. El motor intermedia para Wompi. Los dos extremos lo documentan en el código (`scenarios/ScenarioEngine.ts` y `gateways/<pasarela>/GatewayMockFactory.ts`).
 
 ---
 
-### 3.3. Gateway Mock Factory (`api/factories/GatewayMockFactory.ts`)
+### 3.3. Gateway Mock Factory (`simulator-api/src/gateways/<pasarela>/GatewayMockFactory.ts`)
 
 - **Responsabilidad:** Orquesta la construcción de payloads JSON que replican con exactitud la estructura de las respuestas nativas de cada pasarela.
-- **Fábricas internas:**
-  - `WompiMockFactory`: genera `data.status: "APPROVED"` o `"DECLINED"` con estructura completa de Wompi.
-  - `RapydMockFactory`: **⚠️ PENDIENTE de implementar** (no de investigar: la forma del payload de Rapyd ya está documentada en `ubiquitous-language.md`, issue #23). Reemplaza al antiguo `PayUMockFactory` (que generaba `transactionResponse.state` con estructura de PayU); debe generar el objeto `data` de Rapyd (`id`, `status: "ACT"|"CLO"|"ERR"|"EXP"|"CAN"`, `failure_code` cuando aplique).
-  - `MercadoPagoMockFactory`: genera `status` y `status_detail` en minúsculas. Para fondos insuficientes: `status_detail: "cc_rejected_insufficient_amount"`.
-  - `KushkiMockFactory`: genera `transaction_status: "APPROVAL"` o `"DECLINED"` respetando el vocabulario propio de Kushki.
-- **Criticidad:** La precisión de este componente es crítica para la validación del framework. Si el formato del Mock no coincide con el de la pasarela real, el `Response Normalizer` del SDK fallará en los escenarios de prueba.
+- **Fábricas internas (todas implementadas, una carpeta por pasarela):**
+  - `gateways/wompi/GatewayMockFactory.ts`: genera `data.status: "APPROVED"` o el cuerpo del PSE, con estructura completa de Wompi.
+  - `gateways/rapyd/GatewayMockFactory.ts`: genera el objeto `data` de Rapyd (`id`, `status`, `failure_code` cuando aplique) y la página de pago alojada del checkout. Reemplazó al antiguo `PayUMockFactory` (que generaba `transactionResponse.state` con estructura de PayU) — ver `architecture-log.md`, puntos 16 y 18.
+  - `gateways/mercadopago/GatewayMockFactory.ts`: genera `status` y `status_detail` en minúsculas. Para fondos insuficientes: `status_detail: "cc_rejected_insufficient_amount"`.
+  - `gateways/kushki/GatewayMockFactory.ts`: genera `transaction_status: "APPROVAL"` o `"DECLINED"` respetando el vocabulario propio de Kushki.
+- **Criticidad:** La precisión de este componente es crítica para la validación del framework. Si el formato del Mock no coincide con el de la pasarela real, el `Response Normalizer` del SDK fallará en los escenarios de prueba (medido en los puntos 48 y 50 del `architecture-log.md`).
 
 ---
 
-### 3.4. Signature Generator (`api/security/SignatureGenerator.ts`)
+### 3.4. Signature Generator — **no existe** en la implementación actual (RF-12)
 
-- **Responsabilidad:** Calcula la firma criptográfica que acompaña a los webhooks simulados, de modo que el `Webhook Verifier` del SDK pueda verificarla con su lógica de validación real.
-- **Implementación por pasarela:**
-  - **Wompi:** SHA-256 sobre cadena de propiedades + timestamp + secreto de integridad. Implementación completa y validada.
-  - **Rapyd:** `Base64(HMAC-SHA256(url_path + salt + timestamp + access_key + secret_key + body_string))`. **⚠️ PENDIENTE de implementar** en este componente de la API de Simulación (a diferencia del `WebhookVerifier.ts` del SDK, que sí ya implementa y valida esta fórmula, ver sección 2.10); la fórmula es la misma, solo falta la clase `SignatureGenerator.ts`, que todavía no existe en `simulator-api/src`.
-  - **Mercado Pago / Kushki:** HMAC-SHA256 sobre headers y body. Implementación suficiente para la fase de evaluación.
-- **Invocación:** No opera de forma automática. Es invocado exclusivamente por el `Webhook Trigger Endpoint` cuando el desarrollador solicita explícitamente el envío de un webhook sintético.
+- **Responsabilidad prevista:** Calcular la firma criptográfica que acompaña a los webhooks simulados, de modo que el `Webhook Verifier` del SDK pueda verificarla con su lógica de validación real.
+- **Estado real:** no hay carpeta `security/` ni archivo `SignatureGenerator.ts` en `simulator-api/src/`. El webhook sintético completo (Signature Generator + Webhook Trigger Endpoint de la sección 3.5) sigue siendo el requisito **RF-12, pendiente**. Las fórmulas por pasarela que tendrá que implementar son las que `WebhookVerifier.ts` del SDK ya implementa y valida (sección 2.10): SHA-256 para Wompi, `Base64(HMAC-SHA256(...))` para Rapyd, y HMAC-SHA256 para Mercado Pago y Kushki.
+- **Invocación prevista:** No operaría de forma automática; lo invocaría el `Webhook Trigger Endpoint` cuando el desarrollador solicite explícitamente el envío de un webhook sintético.
 
 ---
 
-### 3.5. Webhook Trigger Endpoint (`api/endpoints/WebhookTriggerEndpoint.ts`)
+### 3.5. Webhook Trigger Endpoint — **no existe** en la implementación actual (RF-12)
 
-- **Responsabilidad:** Gestiona el envío de webhooks sintéticos de forma controlada y explícita mediante `POST /v1/sim/webhooks/trigger`.
-- **Parámetros de entrada:** URL destino, tipo de evento y pasarela a simular.
+- **Responsabilidad prevista:** Gestionar el envío de webhooks sintéticos de forma controlada y explícita mediante `POST /v1/sim/webhooks/trigger`.
+- **Estado real:** no hay carpeta `endpoints/` ni archivo `WebhookTriggerEndpoint.ts` en `simulator-api/src/`. Es la segunda mitad del requisito **RF-12, pendiente**.
+- **Parámetros de entrada previstos:** URL destino, tipo de evento y pasarela a simular.
 - **Justificación del diseño manual:** Esta decisión responde a una restricción práctica del contexto de evaluación académica. Los proyectos prototípicos que integran el framework corren típicamente en entornos locales sin URL pública fija, lo que hace inviable el dispatch automático sin una solución de tunelización adicional como ngrok. Al requerir invocación manual, el componente elimina esa dependencia sin sacrificar la capacidad de probar el flujo completo de validación de webhooks.
-- **Flujo:** Recibe la solicitud → delega la generación de firma al `Signature Generator` → ejecuta HTTP POST hacia la URL destino indicada → retorna el resultado del intento de entrega.
+- **Flujo previsto:** Recibe la solicitud → delega la generación de firma al `Signature Generator` → ejecuta HTTP POST hacia la URL destino indicada → retorna el resultado del intento de entrega.
 
 ---
 
-### 3.6. OpenAPI Documentation Provider (`api/docs/OpenAPIProvider.ts`)
+### 3.6. OpenAPI Documentation Provider — **no existe** en la implementación actual (RF-13)
 
-- **Responsabilidad:** Sirve automáticamente la especificación OpenAPI 3.0 del simulador en el endpoint `/docs` mediante el plugin `@fastify/swagger`.
-- **Beneficio operativo:** No requiere mantenimiento manual. Cada modificación en los endpoints del simulador se refleja automáticamente en la especificación servida.
-- **Entregable formal:** Constituye uno de los entregables formales del proyecto definidos en la propuesta (sección 1.3), produciendo directamente un artefacto evaluable sin trabajo adicional.
+- **Responsabilidad prevista:** Servir automáticamente la especificación OpenAPI 3.0 del simulador en el endpoint `/docs` mediante el plugin `@fastify/swagger`.
+- **Estado real:** no hay carpeta `docs/` ni archivo `OpenAPIProvider.ts`; `@fastify/swagger` **no está instalado** en `simulator-api/package.json`. La especificación OpenAPI en `/docs` es el requisito **RF-13, pendiente**.
+- **Beneficio operativo previsto:** No requeriría mantenimiento manual. Cada modificación en los endpoints del simulador se reflejaría automáticamente en la especificación servida.
+- **Entregable formal (previsto):** constituye uno de los entregables formales del proyecto definidos en la propuesta (sección 1.3), produciendo directamente un artefacto evaluable sin trabajo adicional.
 
 ---
 
@@ -432,15 +431,15 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 | **RF-02** Respuesta normalizada con Transaction | `ResponseNormalizer` → `Transaction Entity` | `GatewayMockFactory` (payload de referencia) |
 | **RF-03** Consultar estado de transacción | `KitPagos` → `Adapter` → `ResponseNormalizer` | `GatewayMockFactory` |
 | **RF-04** Validar firma de webhook y retornar evento normalizado | `WebhookVerifier` (`verify()` + `parse()`) → `WebhookEvent` | `SignatureGenerator` → `WebhookTriggerEndpoint` |
-| **RF-05** Excepciones tipadas SdkError | `ErrorHandler` (`SdkError` + `SdkErrorCode`) | `ScenarioEngine` (escenario `ERROR_RED`) |
+| **RF-05** Excepciones tipadas KitPagosError | `ErrorHandler` (`KitPagosError` + `KitPagosErrorCode`) | `ScenarioEngine` (escenario `ERROR_RED`, RF-10 pendiente) |
 | **RF-06** Cambiar pasarela sin modificar código | `SDKConfigurator` + `GatewayFactory` | N/A |
-| **RF-07** Reintentos con backoff exponencial | `RetryHandler` | `ScenarioEngine` (escenario `TIMEOUT`) |
+| **RF-07** Reintentos con backoff exponencial | `RetryHandler` | `ScenarioEngine` (escenario `TIMEOUT`, RF-10 pendiente) |
 | **RF-08** Credenciales no expuestas en logs | `SDKConfigurator` + `ErrorHandler` | N/A |
 | **RF-09** Endpoints REST por pasarela | N/A | `HTTPRouter` (`/v1/sim/{pasarela}/*`) |
 | **RF-10** Escenarios controlados configurables | `SDKConfigurator` (header `x-simulate-scenario`) | `HTTPRouter` → `ScenarioEngine` |
 | **RF-11** Estructura de error nativa por pasarela | `ResponseNormalizer` (campo `rawStatus`) | `GatewayMockFactory` (payload de error nativo) |
-| **RF-12** Webhook sintético hacia URL destino | `WebhookVerifier` (validación del receptor) | `WebhookTriggerEndpoint` → `SignatureGenerator` |
-| **RF-13** Especificación OpenAPI 3.0 en `/docs` | N/A | `OpenAPIProvider` |
+| **RF-12** Webhook sintético hacia URL destino | `WebhookVerifier` (validación del receptor) | `WebhookTriggerEndpoint` → `SignatureGenerator` (ambos pendientes) |
+| **RF-13** Especificación OpenAPI 3.0 en `/docs` | N/A | `OpenAPIProvider` (pendiente) |
 | **RF-14** Documentación de datos de prueba por pasarela | N/A | Documentación centralizada (repositorio) |
 | **RF-15** Comportamiento esperado por dato de prueba | `ResponseNormalizer` (mapeo de estados) | `GatewayMockFactory` (escenarios por dato) |
 

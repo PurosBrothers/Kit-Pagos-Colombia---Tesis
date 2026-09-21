@@ -12,13 +12,13 @@ Esto no reemplaza la asignación caso por caso: sigue siendo válido que alguien
 
 ### Joan — Testing
 
-Responsable por defecto de que el núcleo del SDK tenga cobertura de pruebas real, no solo que exista. Esto incluye escribir las pruebas unitarias de las clases del dominio (`Transaction`, objetos de valor monetarios, `SdkError`) y, hacia la Iteración 2 y 3, extender ese mismo criterio a los adaptadores de pasarela y a los endpoints de `simulator-api`. Si en el futuro aparece una decisión sobre qué framework de pruebas usar, o sobre cómo estructurar una suite de pruebas nueva, el punto de partida es Joan.
+Responsable por defecto de que el núcleo del SDK tenga cobertura de pruebas real, no solo que exista. Esto incluye escribir las pruebas unitarias de las clases del dominio (`Transaction`, objetos de valor monetarios, `KitPagosError`) y, hacia la Iteración 2 y 3, extender ese mismo criterio a los adaptadores de pasarela y a los endpoints de `simulator-api`. Si en el futuro aparece una decisión sobre qué framework de pruebas usar, o sobre cómo estructurar una suite de pruebas nueva, el punto de partida es Joan.
 
-Issues actuales que sustentan esta área: `#12` (pruebas de `Transaction` y VOs monetarios), `#16` (pruebas de `SdkError`).
+Issues actuales que sustentan esta área: `#12` (pruebas de `Transaction` y VOs monetarios), `#16` (pruebas de `KitPagosError`).
 
 ### Joshua — Núcleo del SDK
 
-Responsable por defecto de la forma pública y el esqueleto del SDK: el Facade (`KitPagos`), los servicios de dominio (`WebhookVerifier`), el esqueleto de los servicios de aplicación e infraestructura que la Iteración 2 necesita para paralelizarse (`SDKConfigurator`, `GatewayFactory`, `ResponseNormalizer`, `RetryHandler`, `ErrorHandler`), y la superficie pública que se exporta desde `sdk/src/index.ts`. En la práctica, es quien más decide cómo se ve una clase antes de que exista lógica real detrás de ella.
+Responsable por defecto de la forma pública del SDK: el Facade (`KitPagos`), los servicios de dominio (`WebhookVerifier`, con `verify()` y `parse()` implementados), los servicios de aplicación e infraestructura (`SDKConfigurator`, `GatewayFactory`, `ResponseNormalizer`, `RetryHandler`, `ErrorHandler` — todos con lógica real al cierre de la Iteración 2), y la superficie pública que se exporta desde `sdk/src/index.ts`. En la práctica, es quien más decide cómo se ve la API pública que el desarrollador consume.
 
 Issues actuales que sustentan esta área: `#9` (scaffolding de la capa de aplicación), `#11` (implementación de `WebhookVerifier`), `#20` (exports de `index.ts`).
 
