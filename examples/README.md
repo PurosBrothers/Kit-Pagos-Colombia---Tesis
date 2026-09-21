@@ -218,7 +218,25 @@ Explicación completa, con los límites de la demostración, en [`docs/05-ejempl
 
 ---
 
-### 7. Verificar tipos sin ejecutar
+### 7. Demo interactiva
+
+```bash
+npm run demo
+```
+
+* **Archivo:** `interactive-demo.ts`
+* **Qué demuestra:** los diez ejemplos anteriores muestran **que** el SDK funciona; este muestra **qué está haciendo**. Pregunta pasarela, método de pago, monto y datos del pagador, y en cada paso imprime la petición que realmente salió y la respuesta que realmente llegó, al lado de la `Transaction` normalizada que produjo el `ResponseNormalizer`.
+* **Nada de lo que imprime está escrito a mano.** Las peticiones salen de un espía sobre `globalThis.fetch`, así que son los bytes que el adaptador envió. Si un adaptador cambia lo que manda, la salida cambia sola: el ejemplo no puede desincronizarse del código como sí puede un texto que lo describa.
+* **Sin conocimiento de pasarelas propio.** No hay ni un `switch` sobre `Gateway` con detalles de ninguna API. El espía es agnóstico por construcción, y los datos extra que cada pasarela exige se preguntan leyendo los nombres de campo del `INVALID_REQUEST` que devuelve el SDK, así que la demo **aprende del SDK** qué pedir en vez de saberlo.
+* **Qué esperar:** con `150000.00 COP`, Wompi recibe `amount_in_cents: 15000000` en dos llamadas y Mercado Pago `transaction_amount: 150000` en una. Con PSE aparecen seis vocabularios nativos distintos para el mismo estado normalizado, y la rama `REDIRECT_REQUIRED` que el compilador obliga a distinguir.
+* **Modo no interactivo:** `npm run demo -- wompi pse` recorre un camino concreto sin preguntar nada, tomando las respuestas de los argumentos en orden y el valor por omisión para el resto. Cada opción acepta el número o parte del nombre. Sirve para reproducir un caso y para mostrarlo en una sustentación sin tipear en vivo.
+* **Sin dependencias nuevas:** usa `readline/promises` del núcleo de Node. Parte de lo que el ejemplo demuestra es que consumir el SDK no exige nada especial, y meter una librería de prompts justo acá lo debilitaría.
+
+Recorrido completo, con la salida real de los ocho caminos, en [`docs/05-ejemplos/demo-interactiva.md`](../docs/05-ejemplos/demo-interactiva.md).
+
+---
+
+### 8. Verificar tipos sin ejecutar
 
 ```bash
 npm run typecheck
@@ -244,4 +262,8 @@ Asegúrate de haberla iniciado en otra terminal:
 
 ## Nota sobre el pipeline (CI)
 
-El CI del repositorio ejecuta pruebas y verificaciones en `sdk` y `simulator-api`. Por lo tanto, si realizas cambios que afecten la API pública del SDK, ejecuta `npm run typecheck` en esta carpeta localmente antes de crear un pull request.
+Desde el issue #60, el CI tiene un job propio para esta carpeta —`Examples (Compile against SDK build)`— que construye el SDK y corre `npm run typecheck` de los ejemplos contra ese `dist/`. Así, un pull request que rompa la superficie pública del SDK se pone rojo en el mismo pull request, sin esperar a que alguien corra los ejemplos a mano.
+
+Por eso `package.json` declara `"kit-pagos-colombia": "file:../sdk"` y no la versión de npm. Consumir el paquete publicado parecería más fiel a lo que hace un comercio, pero rompería justo esa detección: los ejemplos compilarían contra la última versión publicada y una ruptura pasaría en verde hasta el próximo release.
+
+Que el paquete **publicado** sirva se verifica aparte, con `cd sdk && npm run check:published`, que lo instala desde npm en un directorio temporal y compila un programa contra él. Las dos cosas hacen falta y miden distinto: los ejemplos detectan rupturas antes de publicar, y esa verificación detecta que lo publicado se pueda usar.

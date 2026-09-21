@@ -72,6 +72,7 @@ Dos cosas que conviene entender de este arranque, porque explican casi todos los
 | `npm run build` | Borra `dist/` y compila con `tsconfig.build.json` (el de producción, que excluye las pruebas) |
 | `npm run metrics` | Las métricas CK (WMC, CBO, RFC, MAX_CC) con `ts-morph`. Sale con código 1 si alguna clase viola un umbral |
 | `npm run check:readme` | Extrae los bloques TypeScript del `README.md` y los compila contra `dist/`. **Requiere haber corrido `build` antes** |
+| `npm run check:published` | Instala `kit-pagos-colombia` desde npm en un directorio temporal y compila un programa contra él. Necesita red, y verifica lo publicado, no el árbol de trabajo |
 
 ### `simulator-api/`
 

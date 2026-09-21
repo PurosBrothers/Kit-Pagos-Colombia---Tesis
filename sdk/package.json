@@ -11,7 +11,8 @@
     "test:sandbox": "jest --config jest.sandbox.config.js",
     "lint": "eslint .",
     "metrics": "ts-node --project tsconfig.json scripts/ck-metrics.ts",
-    "check:readme": "ts-node --project tsconfig.json scripts/check-readme.ts"
+    "check:readme": "ts-node --project tsconfig.json scripts/check-readme.ts",
+    "check:published": "ts-node --project tsconfig.json scripts/check-published-package.ts"
   },
   "keywords": [
     "pagos",

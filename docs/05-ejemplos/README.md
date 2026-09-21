@@ -20,7 +20,7 @@ La API de Simulación tiene que quedar corriendo en su propia terminal, en `loca
 
 ---
 
-## Los diez, en orden de lectura
+## Los once, en orden de lectura
 
 ### Cobro con tarjeta
 
@@ -47,14 +47,26 @@ La API de Simulación tiene que quedar corriendo en su propia terminal, en `loca
 | 9 | `npm run simulate:pse-bancos` | Las cuatro listas de bancos, y que **los códigos no son portables**. |
 | 10 | `npm run simulate:interchangeability` | El mismo pago por las cuatro pasarelas, verificado por código. |
 
+### Interactivo
+
+| # | Comando | Qué muestra |
+|---|---------|-------------|
+| 11 | `npm run demo` | Pregunta pasarela, método y datos, e imprime **la petición real que salió y la respuesta real que llegó** en cada paso. |
+
+El 11 es el único que muestra lo que viaja por el cable. Los otros diez muestran
+*que* el SDK funciona; este muestra *qué está haciendo*, y por eso es el que sirve
+para una sustentación. Acepta las respuestas como argumentos —`npm run demo -- wompi
+pse`— para recorrer un camino concreto sin tipear.
+
 ---
 
-## Los dos recorridos documentados
+## Los tres recorridos documentados
 
-De los diez, dos tienen su propio documento porque enseñan más que su propia pasarela:
+De los once, tres tienen su propio documento porque enseñan más que su propia pasarela:
 
 - **[pago-simulado-wompi.md](pago-simulado-wompi.md)** — El primer ejemplo, línea por línea: qué escribe el comercio, qué hace cada capa, por qué la creación devuelve `PENDING`.
 - **[intercambiabilidad.md](intercambiabilidad.md)** — El argumento de la tesis: mismo pago, cuatro pasarelas, cero condicionales por pasarela, y una verificación que sale con código 1 si la propiedad se rompe.
+- **[demo-interactiva.md](demo-interactiva.md)** — La normalización vuelta observable: seis vocabularios nativos contra un estado normalizado, y el mismo monto saliendo como `amount_in_cents: 15000000` o `transaction_amount: 150000` según la pasarela.
 
 ---
 
@@ -89,6 +101,8 @@ El ejemplo 10 tiene exactamente dos condicionales, y **ninguno discrimina pasare
 | Rapyd | 2 y una redirección |
 
 El comercio escribe el caso más largo y le sirve para las cuatro. Así es como la diferencia queda **absorbida** en lugar de escondida: el código que funciona con Rapyd funciona con Mercado Pago sin cambios, aunque Mercado Pago no necesite el segundo paso.
+
+El ejemplo 11 imprime ese número medido en cada corrida, así que la tabla de arriba deja de ser una afirmación de la documentación y pasa a ser algo que se comprueba al correrlo. Con PSE llega a tres en Wompi.
 
 ---
 

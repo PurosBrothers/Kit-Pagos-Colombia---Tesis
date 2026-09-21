@@ -1718,6 +1718,73 @@ Es preferible al enfoque original por lo mismo que motivó crear `TaxBreakdown` 
 
 ---
 
+### 61. La demo interactiva observa la red en vez de describirla, y aprende del SDK qué datos exige cada pasarela (issue #89)
+
+**Responsable:** Orduz (issue #89).
+
+**Contexto.** El issue #89 pedía un programa interactivo por terminal que recorriera un pago completo y explicara en cada paso qué está haciendo el SDK por detrás. El requisito difícil no era la interactividad sino el que venía después: las explicaciones tenían que salir de **datos reales**, porque un texto que describe lo que un adaptador envía se desincroniza a la primera refactorización y a partir de ahí miente con seguridad. Y al mismo tiempo el programa no podía contener conocimiento de pasarelas propio —ningún `switch (gateway)` con detalles de cada API—, porque eso duplicaría en `examples/` lo que vive en `sdk/src/infrastructure/adapters/`.
+
+Las dos exigencias parecen tirar en direcciones opuestas: imprimir lo que viajó por el cable suena a tener que saber qué envía cada pasarela.
+
+**Decisión 1: un espía sobre `globalThis.fetch`.** Los cuatro adaptadores llaman al `fetch` global sin importarlo, así que envolverlo desde el ejemplo los intercepta a los cuatro por igual. Se verificó antes de escribir el ejemplo, con un sondeo desechable cuya traza dejó ver la función del ejemplo en medio de la llamada del adaptador:
+
+```
+at async globalThis.fetch (examples/spike-fetch-spy.ts:16:21)
+at async WompiAdapter.request (sdk/dist/.../WompiAdapter.js:176:24)
+```
+
+El espía resuelve las dos exigencias a la vez porque es **agnóstico de pasarela por construcción**: no menciona ninguna y funciona igual con una quinta. Y como imprime bytes en lugar de descripciones, si un adaptador cambia lo que envía la salida cambia sola. Detalle no obvio: hay que clonar la `Response` antes de leerla, porque su cuerpo se consume una sola vez y leerlo sin clonar le dejaría al adaptador un cuerpo vacío.
+
+**Decisión 2: los datos que cada pasarela exige se leen del error del SDK.** Los tres adaptadores que validan PSE localmente (`mercadopago-pse.ts`, `kushki-pse.ts`, `rapyd-pse.ts`) acumulan todos los faltantes en un único `INVALID_REQUEST` y los nombran con campos del dominio: `payer.firstName`, `payer.address`, `ipAddress`, `returnUrlConfig`. La demo parsea esos nombres y los busca en un catálogo indexado **por campo del dominio, no por pasarela**, así que pregunta exactamente lo que la pasarela elegida necesita sin contener la lista de lo que cada una necesita.
+
+La consecuencia de diseño es que una quinta pasarela que exija los mismos datos no agrega ninguna entrada al catálogo. Y como efecto secundario la demo exhibe algo que ningún otro ejemplo deja ver, porque los otros traen todos los datos puestos: que la validación es **local**, y se comprueba en pantalla porque el bloque de llamadas HTTP que se imprime después de completar los datos reporta una sola llamada.
+
+**Decisión 3: modo no interactivo por argumentos.** `npm run demo -- wompi pse` recorre un camino sin preguntar nada. No es un andamio para las pruebas: es lo que hace que la demo se pueda **ejecutar** de forma reproducible en lugar de solo compilar, y lo que permite mostrar un camino concreto en una sustentación. Los dos modos están separados a propósito —con argumentos no pregunta nada, ni siquiera lo que no se informó— porque el modo híbrido es el que parece más flexible y falla peor: al agotarse los argumentos se queda esperando una entrada que en una tubería no va a llegar.
+
+**Un defecto que la primera versión tenía y que vale registrar.** `rl.question()` de `readline/promises` **nunca resuelve** si la entrada se cierra. La promesa queda colgada, el bucle de eventos se queda sin trabajo y Node termina con **código 0** sin haber hecho nada. La demo moría así: en silencio, en verde, y parecía haber funcionado. Es la peor forma de fallar de un artefacto de demostración, porque un artefacto que falla en verde no avisa que se rompió — la misma clase de problema que motivó `check:readme` (punto 21). Ahora cada pregunta vigila el cierre de la entrada y el detector se desconecta al salir, para que un cierre entre dos preguntas no deje una promesa rechazada sin dueño.
+
+**Lo medido.** Los ocho caminos (cuatro pasarelas × dos métodos) corren contra la API de Simulación. El mismo monto de dominio `150000.00 COP` sale como `amount_in_cents: 15000000` en Wompi y `transaction_amount: 150000` en Mercado Pago, que es la diferencia de escala del punto 42 pasando de *tolerada en una comparación* a *explicada en pantalla*. Y aparecen **seis** vocabularios nativos para el mismo estado normalizado: `APPROVED`, `approved`, `processed`, `APPROVAL`, `approvedTransaction`, `CLO`. El ejemplo de intercambiabilidad muestra cuatro porque solo recorre tarjeta.
+
+**Límite conocido.** Los caminos de falla no se pueden recorrer todavía: el simulador responde `501` a cualquier escenario que no sea `APPROVED` (issue #65). Cuando esté cerrado, la demo puede mostrar cómo el `ErrorHandler` traduce cada error nativo a la jerarquía `KitPagosError`, que es la otra mitad de lo que el SDK unifica. Hoy solo se ve la mitad feliz.
+
+**Estado:** Resuelto en código (`examples/interactive-demo.ts`, `examples/package.json`) y documentado (`docs/05-ejemplos/demo-interactiva.md`). No requiere cambios en el SAD.
+
+---
+
+### 62. `check:published`: verificar el paquete de npm sin apagar la detección de rupturas de CI
+
+**Responsable:** Orduz (issue #89).
+
+**Contexto.** Al implementar el issue #89 surgió la propuesta de que `examples/` consumiera `kit-pagos-colombia` desde npm en lugar de `file:../sdk`, ahora que el paquete está publicado. Suena más fiel a lo que hace un comercio.
+
+**Por qué no se hizo.** Porque apagaría la única detección que el issue #60 acababa de instalar. El job `Examples (Compile against SDK build)` construye el SDK del pull request y compila los ejemplos contra ese `dist/`, así que una ruptura de la superficie pública se pone roja **en el mismo pull request**. Si los ejemplos consumieran el paquete publicado, compilarían contra la última versión del registro y la ruptura pasaría en verde hasta el próximo release. Es la misma clase de regresión que dejó diez fragmentos del README sin compilar (punto 21), y habría desarmado en un día lo que el PR #94 acababa de mergear.
+
+**Decisión.** Las dos cosas se separan porque miden distinto:
+
+- `examples/` conserva `file:../sdk` y detecta rupturas **antes** de publicar.
+- `sdk/scripts/check-published-package.ts` verifica que lo **ya publicado** sirva: instala el paquete desde npm en un directorio temporal, escribe un programa que ejercita la superficie pública y lo compila.
+
+Lo segundo cubre una clase de defecto que nada más cubre, porque todo el resto del repositorio mira el árbol de trabajo: un `files` que deja afuera una carpeta, un `types` que apunta a un `.d.ts` que no se empaquetó, un `exports` que no resuelve. Todo eso convive con un `dist/` local perfecto y la suite en verde. El CI ya corría `npm pack --dry-run`, que lista lo que iría en el tarball; esto instala y compila, así que no comprueba que los archivos estén en la lista sino que sirvan.
+
+Queda **fuera del flujo de cada pull request** a propósito: corre contra el registro, y la versión publicada va por detrás de la rama casi siempre, así que hacerlo obligatorio pondría rojo un pull request por un desfase que es normal. El script avisa cuando las versiones difieren, para que quien lea la salida sepa contra qué se compiló.
+
+**Un hallazgo del entorno que costó encontrar.** La primera corrida falló con `ENOVERSIONS: No versions available for kit-pagos-colombia`, mientras `npm view` devolvía `0.1.0` y el packument del registro —completo y abreviado— traía la versión con su tarball, 123 archivos y 478 KB. El error no venía del paquete ni del caché de npm ni del sandbox: `~/.npmrc` tiene `min-release-age = 3`, una política de npm 11 que rechaza paquetes publicados hace menos de tres días para no instalar en la ventana donde vive el secuestro de cadena de suministro. El SDK se había publicado ese mismo día.
+
+La pista real solo apareció al pedir la versión exacta, porque con un rango el mensaje oculta la causa:
+
+```
+npm error notarget No matching version found for kit-pagos-colombia@0.1.0
+  with a date before 9/18/2026, 12:46:30 PM.
+```
+
+El script pasa `--min-release-age=0`, que desactiva una protección y por eso está justificado en el código: este script existe justamente para verificar una versión **recién publicada**, y con la política activa el paquete propio queda inelegible durante tres días con un error que se lee como si la versión no existiera. El alcance de la excepción es acotado: un solo paquete con el nombre fijo en el código, en un directorio temporal que se borra al terminar, y nada de lo instalado se ejecuta.
+
+**Un defecto menor de la superficie pública, encontrado por esta verificación.** `TransactionStatus` es un `type` (unión de cadenas) pero `sdk/src/index.ts` lo reexporta con `export {}` en vez de `export type {}`. Compila hoy, pero un consumidor con `isolatedModules` o `verbatimModuleSyntax` activados podría tropezar. No se corrigió acá porque toca la superficie pública y merece su propio cambio.
+
+**Estado:** Resuelto en código (`sdk/scripts/check-published-package.ts`, `sdk/package.json`) y verificado: `kit-pagos-colombia@0.1.0` se instala desde npm y su superficie pública alcanza para integrar un pago completo con tipos. La reexportación de `TransactionStatus` queda como deuda abierta.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum
