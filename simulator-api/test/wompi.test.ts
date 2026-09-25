@@ -72,13 +72,170 @@ describe("POST /v1/sim/wompi/transactions", () => {
     await app.close();
   });
 
+  it("crea un cobro DECLINED cuando el escenario es DECLINED", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/transactions",
+      headers: { "x-simulator-scenario": "DECLINED" },
+      payload: validRequestBody,
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.data.status).toBe("DECLINED");
+    expect(body.data.reference).toBe(validRequestBody.reference);
+
+    await app.close();
+  });
+
+  it("crea un cobro VOIDED cuando el escenario es EXPIRED", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/transactions",
+      headers: { "x-simulator-scenario": "EXPIRED" },
+      payload: validRequestBody,
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.data.status).toBe("VOIDED");
+
+    await app.close();
+  });
+
+  it("responde 504 Gateway Timeout cuando el escenario es TIMEOUT", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/transactions",
+      headers: { "x-simulator-scenario": "TIMEOUT" },
+      payload: validRequestBody,
+    });
+
+    expect(response.statusCode).toBe(504);
+    expect(response.json().error.type).toBe("GATEWAY_TIMEOUT");
+
+    await app.close();
+  });
+
+  it("simula NETWORK_ERROR respondiendo con error de conexión", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/transactions",
+      headers: { "x-simulator-scenario": "NETWORK_ERROR" },
+      payload: validRequestBody,
+    });
+
+    expect(response.statusCode).toBe(500);
+
+    await app.close();
+  });
+
+  it("responde 429 Too Many Requests cuando el escenario es RATE_LIMIT", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/transactions",
+      headers: { "x-simulator-scenario": "RATE_LIMIT" },
+      payload: validRequestBody,
+    });
+
+    expect(response.statusCode).toBe(429);
+    expect(response.json().error.type).toBe("RATE_LIMIT");
+
+    await app.close();
+  });
+
+  it("responde 500 cuando el escenario es SERVER_ERROR", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/transactions",
+      headers: { "x-simulator-scenario": "SERVER_ERROR" },
+      payload: validRequestBody,
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json().error.type).toBe("SERVER_ERROR");
+
+    await app.close();
+  });
+
+  it("responde con flapping (503 en primer intento, éxito en el segundo)", async () => {
+    const app = buildApp();
+    const flapBody = { ...validRequestBody, reference: "wompi-flap-test" };
+
+    // Intento 1 -> 503
+    const res1 = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/transactions",
+      headers: { "x-simulator-scenario": "FLAPPING" },
+      payload: flapBody,
+    });
+    expect(res1.statusCode).toBe(503);
+
+    // Intento 2 -> 503
+    const res2 = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/transactions",
+      headers: { "x-simulator-scenario": "FLAPPING" },
+      payload: flapBody,
+    });
+    expect(res2.statusCode).toBe(503);
+
+    // Intento 3 -> 201 Aprobado (recuperado)
+    const res3 = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/transactions",
+      headers: { "x-simulator-scenario": "FLAPPING" },
+      payload: flapBody,
+    });
+    expect(res3.statusCode).toBe(201);
+    expect(res3.json().data.status).toBe("PENDING");
+
+    await app.close();
+  });
+
+  it("detecta pagos duplicados cuando el escenario es DUPLICATE_PAYMENT", async () => {
+    const app = buildApp();
+    const dupBody = { ...validRequestBody, reference: "wompi-dup-1" };
+
+    const res1 = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/transactions",
+      headers: { "x-simulator-scenario": "DUPLICATE_PAYMENT" },
+      payload: dupBody,
+    });
+    expect(res1.statusCode).toBe(201);
+
+    const res2 = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/transactions",
+      headers: { "x-simulator-scenario": "DUPLICATE_PAYMENT" },
+      payload: dupBody,
+    });
+    expect(res2.statusCode).toBe(409);
+    expect(res2.json().error.type).toBe("DUPLICATE_TRANSACTION");
+
+    await app.close();
+  });
+
   it("responde con error explícito ante un escenario no soportado, sin devolver un APPROVED falso", async () => {
     const app = buildApp();
 
     const response = await app.inject({
       method: "POST",
       url: "/v1/sim/wompi/transactions",
-      headers: { "x-simulate-scenario": "DECLINED" },
+      headers: { "x-simulate-scenario": "ESCENARIO_DESCONOCIDO_99" },
       payload: validRequestBody,
     });
 

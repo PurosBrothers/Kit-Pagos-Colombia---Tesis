@@ -159,6 +159,173 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
+    it("crea un pago EXPIRED cuando el header es EXPIRED", async () => {
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        headers: {
+          "x-idempotency-key": "prueba-idempotencia",
+          "x-simulator-scenario": "EXPIRED",
+        },
+        payload: validRequestBody,
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.status).toBe("cancelled");
+      expect(body.status_detail).toBe("expired");
+
+      await app.close();
+    });
+
+    it("responde 504 Gateway Timeout cuando el escenario es TIMEOUT", async () => {
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        headers: {
+          "x-idempotency-key": "prueba-idempotencia",
+          "x-simulator-scenario": "TIMEOUT",
+        },
+        payload: validRequestBody,
+      });
+
+      expect(response.statusCode).toBe(504);
+      expect(response.json().error).toBe("gateway_timeout");
+
+      await app.close();
+    });
+
+    it("simula NETWORK_ERROR respondiendo con error 500", async () => {
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        headers: {
+          "x-idempotency-key": "prueba-idempotencia",
+          "x-simulator-scenario": "NETWORK_ERROR",
+        },
+        payload: validRequestBody,
+      });
+
+      expect(response.statusCode).toBe(500);
+
+      await app.close();
+    });
+
+    it("responde 429 Too Many Requests cuando el escenario es RATE_LIMIT", async () => {
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        headers: {
+          "x-idempotency-key": "prueba-idempotencia",
+          "x-simulator-scenario": "RATE_LIMIT",
+        },
+        payload: validRequestBody,
+      });
+
+      expect(response.statusCode).toBe(429);
+      expect(response.json().error).toBe("rate_limit_exceeded");
+
+      await app.close();
+    });
+
+    it("responde 500 cuando el escenario es SERVER_ERROR", async () => {
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        headers: {
+          "x-idempotency-key": "prueba-idempotencia",
+          "x-simulator-scenario": "SERVER_ERROR",
+        },
+        payload: validRequestBody,
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json().error).toBe("server_error");
+
+      await app.close();
+    });
+
+    it("responde con flapping (503 en intentos iniciales, éxito en el siguiente)", async () => {
+      const app = buildApp();
+      const flapBody = { ...validRequestBody, external_reference: "mp-flap-1" };
+
+      const res1 = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        headers: {
+          "x-idempotency-key": "prueba-idempotencia",
+          "x-simulator-scenario": "FLAPPING",
+        },
+        payload: flapBody,
+      });
+      expect(res1.statusCode).toBe(503);
+
+      const res2 = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        headers: {
+          "x-idempotency-key": "prueba-idempotencia",
+          "x-simulator-scenario": "FLAPPING",
+        },
+        payload: flapBody,
+      });
+      expect(res2.statusCode).toBe(503);
+
+      const res3 = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        headers: {
+          "x-idempotency-key": "prueba-idempotencia",
+          "x-simulator-scenario": "FLAPPING",
+        },
+        payload: flapBody,
+      });
+      expect(res3.statusCode).toBe(201);
+      expect(res3.json().status).toBe("approved");
+
+      await app.close();
+    });
+
+    it("detecta pagos duplicados cuando el escenario es DUPLICATE_PAYMENT", async () => {
+      const app = buildApp();
+      const dupBody = { ...validRequestBody, external_reference: "mp-dup-1" };
+
+      const res1 = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        headers: {
+          "x-idempotency-key": "prueba-idempotencia",
+          "x-simulator-scenario": "DUPLICATE_PAYMENT",
+        },
+        payload: dupBody,
+      });
+      expect(res1.statusCode).toBe(201);
+
+      const res2 = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        headers: {
+          "x-idempotency-key": "prueba-idempotencia",
+          "x-simulator-scenario": "DUPLICATE_PAYMENT",
+        },
+        payload: dupBody,
+      });
+      expect(res2.statusCode).toBe(409);
+      expect(res2.json().error).toBe("conflict");
+
+      await app.close();
+    });
+
     it("responde 501 ante un escenario no soportado", async () => {
       const app = buildApp();
 
@@ -167,7 +334,7 @@ describe("Mercado Pago Simulation Routes", () => {
         url: "/v1/sim/mercadopago/payments",
         headers: {
           "x-idempotency-key": "prueba-idempotencia",
-          "x-simulate-scenario": "TIMEOUT_NO_SOPORTADO",
+          "x-simulate-scenario": "ESCENARIO_INVALIDO_MP",
         },
         payload: validRequestBody,
       });
