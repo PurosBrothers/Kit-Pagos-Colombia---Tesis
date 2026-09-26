@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   DEFAULT_SCENARIO,
+  getSimulatorScenario,
   ScenarioEngine,
   UnsupportedScenarioError,
 } from "../scenarios/ScenarioEngine";
@@ -12,13 +13,17 @@ const SCENARIO_HEADER = "x-simulate-scenario";
 
 /**
  * Wompi HTTP router (issue #55).
+ * Wompi HTTP router (issue #55 & #65).
  *
  * Exposes two endpoints that replicate the real Wompi API contract:
+ * Exposes endpoints that replicate the real Wompi API contract:
  *
  *   POST /v1/sim/wompi/transactions
  *     Creates a transaction under the scenario indicated by the
  *     `x-simulate-scenario` header (defaults to APPROVED) and saves it
  *     in the shared TransactionStore.
+ *     `x-simulator-scenario` or `x-simulate-scenario` header (defaults to APPROVED).
+ *     Saves the resulting transaction in TransactionStore.
  *
  *   GET /v1/sim/wompi/transactions/:id
  *     Retrieves a saved transaction by its native identifier.
@@ -43,11 +48,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
       // Node parser collapses a repeated header into a single comma-separated
       // string and only returns an array for set-cookie. Kept to satisfy the
       // type, not because it describes a real case.
-      const scenarioHeader = request.headers[SCENARIO_HEADER];
-      const scenario = Array.isArray(scenarioHeader)
-        ? scenarioHeader[0]
-        : (scenarioHeader ?? DEFAULT_SCENARIO);
-
+      let scenario = getSimulatorScenario(request);
       const requestBody = request.body as WompiCreateTransactionRequestBody;
 
       /*
@@ -66,6 +67,54 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
             reason: "No se especificó método de pago o fuente de pago",
           },
         });
+      }
+
+      // ── Manejo de escenarios técnicos ──
+      if (scenario === "TIMEOUT" || scenario === "GATEWAY_TIMEOUT") {
+        return reply.code(504).send(mockFactory.buildTimeoutResponse());
+      }
+
+      if (scenario === "NETWORK_ERROR" || scenario === "CONNECTION_ERROR") {
+        return ScenarioEngine.handleNetworkError(request, reply);
+      }
+
+      if (scenario === "RATE_LIMIT" || scenario === "TOO_MANY_REQUESTS" || scenario === "429") {
+        return reply.code(429).send(mockFactory.buildRateLimitResponse());
+      }
+
+      if (scenario === "SERVER_ERROR" || scenario === "INTERNAL_ERROR" || scenario === "500") {
+        return reply.code(500).send(mockFactory.buildServerErrorResponse(500));
+      }
+
+      if (scenario === "BAD_GATEWAY" || scenario === "502") {
+        return reply.code(502).send(mockFactory.buildServerErrorResponse(502));
+      }
+
+      if (scenario === "SERVICE_UNAVAILABLE" || scenario === "503") {
+        return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+      }
+
+      if (scenario === "FLAPPING") {
+        const key = requestBody.reference ?? "default_wompi_flapping";
+        const isFailing = ScenarioEngine.handleFlapping(key);
+        if (isFailing) {
+          return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+        }
+        scenario = DEFAULT_SCENARIO;
+      }
+
+      if (scenario === "DUPLICATE_PAYMENT") {
+        const dupKey = `dup_wompi_${requestBody.reference}`;
+        if (transactionStore.findById(dupKey)) {
+          return reply.code(409).send({
+            error: {
+              type: "DUPLICATE_TRANSACTION",
+              reason: `Transacción ya creada previamente con la referencia '${requestBody.reference}'`,
+            },
+          });
+        }
+        transactionStore.save(dupKey, true);
+        scenario = DEFAULT_SCENARIO;
       }
 
       try {

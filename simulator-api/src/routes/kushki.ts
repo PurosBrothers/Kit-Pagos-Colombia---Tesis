@@ -4,17 +4,24 @@ import {
   KushkiCreateChargeRequestBody,
   KushkiTransferInitRequestBody,
 } from "../gateways/kushki/types";
+import {
+  getSimulatorScenario,
+  ScenarioEngine,
+} from "../scenarios/ScenarioEngine";
+import { transactionStore } from "../store/TransactionStore";
 
 const SCENARIO_HEADER = "x-simulate-scenario";
 const DEFAULT_SCENARIO = "APPROVED";
 
 /**
  * Router HTTP de Kushki (API de Simulación).
+ * Router HTTP de Kushki (API de Simulación - Issue #65).
  *
  * Expone:
  * 1. POST /v1/sim/kushki/card/v1/charges: crea un cobro con tarjeta. La ruta lleva el
  *    prefijo `card/v1` porque **es la ruta real**: se midió que `POST /charges`, que es
  *    la que el SDK usaba, responde `403 Forbidden` igual que una ruta inventada.
+ * 1. POST /v1/sim/kushki/card/v1/charges: crea un cobro con tarjeta.
  * 2. GET /v1/sim/kushki/charges/:ticketNumber: consulta el estado por ticketNumber.
  *    **Esta no tiene equivalente medido**: contra la API real se probaron catorce rutas
  *    candidatas de consulta de cobros con tarjeta y ninguna existe. Se conserva para que
@@ -32,13 +39,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/v1/sim/kushki/card/v1/charges",
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const scenarioHeader = request.headers[SCENARIO_HEADER];
-      const scenario = (
-        Array.isArray(scenarioHeader)
-          ? scenarioHeader[0]
-          : (scenarioHeader ?? DEFAULT_SCENARIO)
-      ).toUpperCase();
-
+      let scenario = getSimulatorScenario(request);
       const requestBody = request.body as KushkiCreateChargeRequestBody;
 
       /*
@@ -55,12 +56,64 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
           .send({ code: "K001", message: "Cuerpo de la petición inválido." });
       }
 
+      // ── Manejo de escenarios técnicos ──
+      if (scenario === "TIMEOUT" || scenario === "GATEWAY_TIMEOUT") {
+        return reply.code(504).send(mockFactory.buildTimeoutResponse());
+      }
+
+      if (scenario === "NETWORK_ERROR" || scenario === "CONNECTION_ERROR") {
+        return ScenarioEngine.handleNetworkError(request, reply);
+      }
+
+      if (scenario === "RATE_LIMIT" || scenario === "TOO_MANY_REQUESTS" || scenario === "429") {
+        return reply.code(429).send(mockFactory.buildRateLimitResponse());
+      }
+
+      if (scenario === "SERVER_ERROR" || scenario === "INTERNAL_ERROR" || scenario === "500") {
+        return reply.code(500).send(mockFactory.buildServerErrorResponse(500));
+      }
+
+      if (scenario === "BAD_GATEWAY" || scenario === "502") {
+        return reply.code(502).send(mockFactory.buildServerErrorResponse(502));
+      }
+
+      if (scenario === "SERVICE_UNAVAILABLE" || scenario === "503") {
+        return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+      }
+
+      if (scenario === "FLAPPING") {
+        const key = requestBody.token ?? "kushki_flapping";
+        const isFailing = ScenarioEngine.handleFlapping(key);
+        if (isFailing) {
+          return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+        }
+        scenario = DEFAULT_SCENARIO;
+      }
+
+      if (scenario === "DUPLICATE_PAYMENT") {
+        const dupKey = `dup_kushki_${requestBody.token}`;
+        if (transactionStore.findById(dupKey)) {
+          return reply.code(409).send({
+            code: "K409",
+            message: `Transacción ya creada con el token '${requestBody.token}'`,
+          });
+        }
+        transactionStore.save(dupKey, true);
+        scenario = DEFAULT_SCENARIO;
+      }
+
       if (scenario === "DECLINED" || scenario === "REJECTED") {
         // HTTP 200, no 4xx: Kushki nunca usa el status HTTP para señalar
         // un rechazo de negocio.
         return reply
           .code(201)
           .send(mockFactory.buildDeclinedResponse(requestBody));
+      }
+
+      if (scenario === "EXPIRED") {
+        return reply
+          .code(201)
+          .send(mockFactory.buildExpiredResponse(requestBody));
       }
 
       if (scenario === "INITIALIZED" || scenario === "PENDING") {
@@ -114,12 +167,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(403).send({ message: "Forbidden" });
       }
 
-      const scenarioHeader = request.headers[SCENARIO_HEADER];
-      const scenario = (
-        Array.isArray(scenarioHeader)
-          ? scenarioHeader[0]
-          : (scenarioHeader ?? DEFAULT_SCENARIO)
-      ).toUpperCase();
+      const scenario = getSimulatorScenario(request);
 
       const placeholderRequest: KushkiCreateChargeRequestBody = {
         token: "query-only",
@@ -233,12 +281,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
           .send({ code: "T004", message: "Transferencia no encontrada" });
       }
 
-      const scenarioHeader = request.headers[SCENARIO_HEADER];
-      const scenario = (
-        Array.isArray(scenarioHeader)
-          ? scenarioHeader[0]
-          : (scenarioHeader ?? DEFAULT_SCENARIO)
-      ).toUpperCase();
+      const scenario = getSimulatorScenario(request);
 
       /*
        * Los estados son los del vocabulario de transferencia, no los de tarjeta:

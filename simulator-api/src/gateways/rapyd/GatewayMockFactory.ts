@@ -70,8 +70,9 @@ export class GatewayMockFactory {
   buildApprovedResponse(
     requestBody: RapydCreatePaymentRequestBody,
   ): RapydPaymentResponse {
-    return GatewayMockFactory.wrap({
-      id: GatewayMockFactory.buildPaymentId(),
+    const paymentId = GatewayMockFactory.buildPaymentId();
+    const payment: RapydPayment = {
+      id: paymentId,
       status: "CLO",
       paid: true,
       amount: requestBody.amount,
@@ -81,7 +82,121 @@ export class GatewayMockFactory {
       failure_code: "",
       failure_message: "",
       created_at: Math.floor(Date.now() / 1000),
-    });
+    };
+
+    this.store.save(paymentId, payment);
+    return GatewayMockFactory.wrap(payment);
+  }
+
+  /**
+   * Construye una respuesta de pago rechazado (ERR / Fondos insuficientes).
+   */
+  buildDeclinedResponse(
+    requestBody: RapydCreatePaymentRequestBody,
+  ): RapydPaymentResponse {
+    const paymentId = GatewayMockFactory.buildPaymentId();
+    const payment: RapydPayment = {
+      id: paymentId,
+      status: "ERR",
+      paid: false,
+      amount: requestBody.amount,
+      currency_code: requestBody.currency,
+      merchant_reference_id: requestBody.merchant_reference_id,
+      receipt_email: requestBody.receipt_email ?? "",
+      failure_code: "ERROR_PROCESSING_CARD - [51]",
+      failure_message: "Insufficient Funds",
+      created_at: Math.floor(Date.now() / 1000),
+    };
+
+    this.store.save(paymentId, payment);
+    return {
+      status: {
+        error_code: "ERROR_PROCESSING_CARD - [51]",
+        status: "ERROR",
+        message: "Insufficient Funds",
+        response_code: "ERROR_PROCESSING_CARD - [51]",
+        operation_id: randomBytes(16).toString("hex"),
+      },
+      data: payment,
+    };
+  }
+
+  /**
+   * Construye una respuesta de pago expirado (EXP).
+   */
+  buildExpiredResponse(
+    requestBody: RapydCreatePaymentRequestBody,
+  ): RapydPaymentResponse {
+    const paymentId = GatewayMockFactory.buildPaymentId();
+    const payment: RapydPayment = {
+      id: paymentId,
+      status: "EXP",
+      paid: false,
+      amount: requestBody.amount,
+      currency_code: requestBody.currency,
+      merchant_reference_id: requestBody.merchant_reference_id,
+      receipt_email: requestBody.receipt_email ?? "",
+      failure_code: "PAYMENT_EXPIRED",
+      failure_message: "The payment has expired",
+      created_at: Math.floor(Date.now() / 1000),
+    };
+
+    this.store.save(paymentId, payment);
+    return {
+      status: {
+        error_code: "",
+        status: "SUCCESS",
+        message: "",
+        response_code: "",
+        operation_id: randomBytes(16).toString("hex"),
+      },
+      data: payment,
+    };
+  }
+
+  /**
+   * Respuesta nativa de timeout para Rapyd (HTTP 504).
+   */
+  buildTimeoutResponse() {
+    return {
+      status: {
+        error_code: "GATEWAY_TIMEOUT",
+        status: "ERROR",
+        message: "Gateway Timeout",
+        response_code: "GATEWAY_TIMEOUT",
+        operation_id: randomBytes(16).toString("hex"),
+      },
+    };
+  }
+
+  /**
+   * Respuesta nativa de rate limit para Rapyd (HTTP 429).
+   */
+  buildRateLimitResponse() {
+    return {
+      status: {
+        error_code: "TOO_MANY_REQUESTS",
+        status: "ERROR",
+        message: "Too Many Requests",
+        response_code: "TOO_MANY_REQUESTS",
+        operation_id: randomBytes(16).toString("hex"),
+      },
+    };
+  }
+
+  /**
+   * Respuesta nativa de error de servidor para Rapyd (HTTP 5xx).
+   */
+  buildServerErrorResponse(status = 500) {
+    return {
+      status: {
+        error_code: "SERVER_ERROR",
+        status: "ERROR",
+        message: `Internal Server Error ${status}`,
+        response_code: "SERVER_ERROR",
+        operation_id: randomBytes(16).toString("hex"),
+      },
+    };
   }
 
   /**

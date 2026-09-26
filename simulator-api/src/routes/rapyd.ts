@@ -6,6 +6,10 @@ import {
   RapydCreateCustomerRequestBody,
   RapydCreatePaymentRequestBody,
 } from "../gateways/rapyd/types";
+import {
+  getSimulatorScenario,
+  ScenarioEngine,
+} from "../scenarios/ScenarioEngine";
 import { transactionStore } from "../store/TransactionStore";
 
 const SCENARIO_HEADER = "x-simulate-scenario";
@@ -13,8 +17,10 @@ const DEFAULT_SCENARIO = "APPROVED";
 
 /**
  * Router HTTP de Rapyd (issue #52).
+ * Router HTTP de Rapyd (issue #52 & #65).
  *
  * Expone las dos operaciones que el `RapydAdapter` del SDK necesita, con las
+ * Expone las operaciones que el `RapydAdapter` del SDK necesita, con las
  * mismas rutas que la API real bajo el prefijo de simulacion:
  *
  * 1. `POST /v1/sim/rapyd/payments` — creacion de pago (201), que es el camino de PSE.
@@ -43,6 +49,7 @@ const DEFAULT_SCENARIO = "APPROVED";
  * eso, un adaptador que calcule mal la firma pasaria igual contra el mock: por
  * eso la correccion de la firma se cubre con pruebas unitarias del adaptador
  * contra el vector de la documentacion oficial, y no confiando en el mock.
+ * 5. `GET  /v1/sim/rapyd/checkout/:checkoutId/pagar` — la visita del pagador a la pagina.
  */
 export async function rapydRoutes(app: FastifyInstance): Promise<void> {
   const mockFactory = new GatewayMockFactory();
@@ -53,16 +60,73 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
       // Fastify tipa las cabeceras como string | string[] | undefined. La rama
       // del arreglo no se alcanza por HTTP (Node colapsa cabeceras repetidas en
       // un solo string), se conserva para satisfacer el tipo.
-      const scenarioHeader = request.headers[SCENARIO_HEADER];
-      const scenario = Array.isArray(scenarioHeader)
-        ? scenarioHeader[0]
-        : (scenarioHeader ?? DEFAULT_SCENARIO);
-
+      let scenario = getSimulatorScenario(request);
       const requestBody = request.body as RapydCreatePaymentRequestBody;
 
-      if (scenario.toUpperCase() !== DEFAULT_SCENARIO) {
-        // 501 y no 400: el escenario es legitimo, simplemente todavia no se
-        // sabe producir. Los demas escenarios son el issue #65.
+      // ── Manejo de escenarios técnicos ──
+      if (scenario === "TIMEOUT" || scenario === "GATEWAY_TIMEOUT") {
+        return reply.code(504).send(mockFactory.buildTimeoutResponse());
+      }
+
+      if (scenario === "NETWORK_ERROR" || scenario === "CONNECTION_ERROR") {
+        return ScenarioEngine.handleNetworkError(request, reply);
+      }
+
+      if (scenario === "RATE_LIMIT" || scenario === "TOO_MANY_REQUESTS" || scenario === "429") {
+        return reply.code(429).send(mockFactory.buildRateLimitResponse());
+      }
+
+      if (scenario === "SERVER_ERROR" || scenario === "INTERNAL_ERROR" || scenario === "500") {
+        return reply.code(500).send(mockFactory.buildServerErrorResponse(500));
+      }
+
+      if (scenario === "BAD_GATEWAY" || scenario === "502") {
+        return reply.code(502).send(mockFactory.buildServerErrorResponse(502));
+      }
+
+      if (scenario === "SERVICE_UNAVAILABLE" || scenario === "503") {
+        return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+      }
+
+      if (scenario === "FLAPPING") {
+        const key = requestBody.merchant_reference_id ?? "rapyd_flapping";
+        const isFailing = ScenarioEngine.handleFlapping(key);
+        if (isFailing) {
+          return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+        }
+        scenario = DEFAULT_SCENARIO;
+      }
+
+      if (scenario === "DUPLICATE_PAYMENT") {
+        const dupKey = `dup_rapyd_${requestBody.merchant_reference_id}`;
+        if (transactionStore.findById(dupKey)) {
+          return reply.code(409).send({
+            status: {
+              error_code: "DUPLICATE_MERCHANT_REFERENCE_ID",
+              status: "ERROR",
+              message: `Payment already exists for merchant_reference_id '${requestBody.merchant_reference_id}'`,
+              response_code: "DUPLICATE_MERCHANT_REFERENCE_ID",
+              operation_id: "",
+            },
+          });
+        }
+        transactionStore.save(dupKey, true);
+        scenario = DEFAULT_SCENARIO;
+      }
+
+      if (scenario === "DECLINED" || scenario === "REJECTED") {
+        return reply.code(201).send(mockFactory.buildDeclinedResponse(requestBody));
+      }
+
+      if (scenario === "EXPIRED") {
+        return reply.code(201).send(mockFactory.buildExpiredResponse(requestBody));
+      }
+
+      if (
+        scenario !== DEFAULT_SCENARIO &&
+        scenario !== "APPROVED" &&
+        scenario !== "APPROVAL"
+      ) {
         return reply
           .code(501)
           .send({ error: `Escenario aun no soportado: ${scenario}` });
@@ -70,6 +134,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
 
       // PSE se reconoce por el prefijo del metodo de pago, que en Rapyd son 47
       // tipos `co_pse_{banco}_bank` en vez de un metodo con un campo de banco.
+      // PSE se reconoce por el prefijo del metodo de pago
       const methodType = (requestBody.payment_method as { type?: unknown })?.type;
       const esPse =
         typeof methodType === "string" && methodType.startsWith("co_pse_");
