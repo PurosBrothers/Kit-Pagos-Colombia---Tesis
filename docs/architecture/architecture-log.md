@@ -1785,6 +1785,38 @@ El script pasa `--min-release-age=0`, que desactiva una protección y por eso es
 
 ---
 
+### 63. Resolución híbrida de credenciales y autenticación de la capa REST en la API de Simulación (issue #101)
+
+**Responsable:** Orduz / Prieto (issue #101).
+
+**Contexto.** La nueva fase del proyecto extiende la API de Simulación existente para actuar como una interfaz HTTP REST sobre el SDK (`kit-pagos-colombia`), soportando el caso de uso `Frontend / Comercio → REST → Simulador API → Kit Pagos SDK → Pasarela`. El SDK no lee `process.env` en ningún punto por diseño, y `KitPagos` fija la pasarela en su constructor sin exponer `setGateway` ni `configure`. La capa REST necesitaba resolver de dónde provienen las credenciales de pasarela sin filtrarlas en peticiones, respuestas ni registros, y cómo proteger el acceso al servidor.
+
+**Decisión 1: Modelo híbrido de resolución de credenciales con prioridad al cliente (`CredentialResolver`).**
+Se evaluaron dos fuentes para las credenciales de pasarela y se combinaron de forma jerárquica:
+1. **Primera prioridad — Cabeceras HTTP del cliente:** si la petición incluye `x-gateway-public-key` y `x-gateway-private-key` (y opcionalmente `x-gateway-integrity-secret` para Wompi), se instancian las credenciales del cliente directamente sin consultar el entorno del servidor. Esto permite a un comercio o evaluador apuntar a sus propios sandboxes o cuentas bancarias.
+2. **Segunda prioridad (Respaldo) — Perfil del servidor:** si el cliente solo envía `{ "gateway": "..." }` sin cabeceras de llaves, el resolvedor lee las variables del `.env` de la raíz (`WOMPI_PUBLIC_KEY`, `MERCADOPAGO_ACCESS_TOKEN`, etc.), reutilizando los mismos nombres que `sandbox-env.ts`. Esto permite ejecutar pruebas de demostración o evaluación inmediata sin forzar al usuario a crear cuentas en las pasarelas.
+3. **Regla inviolable sobre `webhookSecret`:** NUNCA se acepta por cabecera de cliente (`x-gateway-webhook-secret` es descartado explícitamente); siempre se asocia el secreto del servidor, ya que aceptar el secreto de validación desde el cliente vaciaría de sentido la verificación criptográfica del webhook.
+4. **Respuesta segura ante faltantes:** si ni el cliente ni el servidor tienen credenciales para la pasarela solicitada, se lanza `MissingCredentialsError`, que Fastify traduce a `401 Unauthorized` indicando qué pasarela carece de llaves sin revelar qué otras pasarelas sí están configuradas en el servidor.
+
+**Decisión 2: Provisión y ciclo de vida de instancias del SDK (`KitPagosProvider`).**
+Dado que `KitPagos` no permite cambiar de pasarela una vez construido:
+- Para el perfil del servidor, `KitPagosProvider` mantiene un mapa en memoria (`serverInstances`) con una única instancia por pasarela, reutilizada entre peticiones.
+- Para credenciales suministradas por el cliente, construye una instancia `new KitPagos(...)` al vuelo y aislada por petición. Como el constructor del SDK no abre sockets ni conexiones de red, el costo de instanciación es despreciable y garantiza cero contaminación cruzada entre clientes concurrentes.
+- El `baseUrl` del SDK queda parametrizado: consulta `<PASARELA>_BASE_URL` o `SIMULATOR_SDK_BASE_URL`, cayendo por defecto a `http://localhost:3000/v1/sim/<pasarela>` (nuestro simulador local).
+
+**Decisión 3: Autenticación de la API REST en tiempo constante (`authHook`).**
+Se implementó un hook `onRequest` para Fastify gobernado por la variable de entorno `API_AUTH_TOKEN`:
+- Si la variable **no está definida**, la API opera en modo abierto para desarrollo local y suites de prueba automáticas (`app.inject()`), emitiendo una advertencia única en el log.
+- Si la variable **está definida**, exige la cabecera `Authorization: Bearer <token>`. La comparación se realiza mediante `crypto.timingSafeEqual` con normalización de longitud previa (`timingSafeCompare`), mitigando cualquier vulnerabilidad de fuga de información por análisis de tiempos (*timing attacks*).
+- Rutas públicas como `/health` y los endpoints mock del simulador (`/v1/sim/*`, consumidos por los adaptadores del SDK) quedan exentos por prefijo.
+
+**Decisión 4: Redacción estricta de secretos en logs (`redactSerializer`).**
+Para prevenir fugas accidentales de secretos en terminales, consolas de Render o monitores de observabilidad, se configuró un serializador y redactor de Fastify/Pino que reemplaza por `"[REDACTED]"` cualquier cabecera sensible (`authorization`, `x-gateway-private-key`, `x-gateway-public-key`, `x-gateway-integrity-secret`, `x-gateway-webhook-secret`). Se escribió una prueba con captura de stream en memoria (`redactSerializer.test.ts`) que garantiza que ningún valor sensible en claro figure en la salida del logger.
+
+**Estado:** Resuelto en código (`simulator-api/src/auth/`, `simulator-api/src/services/`, `simulator-api/src/logger/`, `simulator-api/src/app.ts`) y 100% probado en 4 suites de prueba nuevas (26 pruebas pasando, 107 en total en `simulator-api`). Cumple la Definition of Done del Issue #101.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum
