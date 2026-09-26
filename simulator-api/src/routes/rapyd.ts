@@ -12,7 +12,6 @@ import {
 } from "../scenarios/ScenarioEngine";
 import { transactionStore } from "../store/TransactionStore";
 
-const SCENARIO_HEADER = "x-simulate-scenario";
 const DEFAULT_SCENARIO = "APPROVED";
 
 /**
