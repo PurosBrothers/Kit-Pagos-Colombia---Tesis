@@ -25,7 +25,14 @@ El simulador resuelve las dos cosas: es **determinista**, así que una prueba pu
 ```text
 simulator-api/src/
 ├── server.ts                 pone a escuchar el puerto
-├── app.ts                    construye la instancia de Fastify y registra las rutas
+├── app.ts                    construye la instancia de Fastify, hooks y registra las rutas
+├── auth/
+│   ├── CredentialResolver.ts resolución híbrida de credenciales (headers > env)
+│   └── authHook.ts           hook onRequest de autenticación Bearer en tiempo constante
+├── services/
+│   └── KitPagosProvider.ts   ciclo de vida e instanciación del SDK (npm)
+├── logger/
+│   └── redactSerializer.ts   redacción estricta de credenciales en logs de Pino
 ├── routes/
 │   ├── health.ts             GET /health
 │   ├── wompi.ts              4 rutas
@@ -43,7 +50,17 @@ simulator-api/src/
     └── TransactionStore.ts   memoria de las transacciones creadas
 ```
 
-**`app.ts` está separado de `server.ts` a propósito.** `buildApp()` construye la instancia de Fastify sin ponerla a escuchar, y `server.ts` es lo único que llama a `listen()`. Así las nueve suites de prueba usan `app.inject()` sobre la misma aplicación que corre en producción, sin abrir un socket. La diferencia práctica es que las pruebas no pueden quedarse colgadas esperando la red ni chocar por el puerto ocupado.
+**`app.ts` está separado de `server.ts` a propósito.** `buildApp()` construye la instancia de Fastify sin ponerla a escuchar, y `server.ts` es lo único que llama a `listen()`. Así las suites de prueba usan `app.inject()` sobre la misma aplicación que corre en producción, sin abrir un socket. La diferencia práctica es que las pruebas no pueden quedarse colgadas esperando la red ni chocar por el puerto ocupado.
+
+**Capa de autenticación y resolución de credenciales (`src/auth/`):**
+- `CredentialResolver`: Implementa la resolución híbrida. Primero inspecciona las cabeceras `x-gateway-public-key`, `x-gateway-private-key` (e `integrity-secret`). Si no están presentes, recurre al perfil de sandbox del `.env` del servidor. Por seguridad estricta, `webhookSecret` **nunca** se acepta desde el cliente HTTP para evitar invalidar la verificación criptográfica. Si faltan credenciales, lanza `MissingCredentialsError` (HTTP 401).
+- `authHook`: Hook `onRequest` que protege los endpoints REST mediante token Bearer (`API_AUTH_TOKEN`). Realiza comparaciones en tiempo constante (`crypto.timingSafeEqual`) para mitigar ataques de temporización. Si `API_AUTH_TOKEN` no está configurado, opera en modo desarrollo abierto con advertencia en logs. Rutas públicas como `/health` y los endpoints mock `/v1/sim/*` están exentos por prefijo.
+
+**Capa de servicio SDK (`src/services/`):**
+- `KitPagosProvider`: Administra las instancias de `KitPagos` (importado del paquete publicado en npm `kit-pagos-colombia@^0.1.0`). Para credenciales del servidor, mantiene un caché singleton por pasarela. Para credenciales inyectadas por el cliente en cabeceras HTTP, crea instancias al vuelo aisladas por petición, garantizando que no exista fuga ni contaminación cruzada entre clientes concurrentes.
+
+**Seguridad en observabilidad (`src/logger/`):**
+- `redactSerializer`: Redactor para Fastify/Pino que reemplaza por `"[REDACTED]"` cualquier cabecera sensible (`authorization`, `x-gateway-*`), impidiendo que secretos o API keys aparezcan en texto claro en consolas o servicios de agregación de logs.
 
 **Una factoría de mocks por pasarela**, con sus tipos al lado. Cada una construye las respuestas con la forma nativa de su pasarela: Wompi envuelve todo en `data` y usa `amount_in_cents`; Mercado Pago pone el pago en la raíz y el monto en pesos; y así.
 
@@ -154,7 +171,7 @@ cd simulator-api && npm install && npm run dev
 curl http://localhost:3000/health
 ```
 
-Las nueve suites de prueba corren con `npm test` y no necesitan que el servidor esté levantado, porque usan `app.inject()`.
+Las suites de prueba (14 suites con 107 pruebas en total) corren con `npm test` y no necesitan que el servidor esté levantado, porque usan `app.inject()`.
 
 ---
 

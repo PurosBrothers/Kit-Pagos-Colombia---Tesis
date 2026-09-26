@@ -9,8 +9,6 @@ import { GatewayMockFactory } from "../gateways/wompi/GatewayMockFactory";
 import { WompiCreateTransactionRequestBody, WompiTransaction } from "../gateways/wompi/types";
 import { transactionStore } from "../store/TransactionStore";
 
-const SCENARIO_HEADER = "x-simulate-scenario";
-
 /**
  * Wompi HTTP router (issue #55).
  * Wompi HTTP router (issue #55 & #65).
