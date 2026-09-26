@@ -40,7 +40,7 @@ export function createAuthHook(options?: AuthHookOptions) {
     env.API_AUTH_TOKEN?.trim() ??
     env.SIMULATOR_API_AUTH_TOKEN?.trim();
 
-  const exemptPaths = options?.exemptPaths ?? ["/health"];
+  const exemptPaths = options?.exemptPaths ?? ["/health", "/v1/sim"];
   let warningLogged = false;
 
   return async function authHook(
@@ -49,7 +49,12 @@ export function createAuthHook(options?: AuthHookOptions) {
   ): Promise<void> {
     // Si la ruta está en la lista de excepciones, permitir libre acceso
     const urlPath = request.url.split("?")[0];
-    if (exemptPaths.includes(urlPath)) {
+    const isExempt = exemptPaths.some(
+      (prefix) =>
+        urlPath === prefix ||
+        urlPath.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`),
+    );
+    if (isExempt) {
       return;
     }
 
