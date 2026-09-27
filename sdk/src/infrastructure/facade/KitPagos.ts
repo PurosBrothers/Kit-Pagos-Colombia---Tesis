@@ -94,6 +94,8 @@ export class KitPagos {
    * `Transaction`, olvidar la redirección compilaba y dejaba el pago colgado.
    */
   async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
+    const gateway = this.configurator.getActiveGateway();
+    assertValidCreatePaymentRequest(request, gateway);
     const adapter = this.resolveAdapter();
     return adapter.createPayment(request);
   }
@@ -215,5 +217,29 @@ export class KitPagos {
         `Malformed webhook: ${msg}`,
       );
     }
+  }
+}
+
+/**
+ * Valida la presencia de los objetos de valor obligatorios en CreatePaymentRequest.
+ * Se extrae como función pura de módulo para no sumar WMC ni MAX_CC a la clase KitPagos.
+ */
+function assertValidCreatePaymentRequest(
+  request: CreatePaymentRequest,
+  gateway: Gateway,
+): void {
+  const missing: string[] = [];
+  if (!request?.amount) missing.push("amount");
+  if (!request?.currency) missing.push("currency");
+  if (!request?.orderReference) missing.push("orderReference");
+  if (!request?.payer) missing.push("payer");
+
+  if (missing.length > 0) {
+    throw new KitPagosError(
+      KitPagosErrorCode.INVALID_REQUEST,
+      gateway,
+      null,
+      `CreatePaymentRequest requiere los siguientes campos obligatorios: ${missing.join(", ")}`,
+    );
   }
 }

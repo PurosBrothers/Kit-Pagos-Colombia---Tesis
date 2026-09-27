@@ -1838,6 +1838,37 @@ Para prevenir fugas accidentales de secretos en terminales, consolas de Render o
 
 ---
 
+### 65. Exposición REST de creación de pagos: preservación del discriminador de outcome, escala decimal exacta y validación originada en el SDK (issue #102)
+
+**Responsable:** Orduz / Prieto (issue #102).
+
+**Contexto.** El issue pedía implementar `POST /v1/api/payments` dentro del módulo `simulator-api/src/kit-pagos-api/`, exponiendo la operación central `KitPagos.createPayment(request: CreatePaymentRequest): Promise<PaymentResult>`. Dos propiedades del contrato del SDK condicionaban el diseño del endpoint: el retorno es una unión discriminada (`PaymentResult` = `TRANSACTION` o `REDIRECT_REQUIRED`), no una simple entidad `Transaction`; y los objetos de valor del SDK (`Amount`, `Currency`, `OrderReference`, `Payer`) validan invariantes de negocio directamente al construirse, sin que el endpoint deba reimplementar o duplicar reglas de validación.
+
+**Decisión 1: Preservación explícita del discriminador `outcome` y estado nativo `rawStatus`.**
+La respuesta REST no aplana la redirección en un campo opcional dentro de la transacción, sino que devuelve la misma unión discriminada por `outcome` que expone la biblioteca:
+- En `REDIRECT_REQUIRED`: `{ outcome: "REDIRECT_REQUIRED", redirect: { redirectUrl, gatewayTransactionId, rawStatus } }`.
+- En `TRANSACTION`: `{ outcome: "TRANSACTION", transaction, rawStatus }`.
+Ambos desenlaces responden con código HTTP `201 Created`, ya que en ambos el intento de pago fue registrado satisfactoriamente en el procesador. Se preserva `rawStatus` en ambos casos porque perder el estado nativo privaría al comercio de capacidad de depuración y auditoría.
+
+**Decisión 2: Tratamiento del monto (`amount`) como cadena decimal estricta.**
+El campo `amount` se recibe y transfiere como `string` sin parsearse a tipo `number` IEEE 754 de JavaScript. Conforme al punto 25, convertir la entrada a número reintroduciría la pérdida de precisión en los ceros a la derecha y afectaría la firma HMAC de pasarelas como Rapyd o los cálculos en centavos de Wompi.
+
+**Decisión 3: Validación de campos obligatorios delegada al SDK mediante función pura de módulo.**
+Para satisfacer el criterio de no duplicar validaciones en el endpoint mientras se reportan los campos faltantes con HTTP 400 (`INVALID_REQUEST`):
+- Se incorporó la función pura `assertValidCreatePaymentRequest` en `sdk/src/infrastructure/facade/KitPagos.ts`. Al ser una función de módulo externa a la clase `KitPagos`, no altera las métricas CK (`MAX_CC` se mantiene en 9, `WMC` en 15).
+- Cuando faltan campos obligatorios (`amount`, `currency`, `orderReference`, `payer`), el SDK lanza `KitPagosError(INVALID_REQUEST)` listando exactamente los nombres faltantes.
+- En el endpoint, los objetos de valor se instancian con los datos provistos; si los constructores del dominio detectan valores inválidos (como `Amount` negativo, divisa no ISO 4217 o `Payer` sin correo), se captura el error y se traduce a `KitPagosError(INVALID_REQUEST)`.
+- El manejador central `app.setErrorHandler` traduce automáticamente todos los `KitPagosError` a sus códigos HTTP correspondientes (400 para `INVALID_REQUEST` y `UNSUPPORTED_OPERATION`, 401 para credenciales). El endpoint no contiene bloques de manejo de errores HTTP propios.
+
+**Decisión 4: Ausencia total de condicionales por pasarela en el endpoint.**
+El endpoint no contiene ramas `if/switch` por pasarela. La resolución de instancias se delega a `KitPagosProvider.getKitPagos(gateway, request.headers)`, y las restricciones de pasarela (como el token de tarjeta requerido en Wompi o los campos específicos de PSE en Mercado Pago) son verificadas por los adaptadores del SDK. Del mismo modo, si se solicita un método de pago no soportado (ej. `CRYPTO`), el SDK lanza `KitPagosError(UNSUPPORTED_OPERATION)` respondiendo 400 y evitando cobros silenciosos con métodos por omisión (punto 44).
+
+**Lo medido.** 17 suites y 193 pruebas pasando en `simulator-api` (18 pruebas nuevas en `payments.test.ts`), 35 suites y 587 pruebas pasando en `sdk` (incluyendo la prueba de campos faltantes en `KitPagos.test.ts`). Linter sin errores y métricas CK en verde en las 31 clases.
+
+**Estado:** Resuelto en código (`sdk/src/infrastructure/facade/KitPagos.ts`, `simulator-api/src/kit-pagos-api/routes/payments.ts`, `simulator-api/src/kit-pagos-api/index.ts`).
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum
