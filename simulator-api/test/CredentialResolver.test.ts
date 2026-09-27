@@ -63,11 +63,11 @@ describe("CredentialResolver", () => {
     expect(result.credentials.publicKey).toBe("pub_client_custom");
     expect(result.credentials.privateKey).toBe("prv_client_custom");
     expect(result.credentials.integritySecret).toBe("custom_integrity_secret");
-    // El webhookSecret siempre proviene del servidor
-    expect(result.credentials.webhookSecret).toBe("events_server_secret");
+    // Los webhooks se verifican con el perfil del servidor, no con esta instancia.
+    expect(result.credentials.webhookSecret).toBeUndefined();
   });
 
-  it("ignora cualquier intento de enviar webhookSecret por cabecera", () => {
+  it("should never take a webhookSecret from the headers nor attach the server's to client credentials", () => {
     const resolver = new CredentialResolver(mockServerEnv);
 
     const headers = {
@@ -80,9 +80,7 @@ describe("CredentialResolver", () => {
     expect(result.source).toBe("client");
     expect(result.credentials.publicKey).toBe("pub_client_custom");
     expect(result.credentials.privateKey).toBe("prv_client_custom");
-    // Conserva el secreto del servidor y descarta el malicioso
-    expect(result.credentials.webhookSecret).toBe("mp_webhook_secret");
-    expect(result.credentials.webhookSecret).not.toBe("malicious_fake_webhook_secret");
+    expect(result.credentials.webhookSecret).toBeUndefined();
   });
 
   it("cae al perfil del servidor si las cabeceras son incompletas", () => {

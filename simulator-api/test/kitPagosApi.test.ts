@@ -22,9 +22,9 @@ function registerApiTestRoutes(
   );
 }
 
-describe("Módulo REST /v1/api", () => {
+describe("REST module /v1/api", () => {
   describe("GET /v1/api/gateways", () => {
-    it("responde 200 con las cuatro pasarelas soportadas", async () => {
+    it("should return 200 with the four supported gateways", async () => {
       const app = buildApp();
 
       const res = await app.inject({ method: "GET", url: "/v1/api/gateways" });
@@ -37,7 +37,7 @@ describe("Módulo REST /v1/api", () => {
       await app.close();
     });
 
-    it("exige el token Bearer cuando la autenticación está activa", async () => {
+    it("should require the Bearer token when authentication is enabled", async () => {
       const app = buildApp({ authOptions: { expectedToken: "api_token_test" } });
 
       const sinToken = await app.inject({ method: "GET", url: "/v1/api/gateways" });
@@ -55,7 +55,7 @@ describe("Módulo REST /v1/api", () => {
   });
 
   describe("CORS", () => {
-    it("responde el preflight del navegador aun con la autenticación activa", async () => {
+    it("should answer the browser preflight even with authentication enabled", async () => {
       const app = buildApp({ authOptions: { expectedToken: "api_token_test" } });
 
       const res = await app.inject({
@@ -74,7 +74,7 @@ describe("Módulo REST /v1/api", () => {
       await app.close();
     });
 
-    it("no agrega cabeceras CORS a las rutas de simulación /v1/sim", async () => {
+    it("should not add CORS headers to the /v1/sim simulation routes", async () => {
       const app = buildApp();
 
       const res = await app.inject({
@@ -90,7 +90,7 @@ describe("Módulo REST /v1/api", () => {
     });
   });
 
-  describe("Traducción de KitPagosError a HTTP", () => {
+  describe("KitPagosError to HTTP translation", () => {
     // Una fila por código del SDK, lo que cubre las dos familias de ErrorFamily
     // (RETRIABLE y FINAL) y todos los códigos HTTP de la tabla del issue #100.
     it.each([
@@ -106,7 +106,7 @@ describe("Módulo REST /v1/api", () => {
       [KitPagosErrorCode.MAX_RETRIES_EXCEEDED, 502],
       [KitPagosErrorCode.GATEWAY_TIMEOUT, 504],
       [KitPagosErrorCode.UNKNOWN_ERROR, 500],
-    ])("%s responde %i con el código y el mensaje", async (code, status) => {
+    ])("should answer %s with %i, the code and the message", async (code, status) => {
       const app = buildApp();
       registerApiTestRoutes(app, (api) => {
         api.get("/test-error", async () => {
@@ -122,7 +122,7 @@ describe("Módulo REST /v1/api", () => {
       await app.close();
     });
 
-    it("traduce un error real lanzado por la fachada del SDK", async () => {
+    it("should translate a real error thrown by the SDK facade", async () => {
       const app = buildApp();
       registerApiTestRoutes(app, (api) => {
         api.get("/test-sdk", async () => {
@@ -139,7 +139,7 @@ describe("Módulo REST /v1/api", () => {
       await app.close();
     });
 
-    it("no expone el cuerpo crudo de la pasarela, credenciales ni trazas de pila", async () => {
+    it("should not expose the raw gateway body, credentials or stack traces", async () => {
       const app = buildApp();
       const rawGatewayBody = {
         error: { type: "INPUT_VALIDATION_ERROR", reason: "cuerpo_crudo_de_wompi" },

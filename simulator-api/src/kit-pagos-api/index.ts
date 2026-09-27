@@ -1,6 +1,9 @@
 import cors from "@fastify/cors";
 import { FastifyInstance } from "fastify";
+import { CREDENTIAL_WARNING_HEADER } from "../services/KitPagosProvider";
+import { attachCredentialWarnings, logCredentialPolicy } from "./gateway-client";
 import { gatewaysRoute } from "./routes/gateways";
+import { webhooksRoute } from "./routes/webhooks";
 
 /**
  * Modulo REST que expone las capacidades del SDK bajo `/v1/api`.
@@ -15,6 +18,11 @@ import { gatewaysRoute } from "./routes/gateways";
  * responder exactamente igual que antes (ver el punto 64 del architecture-log.md).
  */
 export async function kitPagosApi(app: FastifyInstance): Promise<void> {
-  await app.register(cors);
+  // Sin `exposedHeaders` el navegador esconde la advertencia del respaldo en sandbox
+  // al JavaScript del frontend, aunque viaje en la respuesta (punto 68).
+  await app.register(cors, { exposedHeaders: [CREDENTIAL_WARNING_HEADER] });
+  attachCredentialWarnings(app);
+  logCredentialPolicy(app);
   app.register(gatewaysRoute);
+  app.register(webhooksRoute);
 }

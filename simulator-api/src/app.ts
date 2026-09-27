@@ -6,7 +6,11 @@ import { mercadopagoRoutes } from "./routes/mercadopago";
 import { rapydRoutes } from "./routes/rapyd";
 import { kushkiRoutes } from "./routes/kushki";
 import { createAuthHook, AuthHookOptions } from "./auth/authHook";
-import { CredentialResolver, MissingCredentialsError } from "./auth/CredentialResolver";
+import {
+  ClientCredentialsRequiredError,
+  CredentialResolver,
+  MissingCredentialsError,
+} from "./auth/CredentialResolver";
 import { KitPagosProvider } from "./services/KitPagosProvider";
 import { kitPagosApi } from "./kit-pagos-api";
 import { toKitPagosErrorResponse } from "./kit-pagos-api/errors/kitPagosErrorResponse";
@@ -53,7 +57,7 @@ export function buildApp(options?: BuildAppOptions): FastifyInstance {
 
   // Manejador centralizado de errores: credenciales faltantes y errores del SDK
   app.setErrorHandler((error, request, reply) => {
-    if (error instanceof MissingCredentialsError) {
+    if (error instanceof MissingCredentialsError || error instanceof ClientCredentialsRequiredError) {
       reply.status(401).send({
         error: "Unauthorized",
         message: error.message,
