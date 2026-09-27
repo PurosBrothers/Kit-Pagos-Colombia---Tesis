@@ -41,6 +41,34 @@ describe("authHook", () => {
 
       await app.close();
     });
+
+    it("cae al alias SIMULATOR_API_AUTH_TOKEN si API_AUTH_TOKEN es cadena vacía", async () => {
+      const originalEnv = { ...process.env };
+      process.env.API_AUTH_TOKEN = "   ";
+      process.env.SIMULATOR_API_AUTH_TOKEN = "fallback_secret_token";
+
+      try {
+        const app = Fastify();
+        app.addHook("onRequest", createAuthHook());
+        app.get("/alias-test", async () => ({ ok: true }));
+
+        // Sin token debe responder 401 porque fallback_secret_token fue reconocido
+        const resUnauthorized = await app.inject({ method: "GET", url: "/alias-test" });
+        expect(resUnauthorized.statusCode).toBe(401);
+
+        // Con el token de fallback debe responder 200
+        const resAuthorized = await app.inject({
+          method: "GET",
+          url: "/alias-test",
+          headers: { authorization: "Bearer fallback_secret_token" },
+        });
+        expect(resAuthorized.statusCode).toBe(200);
+
+        await app.close();
+      } finally {
+        process.env = originalEnv;
+      }
+    });
   });
 
   describe("Comportamiento con token configurado", () => {

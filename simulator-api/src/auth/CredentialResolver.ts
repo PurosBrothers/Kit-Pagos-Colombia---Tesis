@@ -183,7 +183,9 @@ export class CredentialResolver {
         if (!publicKey || !privateKey) return undefined;
 
         const creds: Credentials = { publicKey, privateKey };
-        const webhookSecret = this.env.KUSHKI_WEBHOOK_SIGNATURE_ID?.trim();
+        const webhookSecret = (
+          this.env.KUSHKI_WEBHOOK_SECRET ?? this.env.KUSHKI_WEBHOOK_SIGNATURE_ID
+        )?.trim();
         if (webhookSecret) creds.webhookSecret = webhookSecret;
 
         return creds;
@@ -214,7 +216,9 @@ export class CredentialResolver {
       case Gateway.MERCADOPAGO:
         return this.env.MERCADOPAGO_WEBHOOK_SECRET?.trim();
       case Gateway.KUSHKI:
-        return this.env.KUSHKI_WEBHOOK_SIGNATURE_ID?.trim();
+        return (
+          this.env.KUSHKI_WEBHOOK_SECRET ?? this.env.KUSHKI_WEBHOOK_SIGNATURE_ID
+        )?.trim();
       case Gateway.RAPYD:
         return this.env.RAPYD_API_SECRET_KEY?.trim();
       default:

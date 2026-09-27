@@ -15,7 +15,7 @@ describe("CredentialResolver", () => {
     MERCADOPAGO_WEBHOOK_SECRET: "mp_webhook_secret",
     KUSHKI_PUBLIC_MERCHANT_ID: "kushki_public_merchant_server",
     KUSHKI_PRIVATE_MERCHANT_ID: "kushki_private_merchant_server",
-    KUSHKI_WEBHOOK_SIGNATURE_ID: "kushki_signature_id_server",
+    KUSHKI_WEBHOOK_SECRET: "kushki_secret_server",
     RAPYD_API_ACCESS_KEY: "rapyd_access_server",
     RAPYD_API_SECRET_KEY: "rapyd_secret_server",
   };
@@ -40,7 +40,7 @@ describe("CredentialResolver", () => {
     expect(kushkiResult.source).toBe("server");
     expect(kushkiResult.credentials.publicKey).toBe("kushki_public_merchant_server");
     expect(kushkiResult.credentials.privateKey).toBe("kushki_private_merchant_server");
-    expect(kushkiResult.credentials.webhookSecret).toBe("kushki_signature_id_server");
+    expect(kushkiResult.credentials.webhookSecret).toBe("kushki_secret_server");
 
     const rapydResult = resolver.resolve(Gateway.RAPYD);
     expect(rapydResult.source).toBe("server");

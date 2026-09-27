@@ -30,7 +30,7 @@ simulator-api/src/
 │   ├── CredentialResolver.ts resolución híbrida de credenciales (headers > env)
 │   └── authHook.ts           hook onRequest de autenticación Bearer en tiempo constante
 ├── services/
-│   └── KitPagosProvider.ts   ciclo de vida e instanciación del SDK (npm)
+│   └── KitPagosProvider.ts   ciclo de vida e instanciación del SDK (workspace)
 ├── logger/
 │   └── redactSerializer.ts   redacción estricta de credenciales en logs de Pino
 ├── routes/
@@ -57,7 +57,7 @@ simulator-api/src/
 - `authHook`: Hook `onRequest` que protege los endpoints REST mediante token Bearer (`API_AUTH_TOKEN`). Realiza comparaciones en tiempo constante (`crypto.timingSafeEqual`) para mitigar ataques de temporización. Si `API_AUTH_TOKEN` no está configurado, opera en modo desarrollo abierto con advertencia en logs. Rutas públicas como `/health` y los endpoints mock `/v1/sim/*` están exentos por prefijo.
 
 **Capa de servicio SDK (`src/services/`):**
-- `KitPagosProvider`: Administra las instancias de `KitPagos` (importado del paquete publicado en npm `kit-pagos-colombia@^0.1.0`). Para credenciales del servidor, mantiene un caché singleton por pasarela. Para credenciales inyectadas por el cliente en cabeceras HTTP, crea instancias al vuelo aisladas por petición, garantizando que no exista fuga ni contaminación cruzada entre clientes concurrentes.
+- `KitPagosProvider`: Administra las instancias de `KitPagos` (consumido desde el workspace local `file:../sdk`, alineado con la política de detección temprana de rupturas de CI del punto 62). Para credenciales del servidor, mantiene un caché singleton por pasarela. Para credenciales inyectadas por el cliente en cabeceras HTTP, crea instancias al vuelo aisladas por petición, garantizando que no exista fuga ni contaminación cruzada entre clientes concurrentes.
 
 **Seguridad en observabilidad (`src/logger/`):**
 - `redactSerializer`: Redactor para Fastify/Pino que reemplaza por `"[REDACTED]"` cualquier cabecera sensible (`authorization`, `x-gateway-*`), impidiendo que secretos o API keys aparezcan en texto claro en consolas o servicios de agregación de logs.
@@ -171,7 +171,7 @@ cd simulator-api && npm install && npm run dev
 curl http://localhost:3000/health
 ```
 
-Las suites de prueba (14 suites con 107 pruebas en total) corren con `npm test` y no necesitan que el servidor esté levantado, porque usan `app.inject()`.
+Las suites de prueba (15 suites con 157 pruebas en total) corren con `npm test` y no necesitan que el servidor esté levantado, porque usan `app.inject()`.
 
 ---
 

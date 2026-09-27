@@ -7,7 +7,6 @@ import { kushkiRoutes } from "./routes/kushki";
 import { createAuthHook, AuthHookOptions } from "./auth/authHook";
 import { CredentialResolver, MissingCredentialsError } from "./auth/CredentialResolver";
 import { KitPagosProvider } from "./services/KitPagosProvider";
-import { fastifyLoggerConfig } from "./logger/redactSerializer";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -32,8 +31,7 @@ export interface BuildAppOptions {
  * produccion, sin necesidad de abrir un socket de red.
  */
 export function buildApp(options?: BuildAppOptions): FastifyInstance {
-  const loggerConfig =
-    options?.logger !== undefined ? options.logger : fastifyLoggerConfig;
+  const loggerConfig = options?.logger ?? false;
 
   const app = Fastify({
     logger: loggerConfig,
@@ -56,20 +54,6 @@ export function buildApp(options?: BuildAppOptions): FastifyInstance {
       reply.status(401).send({
         error: "Unauthorized",
         message: error.message,
-      });
-      return;
-    }
-
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "name" in error &&
-      (error as { name: string }).name === "MissingCredentialsError"
-    ) {
-      const err = error as { message?: string };
-      reply.status(401).send({
-        error: "Unauthorized",
-        message: err.message ?? "Missing credentials for requested gateway",
       });
       return;
     }

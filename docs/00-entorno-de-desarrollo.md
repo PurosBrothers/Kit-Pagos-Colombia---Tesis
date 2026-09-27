@@ -126,7 +126,7 @@ En la raíz hay un `.env.example` que se copia a `.env` (que está en `.gitignor
    - Activan `npm run test:sandbox` en el SDK.
    - Sirven como perfil de respaldo (*fallback*) en la API de Simulación (`simulator-api` / `KitPagosProvider`), cuando un cliente REST no provee sus propias llaves en las cabeceras `x-gateway-*`.
 3. **Variables de la API de Simulación (REST Wrapper):**
-   - `API_AUTH_TOKEN`: Token Bearer estático exigido para autenticar las peticiones a la API REST (`/v1/*`). Si no se define en `.env`, el servidor arranca en modo desarrollo abierto (sin autenticación), ideal para CI y desarrollo local.
+   - `API_AUTH_TOKEN`: Token Bearer estático exigido para autenticar las peticiones a la API REST (`/v1/api/*`). Las rutas de salud (`/health`) y los endpoints mock del simulador (`/v1/sim/*`) quedan exentos. Si no se define en `.env`, el servidor arranca en modo desarrollo abierto (sin autenticación), ideal para CI y desarrollo local.
    - `SIMULATOR_SDK_BASE_URL`: URL base que las instancias del SDK creadas por `simulator-api` usan para conectarse. Por defecto toma `http://localhost:3000/v1/sim/<pasarela>`, dirigiendo el tráfico a los endpoints mock locales.
 
 Si el `.env` no tiene llaves de una pasarela, sus pruebas de contrato **se saltan en silencio en lugar de fallar**. Eso es a propósito, para que cualquiera pueda correr la suite completa sin credenciales, pero tiene una trampa: una suite que se salta entera se ve igual de verde que una que pasa. Cuando importe, hay que leer la salida y confirmar que corrió.

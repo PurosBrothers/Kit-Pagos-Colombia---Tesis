@@ -37,11 +37,23 @@ export function createAuthHook(options?: AuthHookOptions) {
   const env = loadServerEnv();
   const token =
     options?.expectedToken ??
-    env.API_AUTH_TOKEN?.trim() ??
-    env.SIMULATOR_API_AUTH_TOKEN?.trim();
+    (env.API_AUTH_TOKEN?.trim() ||
+      env.SIMULATOR_API_AUTH_TOKEN?.trim() ||
+      undefined);
 
   const exemptPaths = options?.exemptPaths ?? ["/health", "/v1/sim"];
-  let warningLogged = false;
+
+  if (!token) {
+    if (options?.logger) {
+      options.logger.warn(
+        "API_AUTH_TOKEN no está definido. La API REST está operando en modo abierto (desarrollo local).",
+      );
+    } else if (process.env.NODE_ENV !== "test") {
+      console.warn(
+        "API_AUTH_TOKEN no está definido. La API REST está operando en modo abierto (desarrollo local).",
+      );
+    }
+  }
 
   return async function authHook(
     request: FastifyRequest,
@@ -58,15 +70,8 @@ export function createAuthHook(options?: AuthHookOptions) {
       return;
     }
 
-    // Si no hay token configurado, opera en modo abierto y advierte
+    // Si no hay token configurado, opera en modo abierto
     if (!token) {
-      if (!warningLogged) {
-        warningLogged = true;
-        const logger = options?.logger ?? request.log;
-        logger.warn(
-          "API_AUTH_TOKEN no está definido. La API REST está operando en modo abierto (desarrollo local).",
-        );
-      }
       return;
     }
 

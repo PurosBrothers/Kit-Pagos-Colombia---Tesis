@@ -1800,6 +1800,7 @@ Se evaluaron dos fuentes para las credenciales de pasarela y se combinaron de fo
 
 **Decisión 2: Provisión y ciclo de vida de instancias del SDK (`KitPagosProvider`).**
 Dado que `KitPagos` no permite cambiar de pasarela una vez construido:
+- La dependencia se consume desde el workspace local (`file:../sdk`), alineada con la política de detección temprana de rupturas de CI descrita en el punto 62.
 - Para el perfil del servidor, `KitPagosProvider` mantiene un mapa en memoria (`serverInstances`) con una única instancia por pasarela, reutilizada entre peticiones.
 - Para credenciales suministradas por el cliente, construye una instancia `new KitPagos(...)` al vuelo y aislada por petición. Como el constructor del SDK no abre sockets ni conexiones de red, el costo de instanciación es despreciable y garantiza cero contaminación cruzada entre clientes concurrentes.
 - El `baseUrl` del SDK queda parametrizado: consulta `<PASARELA>_BASE_URL` o `SIMULATOR_SDK_BASE_URL`, cayendo por defecto a `http://localhost:3000/v1/sim/<pasarela>` (nuestro simulador local).
@@ -1813,7 +1814,7 @@ Se implementó un hook `onRequest` para Fastify gobernado por la variable de ent
 **Decisión 4: Redacción estricta de secretos en logs (`redactSerializer`).**
 Para prevenir fugas accidentales de secretos en terminales, consolas de Render o monitores de observabilidad, se configuró un serializador y redactor de Fastify/Pino que reemplaza por `"[REDACTED]"` cualquier cabecera sensible (`authorization`, `x-gateway-private-key`, `x-gateway-public-key`, `x-gateway-integrity-secret`, `x-gateway-webhook-secret`). Se escribió una prueba con captura de stream en memoria (`redactSerializer.test.ts`) que garantiza que ningún valor sensible en claro figure en la salida del logger.
 
-**Estado:** Resuelto en código (`simulator-api/src/auth/`, `simulator-api/src/services/`, `simulator-api/src/logger/`, `simulator-api/src/app.ts`) y 100% probado en 4 suites de prueba nuevas (26 pruebas pasando, 107 en total en `simulator-api`). Cumple la Definition of Done del Issue #101.
+**Estado:** Resuelto en código (`simulator-api/src/auth/`, `simulator-api/src/services/`, `simulator-api/src/logger/`, `simulator-api/src/app.ts`) y verificado mediante 5 suites de prueba nuevas (27 pruebas en total: `CredentialResolver.test.ts` con 6 pruebas, `KitPagosProvider.test.ts` con 5 pruebas, `authHook.test.ts` con 10 pruebas, `redactSerializer.test.ts` con 3 pruebas, y `appIntegration.test.ts` con 3 pruebas; alcanzando 157 pruebas totales en 15 suites dentro de `simulator-api`). Las pruebas cubren: resolución jerárquica de credenciales con descarte estricto de `webhookSecret` en cabeceras de cliente, provisión y aislamiento de instancias de `KitPagos`, validación de token Bearer en tiempo constante con rutas exentas, redacción de cabeceras en streams de logs y captura centralizada de errores con HTTP 401. Cumple la Definition of Done del Issue #101.
 
 ---
 
