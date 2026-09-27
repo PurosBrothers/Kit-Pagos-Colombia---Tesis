@@ -461,6 +461,11 @@ describe("ResponseNormalizer", () => {
         { raw: "pending", expected: "PENDING" },
         { raw: "in_process", expected: "PENDING" },
         { raw: "cancelled", expected: "VOIDED" },
+        // Vocabulario de la Orders API (punto 46). Desde el punto 69 solo lo traduce
+        // esta tabla: el webhook de Mercado Pago ya no lee estados.
+        { raw: "action_required", expected: "PENDING" },
+        { raw: "processed", expected: "APPROVED" },
+        { raw: "expired", expected: "EXPIRED" },
         { raw: "other_unknown", expected: "ERROR" },
       ];
 

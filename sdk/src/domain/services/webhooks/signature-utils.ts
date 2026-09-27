@@ -38,6 +38,16 @@ export function hmacSha256(
 }
 
 /**
+ * HMAC-SHA256 serializado a hexadecimal y ese **texto** codificado en base64, que es
+ * lo que Rapyd llama `BASE64(HASH(...))`. No equivale a `hmacSha256(..., "base64")`:
+ * la firma de ejemplo de docs.rapyd.net/en/webhook-format.html mide 88 caracteres y
+ * decodifica a hexadecimal, y un digest en base64 mide 44 (punto 66).
+ */
+export function hmacSha256HexAsBase64(secret: string, data: string): string {
+  return Buffer.from(hmacSha256(secret, data, "hex")).toString("base64");
+}
+
+/**
  * Normaliza un timestamp numérico o string a segundos Unix enteros.
  * Soporta timestamps en milisegundos (> 1e11) convirtiéndolos a segundos.
  */

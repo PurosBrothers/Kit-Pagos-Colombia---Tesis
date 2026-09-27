@@ -1,8 +1,20 @@
 import { Gateway } from "../../value-objects/Gateway";
 import { WebhookEvent } from "../../value-objects/WebhookEvent";
 import { TransactionStatus } from "../../value-objects/TransactionStatus";
-import { GatewayWebhookHandler, WebhookVerificationOptions } from "./GatewayWebhookHandler";
-import { safeCompare, hmacSha256, normalizeTimestamp, isTimestampWithinTolerance } from "./signature-utils";
+import { KitPagosError } from "../../errors/KitPagosError";
+import { KitPagosErrorCode } from "../../value-objects/KitPagosErrorCode";
+import {
+  GatewayWebhookHandler,
+  IncomingWebhook,
+  WebhookSigningContext,
+  WebhookVerificationOptions,
+} from "./GatewayWebhookHandler";
+import {
+  safeCompare,
+  hmacSha256HexAsBase64,
+  normalizeTimestamp,
+  isTimestampWithinTolerance,
+} from "./signature-utils";
 
 /**
  * Prefijo de `failure_code` que identifica un rechazo del procesador de tarjeta.
@@ -14,35 +26,40 @@ const CARD_DECLINE_PREFIX = "ERROR_PROCESSING_CARD";
 /**
  * Manejador de webhooks de Rapyd (adquirida por PayU GPO el 14 mar 2025).
  *
- * Firma: cabecera "signature", HMAC-SHA256 en base64 sobre
- * `url_path + salt + timestamp + access_key + secret_key + body_string`.
- * Fuente: https://docs.rapyd.net/en/webhook-authentication.html
+ * Firma: cabecera "signature", `BASE64(HMAC-SHA256(url_path + salt + timestamp +
+ * access_key + secret_key + body_string))`, con el base64 aplicado al texto
+ * hexadecimal del HMAC. Fuente: https://docs.rapyd.net/en/webhook-authentication.html
  *
- * "url_path" aqui es la URL COMPLETA (protocolo + dominio + path) configurada en
- * el panel de Rapyd, no un path relativo del request entrante, a diferencia de la
- * firma de requests salientes. El SDK no puede derivarla del propio request, asi
- * que el middleware del comercio debe inyectarla en la cabecera sintetica
- * "x-webhook-url" antes de llamar verify(). Ver architecture-log.md, punto 16.
+ * Rapyd solo manda `salt`, `timestamp` y `signature`
+ * (docs.rapyd.net/en/webhook-format.html). Los otros dos valores firmados salen de
+ * la configuración: `access_key` es `credentials.publicKey`, y `url_path` es la URL
+ * COMPLETA registrada en el panel, `credentials.webhookUrl`. Antes se leían de
+ * cabeceras que Rapyd no envía; tomarlos de la petición dejaría además que quien la
+ * manda eligiera a qué destino queda atada la firma (punto 66).
  */
 export class RapydWebhookHandler implements GatewayWebhookHandler {
   verify(
-    payload: string,
-    headers: Record<string, string>,
-    secret: string,
+    webhook: IncomingWebhook,
+    context: WebhookSigningContext,
     options?: WebhookVerificationOptions,
   ): boolean {
+    const { payload, headers } = webhook;
     const receivedSignature = headers["signature"] ?? "";
-    const accessKey = headers["access_key"] ?? "";
     const salt = headers["salt"] ?? "";
     const rawTimestamp = headers["timestamp"] ?? "";
-    const webhookUrl = headers["x-webhook-url"];
 
     if (!rawTimestamp) {
       throw new Error("Missing required header: timestamp");
     }
 
-    if (!webhookUrl) {
-      throw new Error("Missing required header: x-webhook-url");
+    const webhookUrl = requireWebhookUrl(context.webhookUrl);
+    if (!context.publicKey) {
+      throw new KitPagosError(
+        KitPagosErrorCode.INVALID_CREDENTIALS,
+        Gateway.RAPYD,
+        null,
+        "Rapyd webhook verification requires credentials.publicKey (the Rapyd access key)",
+      );
     }
 
     const timestampNum = normalizeTimestamp(rawTimestamp);
@@ -50,13 +67,14 @@ export class RapydWebhookHandler implements GatewayWebhookHandler {
       return false;
     }
 
-    const toSign = webhookUrl + salt + rawTimestamp + accessKey + secret + payload;
+    const toSign =
+      webhookUrl + salt + rawTimestamp + context.publicKey + context.secret + payload;
 
-    return safeCompare(receivedSignature, hmacSha256(secret, toSign, "base64"));
+    return safeCompare(receivedSignature, hmacSha256HexAsBase64(context.secret, toSign));
   }
 
-  parse(payload: string): WebhookEvent {
-    const body = JSON.parse(payload);
+  parse(webhook: IncomingWebhook): WebhookEvent {
+    const body = JSON.parse(webhook.payload);
     const eventType: string = body.type ?? "";
 
     // Rapyd nombra el campo `failure_code` en unos eventos y `error_code` en
@@ -71,6 +89,34 @@ export class RapydWebhookHandler implements GatewayWebhookHandler {
       gateway: Gateway.RAPYD,
     });
   }
+}
+
+/**
+ * Exige una URL absoluta http(s) y la devuelve tal cual se configuró. No se normaliza
+ * porque Rapyd firma la cadena exacta del panel: una barra final o un puerto explícito
+ * de más producen otra firma.
+ */
+function requireWebhookUrl(webhookUrl: string | undefined): string {
+  const invalid = () =>
+    new KitPagosError(
+      KitPagosErrorCode.INVALID_CREDENTIALS,
+      Gateway.RAPYD,
+      null,
+      "Rapyd webhook verification requires credentials.webhookUrl, the absolute URL registered in the Rapyd panel",
+    );
+  if (!webhookUrl || webhookUrl.trim() !== webhookUrl) {
+    throw invalid();
+  }
+  let protocol: string;
+  try {
+    protocol = new URL(webhookUrl).protocol;
+  } catch {
+    throw invalid();
+  }
+  if (protocol !== "https:" && protocol !== "http:") {
+    throw invalid();
+  }
+  return webhookUrl;
 }
 
 /**

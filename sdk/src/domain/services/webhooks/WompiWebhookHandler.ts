@@ -1,7 +1,12 @@
 import { Gateway } from "../../value-objects/Gateway";
 import { WebhookEvent } from "../../value-objects/WebhookEvent";
 import { TransactionStatus } from "../../value-objects/TransactionStatus";
-import { GatewayWebhookHandler, WebhookVerificationOptions } from "./GatewayWebhookHandler";
+import {
+  GatewayWebhookHandler,
+  IncomingWebhook,
+  WebhookSigningContext,
+  WebhookVerificationOptions,
+} from "./GatewayWebhookHandler";
 import { safeCompare, sha256Hex, normalizeTimestamp, isTimestampWithinTolerance } from "./signature-utils";
 import { WOMPI_NATIVE_STATUS, lookupNativeStatus } from "../native-status";
 
@@ -9,22 +14,31 @@ import { WOMPI_NATIVE_STATUS, lookupNativeStatus } from "../native-status";
 const DEFAULT_EVENT_TYPE = "transaction.updated";
 
 /**
+ * Propiedades que `parse()` lee de una transacción y que por eso la firma tiene que
+ * cubrir. La lista `signature.properties` viaja sin firmar: sin esta exigencia, un
+ * evento capturado se puede reescribir apuntando la lista a un campo nuevo que
+ * repita la concatenación original, y cambiar el estado sin alterar el checksum
+ * (punto 66).
+ */
+const REQUIRED_TRANSACTION_PROPERTIES = ["transaction.id", "transaction.status"];
+
+/**
  * Manejador de webhooks de Wompi.
  *
  * Firma: viaja en la cabecera "x-event-checksum". La cadena a firmar es la
  * concatenacion de los valores de las propiedades que el propio cuerpo declara en
  * `signature.properties`, mas el timestamp y el secreto de eventos. El algoritmo
- * es SHA-256 puro, sin clave HMAC.
+ * es SHA-256 puro, sin clave HMAC. Las propiedades son rutas relativas al objeto
+ * `data` (docs.wompi.co/docs/colombia/eventos/), no a la raíz del cuerpo.
  */
 export class WompiWebhookHandler implements GatewayWebhookHandler {
   verify(
-    payload: string,
-    headers: Record<string, string>,
-    secret: string,
+    webhook: IncomingWebhook,
+    context: WebhookSigningContext,
     options?: WebhookVerificationOptions,
   ): boolean {
-    const receivedChecksum = headers["x-event-checksum"];
-    const body = JSON.parse(payload);
+    const receivedChecksum = webhook.headers["x-event-checksum"];
+    const body = JSON.parse(webhook.payload);
 
     if (body.timestamp === undefined || body.timestamp === null) {
       throw new Error("Missing timestamp in Wompi webhook payload");
@@ -39,18 +53,22 @@ export class WompiWebhookHandler implements GatewayWebhookHandler {
     }
 
     const properties: string[] = body.signature.properties;
+    if (!coversParsedTransactionFields(body, properties)) {
+      return false;
+    }
 
-    // Cada propiedad es una ruta con puntos ("transaction.amount_in_cents") que
-    // hay que resolver contra el cuerpo. Wompi decide en cada evento cuales
-    // campos entran en la firma, asi que la lista no se puede fijar en el SDK.
-    const values = properties.map((prop: string) => resolvePath(body, prop));
-    const concatenated = values.join("") + body.timestamp + secret;
+    // Wompi decide en cada evento cuales campos entran en la firma, asi que la
+    // lista no se puede fijar en el SDK; solo se exige que cubra lo que se lee.
+    const values = properties.map((prop: string) => resolvePath(body.data, prop));
+    const concatenated = values.join("") + body.timestamp + context.secret;
 
-    return safeCompare(receivedChecksum, sha256Hex(concatenated));
+    // La documentación muestra el checksum en mayúsculas y los ejemplos de código lo
+    // calculan en minúsculas; el hexadecimal vale lo mismo en los dos casos.
+    return safeCompare(receivedChecksum?.toLowerCase(), sha256Hex(concatenated));
   }
 
-  parse(payload: string): WebhookEvent {
-    const body = JSON.parse(payload);
+  parse(webhook: IncomingWebhook): WebhookEvent {
+    const body = JSON.parse(webhook.payload);
 
     return new WebhookEvent({
       eventType: body.event ?? DEFAULT_EVENT_TYPE,
@@ -61,20 +79,27 @@ export class WompiWebhookHandler implements GatewayWebhookHandler {
   }
 }
 
+function coversParsedTransactionFields(body: { data?: { transaction?: unknown } }, properties: string[]): boolean {
+  if (body.data?.transaction === undefined) {
+    return true;
+  }
+  return REQUIRED_TRANSACTION_PROPERTIES.every((required) => properties.includes(required));
+}
+
 /**
- * Resuelve una ruta con notacion de puntos contra el cuerpo del evento.
+ * Resuelve una ruta con notacion de puntos contra el objeto `data` del evento.
  *
  * Devuelve un objeto vacio en cada tramo ausente en vez de lanzar, para que una
  * propiedad que Wompi declare pero no envie produzca una firma que no coincide
  * (webhook rechazado) y no una excepcion no tipada.
  */
-function resolvePath(body: unknown, path: string): unknown {
+function resolvePath(data: unknown, path: string): unknown {
   return path
     .split(".")
     .reduce(
       (obj: Record<string, unknown>, key: string) =>
         obj ? (obj[key] as Record<string, unknown>) : ({} as Record<string, unknown>),
-      body as Record<string, unknown>,
+      data as Record<string, unknown>,
     );
 }
 
