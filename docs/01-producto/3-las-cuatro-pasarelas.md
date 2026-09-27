@@ -61,7 +61,7 @@ La fila más reveladora es la de llamadas: el mismo cobro con tarjeta cuesta ent
 checksum = SHA256_hex( concat(valores de signature.properties) + timestamp + secreto_de_eventos )
 ```
 
-Las propiedades a concatenar las declara el propio webhook en `signature.properties`, como rutas con puntos (`transaction.amount_in_cents`), así que el verificador tiene que resolverlas dinámicamente. Trae el pago completo, así que verificar la firma alcanza para conciliar.
+Las propiedades a concatenar las declara el propio webhook en `signature.properties`, como rutas con puntos relativas al objeto `data` (`transaction.amount_in_cents`), así que el verificador tiene que resolverlas dinámicamente. Trae el pago completo, así que verificar la firma alcanza para conciliar.
 
 **Alcance.** Wompi documenta nueve métodos de pago (tarjeta, PSE, Nequi, Daviplata, botón y QR de Bancolombia, Puntos Colombia, BNPL y efectivo). El SDK implementa dos: tarjeta y PSE.
 
@@ -88,7 +88,7 @@ Las propiedades a concatenar las declara el propio webhook en `signature.propert
 **Webhook — el caso liviano.** Header `x-signature: "ts=<timestamp>,v1=<hash>"`, y el hash es:
 
 ```text
-manifiesto = "id:<data.id>;request-id:<x-request-id>;ts:<timestamp>;"
+manifiesto = "id:<data.id de la URL, en minúsculas>;request-id:<x-request-id>;ts:<timestamp>;"
 v1 = HMAC_SHA256_hex( secreto, manifiesto )
 ```
 
@@ -171,7 +171,7 @@ La URL del banco viene en la respuesta de creación, sin sondeo: se midió `stat
 
 **Estado de éxito — el más engañoso.** `CLO` significa "cerrado", **no "pagado"**. Un checkout que se cerró sin pagar también queda en `CLO`. Traducirlo a `APPROVED` solo es correcto si la respuesta además trae `paid: true`, y el SDK verifica las dos cosas. Un comercio que asumiera que `CLO` es éxito estaría despachando producto sin haber cobrado.
 
-**Webhook.** Header `signature`, con la misma construcción en base64, y con una particularidad: el texto que se firma incluye **la URL del webhook configurada en el panel de Rapyd**, que no se puede derivar de la petición entrante. Por eso el SDK la recibe como un header sintético `x-webhook-url` que el comercio agrega (punto 16). Es la única de las cuatro que usa la misma llave para la API y para los webhooks.
+**Webhook.** Header `signature`, con la misma construcción en base64, y con una particularidad: el texto que se firma incluye **la URL del webhook configurada en el panel de Rapyd**, que no se puede derivar de la petición entrante. Por eso el SDK la recibe como configuración, en `credentials.webhookUrl` (punto 66). Es la única de las cuatro que usa la misma llave para la API y para los webhooks.
 
 ---
 

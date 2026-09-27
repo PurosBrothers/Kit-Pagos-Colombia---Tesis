@@ -561,9 +561,9 @@ async function collectDraft(): Promise<{
     /*
      * La lista de bancos sale de la pasarela, no del código. Es el mismo método
      * para las cuatro —`getPseBanks()`— y devuelve códigos que no se parecen entre
-     * sí: `1` en Wompi, `1007` en Mercado Pago, `co_pse_bancolombia_bank` en
-     * Rapyd. Es el único dato del contrato que no se puede reutilizar al cambiar
-     * de pasarela, y verlo en la propia demo es más elocuente que leerlo.
+     * sí: `1` en el sandbox de Wompi, `1007` en Mercado Pago,
+     * `co_pse_bancolombia_bank` en Rapyd. El `achCode` de cada banco es el código
+     * común de ACH Colombia, el mismo de `PseBankCode` (punto 67).
      */
     console.log("\nPidiéndole a la pasarela su lista de bancos de PSE...");
     const banks = await kitPagos.getPseBanks();

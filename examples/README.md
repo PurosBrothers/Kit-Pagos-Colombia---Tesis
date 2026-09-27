@@ -118,7 +118,7 @@ npm run simulate:mercadopago-pse
   | URL de retorno | **opcional** | **obligatoria** |
   | sondeo para obtener la URL | **necesario** | no hace falta |
 
-* **Códigos de banco:** son los reales que publica la cuenta, y el ejemplo los pide con `kitPagos.getPseBanks()` en vez de fijarlos: son 47 entidades, entre ellas `1051` Davivienda, `1007` Bancolombia y `1013` BBVA. No tienen nada que ver con los de Wompi (`1`, `2`, `3`): el código de banco es el único dato del contrato que no se puede reutilizar al cambiar de pasarela.
+* **Códigos de banco:** son los reales que publica la cuenta, y el ejemplo los pide con `kitPagos.getPseBanks()` en vez de fijarlos: son 47 entidades, entre ellas `1051` Davivienda, `1007` Bancolombia y `1013` BBVA. Son los códigos de compensación de ACH Colombia, los mismos de `PseBankCode`, y no tienen nada que ver con los bancos ficticios del sandbox de Wompi (`1`, `2`, `3`).
 * **Por qué corre contra el simulador:** porque la Orders API real **no se puede ejercitar con credenciales de prueba** (responde `401` y exige un token de producción), y completar el pago requiere que una persona entre al simulador bancario y transfiera. El detalle de lo medido está en el punto 45 del `architecture-log.md`.
 
 ---
@@ -197,7 +197,7 @@ npm run simulate:pse-bancos
 * **Qué esperar:**
   1. Las cuatro listas, una debajo de otra, con el código y el nombre tal como los devuelve cada pasarela.
   2. Una demostración de que los códigos **no son intercambiables**: mandarle a Rapyd el `"1"` de Wompi falla con un `INVALID_REQUEST` del SDK que dice qué patrón espera y de dónde sacarlo, en vez del error genérico de Rapyd.
-* **Por qué existe:** porque es el paso inmediatamente anterior al cobro y, hasta que este método existió, era el único del flujo de PSE que el comercio tenía que resolver hablándole directo a la pasarela. Verlas al lado es también lo que hace evidente por qué el código de banco es opaco: en Wompi es `1`, en Mercado Pago `1007`, en Rapyd `co_pse_bancolombia_bank`. Un catálogo propio tendría que traducir en los dos sentidos y mantenerse al día con cuatro pasarelas, para resolver un problema que nadie tiene.
+* **Por qué existe:** porque es el paso inmediatamente anterior al cobro y, hasta que este método existió, era el único del flujo de PSE que el comercio tenía que resolver hablándole directo a la pasarela. Verlas al lado muestra que cada pasarela nombra los bancos a su manera: en Mercado Pago Bancolombia es `1007` y en Rapyd `co_pse_bancolombia_bank`. El `achCode` de cada banco es el código de compensación común, y `PseBankCode.BANCOLOMBIA` sirve en las cuatro (punto 67 del `architecture-log.md`).
 
 ---
 

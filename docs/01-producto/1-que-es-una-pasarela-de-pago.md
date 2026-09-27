@@ -74,7 +74,7 @@ Colombia no es un mercado de tarjeta únicamente. Una parte importante del comer
 
 1. **Obliga a redirigir.** El pago no se resuelve en la respuesta de la llamada: hay que mandar al pagador al portal de su banco. Un método que devuelva "la transacción" no alcanza para expresar eso, y por eso el resultado de crear un pago en este SDK es una unión de dos casos y no un objeto único.
 2. **Necesita una lista de bancos viva.** El pagador tiene que escoger su banco **antes** de que el pago exista, de una lista que cada pasarela publica y que cambia. Por eso el SDK expone `getPseBanks()`.
-3. **El código de banco no es portable.** El mismo Bancolombia es `1` en el sandbox de Wompi, `1007` en Mercado Pago y `co_pse_bancolombia_bank` en Rapyd. Es el único dato del contrato que no se puede reutilizar al cambiar de pasarela, y el SDK lo trata como una cadena opaca en vez de inventar un catálogo propio que habría que mantener al día con cuatro proveedores.
+3. **Cada pasarela nombra los bancos a su manera.** El mismo Bancolombia es `1007` en Mercado Pago y `co_pse_bancolombia_bank` en Rapyd. Lo que sí es común es el código de compensación de ACH Colombia, `1007`, y el SDK lo expone como `PseBankCode` para que el mismo código sirva en las cuatro pasarelas.
 
 El alcance de este proyecto son **tarjeta y PSE** en las cuatro pasarelas. Los demás métodos quedaron fuera de forma explícita, no por olvido: el detalle está en el punto 49 del [architecture-log](../architecture/architecture-log.md).
 

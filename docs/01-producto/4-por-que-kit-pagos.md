@@ -91,7 +91,7 @@ Está en [docs/testing-data/](../testing-data/).
 
 Esta sección es tan importante como la anterior. Un SDK que promete más de lo que puede cumplir falla justo cuando el comercio ya no tiene margen.
 
-**Los códigos de banco de PSE no son portables.** El mismo Bancolombia es `1` en el sandbox de Wompi, `1007` en Mercado Pago y `co_pse_bancolombia_bank` en Rapyd. El SDK los pasa como cadenas opacas y **no** mantiene un catálogo propio de equivalencias, porque ese catálogo habría que sincronizarlo con cuatro proveedores que lo cambian sin avisar, y un catálogo desactualizado es peor que no tenerlo: manda al pagador al banco equivocado. Un comercio que cambie de pasarela tiene que volver a pedir la lista con `getPseBanks()`, y eso el SDK sí lo hace igual en las cuatro.
+**Los códigos de banco de PSE son portables, salvo en los sandboxes.** Cada pasarela nombra los bancos a su manera: el mismo Bancolombia es `1007` en Mercado Pago y `co_pse_bancolombia_bank` en Rapyd. Pero existe un estándar, el código de compensación que publica el Banco de la República y que usa ACH Colombia, y el SDK lo expone como `PseBankCode`. Con `PseBankCode.BANCOLOMBIA` el comercio pide ese banco en cualquiera de las cuatro pasarelas, y el SDK hace la traducción que Rapyd necesita. La excepción son los bancos ficticios de los sandboxes de Wompi y Kushki, que solo existen con el código que devuelve `getPseBanks()` (punto 67 del `architecture-log.md`).
 
 **Los tokens de tarjeta tampoco son portables.** Los emite cada pasarela y solo valen en ella. La tokenización sigue viviendo en el frontend, con la librería del proveedor, y el SDK no la toca: si la tocara, metería al comercio en el alcance de PCI DSS, que es justo lo que hay que evitar.
 
