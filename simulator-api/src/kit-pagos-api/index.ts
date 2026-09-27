@@ -1,6 +1,7 @@
 import cors from "@fastify/cors";
 import { FastifyInstance } from "fastify";
 import { gatewaysRoute } from "./routes/gateways";
+import { paymentsRoute } from "./routes/payments";
 
 /**
  * Modulo REST que expone las capacidades del SDK bajo `/v1/api`.
@@ -17,4 +18,5 @@ import { gatewaysRoute } from "./routes/gateways";
 export async function kitPagosApi(app: FastifyInstance): Promise<void> {
   await app.register(cors);
   app.register(gatewaysRoute);
+  app.register(paymentsRoute);
 }
