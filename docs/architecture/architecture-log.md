@@ -1818,6 +1818,26 @@ Para prevenir fugas accidentales de secretos en terminales, consolas de Render o
 
 ---
 
+### 64. Fundación del módulo REST `/v1/api`: errores del SDK en HTTP, CORS acotado y el preflight que la autenticación bloqueaba
+
+**Responsable:** Orduz (issue #100).
+
+**Contexto.** El issue pedía montar el módulo `simulator-api/src/kit-pagos-api/` bajo `/v1/api`, traducir `KitPagosError` a códigos HTTP, registrar `@fastify/cors` y exponer `GET /v1/api/gateways` como prueba de vida. Dos de sus siete puntos (la dependencia `file:../sdk` y la compilación del SDK en CI) ya habían llegado con el PR #116 del issue #101. Al mirar el código se encontró que `@fastify/cors` estaba declarado en `package.json` desde el inicio sin importarse en ningún archivo, y que el único manejador de errores de `buildApp()` atendía solo `MissingCredentialsError`: cualquier `KitPagosError` habría salido como un 500 genérico.
+
+**Decisión 1: la tabla de códigos es un `Record<KitPagosErrorCode, number>`.** La alternativa obvia era un `switch` con un `default` a 500. Se descartó porque convierte un olvido en un defecto silencioso: si el SDK agrega un código, el `switch` compila y el código nuevo sale como 500 en producción. Con el `Record`, TypeScript exige una entrada por cada valor del enum, así que el mismo olvido rompe la compilación del simulador en el pull request que agrega el código. Es la misma lógica del punto 62: que la ruptura se ponga roja antes de publicarse.
+
+**Decisión 2: el cuerpo del error es `{ code, message }`, y se descarta `originalPayload`.** `KitPagosError` trae además `gateway` y `originalPayload`, y este último guarda el cuerpo crudo que devolvió la pasarela. El issue prohíbe exponerlo. El `message` sí se expone, pero se verificó antes de decidirlo: el `ErrorHandler` del SDK pasa todo mensaje por `sanitize()`, que ya oculta llaves y tokens (RF-08). Para una respuesta HTTP fallida el mensaje es una plantilla fija («Wompi gateway returned an HTTP error status 500») que no incluye el cuerpo; para un error de red incluye el mensaje del error nativo de Node (por ejemplo `fetch failed`), no la respuesta de la pasarela.
+
+**Decisión 3: CORS se registra dentro del módulo, no en `buildApp()`.** Registrarlo en la raíz habría sido una línea, pero agrega cabeceras `Access-Control-*` a las 23 rutas de `/v1/sim`, que el issue exige dejar exactamente igual y que solo consume el SDK desde un backend. Dentro del plugin con prefijo, las cabeceras CORS quedan limitadas a `/v1/api`; una prueba lo comprueba sobre `/v1/sim/wompi/merchants/:key`.
+
+**Defecto encontrado: el preflight de CORS respondía 401.** El `authHook` del punto 63 corre en `onRequest` para toda ruta no exenta, y el navegador envía el preflight (`OPTIONS` con `Access-Control-Request-Method`) sin `Authorization`, antes de la petición real. Un sondeo desechable lo confirmó antes de escribir el módulo: con `API_AUTH_TOKEN` definido, el preflight respondía `401` y la petición real con token, `200`. En la práctica ningún frontend habría podido llamar a la API en cuanto se activara el token, y las pruebas con `app.inject()` no lo habrían mostrado, porque no envían preflight. El hook ahora deja pasar solo esa combinación exacta de método y cabecera; un `OPTIONS` sin ella sigue exigiendo el token.
+
+**Lo medido.** `npx jest` en `simulator-api`: 16 suites y 175 pruebas en verde (las 157 anteriores sin cambios, más 18 nuevas en `kitPagosApi.test.ts`). `npm run lint` y `npx tsc --noEmit` sin errores.
+
+**Estado:** Resuelto en código (`simulator-api/src/kit-pagos-api/`, `simulator-api/src/app.ts`, `simulator-api/src/auth/authHook.ts`). El origen permitido por CORS queda en el valor por defecto (`*`); restringirlo por variable de entorno se decide cuando exista el cliente de frontend del issue #109.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum
