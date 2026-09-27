@@ -70,6 +70,15 @@ export function createAuthHook(options?: AuthHookOptions) {
       return;
     }
 
+    // El navegador envía el preflight de CORS sin Authorization, antes de la
+    // petición real; exigir el token aquí bloquearía a cualquier frontend.
+    if (
+      request.method === "OPTIONS" &&
+      request.headers["access-control-request-method"] !== undefined
+    ) {
+      return;
+    }
+
     // Si no hay token configurado, opera en modo abierto
     if (!token) {
       return;

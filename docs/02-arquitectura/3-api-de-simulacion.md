@@ -33,6 +33,10 @@ simulator-api/src/
 │   └── KitPagosProvider.ts   ciclo de vida e instanciación del SDK (workspace)
 ├── logger/
 │   └── redactSerializer.ts   redacción estricta de credenciales en logs de Pino
+├── kit-pagos-api/            capa REST propia bajo /v1/api
+│   ├── index.ts              plugin del módulo: CORS y registro de rutas
+│   ├── routes/gateways.ts    GET /v1/api/gateways
+│   └── errors/               traducción de KitPagosError a HTTP
 ├── routes/
 │   ├── health.ts             GET /health
 │   ├── wompi.ts              4 rutas
@@ -54,7 +58,12 @@ simulator-api/src/
 
 **Capa de autenticación y resolución de credenciales (`src/auth/`):**
 - `CredentialResolver`: Implementa la resolución híbrida. Primero inspecciona las cabeceras `x-gateway-public-key`, `x-gateway-private-key` (e `integrity-secret`). Si no están presentes, recurre al perfil de sandbox del `.env` del servidor. Por seguridad estricta, `webhookSecret` **nunca** se acepta desde el cliente HTTP para evitar invalidar la verificación criptográfica. Si faltan credenciales, lanza `MissingCredentialsError` (HTTP 401).
-- `authHook`: Hook `onRequest` que protege los endpoints REST mediante token Bearer (`API_AUTH_TOKEN`). Realiza comparaciones en tiempo constante (`crypto.timingSafeEqual`) para mitigar ataques de temporización. Si `API_AUTH_TOKEN` no está configurado, opera en modo desarrollo abierto con advertencia en logs. Rutas públicas como `/health` y los endpoints mock `/v1/sim/*` están exentos por prefijo.
+- `authHook`: Hook `onRequest` que protege los endpoints REST mediante token Bearer (`API_AUTH_TOKEN`). Realiza comparaciones en tiempo constante (`crypto.timingSafeEqual`) para mitigar ataques de temporización. Si `API_AUTH_TOKEN` no está configurado, opera en modo desarrollo abierto con advertencia en logs. Rutas públicas como `/health` y los endpoints mock `/v1/sim/*` están exentos por prefijo. El preflight de CORS (`OPTIONS` con `Access-Control-Request-Method`) también pasa sin token, porque el navegador nunca le agrega `Authorization`.
+
+**El módulo REST propio (`src/kit-pagos-api/`):** se registra en `buildApp()` con el prefijo `/v1/api` y queda separado de `src/routes/` y `src/gateways/`, porque `/v1/sim` finge ser un tercero y `/v1/api` expone lo propio. No reimplementa reglas del SDK: traduce HTTP a llamadas de la fachada `KitPagos`.
+- `GET /v1/api/gateways` devuelve las pasarelas que soporta el SDK, tomadas de su enum `Gateway`. Sirve como prueba de vida del montaje, sin depender de credenciales.
+- Un `KitPagosError` lanzado en cualquier ruta se traduce al código HTTP de su `KitPagosErrorCode` (400, 401, 404, 429, 502, 504 o 500), con un cuerpo `{ code, message }` y nada más: el `originalPayload` con el cuerpo crudo de la pasarela no sale de la API.
+- `@fastify/cors` se registra dentro del módulo, así que solo `/v1/api` responde cabeceras CORS; las rutas de simulación siguen iguales. El detalle de las decisiones está en el punto 64 del `architecture-log.md`.
 
 **Capa de servicio SDK (`src/services/`):**
 - `KitPagosProvider`: Administra las instancias de `KitPagos` (consumido desde el workspace local `file:../sdk`, alineado con la política de detección temprana de rupturas de CI del punto 62). Para credenciales del servidor, mantiene un caché singleton por pasarela. Para credenciales inyectadas por el cliente en cabeceras HTTP, crea instancias al vuelo aisladas por petición, garantizando que no exista fuga ni contaminación cruzada entre clientes concurrentes.
@@ -171,7 +180,7 @@ cd simulator-api && npm install && npm run dev
 curl http://localhost:3000/health
 ```
 
-Las suites de prueba (15 suites con 157 pruebas en total) corren con `npm test` y no necesitan que el servidor esté levantado, porque usan `app.inject()`.
+Las suites de prueba (16 suites con 175 pruebas en total) corren con `npm test` y no necesitan que el servidor esté levantado, porque usan `app.inject()`.
 
 ---
 
