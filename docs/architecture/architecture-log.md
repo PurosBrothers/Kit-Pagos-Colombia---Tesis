@@ -1865,6 +1865,7 @@ Para satisfacer el criterio de no duplicar validaciones en el endpoint mientras 
 **Decisión 4: Ausencia total de condicionales por pasarela en el endpoint.**
 El endpoint no contiene ramas `if/switch` por pasarela. La resolución de instancias se delega a `KitPagosProvider.getKitPagos(gateway, request.headers)`, y las restricciones de pasarela (como el token de tarjeta requerido en Wompi o los campos específicos de PSE en Mercado Pago) son verificadas por los adaptadores del SDK. Del mismo modo, si se solicita un método de pago no soportado (ej. `CRYPTO`), el SDK lanza `KitPagosError(UNSUPPORTED_OPERATION)` respondiendo 400 y evitando cobros silenciosos con métodos por omisión (punto 44).
 
+> **Revisado en el punto 71.** `getKitPagos()` ya no existe: la ruta resuelve el cliente con `gatewayClientFor()`, que aplica la regla de credenciales del punto 69. Los campos opcionales que llegan mal formados, como un `taxBreakdown` incompleto, ya no se descartan: responden 400.
 
 **Lo medido.** 17 suites y 193 pruebas pasando en `simulator-api` (18 pruebas nuevas en `payments.test.ts`), 35 suites y 587 pruebas pasando en `sdk` (incluyendo la prueba de campos faltantes en `KitPagos.test.ts`). Linter sin errores y métricas CK en verde en las 31 clases.
 
@@ -2065,6 +2066,37 @@ Mutaciones: volver a leer el estado del cuerpo de Mercado Pago hace fallar 2 pru
 - **Los webhooks de las cuatro pasarelas contra sus sandboxes.** El método quedó probado: un sondeo mostró que webhook.site conserva el cuerpo byte a byte, con espacios y caracteres fuera de ASCII, y las cabeceras. El query string lo altera (`data.id` llega como `data_id`), pero conserva la URL completa, de donde se puede tomar. Falta que alguien registre esa URL en los cuatro paneles y copie los secretos de Mercado Pago y Kushki al `.env`. Según su documentación, Mercado Pago no notifica los pagos de prueba, y su único camino es «Simular notificación» en el panel.
 
 **Estado:** Resueltos el estado de Mercado Pago, la advertencia y la mezcla de secretos. Quedan dos pendientes con el método listo: medir los webhooks reales y medir los códigos ACH de Wompi y Kushki cuando haya credenciales de producción.
+
+### 71. Integración de `POST /v1/api/payments` con la regla de credenciales: la ruta que la esquivaba y los campos que se descartaban en silencio
+
+**Responsable:** Orduz (integración del PR #118 del issue #102 en el PR #119 del issue #104).
+
+**Contexto.** El PR #118 (punto 65) se integró en `devops` antes que el #119, aunque el #119 ya había cambiado el acceso del que dependía. Al traer `devops` a la rama del #119, la ruta dejó de compilar: llamaba a `KitPagosProvider.getKitPagos()`, que el punto 69 reemplazó por `resolveClient()`. La revisión del #118, hecha en una copia aislada con sondeos contra el simulador, encontró además tres casos en que la ruta descartaba un campo sin avisar. Se acordó con Joan resolver todo en el #119, porque es el PR que llegó después.
+
+**Decisión 1: la ruta pasa por `gatewayClientFor()`, no por `resolveClient()`.** Renombrar la llamada habría bastado para compilar, y es la alternativa obvia. Se descartó porque `resolveClient()` a secas pierde la advertencia del sandbox en la respuesta. El error de compilación ocultaba algo más grave que un nombre: en la rama del #118 no existía la regla del punto 69, así que un cobro contra la URL de producción usaba las credenciales del servidor. Integrada sin este cambio, la ruta habría cobrado con la cuenta de quien desplegó la API.
+
+**Decisión 2: un campo que viene pero no se puede interpretar responde 400.** La ruta original convertía a `undefined` todo lo que no tuviera la forma esperada, y el cobro seguía con el valor por omisión:
+
+- **`taxBreakdown` incompleto o con `rate` numérico.** Sin desglose, Kushki cobra el monto completo como exento de IVA (`resolveTaxBreakdown`). El comercio envió un IVA y el cobro salió sin él, algo que solo se descubre al conciliar. Es el caso más grave, porque el error es tributario.
+- **`installments` como texto.** `"3"` se descartaba y el cobro salía a una cuota. Ahora el valor pasa sin filtrar a `PaymentMethod.card()`, que ya rechaza lo que no sea un entero mayor o igual a 1: la validación queda en el dominio.
+- **`payerKind` desconocido.** Todo lo que no fuera `"LEGAL"` se convertía en `NATURAL`. El dominio no valida este campo, así que lo valida la ruta.
+- **`paymentMethod` sin `type`, o que no es un objeto.** Sin `type` se respondía `UNSUPPORTED_OPERATION` con el nombre del método vacío (`no soporta pagos con  en esta versión`). Un `paymentMethod: "PSE"` como texto se trataba como omitido y se cobraba con tarjeta. Ahora los dos responden `INVALID_REQUEST`.
+
+Se descartó la alternativa de tolerar y registrar una advertencia, como hace el respaldo del sandbox. Esa advertencia avisa de una decisión de configuración que no cambia el cobro. Aquí el cobro sí cambia, y el punto 44 ya había fijado el criterio de no cobrar con un valor por omisión lo que el comercio pidió distinto.
+
+**Decisión 3: la prueba no hereda `process.env`.** `payments.test.ts` partía de `...process.env`, y un `WOMPI_BASE_URL` en la terminal ganaba sobre `SIMULATOR_SDK_BASE_URL`. En el árbol integrado, con `WOMPI_BASE_URL=https://production.wompi.co/v1` exportado, fallaban 11 de las 18 pruebas: la regla del punto 69 las rechazaba con 401. En la rama del #118, sin esa regla, las mismas peticiones habrían salido hacia el host configurado. Además, la ruta usa ahora el `parseGateway()` compartido de `gateway-param.ts`. Así una pasarela desconocida responde el mismo 400 que en el resto de `/v1/api`, y ya no se registra como error de `Gateway.WOMPI`.
+
+**Hallazgo sin corregir: la escala del monto se garantiza de ida, no de vuelta.** La Decisión 2 del punto 65 protege el `amount` de la petición. El de la respuesta es el que reporta la pasarela: Mercado Pago y Kushki lo reportan como número, y `"75000.00"` vuelve como `"75000"`. La prueba del punto 65 solo lo verificaba en Wompi, donde los centavos devuelven los dos decimales. No es un error de dinero, porque el valor es el mismo, pero sí contradice lo que la documentación prometía. Se dejó documentado en `3-api-de-simulacion.md`, y la prueba compara el valor y no el texto.
+
+**Lo medido (27 de septiembre de 2026).**
+
+- En la rama del #118, con sondeos contra el simulador: `CRYPTO` responde 400 `UNSUPPORTED_OPERATION` en las cuatro pasarelas, y un `amount` numérico se rechaza. En cambio, los tres `taxBreakdown` mal formados de Kushki responden 201, igual que `installments: "3"`.
+- Después de integrar, con URLs de producción exportadas en la terminal (`WOMPI_BASE_URL` y `RAPYD_BASE_URL`), `payments.test.ts` pasa 28 de 28.
+- Contra producción, `POST /v1/api/payments` sin cabeceras responde 401 sin ninguna llamada a `fetch`. Contra `sandbox.wompi.co`, deja la advertencia en la cabecera y en `warnings`.
+- Cinco mutaciones sobre la ruta hacen fallar al menos una prueba cada una: `resolveClient()` en lugar de `gatewayClientFor()`, y volver a descartar el `taxBreakdown`, las cuotas, el `payerKind` o el `type`.
+- `sdk`: 38 suites y 626 pruebas; `test:sandbox`, 4 suites y 18 pruebas contra los sandboxes reales; lint y métricas CK sin errores. `simulator-api`: 20 suites y 259 pruebas; lint y `tsc` sin errores. `examples`: typecheck sin errores.
+
+**Estado:** Resuelto en código (`simulator-api/src/kit-pagos-api/routes/payments.ts`, `simulator-api/test/payments.test.ts`). La pérdida de escala en la respuesta queda documentada, sin corregir.
 
 ---
 

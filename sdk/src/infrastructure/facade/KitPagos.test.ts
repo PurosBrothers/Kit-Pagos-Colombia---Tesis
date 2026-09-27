@@ -158,26 +158,26 @@ describe("KitPagos", () => {
       }
     });
 
-    it("lanza INVALID_REQUEST con los nombres de los campos que faltan", async () => {
+    it("should throw INVALID_REQUEST naming the missing fields", async () => {
       const sdk = buildConfiguredSdk();
 
-      const sinMonto = {
+      const withoutAmount = {
         ...validRequest,
         amount: undefined as unknown as typeof validRequest.amount,
       };
-      await expect(sdk.createPayment(sinMonto)).rejects.toMatchObject({
+      await expect(sdk.createPayment(withoutAmount)).rejects.toMatchObject({
         code: KitPagosErrorCode.INVALID_REQUEST,
         gateway: Gateway.WOMPI,
         message: expect.stringContaining("amount"),
       });
 
-      const sinVarios = {
+      const withoutAnyRequiredField = {
         amount: undefined as unknown as typeof validRequest.amount,
         currency: undefined as unknown as typeof validRequest.currency,
         orderReference: undefined as unknown as typeof validRequest.orderReference,
         payer: undefined as unknown as typeof validRequest.payer,
       };
-      await expect(sdk.createPayment(sinVarios)).rejects.toMatchObject({
+      await expect(sdk.createPayment(withoutAnyRequiredField)).rejects.toMatchObject({
         code: KitPagosErrorCode.INVALID_REQUEST,
         message: expect.stringMatching(/amount.*currency.*orderReference.*payer/),
       });
@@ -324,7 +324,7 @@ describe("KitPagos", () => {
         });
 
         // docs.rapyd.net/en/webhook-authentication.html: base64 del texto hexadecimal del
-        // HMAC, y Rapyd solo manda salt, timestamp y signature (punto 66).
+        // HMAC, y Rapyd solo manda salt, timestamp y signature (punto 67).
         const toSign = webhookUrl + salt + timestamp + rapydAccessKey + rapydSecret + payload;
         const hex = crypto.createHmac("sha256", rapydSecret).update(toSign).digest("hex");
         const signature = Buffer.from(hex).toString("base64");

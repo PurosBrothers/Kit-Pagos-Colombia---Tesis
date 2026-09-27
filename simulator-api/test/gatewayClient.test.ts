@@ -9,10 +9,10 @@ import { KitPagosProvider } from "../src/services/KitPagosProvider";
 /**
  * La regla de credenciales vista desde HTTP (puntos 69 y 70).
  *
- * Todavía no hay una ruta de `/v1/api` que llame a la pasarela —llegan con los issues
- * #102 y #103—, así que la prueba monta dos que usan `gatewayClientFor()` como la usarán
- * ellas, dentro de un contexto armado por el mismo `kitPagosApi()`: así cubre también
- * el cableado del hook y de CORS.
+ * La prueba monta dos rutas propias que usan `gatewayClientFor()`, dentro de un contexto
+ * armado por el mismo `kitPagosApi()`: así prueba el helper sin depender de lo que haga
+ * cada ruta real, y cubre también el cableado del hook y de CORS. Que `POST /payments`
+ * pase por él lo prueba `payments.test.ts`.
  */
 function appPointingTo(baseUrl: string): FastifyInstance {
   const env = {
