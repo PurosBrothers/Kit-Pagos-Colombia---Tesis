@@ -18,7 +18,7 @@ const DEFAULT_EVENT_TYPE = "transaction.updated";
  * cubrir. La lista `signature.properties` viaja sin firmar: sin esta exigencia, un
  * evento capturado se puede reescribir apuntando la lista a un campo nuevo que
  * repita la concatenación original, y cambiar el estado sin alterar el checksum
- * (punto 66).
+ * (punto 67).
  */
 const REQUIRED_TRANSACTION_PROPERTIES = ["transaction.id", "transaction.status"];
 

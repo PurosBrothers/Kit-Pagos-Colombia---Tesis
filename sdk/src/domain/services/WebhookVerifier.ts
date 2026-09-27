@@ -65,7 +65,7 @@ export class WebhookVerifier {
 /*
  * Los manejadores no tienen estado, así que el mapa y su resolución viven en el módulo:
  * como método privado, `GatewayWebhookHandler` entraba en las firmas de la clase y le
- * costaba CBO (ver el punto 66 y la regla de funciones de módulo del punto 34).
+ * costaba CBO (ver el punto 67 y la regla de funciones de módulo del punto 34).
  */
 const HANDLERS: Record<Gateway, GatewayWebhookHandler> = {
   [Gateway.WOMPI]: new WompiWebhookHandler(),

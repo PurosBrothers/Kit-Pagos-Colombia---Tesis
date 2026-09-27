@@ -65,7 +65,7 @@ export interface Credentials {
    * Solo Rapyd la usa, y es obligatoria para verificar sus webhooks: la incluye en el texto
    * que firma y no la manda en la notificación. Va en la configuración y no en la petición
    * porque es lo que ata la firma a este destino; si el emisor pudiera elegirla, un webhook
-   * capturado para otro endpoint se aceptaría aquí (punto 66 del `architecture-log.md`).
+   * capturado para otro endpoint se aceptaría aquí (punto 67 del `architecture-log.md`).
    */
   webhookUrl?: string;
 }

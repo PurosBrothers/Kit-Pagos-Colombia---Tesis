@@ -15,7 +15,7 @@ import type { CreatePaymentRequest } from "../../application/ports/PaymentGatewa
 /**
  * El mismo `PseBankCode.BANCOLOMBIA` tiene que llegar a cada pasarela en la forma que
  * ella entiende, sin que el comercio sepa cuál es. Es lo que pidió la dirección del
- * trabajo, y lo que el catálogo del punto 67 existe para permitir.
+ * trabajo, y lo que el catálogo del punto 68 existe para permitir.
  *
  * La solicitud trae los datos del pagador que pide la más exigente de las cuatro
  * (Mercado Pago), para que la misma sirva en todas.

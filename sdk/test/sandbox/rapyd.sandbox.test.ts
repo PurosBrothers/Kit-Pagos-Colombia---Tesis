@@ -39,7 +39,7 @@ describeSandbox(Gateway.RAPYD, (credentials, baseUrl) => {
   /**
    * La tabla de traducción tiene que seguir cubriendo lo que Rapyd publica, en los dos
    * sentidos. Si Rapyd suma un banco, sale acá sin `achCode`; si renombra o retira uno,
-   * un código de `PseBankCode` quedaría traducido a un método que ya no existe (punto 67).
+   * un código de `PseBankCode` quedaría traducido a un método que ya no existe (punto 68).
    */
   it("should list exactly the PSE methods of the translation table", async () => {
     const banks = await kitPagos.getPseBanks();

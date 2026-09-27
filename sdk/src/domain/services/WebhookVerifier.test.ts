@@ -18,7 +18,7 @@ describe("WebhookVerifier", () => {
 
   /*
    * Los firmantes de esta sección se escriben a partir de la documentación oficial de
-   * cada pasarela y no a partir del SDK. Hasta el punto 66 las pruebas firmaban con la
+   * cada pasarela y no a partir del SDK. Hasta el punto 67 las pruebas firmaban con la
    * misma fórmula que el verificador, y por eso pasaban mientras Rapyd y Wompi
    * rechazaban cualquier webhook real.
    */
@@ -79,7 +79,7 @@ describe("WebhookVerifier", () => {
       });
 
       /**
-       * El ataque que motivó exigir las propiedades del punto 66: la lista viaja sin
+       * El ataque que motivó exigir las propiedades del punto 67: la lista viaja sin
        * firmar, así que se la puede apuntar a un campo nuevo que repita la
        * concatenación original y cambiar el estado sin alterar el checksum.
        */
@@ -563,7 +563,7 @@ describe("WebhookVerifier", () => {
       /**
        * La notificación de una orden trae su estado en `data.status`, pero fuera de
        * la firma. El vocabulario de la Orders API se traduce ahora solo al consultar
-       * con `getPaymentStatus()`, y lo cubre `ResponseNormalizer.test.ts` (punto 69).
+       * con `getPaymentStatus()`, y lo cubre `ResponseNormalizer.test.ts` (punto 70).
        */
       it("should report PENDING for an official Orders API notification, whose data.status is unsigned", () => {
         const processed = JSON.stringify({

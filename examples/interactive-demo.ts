@@ -563,7 +563,7 @@ async function collectDraft(): Promise<{
      * para las cuatro —`getPseBanks()`— y devuelve códigos que no se parecen entre
      * sí: `1` en el sandbox de Wompi, `1007` en Mercado Pago,
      * `co_pse_bancolombia_bank` en Rapyd. El `achCode` de cada banco es el código
-     * común de ACH Colombia, el mismo de `PseBankCode` (punto 67).
+     * común de ACH Colombia, el mismo de `PseBankCode` (punto 68).
      */
     console.log("\nPidiéndole a la pasarela su lista de bancos de PSE...");
     const banks = await kitPagos.getPseBanks();

@@ -29,7 +29,7 @@
  * `bankCode` acepta un código de `PseBankCode`, que sirve igual en las cuatro
  * pasarelas porque Rapyd lo traduce, o el `code` que devolvió `getPseBanks()`,
  * que solo sirve en la pasarela que lo dio. Los bancos de prueba de los sandboxes
- * solo existen de la segunda forma (punto 67).
+ * solo existen de la segunda forma (punto 68).
  */
 
 /**

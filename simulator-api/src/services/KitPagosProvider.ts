@@ -57,7 +57,7 @@ export class KitPagosProvider {
   /**
    * Instancia para una operación que llama a la pasarela: cobro, consulta o bancos.
    *
-   * Qué credenciales usa depende de a dónde apunta la API (punto 68):
+   * Qué credenciales usa depende de a dónde apunta la API (punto 69):
    *
    * - **Simulador:** las del cliente si vienen completas y, si no, las del servidor.
    * - **Sandbox real:** igual, pero cuando usa las del servidor devuelve una
@@ -87,7 +87,7 @@ export class KitPagosProvider {
    *
    * No pasa por la regla de `resolveClient()` porque verificar no llama a la
    * pasarela, y porque el secreto del webhook nunca se acepta del cliente: quien
-   * emite la notificación no puede elegir contra qué se verifica (punto 65).
+   * emite la notificación no puede elegir contra qué se verifica (punto 66).
    */
   public getWebhookVerifier(gateway: Gateway): KitPagos {
     return this.instanceFor(gateway, this.credentialResolver.resolve(gateway));

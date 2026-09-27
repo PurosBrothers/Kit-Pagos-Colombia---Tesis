@@ -28,7 +28,7 @@ import { isPseBankCode, type PseBankCode } from "./PseBankCode";
  * `PseBankCode.BANCOLOMBIA` a `PaymentMethod.pse()`. La lista sigue haciendo falta
  * para armar el selector del pagador, y `achCode` sirve para, por ejemplo,
  * destacar los bancos más usados sin depender de cómo los nombra cada pasarela
- * (punto 67).
+ * (punto 68).
  *
  * ## Por qué es una interfaz y no una clase
  *

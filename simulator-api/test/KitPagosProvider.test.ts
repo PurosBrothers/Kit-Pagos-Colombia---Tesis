@@ -72,7 +72,7 @@ describe("KitPagosProvider", () => {
     );
   });
 
-  /** Las credenciales que la API usa dependen de a dónde apunta (punto 68). */
+  /** Las credenciales que la API usa dependen de a dónde apunta (punto 69). */
   describe("resolveClient() according to the target environment", () => {
     const productionEnv = { ...mockServerEnv, WOMPI_BASE_URL: "https://production.wompi.co/v1" };
     const sandboxEnv = { ...mockServerEnv, WOMPI_BASE_URL: "https://sandbox.wompi.co/v1" };
@@ -163,7 +163,7 @@ describe("KitPagosProvider", () => {
     });
 
     /**
-     * Verificar no llama a la pasarela y el secreto sale solo del servidor (punto 65), así
+     * Verificar no llama a la pasarela y el secreto sale solo del servidor (punto 66), así
      * que apuntar a producción no puede dejar a la API sin poder verificar webhooks.
      */
     it("should keep verifying webhooks with the server profile when pointed at production", () => {

@@ -4,7 +4,7 @@ import * as crypto from "crypto";
  * Firmantes de prueba escritos a partir de la documentación oficial de cada pasarela,
  * por separado del SDK. Si coincidieran por construcción con el verificador, una prueba
  * que valida no demostraría nada: la primera versión de este archivo copió las fórmulas
- * del SDK y pasaba mientras Rapyd y Wompi rechazaban cualquier webhook real (punto 66).
+ * del SDK y pasaba mientras Rapyd y Wompi rechazaban cualquier webhook real (punto 67).
  */
 
 export interface SignedWebhook {

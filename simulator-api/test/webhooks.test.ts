@@ -58,7 +58,7 @@ function postWebhook(
 
 describe("POST /v1/api/webhooks/:gateway", () => {
   describe("valid signatures", () => {
-    // Mercado Pago no firma el cuerpo, así que su estado se confirma con getPaymentStatus() (punto 69).
+    // Mercado Pago no firma el cuerpo, así que su estado se confirma con getPaymentStatus() (punto 70).
     it.each([
       ["wompi", () => signWompi(SERVER_ENV.WOMPI_EVENTS_SECRET), "APPROVED"],
       ["mercadopago", () => signMercadoPago(SERVER_ENV.MERCADOPAGO_WEBHOOK_SECRET), "PENDING"],

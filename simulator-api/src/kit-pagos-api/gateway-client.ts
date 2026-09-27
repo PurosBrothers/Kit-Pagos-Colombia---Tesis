@@ -20,7 +20,7 @@ const warningsByRequest = new WeakMap<FastifyRequest, ResponseWarning[]>();
  * Es la única puerta que deberían usar las rutas de cobro, consulta y bancos: aplica
  * la regla de credenciales según el destino y, si la petición cayó a las credenciales
  * de sandbox del servidor, deja la advertencia en la cabecera, en el cuerpo y en el
- * log. Una ruta que llame a `resolveClient()` directamente la perdería (puntos 68 y 69).
+ * log. Una ruta que llame a `resolveClient()` directamente la perdería (puntos 69 y 70).
  */
 export function gatewayClientFor(
   app: FastifyInstance,

@@ -158,6 +158,31 @@ describe("KitPagos", () => {
       }
     });
 
+    it("lanza INVALID_REQUEST con los nombres de los campos que faltan", async () => {
+      const sdk = buildConfiguredSdk();
+
+      const sinMonto = {
+        ...validRequest,
+        amount: undefined as unknown as typeof validRequest.amount,
+      };
+      await expect(sdk.createPayment(sinMonto)).rejects.toMatchObject({
+        code: KitPagosErrorCode.INVALID_REQUEST,
+        gateway: Gateway.WOMPI,
+        message: expect.stringContaining("amount"),
+      });
+
+      const sinVarios = {
+        amount: undefined as unknown as typeof validRequest.amount,
+        currency: undefined as unknown as typeof validRequest.currency,
+        orderReference: undefined as unknown as typeof validRequest.orderReference,
+        payer: undefined as unknown as typeof validRequest.payer,
+      };
+      await expect(sdk.createPayment(sinVarios)).rejects.toMatchObject({
+        code: KitPagosErrorCode.INVALID_REQUEST,
+        message: expect.stringMatching(/amount.*currency.*orderReference.*payer/),
+      });
+    });
+
     it("should create a payment through the configured Kushki adapter", async () => {
       const kitPagos = new KitPagos({
         gateway: Gateway.KUSHKI,

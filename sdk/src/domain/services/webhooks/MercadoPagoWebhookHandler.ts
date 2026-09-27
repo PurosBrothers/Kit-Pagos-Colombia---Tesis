@@ -25,7 +25,7 @@ const DATA_ID_QUERY_PARAM = "data.id";
  * El `data.id` firmado es el **parámetro de la URL**, en minúsculas si es
  * alfanumérico (los ids de la Orders API llegan en mayúsculas). El cuerpo no está
  * firmado, así que si trae otro `data.id` la notificación se rechaza: de lo
- * contrario el evento reportaría un id distinto del que se verificó (punto 66).
+ * contrario el evento reportaría un id distinto del que se verificó (punto 67).
  * Sin parámetro en la URL se usa el del cuerpo, que en la Payments API coincide.
  */
 export class MercadoPagoWebhookHandler implements GatewayWebhookHandler {
@@ -65,7 +65,7 @@ export class MercadoPagoWebhookHandler implements GatewayWebhookHandler {
   /**
    * El evento sale siempre en `PENDING`: la firma no cubre el cuerpo, así que ningún
    * estado que venga en él es confiable, y el estado real se consulta con
-   * `getPaymentStatus(gatewayTransactionId)` (punto 69).
+   * `getPaymentStatus(gatewayTransactionId)` (punto 70).
    */
   parse(webhook: IncomingWebhook): WebhookEvent {
     const body = JSON.parse(webhook.payload);

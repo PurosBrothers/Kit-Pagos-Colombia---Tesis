@@ -25,7 +25,7 @@
  * es `"1007"` en Mercado Pago y `"co_pse_bancolombia_bank"` en Rapyd. El `achCode` es
  * el código de compensación de ACH Colombia, que es el mismo en las cuatro, y
  * `PseBankCode.BANCOLOMBIA` sirve en cualquiera porque el SDK lo traduce para Rapyd
- * (punto 67 del `architecture-log.md`). Lo que no se traduce son los bancos ficticios
+ * (punto 68 del `architecture-log.md`). Lo que no se traduce son los bancos ficticios
  * de los sandboxes, como el `"1"` de Wompi, y el ejemplo termina mostrando ese rechazo.
  *
  * Requisito para correrlo: la API de Simulación arriba en el puerto 3000.

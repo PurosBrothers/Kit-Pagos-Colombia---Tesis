@@ -354,7 +354,7 @@ export function isOrderId(gatewayTransactionId: string): boolean {
  * Que sean 47 no es casualidad: Rapyd expone exactamente 47 métodos
  * `co_pse_{banco}_bank`. Las dos están leyendo el mismo registro de entidades de
  * ACH Colombia, cada una con su forma. El `id` de Mercado Pago es el código de
- * compensación, así que es a la vez `code` y `achCode` (punto 67).
+ * compensación, así que es a la vez `code` y `achCode` (punto 68).
  *
  * Si la entrada `pse` no aparece, la lista vuelve vacía en vez de fallar: que una
  * cuenta no tenga PSE habilitado es una configuración posible del comercio, no una

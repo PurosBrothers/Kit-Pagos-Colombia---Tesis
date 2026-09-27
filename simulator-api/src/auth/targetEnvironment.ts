@@ -15,7 +15,7 @@ export type TargetEnvironment = "simulator" | "sandbox" | "production";
  * Mercado Pago no tiene ninguno: usa `api.mercadopago.com` para prueba y para
  * producción, y sus llaves de prueba empiezan con `APP_USR-`, igual que las de
  * producción (medido en el `.env` del proyecto). Como no hay forma de distinguirlos,
- * una URL real de Mercado Pago se trata como producción (punto 68).
+ * una URL real de Mercado Pago se trata como producción (punto 69).
  */
 const SANDBOX_HOSTS: Readonly<Record<Gateway, readonly string[]>> = {
   [Gateway.WOMPI]: ["sandbox.wompi.co"],

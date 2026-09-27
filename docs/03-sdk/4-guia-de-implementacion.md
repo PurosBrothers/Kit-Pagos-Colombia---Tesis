@@ -137,7 +137,7 @@ PaymentMethod.pse({ bankCode: PseBankCode.BANCOLOMBIA });
 
 **`PseBankCode` sirve igual en las cuatro pasarelas.** Es el código de compensación de cuatro dígitos que publica el Banco de la República y que usa ACH Colombia (`1007` es Bancolombia). Mercado Pago, Wompi y Kushki lo reciben tal cual, y el SDK lo traduce para Rapyd, que nombra cada banco con un método propio (`co_pse_bancolombia_bank`). Cada banco de `getPseBanks()` trae además su `achCode` cuando lo tiene.
 
-**El `code` de la lista, en cambio, solo vale en la pasarela que lo dio.** Los bancos de prueba de los sandboxes solo existen así: `1`, `2` y `3` en Wompi, y `0001` en Kushki. Tenga en cuenta que Wompi no valida el código al crear el pago, así que en su sandbox un código de `PseBankCode` no falla al crear, sino después. El razonamiento está en el punto 67 del `architecture-log.md`.
+**El `code` de la lista, en cambio, solo vale en la pasarela que lo dio.** Los bancos de prueba de los sandboxes solo existen así: `1`, `2` y `3` en Wompi, y `0001` en Kushki. Tenga en cuenta que Wompi no valida el código al crear el pago, así que en su sandbox un código de `PseBankCode` no falla al crear, sino después. El razonamiento está en el punto 68 del `architecture-log.md`.
 
 El ejemplo completo está en el [README, sección 3](../../sdk/README.md#3-crear-una-transacción-con-pse-redirección-bancaria). Lo que hay que tener presente:
 
@@ -298,7 +298,7 @@ const sdk = new KitPagos({
 
 Tiene que coincidir carácter por carácter con lo configurado en Rapyd. Una barra final de más y la firma no coincide. Sin `webhookUrl`, `validateWebhook()` lanza `INVALID_CREDENTIALS` en vez de rechazar el webhook, para que el error apunte a la configuración.
 
-Hasta la versión 0.1.0 el SDK pedía esa URL en una cabecera sintética `x-webhook-url`. Ya no la lee: si la URL viniera en la petición, quien la envía decidiría a qué destino queda atada la firma (punto 66 del `architecture-log.md`).
+Hasta la versión 0.1.0 el SDK pedía esa URL en una cabecera sintética `x-webhook-url`. Ya no la lee: si la URL viniera en la petición, quien la envía decidiría a qué destino queda atada la firma (punto 67 del `architecture-log.md`).
 
 ### El caso particular de Mercado Pago
 
@@ -313,7 +313,7 @@ const evento = sdk.validateWebhook(cuerpoCrudo, headers, {
 
 Sin `query` el SDK usa el `data.id` del cuerpo, que coincide en los pagos pero no en los ids alfanuméricos de la Orders API. Si la URL y el cuerpo traen ids distintos, el webhook se rechaza.
 
-Tenga en cuenta además que Mercado Pago **no firma el cuerpo**: la firma cubre el id, el `x-request-id` y la marca de tiempo. Por eso el SDK no lee ningún estado del cuerpo, ni siquiera el `data.status` que traen las notificaciones de la Orders API, y reporta `PENDING`. El estado se confirma siempre con `getPaymentStatus()`, como en el ejemplo de la sección anterior (punto 69 del `architecture-log.md`).
+Tenga en cuenta además que Mercado Pago **no firma el cuerpo**: la firma cubre el id, el `x-request-id` y la marca de tiempo. Por eso el SDK no lee ningún estado del cuerpo, ni siquiera el `data.status` que traen las notificaciones de la Orders API, y reporta `PENDING`. El estado se confirma siempre con `getPaymentStatus()`, como en el ejemplo de la sección anterior (punto 70 del `architecture-log.md`).
 
 ---
 

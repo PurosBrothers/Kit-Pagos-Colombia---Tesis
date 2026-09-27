@@ -89,7 +89,7 @@ Ninguna de las cuatro pasarelas del proyecto usa firma asimétrica. Usan hash o 
 checksum = SHA256_hex( concat(valores de signature.properties) + timestamp + secreto_de_eventos )
 ```
 
-Las `properties` son rutas con puntos que el propio webhook declara (por ejemplo `transaction.amount_in_cents`), relativas al objeto `data` y no a la raíz del cuerpo, así que el verificador tiene que resolverlas dinámicamente en lugar de asumir un orden fijo. La lista viaja sin firmar, y por eso el SDK exige además que incluya `transaction.id` y `transaction.status`, los campos que lee del evento (punto 66).
+Las `properties` son rutas con puntos que el propio webhook declara (por ejemplo `transaction.amount_in_cents`), relativas al objeto `data` y no a la raíz del cuerpo, así que el verificador tiene que resolverlas dinámicamente en lugar de asumir un orden fijo. La lista viaja sin firmar, y por eso el SDK exige además que incluya `transaction.id` y `transaction.status`, los campos que lee del evento (punto 67).
 
 **Mercado Pago — HMAC-SHA256 hexadecimal sobre un manifiesto con formato fijo:**
 
@@ -112,7 +112,7 @@ texto = url_del_webhook + salt + timestamp + access_key + secreto + cuerpo_crudo
 firma = base64( HMAC_SHA256_hex( secreto, texto ) )
 ```
 
-Tres detalles de Rapyd que arruinan la verificación si se pasan por alto: el digest se serializa a hexadecimal y **ese texto hex** es lo que se codifica en base64 (pedirle `digest("base64")` directo produce otra firma); el secreto aparece **dos veces**, dentro del texto y como llave; y la URL que entra en el cálculo es la URL completa configurada en el panel de Rapyd, no la ruta de la petición entrante. Ese último detalle obliga a que el SDK reciba esa URL como configuración (`credentials.webhookUrl`), porque no hay forma de derivarla de la petición. Rapyd tampoco envía el `access_key`: sale de `credentials.publicKey` (punto 66).
+Tres detalles de Rapyd que arruinan la verificación si se pasan por alto: el digest se serializa a hexadecimal y **ese texto hex** es lo que se codifica en base64 (pedirle `digest("base64")` directo produce otra firma); el secreto aparece **dos veces**, dentro del texto y como llave; y la URL que entra en el cálculo es la URL completa configurada en el panel de Rapyd, no la ruta de la petición entrante. Ese último detalle obliga a que el SDK reciba esa URL como configuración (`credentials.webhookUrl`), porque no hay forma de derivarla de la petición. Rapyd tampoco envía el `access_key`: sale de `credentials.publicKey` (punto 67).
 
 ### El secreto del webhook no es la llave de la API
 

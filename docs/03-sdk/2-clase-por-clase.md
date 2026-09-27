@@ -98,7 +98,7 @@ export type PaymentResult = TransactionOutcome | RedirectRequiredOutcome;
 
 `PaymentMethod.card(token)` y `PaymentMethod.pse({ bankCode, payerKind })`. Recibe un **token**, nunca un número de tarjeta: la tokenización vive en el frontend con la librería del proveedor, y aceptar el número metería al comercio en el alcance de PCI DSS.
 
-`bankCode` acepta un valor de `PseBankCode`, el código de compensación de ACH Colombia, que sirve en las cuatro pasarelas, o el `code` que devolvió `getPseBanks()`, que solo sirve en la pasarela que lo dio. Rapyd es la única que necesita traducción, y la tabla está en `rapyd-pse-banks.ts` (punto 67).
+`bankCode` acepta un valor de `PseBankCode`, el código de compensación de ACH Colombia, que sirve en las cuatro pasarelas, o el `code` que devolvió `getPseBanks()`, que solo sirve en la pasarela que lo dio. Rapyd es la única que necesita traducción, y la tabla está en `rapyd-pse-banks.ts` (punto 68).
 
 #### `TaxBreakdown` — el desglose que solo Kushki exige
 

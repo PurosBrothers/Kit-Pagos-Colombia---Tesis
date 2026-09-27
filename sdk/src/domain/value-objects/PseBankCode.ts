@@ -25,7 +25,7 @@
  *
  * El nombre de cada entrada es la marca vigente, no la razón social: `1019` es
  * `DAVIBANK`, que antes se llamaba Scotiabank Colpatria. El razonamiento completo,
- * incluido por qué esto revierte la decisión del punto 47, está en el punto 67 del
+ * incluido por qué esto revierte la decisión del punto 47, está en el punto 68 del
  * `architecture-log.md`.
  */
 export enum PseBankCode {

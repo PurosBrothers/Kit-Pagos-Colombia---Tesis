@@ -197,7 +197,7 @@ npm run simulate:pse-bancos
 * **Qué esperar:**
   1. Las cuatro listas, una debajo de otra, con el código y el nombre tal como los devuelve cada pasarela.
   2. Una demostración de que los códigos **no son intercambiables**: mandarle a Rapyd el `"1"` de Wompi falla con un `INVALID_REQUEST` del SDK que dice qué patrón espera y de dónde sacarlo, en vez del error genérico de Rapyd.
-* **Por qué existe:** porque es el paso inmediatamente anterior al cobro y, hasta que este método existió, era el único del flujo de PSE que el comercio tenía que resolver hablándole directo a la pasarela. Verlas al lado muestra que cada pasarela nombra los bancos a su manera: en Mercado Pago Bancolombia es `1007` y en Rapyd `co_pse_bancolombia_bank`. El `achCode` de cada banco es el código de compensación común, y `PseBankCode.BANCOLOMBIA` sirve en las cuatro (punto 67 del `architecture-log.md`).
+* **Por qué existe:** porque es el paso inmediatamente anterior al cobro y, hasta que este método existió, era el único del flujo de PSE que el comercio tenía que resolver hablándole directo a la pasarela. Verlas al lado muestra que cada pasarela nombra los bancos a su manera: en Mercado Pago Bancolombia es `1007` y en Rapyd `co_pse_bancolombia_bank`. El `achCode` de cada banco es el código de compensación común, y `PseBankCode.BANCOLOMBIA` sirve en las cuatro (punto 68 del `architecture-log.md`).
 
 ---
 

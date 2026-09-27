@@ -3,6 +3,7 @@ import { FastifyInstance } from "fastify";
 import { CREDENTIAL_WARNING_HEADER } from "../services/KitPagosProvider";
 import { attachCredentialWarnings, logCredentialPolicy } from "./gateway-client";
 import { gatewaysRoute } from "./routes/gateways";
+import { paymentsRoute } from "./routes/payments";
 import { webhooksRoute } from "./routes/webhooks";
 
 /**
@@ -19,10 +20,11 @@ import { webhooksRoute } from "./routes/webhooks";
  */
 export async function kitPagosApi(app: FastifyInstance): Promise<void> {
   // Sin `exposedHeaders` el navegador esconde la advertencia del respaldo en sandbox
-  // al JavaScript del frontend, aunque viaje en la respuesta (punto 68).
+  // al JavaScript del frontend, aunque viaje en la respuesta (punto 69).
   await app.register(cors, { exposedHeaders: [CREDENTIAL_WARNING_HEADER] });
   attachCredentialWarnings(app);
   logCredentialPolicy(app);
   app.register(gatewaysRoute);
+  app.register(paymentsRoute);
   app.register(webhooksRoute);
 }

@@ -32,7 +32,7 @@ describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
   /**
    * Mercado Pago identifica a los bancos con el código de compensación, así que su lista
    * es la referencia viva de `PseBankCode`. Si ACH habilita o retira una entidad, esto lo
-   * dice (punto 67).
+   * dice (punto 68).
    */
   it("should list exactly the entities of PseBankCode, each one with its achCode", async () => {
     const banks = await kitPagos.getPseBanks();

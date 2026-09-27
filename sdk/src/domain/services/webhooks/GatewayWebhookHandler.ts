@@ -34,14 +34,14 @@ export interface IncomingWebhook {
   payload: string;
   /** Cabeceras de la petición, en minúsculas. */
   headers: Record<string, string>;
-  /** Parámetros de la URL. Mercado Pago firma el `data.id` que viaja aquí (punto 66). */
+  /** Parámetros de la URL. Mercado Pago firma el `data.id` que viaja aquí (punto 67). */
   query?: Record<string, string>;
 }
 
 /**
  * Lo que la verificación necesita además de la notificación. Sale siempre de la
  * configuración del comercio y nunca de la petición: un valor que el emisor pudiera
- * elegir dejaría de atar la firma a este comercio (punto 66).
+ * elegir dejaría de atar la firma a este comercio (punto 67).
  */
 export interface WebhookSigningContext {
   /** Secreto de webhooks configurado en el panel de la pasarela. */

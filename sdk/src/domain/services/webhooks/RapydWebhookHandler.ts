@@ -35,7 +35,7 @@ const CARD_DECLINE_PREFIX = "ERROR_PROCESSING_CARD";
  * la configuración: `access_key` es `credentials.publicKey`, y `url_path` es la URL
  * COMPLETA registrada en el panel, `credentials.webhookUrl`. Antes se leían de
  * cabeceras que Rapyd no envía; tomarlos de la petición dejaría además que quien la
- * manda eligiera a qué destino queda atada la firma (punto 66).
+ * manda eligiera a qué destino queda atada la firma (punto 67).
  */
 export class RapydWebhookHandler implements GatewayWebhookHandler {
   verify(

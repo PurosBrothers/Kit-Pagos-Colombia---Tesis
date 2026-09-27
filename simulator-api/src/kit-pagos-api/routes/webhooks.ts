@@ -8,7 +8,7 @@ import { parseGateway, unsupportedGatewayBody } from "../gateway-param";
  * Respuesta única para todo webhook rechazado. Firma falsificada, cuerpo
  * malformado, marca de tiempo vencida y secreto sin configurar responden lo
  * mismo, para no decirle a quien envía la petición por qué falló (puntos 22 y
- * 36.6 del architecture-log.md; ver el punto 65).
+ * 36.6 del architecture-log.md; ver el punto 66).
  */
 const REJECTED_WEBHOOK_BODY = {
   code: KitPagosErrorCode.WEBHOOK_SIGNATURE_INVALID,
@@ -91,7 +91,7 @@ function toResponseBody(event: WebhookEvent) {
  * `x-gateway-*`: el SDK usa `webhookSecret ?? privateKey`, así que con una llave
  * privada del cliente y sin secreto en el servidor, quien envía el webhook
  * elegiría el secreto con que se lo verifica. Por lo mismo se exige un
- * `webhookSecret` configurado, sin caer a la llave privada (punto 65).
+ * `webhookSecret` configurado, sin caer a la llave privada (punto 66).
  */
 export async function webhooksRoute(app: FastifyInstance): Promise<void> {
   const toleranceSeconds = parseToleranceSeconds(loadServerEnv().WEBHOOK_TOLERANCE_SECONDS);

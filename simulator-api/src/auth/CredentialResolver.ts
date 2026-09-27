@@ -24,7 +24,7 @@ export const CLIENT_CREDENTIAL_HEADERS = [
 /**
  * La API apunta a una pasarela real que no es un sandbox conocido, y la petición no
  * trae credenciales propias completas. Contra producción las del servidor no se
- * prestan, porque cobrarían con la cuenta de quien desplegó la API (punto 68).
+ * prestan, porque cobrarían con la cuenta de quien desplegó la API (punto 69).
  */
 export class ClientCredentialsRequiredError extends Error {
   constructor(
@@ -180,7 +180,7 @@ export class CredentialResolver {
 
     // Sin webhookSecret: ni el del cliente ni el del servidor. Los webhooks se verifican
     // con el perfil del servidor (`getWebhookVerifier()`), y pegar aquí su secreto lo
-    // mezclaría con llaves ajenas, incluidas las de producción (punto 69).
+    // mezclaría con llaves ajenas, incluidas las de producción (punto 70).
     return credentials;
   }
 
@@ -233,7 +233,7 @@ export class CredentialResolver {
         if (!publicKey || !privateKey) return undefined;
 
         // Rapyd reutiliza su secret_key para webhooks, y firma además la URL registrada
-        // en su panel, que solo puede salir de la configuración (punto 66).
+        // en su panel, que solo puede salir de la configuración (punto 67).
         const creds: Credentials = { publicKey, privateKey, webhookSecret: privateKey };
         const webhookUrl = this.env.RAPYD_WEBHOOK_URL?.trim();
         if (webhookUrl) creds.webhookUrl = webhookUrl;

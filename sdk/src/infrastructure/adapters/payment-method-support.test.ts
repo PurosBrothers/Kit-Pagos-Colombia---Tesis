@@ -129,7 +129,7 @@ describe("pedir un método que la pasarela no implementa", () => {
 
   /**
    * Los códigos de PSE de `PseBankCode` sirven en Rapyd porque el adaptador los
-   * traduce (punto 67), pero un código de sandbox de otra pasarela no: un comercio
+   * traduce (punto 68), pero un código de sandbox de otra pasarela no: un comercio
    * que migra desde el sandbox de Wompi sin cambiarlo manda un número que no es
    * ninguna de las dos cosas. Rapyd responde a eso con
    * `ERROR_GET_PAYMENT_METHOD_TYPE` y un mensaje que no menciona de dónde sacar el

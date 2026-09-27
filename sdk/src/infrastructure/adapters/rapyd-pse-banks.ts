@@ -14,7 +14,7 @@ import { isPseBankCode, PseBankCode } from "../../domain/value-objects/PseBankCo
  * del banco: `DAVIBANK` es `co_pse_scotiabank_colpatria_bank` y `CREZCAMOS` es
  * `co_pse_crezcamos_mosi_bank`. Además, `co_bancolombia_bank`, sin `pse`, existe y
  * **no** es PSE: es una redirección de Safetypay. Por eso la tabla está escrita y no
- * calculada (punto 67).
+ * calculada (punto 68).
  */
 export const RAPYD_PSE_TYPES: Readonly<Record<PseBankCode, string>> = {
   [PseBankCode.BANCO_DE_BOGOTA]: "co_pse_banco_de_bogota_bank",

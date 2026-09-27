@@ -1157,7 +1157,7 @@ El caso de Rapyd trajo de regalo la confirmación de una decisión del punto 19:
 
 **Estado:** Resuelto para las cuatro pasarelas, con las cuatro medidas contra sus APIs de sandbox. La de Kushki se midió al final, cuando aparecieron sus credenciales de API, y lo que salió de ahí está en el punto 48: no confirmó la implementación, la corrigió en cuatro lugares.
 
-> **Revisado en el punto 67.** La decisión de no tener un catálogo propio de bancos se revirtió cuando se encontró que el código de compensación de ACH es un estándar publicado, y que tres de las cuatro pasarelas ya lo usan.
+> **Revisado en el punto 68.** La decisión de no tener un catálogo propio de bancos se revirtió cuando se encontró que el código de compensación de ACH es un estándar publicado, y que tres de las cuatro pasarelas ya lo usan.
 
 ---
 
@@ -1840,7 +1840,37 @@ Para prevenir fugas accidentales de secretos en terminales, consolas de Render o
 
 ---
 
-### 65. `POST /v1/api/webhooks/:gateway`: el secreto que elegía el atacante, una sola respuesta de rechazo y la prueba de cuerpo crudo que no detectaba nada
+### 65. Exposición REST de creación de pagos: preservación del discriminador de outcome, escala decimal exacta y validación originada en el SDK (issue #102)
+
+**Responsable:** Orduz / Prieto (issue #102).
+
+**Contexto.** El issue pedía implementar `POST /v1/api/payments` dentro del módulo `simulator-api/src/kit-pagos-api/`, exponiendo la operación central `KitPagos.createPayment(request: CreatePaymentRequest): Promise<PaymentResult>`. Dos propiedades del contrato del SDK condicionaban el diseño del endpoint: el retorno es una unión discriminada (`PaymentResult` = `TRANSACTION` o `REDIRECT_REQUIRED`), no una simple entidad `Transaction`; y los objetos de valor del SDK (`Amount`, `Currency`, `OrderReference`, `Payer`) validan invariantes de negocio directamente al construirse, sin que el endpoint deba reimplementar o duplicar reglas de validación.
+
+**Decisión 1: Preservación explícita del discriminador `outcome` y estado nativo `rawStatus`.**
+La respuesta REST no aplana la redirección en un campo opcional dentro de la transacción, sino que devuelve la misma unión discriminada por `outcome` que expone la biblioteca:
+- En `REDIRECT_REQUIRED`: `{ outcome: "REDIRECT_REQUIRED", redirect: { redirectUrl, gatewayTransactionId, rawStatus } }`.
+- En `TRANSACTION`: `{ outcome: "TRANSACTION", transaction, rawStatus }`.
+Ambos desenlaces responden con código HTTP `201 Created`, ya que en ambos el intento de pago fue registrado satisfactoriamente en el procesador. Se preserva `rawStatus` en ambos casos porque perder el estado nativo privaría al comercio de capacidad de depuración y auditoría.
+
+**Decisión 2: Tratamiento del monto (`amount`) como cadena decimal estricta.**
+El campo `amount` se recibe y transfiere como `string` sin parsearse a tipo `number` IEEE 754 de JavaScript. Conforme al punto 25, convertir la entrada a número reintroduciría la pérdida de precisión en los ceros a la derecha y afectaría la firma HMAC de pasarelas como Rapyd o los cálculos en centavos de Wompi.
+
+**Decisión 3: Validación de campos obligatorios delegada al SDK mediante función pura de módulo.**
+Para satisfacer el criterio de no duplicar validaciones en el endpoint mientras se reportan los campos faltantes con HTTP 400 (`INVALID_REQUEST`):
+- Se incorporó la función pura `assertValidCreatePaymentRequest` en `sdk/src/infrastructure/facade/KitPagos.ts`. Al ser una función de módulo externa a la clase `KitPagos`, no altera las métricas CK (`MAX_CC` se mantiene en 9, `WMC` en 15).
+- Cuando faltan campos obligatorios (`amount`, `currency`, `orderReference`, `payer`), el SDK lanza `KitPagosError(INVALID_REQUEST)` listando exactamente los nombres faltantes.
+- En el endpoint, los objetos de valor se instancian con los datos provistos; si los constructores del dominio detectan valores inválidos (como `Amount` negativo, divisa no ISO 4217 o `Payer` sin correo), se captura el error y se traduce a `KitPagosError(INVALID_REQUEST)`.
+- El manejador central `app.setErrorHandler` traduce automáticamente todos los `KitPagosError` a sus códigos HTTP correspondientes (400 para `INVALID_REQUEST` y `UNSUPPORTED_OPERATION`, 401 para credenciales). El endpoint no contiene bloques de manejo de errores HTTP propios.
+
+**Decisión 4: Ausencia total de condicionales por pasarela en el endpoint.**
+El endpoint no contiene ramas `if/switch` por pasarela. La resolución de instancias se delega a `KitPagosProvider.getKitPagos(gateway, request.headers)`, y las restricciones de pasarela (como el token de tarjeta requerido en Wompi o los campos específicos de PSE en Mercado Pago) son verificadas por los adaptadores del SDK. Del mismo modo, si se solicita un método de pago no soportado (ej. `CRYPTO`), el SDK lanza `KitPagosError(UNSUPPORTED_OPERATION)` respondiendo 400 y evitando cobros silenciosos con métodos por omisión (punto 44).
+
+
+**Lo medido.** 17 suites y 193 pruebas pasando en `simulator-api` (18 pruebas nuevas en `payments.test.ts`), 35 suites y 587 pruebas pasando en `sdk` (incluyendo la prueba de campos faltantes en `KitPagos.test.ts`). Linter sin errores y métricas CK en verde en las 31 clases.
+
+**Estado:** Resuelto en código (`sdk/src/infrastructure/facade/KitPagos.ts`, `simulator-api/src/kit-pagos-api/routes/payments.ts`, `simulator-api/src/kit-pagos-api/index.ts`).
+
+### 66. `POST /v1/api/webhooks/:gateway`: el secreto que elegía el atacante, una sola respuesta de rechazo y la prueba de cuerpo crudo que no detectaba nada
 
 **Responsable:** Orduz (issue #104).
 
@@ -1874,18 +1904,18 @@ Reordenar las claves no invalida una firma de Wompi ni de Mercado Pago. El parse
 
 **Pendientes que dejó este punto, cerrados en el mismo PR:**
 
-- **Rapyd** (el SDK exigía una cabecera `x-webhook-url` que Rapyd no envía) y **Wompi** (el SDK resolvía `signature.properties` desde la raíz del cuerpo) resultaron ser defectos confirmados contra la documentación oficial, junto con otros dos que no se sospechaban. Están en el punto 66.
+- **Rapyd** (el SDK exigía una cabecera `x-webhook-url` que Rapyd no envía) y **Wompi** (el SDK resolvía `signature.properties` desde la raíz del cuerpo) resultaron ser defectos confirmados contra la documentación oficial, junto con otros dos que no se sospechaban. Están en el punto 67.
 - **Autenticación:** el endpoint está bajo `/v1/api`, así que exige el Bearer del punto 63 cuando `API_AUTH_TOKEN` está definido. **Decisión:** se mantiene. El endpoint es verificación como servicio —el comercio recibe el webhook y le pregunta a la API si es auténtico—, no un receptor: no guarda ni reenvía el evento, así que una pasarela que apuntara directamente a él recibiría el 200 y nadie más se enteraría. Se descartó eximir la ruta del Bearer por eso mismo: abriría un endpoint público sin ningún consumidor del resultado. El contrato de reenvío (cuerpo byte a byte, cabeceras originales y query string) quedó documentado en `docs/02-arquitectura/3-api-de-simulacion.md`.
 
 **Lo medido.** `npx jest` en `simulator-api`: 17 suites y 197 pruebas en verde (las 175 anteriores sin cambios, más 22 nuevas en `webhooks.test.ts`). `npm run lint`, `npx tsc --noEmit` y el `typecheck` de `examples` sin errores. Las tres mutaciones descritas se revirtieron después de medirlas.
 
-**Estado:** Resuelto en código (`simulator-api/src/kit-pagos-api/routes/webhooks.ts`, `simulator-api/src/kit-pagos-api/gateway-param.ts`). Los pendientes de Rapyd y Wompi se cerraron en el punto 66.
+**Estado:** Resuelto en código (`simulator-api/src/kit-pagos-api/routes/webhooks.ts`, `simulator-api/src/kit-pagos-api/gateway-param.ts`). Los pendientes de Rapyd y Wompi se cerraron en el punto 67.
 
-### 66. Las verificaciones de Rapyd y Wompi no aceptaban ningún webhook real, y las pruebas pasaban porque firmaban con la misma fórmula
+### 67. Las verificaciones de Rapyd y Wompi no aceptaban ningún webhook real, y las pruebas pasaban porque firmaban con la misma fórmula
 
 **Responsable:** Orduz (issue #104).
 
-**Contexto.** El punto 65 dejó dos sospechas sobre el SDK: la cabecera `x-webhook-url` de Rapyd y las rutas de `signature.properties` de Wompi. Al investigarlas contra la documentación oficial, el 26 de septiembre de 2026, aparecieron cuatro defectos en la verificación de webhooks. Ninguno lo detectaba la suite, por una sola causa: **las pruebas firmaban con la misma fórmula que el verificador**. El helper de pruebas del simulador que se escribió en el punto 65 cayó en lo mismo, aunque su comentario decía que firmaba «por separado del SDK»: copió las suposiciones en vez de la documentación.
+**Contexto.** El punto 66 dejó dos sospechas sobre el SDK: la cabecera `x-webhook-url` de Rapyd y las rutas de `signature.properties` de Wompi. Al investigarlas contra la documentación oficial, el 26 de septiembre de 2026, aparecieron cuatro defectos en la verificación de webhooks. Ninguno lo detectaba la suite, por una sola causa: **las pruebas firmaban con la misma fórmula que el verificador**. El helper de pruebas del simulador que se escribió en el punto 66 cayó en lo mismo, aunque su comentario decía que firmaba «por separado del SDK»: copió las suposiciones en vez de la documentación.
 
 Lo más incómodo es que la documentación del repositorio ya tenía bien dos de los cuatro detalles. `docs/01-producto/2-conceptos-tecnicos.md` advertía que Rapyd codifica en base64 el texto hexadecimal y que `digest("base64")` produce otra firma, y `ubiquitous-language.md` decía que el `data.id` de Mercado Pago sale del query string en minúsculas y que la URL de Rapyd es configuración. El código se apartó de eso y nadie lo contrastó.
 
@@ -1897,7 +1927,7 @@ Lo más incómodo es que la documentación del repositorio ya tenía bien dos de
 
 - **Por qué no puede venir de la petición.** La URL entra en la firma para atar el webhook a su destino. Si el verificador la aceptara de la petición, un webhook capturado para otro endpoint del mismo comercio se podría reenviar aquí declarando la URL original, y verificaría. Por eso no queda un respaldo a la cabecera: una prueba verifica que un `x-webhook-url` con otra URL se ignora.
 - **Por qué no se normaliza.** Rapyd firma la cadena exacta del panel; normalizar la barra final o el puerto produciría otra firma. Se valida que sea una URL absoluta `http` o `https` sin espacios alrededor, y se usa tal cual.
-- **Qué pasa si falta.** El manejador lanza `INVALID_CREDENTIALS` y la fachada lo deja pasar sin convertirlo en `MALFORMED_RESPONSE`: es un error de configuración del comercio, y reportarlo como webhook malformado le escondería dónde está el problema. En el simulador ese código se suma a los rechazos del punto 65 y responde el mismo 401 genérico, porque decirle al emisor qué configuración falta revelaría qué pasarelas están configuradas.
+- **Qué pasa si falta.** El manejador lanza `INVALID_CREDENTIALS` y la fachada lo deja pasar sin convertirlo en `MALFORMED_RESPONSE`: es un error de configuración del comercio, y reportarlo como webhook malformado le escondería dónde está el problema. En el simulador ese código se suma a los rechazos del punto 66 y responde el mismo 401 genérico, porque decirle al emisor qué configuración falta revelaría qué pasarelas están configuradas.
 - **La URL no es secreta**, así que no hace falta redactarla del log; tampoco se registra.
 - **El cambio rompe a quien usaba la cabecera**, pero nadie podía estar usándola con éxito: los defectos 1 y 2 hacían fallar toda firma real de Rapyd.
 
@@ -1923,9 +1953,9 @@ Lo más incómodo es que la documentación del repositorio ya tenía bien dos de
 
 **Estado:** Resuelto en código para Rapyd, Wompi y el `data.id` de Mercado Pago, con evidencia de documentación oficial y pendiente de medir contra los sandboxes. El `status` sin firmar de Mercado Pago queda abierto. La versión 0.1.0 publicada en npm conserva los cuatro defectos.
 
-> **Revisado en el punto 69.** El `status` sin firmar de Mercado Pago se cerró: el SDK ya no lee estados del cuerpo. La medición contra los sandboxes sigue pendiente, con el método ya probado.
+> **Revisado en el punto 70.** El `status` sin firmar de Mercado Pago se cerró: el SDK ya no lee estados del cuerpo. La medición contra los sandboxes sigue pendiente, con el método ya probado.
 
-### 67. Los bancos de PSE tienen un código estándar, y el SDK pasó a exponerlo
+### 68. Los bancos de PSE tienen un código estándar, y el SDK pasó a exponerlo
 
 **Responsable:** Orduz (issue #104, a pedido de la dirección del trabajo).
 
@@ -1958,9 +1988,9 @@ Dos pruebas de contrato nuevas (`npm run test:sandbox`) afirman que la lista de 
 
 **Riesgo nombrado.** Wompi no valida `financial_institution_code` al crear el pago (punto 43): en su sandbox, un código del catálogo no falla al crear, sino después. En producción de Wompi y de Kushki el uso del código de compensación está documentado pero no medido, porque el proyecto no tiene credenciales de producción.
 
-**Estado:** Resuelto en código (`PseBankCode.ts`, `rapyd-pse-banks.ts`). Queda sin medir que Wompi y Kushki acepten el código de compensación en producción; el punto 69 registra por qué no se pudo con las credenciales del proyecto.
+**Estado:** Resuelto en código (`PseBankCode.ts`, `rapyd-pse-banks.ts`). Queda sin medir que Wompi y Kushki acepten el código de compensación en producción; el punto 70 registra por qué no se pudo con las credenciales del proyecto.
 
-### 68. La API prestaba las credenciales del servidor contra cualquier URL, incluida la de producción
+### 69. La API prestaba las credenciales del servidor contra cualquier URL, incluida la de producción
 
 **Responsable:** Orduz (issue #104).
 
@@ -1990,7 +2020,7 @@ Tres alternativas quedaron descartadas:
 - **Detectar producción por el prefijo de la llave.** Wompi distingue `pub_test_` de `pub_prod_`, pero las llaves de prueba de Mercado Pago del proyecto empiezan con `APP_USR-`, igual que las de producción, y Rapyd y Kushki no tienen prefijo.
 - **Una variable para prestar las credenciales también en producción.** Se descartó por pedido de Joan: contra producción, siempre las del desarrollador.
 
-La verificación de webhooks queda fuera de la regla, con su propio acceso (`getWebhookVerifier()`): no llama a la pasarela, y el secreto sale solo del servidor por diseño (punto 65).
+La verificación de webhooks queda fuera de la regla, con su propio acceso (`getWebhookVerifier()`): no llama a la pasarela, y el secreto sale solo del servidor por diseño (punto 66).
 
 **Lo medido.** 227 pruebas en `simulator-api`: la clasificación de URL (incluido un host `sandbox.wompi.co.evil.example`, que cuenta como producción), la regla en el proveedor y la regla sobre HTTP con una ruta de prueba que usa `gatewayClientFor()`, como la usarán #102 y #103. Dos mutaciones: quitar el rechazo en producción hace fallar 4 pruebas, y quitar la exposición de la cabecera en CORS hace fallar 1.
 
@@ -1998,23 +2028,23 @@ La verificación de webhooks queda fuera de la regla, con su propio acceso (`get
 
 **Estado:** Resuelto en código (`targetEnvironment.ts`, `KitPagosProvider.resolveClient()`, `gateway-client.ts`). Las rutas de #102 y #103 tienen que pasar por `gatewayClientFor()`; si llaman a `resolveClient()` directamente, pierden la advertencia.
 
-> **Ampliado en el punto 69.** La advertencia pasó a viajar también en el cuerpo, y la regla se midió contra los hosts reales.
+> **Ampliado en el punto 70.** La advertencia pasó a viajar también en el cuerpo, y la regla se midió contra los hosts reales.
 
-### 69. Cierre de lo abierto en #104: el estado sin firmar de Mercado Pago, la advertencia del sandbox y lo que no se pudo medir
+### 70. Cierre de lo abierto en #104: el estado sin firmar de Mercado Pago, la advertencia del sandbox y lo que no se pudo medir
 
 **Responsable:** Orduz (issue #104).
 
-**Contexto.** Antes de hacer commit, Joan pidió cerrar lo que los puntos 66 a 68 dejaron abierto y verificarlo con lo que estuviera al alcance real: el `status` sin firmar de Mercado Pago, la medición de los webhooks contra los sandboxes, los códigos ACH de Wompi y Kushki en producción y una advertencia más explícita cuando el sandbox usa las credenciales del servidor.
+**Contexto.** Antes de hacer commit, Joan pidió cerrar lo que los puntos 67 a 69 dejaron abierto y verificarlo con lo que estuviera al alcance real: el `status` sin firmar de Mercado Pago, la medición de los webhooks contra los sandboxes, los códigos ACH de Wompi y Kushki en producción y una advertencia más explícita cuando el sandbox usa las credenciales del servidor.
 
 **Mercado Pago: el SDK deja de leer estados del cuerpo.** La documentación oficial, consultada el 27 de septiembre de 2026, muestra dos formatos. La notificación de pagos trae `action`, `type`, `data.id` y metadatos, sin estado. La de la Orders API trae el estado en `data.status`, pero fuera de la firma. El manejador leía un `status` en la raíz del cuerpo, que no aparece en ninguno de los dos formatos. En tráfico real el evento ya salía siempre `PENDING`, y solo un campo inyectado lo cambiaba. **Decisión:** `parse()` reporta siempre `PENDING`, y el estado se confirma con `getPaymentStatus()`, como ya indicaba la guía. Se descartaron dos alternativas. Un método asíncrono que verifique y consulte a la vez agrega API pública y haría que la ruta de webhooks del simulador llamara a la pasarela. Una marca de «estado no verificado» en `WebhookEvent` mantiene a la vista un dato en el que no se puede confiar. El vocabulario de la Orders API (`action_required`, `processed`, `expired`) que el punto 46 había sumado al webhook se cubre ahora en `ResponseNormalizer.test.ts`, porque solo lo traduce la consulta.
 
 **La advertencia del sandbox pasa también al cuerpo.** Una cabecera es fácil de pasar por alto. **Decisión:** un hook `preSerialization`, registrado en el plugin de `/v1/api`, agrega `warnings: [{ code: "SERVER_SANDBOX_CREDENTIALS_USED", message }]` al JSON de toda respuesta que usó el respaldo, incluidas las de error, porque una llamada al sandbox que falla es justo cuando el desarrollador necesita saber con qué cuenta se hizo. Las rutas de #102 y #103 lo heredan por pasar por `gatewayClientFor()`. Al arrancar, el log registra por pasarela a dónde apunta y qué regla aplica, en `info` para el simulador y en `warn` para el sandbox y la producción.
 
-**Las credenciales del cliente ya no llevan el `webhookSecret` del servidor.** `CredentialResolver` se lo pegaba desde antes del punto 65. Desde ese punto nada lo usa, porque los webhooks se verifican con `getWebhookVerifier()`, y mezclaba el secreto del servidor con llaves ajenas, incluidas las de producción. En Rapyd ese secreto es el `secret_key` del servidor.
+**Las credenciales del cliente ya no llevan el `webhookSecret` del servidor.** `CredentialResolver` se lo pegaba desde antes del punto 66. Desde ese punto nada lo usa, porque los webhooks se verifican con `getWebhookVerifier()`, y mezclaba el secreto del servidor con llaves ajenas, incluidas las de producción. En Rapyd ese secreto es el `secret_key` del servidor.
 
 **Lo medido, el 27 de septiembre de 2026.**
 
-La regla del punto 68 contra los hosts reales, con un sondeo que apuntó el proveedor a cada URL y espió `fetch`:
+La regla del punto 69 contra los hosts reales, con un sondeo que apuntó el proveedor a cada URL y espió `fetch`:
 
 | Destino | Petición | Resultado | Llamadas de red |
 |---|---|---|---|

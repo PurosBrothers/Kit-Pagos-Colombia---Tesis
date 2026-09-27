@@ -7,7 +7,7 @@ import { gatewayClientFor, logCredentialPolicy } from "../src/kit-pagos-api/gate
 import { KitPagosProvider } from "../src/services/KitPagosProvider";
 
 /**
- * La regla de credenciales vista desde HTTP (puntos 68 y 69).
+ * La regla de credenciales vista desde HTTP (puntos 69 y 70).
  *
  * Todavía no hay una ruta de `/v1/api` que llame a la pasarela —llegan con los issues
  * #102 y #103—, así que la prueba monta dos que usan `gatewayClientFor()` como la usarán
