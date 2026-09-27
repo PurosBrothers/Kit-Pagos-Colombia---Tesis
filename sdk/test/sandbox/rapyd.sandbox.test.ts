@@ -9,6 +9,7 @@ import {
   buildRapydHeaders,
   serializeBody,
 } from "../../src/infrastructure/adapters/rapyd-signature";
+import { RAPYD_PSE_TYPES } from "../../src/infrastructure/adapters/rapyd-pse-banks";
 import { describeSandbox, uniqueReference } from "./sandbox-env";
 
 /** Contrato de Rapyd, medido contra `sandboxapi.rapyd.net`. */
@@ -33,6 +34,20 @@ describeSandbox(Gateway.RAPYD, (credentials, baseUrl) => {
       expect(bank.code.length).toBeGreaterThan(0);
       expect(typeof bank.name).toBe("string");
     }
+  });
+
+  /**
+   * La tabla de traducción tiene que seguir cubriendo lo que Rapyd publica, en los dos
+   * sentidos. Si Rapyd suma un banco, sale acá sin `achCode`; si renombra o retira uno,
+   * un código de `PseBankCode` quedaría traducido a un método que ya no existe (punto 67).
+   */
+  it("should list exactly the PSE methods of the translation table", async () => {
+    const banks = await kitPagos.getPseBanks();
+
+    expect(banks.map((bank) => bank.code).sort()).toEqual(
+      [...Object.values(RAPYD_PSE_TYPES)].sort(),
+    );
+    expect(banks.every((bank) => bank.achCode !== undefined)).toBe(true);
   });
 
   /**

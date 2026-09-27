@@ -6,6 +6,7 @@ import { Currency } from "../../src/domain/value-objects/Currency";
 import { OrderReference } from "../../src/domain/value-objects/OrderReference";
 import { Payer } from "../../src/domain/value-objects/Payer";
 import { PaymentMethod } from "../../src/domain/value-objects/PaymentMethod";
+import { PseBankCode } from "../../src/domain/value-objects/PseBankCode";
 import { describeSandbox, uniqueReference } from "./sandbox-env";
 import { tokenizeMercadoPagoCard } from "./tokenize";
 
@@ -26,6 +27,20 @@ describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
       expect(bank.code.length).toBeGreaterThan(0);
       expect(typeof bank.name).toBe("string");
     }
+  });
+
+  /**
+   * Mercado Pago identifica a los bancos con el código de compensación, así que su lista
+   * es la referencia viva de `PseBankCode`. Si ACH habilita o retira una entidad, esto lo
+   * dice (punto 67).
+   */
+  it("should list exactly the entities of PseBankCode, each one with its achCode", async () => {
+    const banks = await kitPagos.getPseBanks();
+
+    expect(banks.map((bank) => bank.code).sort()).toEqual(
+      [...Object.values(PseBankCode)].sort(),
+    );
+    expect(banks.every((bank) => bank.achCode === bank.code)).toBe(true);
   });
 
   /**

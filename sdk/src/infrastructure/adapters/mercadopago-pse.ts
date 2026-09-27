@@ -75,7 +75,7 @@ import type { PendingRedirect } from "../../domain/value-objects/PaymentResult";
 import type { PayerKind } from "../../domain/value-objects/PaymentMethod";
 import type { Amount } from "../../domain/value-objects/Amount";
 import type { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
-import type { PseBank } from "../../domain/value-objects/PseBank";
+import { describePseBank, type PseBank } from "../../domain/value-objects/PseBank";
 
 /**
  * Naturaleza jurídica tal como la nombra Mercado Pago.
@@ -353,7 +353,8 @@ export function isOrderId(gatewayTransactionId: string): boolean {
  *
  * Que sean 47 no es casualidad: Rapyd expone exactamente 47 métodos
  * `co_pse_{banco}_bank`. Las dos están leyendo el mismo registro de entidades de
- * ACH Colombia, cada una con su forma.
+ * ACH Colombia, cada una con su forma. El `id` de Mercado Pago es el código de
+ * compensación, así que es a la vez `code` y `achCode` (punto 67).
  *
  * Si la entrada `pse` no aparece, la lista vuelve vacía en vez de fallar: que una
  * cuenta no tenga PSE habilitado es una configuración posible del comercio, no una
@@ -387,6 +388,6 @@ export function parseMercadoPagoPseBanks(rawResponse: unknown): PseBank[] {
     }
 
     const name = bank.description;
-    return [{ code, name: typeof name === "string" ? name : code }];
+    return [describePseBank(code, typeof name === "string" ? name : code)];
   });
 }

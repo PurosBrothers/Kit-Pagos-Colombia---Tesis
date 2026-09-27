@@ -1,3 +1,5 @@
+import { isPseBankCode, type PseBankCode } from "./PseBankCode";
+
 /**
  * Una entidad financiera habilitada para cobrar por PSE.
  *
@@ -10,23 +12,23 @@
  * esconderle uno que sí— o hablarle directo a la pasarela, y ahí pierde lo único
  * que el SDK le prometía, que es no tener que saber con cuál está hablando.
  *
- * ## Por qué `code` es opaco y está bien que lo sea
+ * ## Dos códigos: el de la pasarela y el de PSE
  *
- * Las cuatro pasarelas identifican a los bancos de formas que no se parecen:
- * Wompi y Mercado Pago usan números (`"1051"`), Kushki un `bankId` y Rapyd el
- * nombre del método de pago entero (`"co_pse_bancolombia_bank"`), porque en Rapyd
- * PSE son 47 métodos distintos y no uno con un campo de banco (punto 19).
+ * Las cuatro pasarelas identifican a los bancos de formas que no se parecen.
+ * Mercado Pago usa el código de compensación de ACH (`"1051"`); Wompi y Kushki
+ * también en producción, pero sus sandboxes tienen bancos ficticios con otros
+ * códigos (`"1"`, `"0001"`); y Rapyd usa el nombre del método de pago entero
+ * (`"co_pse_bancolombia_bank"`), porque en Rapyd PSE son 47 métodos distintos y no
+ * uno con un campo de banco (punto 19).
  *
- * El SDK **no** traduce eso a un catálogo propio de bancos colombianos, y la razón
- * es que no hace falta: el `code` que sale de acá solo se usa para volver a
- * entrar al SDK, en `PaymentMethod.pse({ bankCode })`. El comercio nunca lo
- * interpreta, lo pasa. Un catálogo propio agregaría una traducción en los dos
- * sentidos, un mapa que mantener cada vez que una pasarela suma una entidad, y una
- * fuente nueva de desacuerdos, para resolver un problema que nadie tiene.
- *
- * Lo que sí hay que respetar es que un `code` de una pasarela **no sirve en otra**.
- * Los adaptadores lo verifican y fallan con un mensaje que lo dice, en vez de
- * dejar que la pasarela responda un error propio y confuso.
+ * `code` es el de la pasarela, sin tocar, y es el único que existe para todos los
+ * bancos de la lista, incluidos los de prueba. `achCode` es el código de PSE, que
+ * es el mismo en las cuatro, y existe cuando el banco está en `PseBankCode`. Un
+ * comercio que solo quiera Bancolombia no necesita la lista: le pasa
+ * `PseBankCode.BANCOLOMBIA` a `PaymentMethod.pse()`. La lista sigue haciendo falta
+ * para armar el selector del pagador, y `achCode` sirve para, por ejemplo,
+ * destacar los bancos más usados sin depender de cómo los nombra cada pasarela
+ * (punto 67).
  *
  * ## Por qué es una interfaz y no una clase
  *
@@ -51,4 +53,22 @@ export interface PseBank {
    * el SDK no debería disimular.
    */
   name: string;
+
+  /**
+   * Código de compensación de PSE, igual en las cuatro pasarelas. Falta cuando la
+   * entidad no está en `PseBankCode`, como los bancos ficticios de los sandboxes de
+   * Wompi y Kushki.
+   */
+  achCode?: PseBankCode;
+}
+
+/**
+ * Arma un `PseBank` y agrega el código de PSE solo si `achCode` es del catálogo.
+ *
+ * Por omisión `achCode` es el mismo `code`, que es el caso de las pasarelas que
+ * usan el código de compensación como identificador propio. Rapyd le pasa el que
+ * resulta de su tabla de traducción.
+ */
+export function describePseBank(code: string, name: string, achCode: string = code): PseBank {
+  return isPseBankCode(achCode) ? { code, name, achCode } : { code, name };
 }
