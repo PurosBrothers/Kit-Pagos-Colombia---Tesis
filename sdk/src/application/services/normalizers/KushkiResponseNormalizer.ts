@@ -17,6 +17,7 @@ import {
   parsePayload,
   mapValueObjectError,
   amountToString,
+  atCurrencyScale,
   firstNonEmptyString,
 } from "./payload-utils";
 import {
@@ -74,10 +75,13 @@ export class KushkiResponseNormalizer implements GatewayResponseNormalizer {
 
     const amount = mapValueObjectError(
       () =>
-        new Amount(amountToString(amountData.subtotalIva0))
-          .add(new Amount(amountToString(amountData.subtotalIva)))
-          .add(new Amount(amountToString(amountData.iva)))
-          .add(new Amount(amountToString(amountData.ice))),
+        atCurrencyScale(
+          new Amount(amountToString(amountData.subtotalIva0))
+            .add(new Amount(amountToString(amountData.subtotalIva)))
+            .add(new Amount(amountToString(amountData.iva)))
+            .add(new Amount(amountToString(amountData.ice))),
+          currency,
+        ),
       Gateway.KUSHKI,
       rawResponse,
       "Malformed amount in Kushki response",

@@ -81,7 +81,7 @@ describe("MercadoPagoAdapter", () => {
       expect(transaction.isApproved()).toBe(true);
       expect(transaction.gatewayTransactionId.value).toBe("1234567890");
       expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.MERCADOPAGO);
-      expect(transaction.amount.getValue()).toBe("50000");
+      expect(transaction.amount.getValue()).toBe("50000.00");
     });
 
     it("autentica con Bearer token usando privateKey de las credenciales", async () => {
@@ -594,7 +594,7 @@ describe("MercadoPagoAdapter PSE", () => {
 
       expect(transaction.isPending()).toBe(true);
       expect(transaction.rawStatus).toBe("action_required");
-      expect(transaction.amount.getValue()).toBe("150000");
+      expect(transaction.amount.getValue()).toBe("150000.00");
       expect(transaction.currency.getCode()).toBe("COP");
       expect(transaction.orderReference.getValue()).toBe("ord-mp-pse-1");
     });

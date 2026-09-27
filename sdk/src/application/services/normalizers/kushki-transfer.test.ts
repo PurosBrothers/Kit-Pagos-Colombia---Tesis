@@ -121,7 +121,7 @@ describe("normalizeKushkiTransfer", () => {
       "7a932344733646f3b3a48187f8715e8e",
     );
     expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.KUSHKI);
-    expect(transaction.amount.getValue()).toBe("50000");
+    expect(transaction.amount.getValue()).toBe("50000.00");
     expect(transaction.currency.getCode()).toBe("COP");
     expect(transaction.payer.email).toBe("comprador@example.com");
   });

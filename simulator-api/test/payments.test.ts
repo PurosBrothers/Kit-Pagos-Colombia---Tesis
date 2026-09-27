@@ -107,14 +107,12 @@ describe("POST /v1/api/payments (issue #102)", () => {
       const response = await pay(payload);
 
       expect(response.statusCode).toBe(201);
-      const data = response.json();
-      expect(data).toMatchObject({
+      // Las dos pasarelas reportan el monto como número; el SDK lo devuelve con
+      // los decimales de COP, igual que Wompi (punto 72).
+      expect(response.json()).toMatchObject({
         outcome: "TRANSACTION",
-        transaction: { orderReference: payload.orderReference },
+        transaction: { orderReference: payload.orderReference, amount },
       });
-      // El monto de la respuesta es el que reporta la pasarela, como número y sin
-      // los ceros de la derecha: la escala exacta solo se garantiza de ida (punto 71).
-      expect(Number(data.transaction.amount)).toBe(Number(amount));
     });
 
     it("should default an omitted paymentMethod to card in Rapyd, which requires a redirect", async () => {

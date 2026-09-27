@@ -2086,7 +2086,9 @@ Se descartó la alternativa de tolerar y registrar una advertencia, como hace el
 
 **Decisión 3: la prueba no hereda `process.env`.** `payments.test.ts` partía de `...process.env`, y un `WOMPI_BASE_URL` en la terminal ganaba sobre `SIMULATOR_SDK_BASE_URL`. En el árbol integrado, con `WOMPI_BASE_URL=https://production.wompi.co/v1` exportado, fallaban 11 de las 18 pruebas: la regla del punto 69 las rechazaba con 401. En la rama del #118, sin esa regla, las mismas peticiones habrían salido hacia el host configurado. Además, la ruta usa ahora el `parseGateway()` compartido de `gateway-param.ts`. Así una pasarela desconocida responde el mismo 400 que en el resto de `/v1/api`, y ya no se registra como error de `Gateway.WOMPI`.
 
-**Hallazgo sin corregir: la escala del monto se garantiza de ida, no de vuelta.** La Decisión 2 del punto 65 protege el `amount` de la petición. El de la respuesta es el que reporta la pasarela: Mercado Pago y Kushki lo reportan como número, y `"75000.00"` vuelve como `"75000"`. La prueba del punto 65 solo lo verificaba en Wompi, donde los centavos devuelven los dos decimales. No es un error de dinero, porque el valor es el mismo, pero sí contradice lo que la documentación prometía. Se dejó documentado en `3-api-de-simulacion.md`, y la prueba compara el valor y no el texto.
+**Hallazgo sin corregir: la escala del monto se garantiza de ida, no de vuelta.** La Decisión 2 del punto 65 protege el `amount` de la petición. El de la respuesta es el que reporta la pasarela: Mercado Pago y Kushki lo reportan como número, y `"75000.00"` vuelve como `"75000"`. La prueba del punto 65 solo lo verificaba en Wompi, donde los centavos devuelven los dos decimales. No es un error de dinero, porque el valor es el mismo, pero sí contradice lo que la documentación prometía.
+
+> **Revisado en el punto 72.** Joan decidió corregirlo en el mismo PR: el SDK devuelve ahora el monto con los decimales de la divisa en las cuatro pasarelas.
 
 **Lo medido (27 de septiembre de 2026).**
 
@@ -2096,7 +2098,32 @@ Se descartó la alternativa de tolerar y registrar una advertencia, como hace el
 - Cinco mutaciones sobre la ruta hacen fallar al menos una prueba cada una: `resolveClient()` en lugar de `gatewayClientFor()`, y volver a descartar el `taxBreakdown`, las cuotas, el `payerKind` o el `type`.
 - `sdk`: 38 suites y 626 pruebas; `test:sandbox`, 4 suites y 18 pruebas contra los sandboxes reales; lint y métricas CK sin errores. `simulator-api`: 20 suites y 259 pruebas; lint y `tsc` sin errores. `examples`: typecheck sin errores.
 
-**Estado:** Resuelto en código (`simulator-api/src/kit-pagos-api/routes/payments.ts`, `simulator-api/test/payments.test.ts`). La pérdida de escala en la respuesta queda documentada, sin corregir.
+**Estado:** Resuelto en código (`simulator-api/src/kit-pagos-api/routes/payments.ts`, `simulator-api/test/payments.test.ts`). La pérdida de escala en la respuesta se corrigió en el punto 72.
+
+### 72. El mismo cobro se leía distinto según la pasarela: el monto de la respuesta con los decimales de la divisa
+
+**Responsable:** Orduz (issue #104, a partir de la revisión del PR #118).
+
+**Contexto.** El punto 71 encontró que un cobro de `"75000.00"` volvía como `"75000"` en Mercado Pago y Kushki, y como `"75000.00"` en Wompi. Al revisar los cuatro normalizadores apareció la causa. Wompi construye el monto con `Amount.fromMinorUnits()` a partir de `amount_in_cents`, que siempre da los dos decimales de COP. Mercado Pago (`transaction_amount`) y Kushki (la suma de sus componentes de IVA) lo reciben como número JSON, y Rapyd (`amount`) puede recibirlo así. `Amount` conserva la escala tal como se escribió. El número ya perdió los ceros antes de llegar al SDK. `payload-utils.ts` lo decía así: «no es algo que el SDK pueda arreglar del lado entrante».
+
+**Decisión: el normalizador lleva el monto a los decimales que su divisa tiene según ISO 4217.** La función de módulo `atCurrencyScale()` de `payload-utils.ts` rellena con ceros hasta `currency.getMinorUnitExponent()`, y la usan las cuatro rutas que construyen el monto desde un número: Mercado Pago, Rapyd, la tarjeta de Kushki y la transferencia de Kushki. Es una función de módulo y no un método de `Amount` por el criterio del punto 34: no cuesta RFC a ninguna clase.
+
+Se descartaron dos alternativas:
+
+- **Repetir la escala de la petición.** Es la obvia desde `POST /v1/api/payments`, que tiene el `amount` original a mano. Pero `getPaymentStatus()` y la conciliación de webhooks no tienen petición, así que el monto seguiría dependiendo de la operación que lo trajo.
+- **Dejarlo como está y comparar por valor.** `Amount.equals()` ya compara por valor, y el ejemplo `gateway-interchangeability.ts` lo usa. Pero el comercio que imprime, guarda o concilia por texto vería dos formas del mismo cobro según la pasarela. La promesa del SDK es que cambiar de pasarela no cambia lo que el comercio lee.
+
+**Qué no hace.** Nunca quita decimales: si una pasarela reportara más de los que admite la divisa, el monto queda como llegó, en vez de redondearse sin avisar. Las divisas de exponente 3 siguen fuera del alcance, igual que en `Amount` (su `MAX_SCALE` es 2).
+
+**Lo medido (27 de septiembre de 2026).**
+
+- Diez aserciones fijaban el monto sin decimales (`"50000"`, `"150000"`) en pruebas de Mercado Pago, Rapyd y Kushki. Se actualizaron a `"50000.00"` y `"150000.00"`; son exactamente las que el cambio debía mover, y ninguna otra falló.
+- `payload-utils.test.ts`, nuevo, tiene 5 pruebas. `payments.test.ts` vuelve a comparar el texto exacto del monto en Mercado Pago y Kushki.
+- Una mutación que hace que `atCurrencyScale()` devuelva el monto sin tocarlo hace fallar 12 pruebas del SDK.
+- `gateway-interchangeability.ts` contra el simulador imprime `150000.00 COP` en las cuatro filas. Antes, Mercado Pago y Kushki imprimían `150000 COP`, y así estaba pegado en `docs/05-ejemplos/`. Los 10 ejemplos no interactivos terminan con código 0.
+- `sdk`: 39 suites y 631 pruebas; `test:sandbox`, 4 suites y 18 pruebas contra los sandboxes reales; lint y métricas CK sin errores (31 clases dentro de los umbrales). `simulator-api`: 20 suites y 259 pruebas; lint y `tsc` sin errores. `examples`: typecheck sin errores.
+
+**Estado:** Resuelto en código (`sdk/src/application/services/normalizers/payload-utils.ts`, usado por `MercadoPagoResponseNormalizer`, `RapydResponseNormalizer`, `KushkiResponseNormalizer` y `kushki-transfer.ts`).
 
 ---
 

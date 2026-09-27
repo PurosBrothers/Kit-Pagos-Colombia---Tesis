@@ -910,7 +910,7 @@ describe("KitPagos", () => {
         expect(transaction.isApproved()).toBe(true);
         expect(transaction.getStatus()).toBe("APPROVED");
         expect(transaction.rawStatus).toBe("approved");
-        expect(transaction.amount.getValue()).toBe("150000");
+        expect(transaction.amount.getValue()).toBe("150000.00");
         expect(transaction.currency.getCode()).toBe("COP");
         expect(transaction.orderReference.getValue()).toBe("ORDER-MP-99");
         expect(transaction.payer.email).toBe("cliente@example.com");

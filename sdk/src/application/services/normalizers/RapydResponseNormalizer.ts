@@ -12,6 +12,7 @@ import {
   requireData,
   mapValueObjectError,
   amountToString,
+  atCurrencyScale,
 } from "./payload-utils";
 
 /** Email de relleno cuando la respuesta no trae `receipt_email`. */
@@ -48,7 +49,7 @@ export class RapydResponseNormalizer implements GatewayResponseNormalizer {
     // Rapyd trabaja en la unidad mayor (pesos con decimales), no en centavos,
     // asi que NO se usa fromMinorUnits(): hacerlo dividiria el monto entre cien.
     const amount = mapValueObjectError(
-      () => new Amount(amountToString(data.amount)),
+      () => atCurrencyScale(new Amount(amountToString(data.amount)), currency),
       Gateway.RAPYD,
       rawResponse,
       "Malformed amount in Rapyd response",
