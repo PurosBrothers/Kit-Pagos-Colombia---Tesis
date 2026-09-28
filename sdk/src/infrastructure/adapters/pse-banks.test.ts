@@ -4,6 +4,8 @@ import { RapydAdapter } from "./RapydAdapter";
 import { KushkiAdapter } from "./KushkiAdapter";
 import { PaymentMethod } from "../../domain/value-objects/PaymentMethod";
 import type { PaymentGatewayPort } from "../../application/ports/PaymentGatewayPort";
+import type { PseBank } from "../../domain/value-objects/PseBank";
+import { PseBankCode } from "../../domain/value-objects/PseBankCode";
 
 /**
  * La lista de bancos de PSE, vista como una sola capacidad de las cuatro pasarelas.
@@ -51,7 +53,7 @@ describe("la lista de bancos de PSE, en las cuatro pasarelas", () => {
     build: (baseUrl: string) => PaymentGatewayPort;
     respuesta: unknown;
     ruta: string;
-    esperado: readonly { code: string; name: string }[];
+    esperado: readonly PseBank[];
   }[] = [
     {
       nombre: "Wompi",
@@ -92,8 +94,8 @@ describe("la lista de bancos de PSE, en las cuatro pasarelas", () => {
         },
       ],
       esperado: [
-        { code: "1007", name: "Bancolombia" },
-        { code: "1051", name: "Davivienda" },
+        { code: "1007", name: "Bancolombia", achCode: PseBankCode.BANCOLOMBIA },
+        { code: "1051", name: "Davivienda", achCode: PseBankCode.DAVIVIENDA },
       ],
     },
     {
@@ -107,7 +109,9 @@ describe("la lista de bancos de PSE, en las cuatro pasarelas", () => {
           { type: "co_visa_card", name: "Visa" },
         ],
       },
-      esperado: [{ code: "co_pse_bancolombia_bank", name: "Bancolombia" }],
+      esperado: [
+        { code: "co_pse_bancolombia_bank", name: "Bancolombia", achCode: PseBankCode.BANCOLOMBIA },
+      ],
     },
     {
       nombre: "Kushki",

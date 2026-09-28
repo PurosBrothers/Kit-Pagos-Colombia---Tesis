@@ -249,10 +249,13 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
     secret: string
   ): boolean {
     return this.webhookVerifier.verify(
-      payload,
-      headers,
-      secret,
-      Gateway.MERCADOPAGO
+      { payload, headers },
+      {
+        secret,
+        publicKey: this.credentials?.publicKey,
+        webhookUrl: this.credentials?.webhookUrl,
+      },
+      Gateway.MERCADOPAGO,
     );
   }
 }

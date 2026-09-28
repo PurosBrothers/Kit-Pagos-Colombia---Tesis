@@ -128,9 +128,10 @@ describe("pedir un método que la pasarela no implementa", () => {
   );
 
   /**
-   * El código de banco es opaco y **con significado por pasarela** (punto 19), así
-   * que un comercio que migra de Wompi a Rapyd sin cambiarlo manda un número donde
-   * Rapyd espera `co_pse_{banco}_bank`. Rapyd responde a eso con
+   * Los códigos de PSE de `PseBankCode` sirven en Rapyd porque el adaptador los
+   * traduce (punto 68), pero un código de sandbox de otra pasarela no: un comercio
+   * que migra desde el sandbox de Wompi sin cambiarlo manda un número que no es
+   * ninguna de las dos cosas. Rapyd responde a eso con
    * `ERROR_GET_PAYMENT_METHOD_TYPE` y un mensaje que no menciona de dónde sacar el
    * valor correcto, así que el SDK lo ataja antes y dice qué hacer.
    */
@@ -147,8 +148,9 @@ describe("pedir un método que la pasarela no implementa", () => {
         documentType: "CC",
         documentNumber: "1099888777",
       }),
-      // "1051" es el código de Davivienda en Mercado Pago, no en Rapyd.
-      paymentMethod: PaymentMethod.pse({ bankCode: "1051" }),
+      // "1" es el banco que aprueba del sandbox de Wompi: no es un código de PSE ni
+      // un método de Rapyd.
+      paymentMethod: PaymentMethod.pse({ bankCode: "1" }),
     };
 
     await expect(

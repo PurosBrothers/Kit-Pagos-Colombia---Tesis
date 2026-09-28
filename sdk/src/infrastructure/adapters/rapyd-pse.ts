@@ -3,7 +3,12 @@ import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode"
 import { Gateway } from "../../domain/value-objects/Gateway";
 import type { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
 import { applyReturnUrls } from "./rapyd-payload";
-import type { PseBank } from "../../domain/value-objects/PseBank";
+import { describePseBank, type PseBank } from "../../domain/value-objects/PseBank";
+import {
+  pseCodeForRapydType,
+  RAPYD_PSE_TYPE_PREFIX,
+  rapydPseTypeFor,
+} from "./rapyd-pse-banks";
 
 /**
  * PSE en Rapyd Collect. Todo lo específico de PSE vive acá y no en el adaptador,
@@ -44,17 +49,6 @@ import type { PseBank } from "../../domain/value-objects/PseBank";
  *    `ERROR_GET_PAYMENT_METHOD_TYPE`, así que no hace falta que el SDK mantenga
  *    la lista de los 47 bancos para validar.
  */
-
-/**
- * Prefijo de los 47 `payment_method_type` de PSE en Rapyd.
- *
- * En Rapyd PSE no es un método con un campo de banco: es una familia de 47 tipos,
- * uno por entidad, con el patrón `co_pse_{banco}_bank` (issue #68, punto 19). Por
- * eso `PaymentMethod.pse({ bankCode })` recibe acá el tipo completo —
- * `co_pse_bancolombia_bank`— y no un número: el `bankCode` es opaco y con
- * significado por pasarela, justamente para que cada una reciba lo que entiende.
- */
-const RAPYD_PSE_TYPE_PREFIX = "co_pse_";
 
 /**
  * Falla, antes de tocar la red, si falta algo que Rapyd va a exigir.
@@ -121,18 +115,18 @@ export function assertPseRequirements(request: CreatePaymentRequest): void {
   }
 
   // El código de banco se verifica aparte porque el diagnóstico es distinto: no
-  // falta un dato, sino que el que hay no es de esta pasarela. El caso probable
-  // es un comercio que migró de Wompi o Mercado Pago, donde el código es un
-  // número, y no cambió el valor al cambiar de pasarela.
-  if (bankCode && !bankCode.startsWith(RAPYD_PSE_TYPE_PREFIX)) {
+  // falta un dato, sino que el que hay no es de esta pasarela ni del catálogo de
+  // PSE. El caso probable es un código de sandbox de otra pasarela, como el "1"
+  // de Wompi, que solo existe allí.
+  if (bankCode && rapydPseTypeFor(bankCode) === undefined) {
     throw new KitPagosError(
       KitPagosErrorCode.INVALID_REQUEST,
       Gateway.RAPYD,
       null,
-      `"${bankCode}" no es un código de banco de Rapyd. En Rapyd PSE son 47 métodos ` +
-        `distintos con el patrón ${RAPYD_PSE_TYPE_PREFIX}{banco}_bank, por ejemplo ` +
-        `"co_pse_bancolombia_bank", y no un número como en Wompi o Mercado Pago. ` +
-        `La lista se obtiene con getPseBanks().`,
+      `"${bankCode}" no es un código de banco de Rapyd ni un código de PSE de ` +
+        `PseBankCode. Rapyd acepta los dos: el código de compensación, como ` +
+        `PseBankCode.BANCOLOMBIA ("1007"), o su propio método con el patrón ` +
+        `${RAPYD_PSE_TYPE_PREFIX}{banco}_bank. La lista se obtiene con getPseBanks().`,
     );
   }
 }
@@ -173,7 +167,7 @@ export function buildPsePaymentPayload(
     currency: request.currency.getCode(),
     customer: customerId,
     payment_method: {
-      type: request.paymentMethod?.bankCode,
+      type: rapydPseTypeFor(request.paymentMethod?.bankCode ?? ""),
       fields: {
         customer_identification_type: request.payer.documentType,
         customer_identification_number: request.payer.documentNumber,
@@ -226,11 +220,10 @@ export function extractCustomerId(rawResponse: unknown): string {
  * `co_pse_`, todos con `category: "bank_redirect"` y con el nombre del banco en
  * `name` ("Bancolombia", "Banco Davivienda").
  *
- * El `code` que sale de acá es el `type` completo, que es exactamente lo que
- * `PaymentMethod.pse({ bankCode })` necesita para esta pasarela. Por eso la
- * decisión del punto 19 —que el código de banco sea opaco— es la que hace que
- * Rapyd entre en la misma abstracción que las otras tres sin un caso especial: el
- * comercio nunca mira el valor, solo lo devuelve.
+ * El `code` que sale de acá es el `type` completo, y el `achCode` es el código de
+ * PSE que le corresponde según `RAPYD_PSE_TYPES`. Un método que Rapyd agregue y que
+ * la tabla no tenga sale sin `achCode`, pero sale: se puede cobrar con su `type`
+ * aunque el catálogo todavía no lo conozca.
  */
 export function parseRapydPseBanks(rawResponse: unknown): PseBank[] {
   const payload = rawResponse as { data?: unknown } | null;
@@ -245,6 +238,12 @@ export function parseRapydPseBanks(rawResponse: unknown): PseBank[] {
     }
 
     const name = method.name;
-    return [{ code: type, name: typeof name === "string" ? name : type }];
+    return [
+      describePseBank(
+        type,
+        typeof name === "string" ? name : type,
+        pseCodeForRapydType(type) ?? "",
+      ),
+    ];
   });
 }

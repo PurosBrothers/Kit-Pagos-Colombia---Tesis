@@ -347,6 +347,14 @@ export class RapydAdapter implements PaymentGatewayPort {
     headers: Record<string, string>,
     secret: string
   ): boolean {
-    return this.webhookVerifier.verify(payload, headers, secret, Gateway.RAPYD);
+    return this.webhookVerifier.verify(
+      { payload, headers },
+      {
+        secret,
+        publicKey: this.credentials?.publicKey,
+        webhookUrl: this.credentials?.webhookUrl,
+      },
+      Gateway.RAPYD,
+    );
   }
 }

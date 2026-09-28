@@ -49,7 +49,7 @@ import { GatewayTransactionId } from "../../domain/value-objects/GatewayTransact
 import type { PendingRedirect } from "../../domain/value-objects/PaymentResult";
 import type { PayerKind, PaymentMethod } from "../../domain/value-objects/PaymentMethod";
 import type { Payer } from "../../domain/value-objects/Payer";
-import type { PseBank } from "../../domain/value-objects/PseBank";
+import { describePseBank, type PseBank } from "../../domain/value-objects/PseBank";
 import {
   requireCardToken,
   resolveInstallments,
@@ -589,6 +589,6 @@ export function parseWompiPseBanks(rawResponse: unknown): PseBank[] {
       return [];
     }
 
-    return [{ code, name: typeof name === "string" ? name : code }];
+    return [describePseBank(code, typeof name === "string" ? name : code)];
   });
 }

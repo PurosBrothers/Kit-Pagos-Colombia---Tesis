@@ -28,24 +28,41 @@ export interface WebhookVerificationOptions {
   currentTimestamp?: number;
 }
 
+/** La notificación tal como llegó por HTTP. */
+export interface IncomingWebhook {
+  /** Cuerpo crudo, sin reserializar: reserializarlo rompe las firmas de Kushki y Rapyd. */
+  payload: string;
+  /** Cabeceras de la petición, en minúsculas. */
+  headers: Record<string, string>;
+  /** Parámetros de la URL. Mercado Pago firma el `data.id` que viaja aquí (punto 67). */
+  query?: Record<string, string>;
+}
+
+/**
+ * Lo que la verificación necesita además de la notificación. Sale siempre de la
+ * configuración del comercio y nunca de la petición: un valor que el emisor pudiera
+ * elegir dejaría de atar la firma a este comercio (punto 67).
+ */
+export interface WebhookSigningContext {
+  /** Secreto de webhooks configurado en el panel de la pasarela. */
+  secret: string;
+  /** Llave pública de la pasarela. Rapyd la firma como su `access_key`. */
+  publicKey?: string;
+  /** URL registrada en el panel de la pasarela. Solo Rapyd la firma. */
+  webhookUrl?: string;
+}
+
 export interface GatewayWebhookHandler {
   /**
    * Verifica la autenticidad del webhook contra la firma que envio la pasarela y valida
    * la frescura del timestamp contra la tolerancia configurada para prevenir ataques de replay.
-   *
-   * @param payload Cuerpo crudo tal como llego, sin reserializar. Reserializarlo
-   *                cambia el orden de las claves y rompe la firma.
-   * @param headers Cabeceras de la peticion, en minusculas.
-   * @param secret Secreto de webhooks configurado en el panel de la pasarela.
-   * @param options Opciones de verificación (tolerancia y timestamp de referencia).
    */
   verify(
-    payload: string,
-    headers: Record<string, string>,
-    secret: string,
+    webhook: IncomingWebhook,
+    context: WebhookSigningContext,
     options?: WebhookVerificationOptions,
   ): boolean;
 
-  /** Traduce el cuerpo del webhook al evento normalizado del dominio. */
-  parse(payload: string): WebhookEvent;
+  /** Traduce el webhook ya verificado al evento normalizado del dominio. */
+  parse(webhook: IncomingWebhook): WebhookEvent;
 }

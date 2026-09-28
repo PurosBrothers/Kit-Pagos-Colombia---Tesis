@@ -15,6 +15,34 @@ export class MissingCredentialsError extends Error {
   }
 }
 
+/** Las dos cabeceras sin las que la petición no trae credenciales propias. */
+export const CLIENT_CREDENTIAL_HEADERS = [
+  "x-gateway-public-key",
+  "x-gateway-private-key",
+] as const;
+
+/**
+ * La API apunta a una pasarela real que no es un sandbox conocido, y la petición no
+ * trae credenciales propias completas. Contra producción las del servidor no se
+ * prestan, porque cobrarían con la cuenta de quien desplegó la API (punto 69).
+ */
+export class ClientCredentialsRequiredError extends Error {
+  constructor(
+    public readonly gateway: Gateway | string,
+    public readonly missingHeaders: readonly string[],
+  ) {
+    const name = String(gateway).toLowerCase();
+    super(
+      `La API está configurada contra la pasarela real de ${name} y no la puede ` +
+        `identificar como sandbox, así que la trata como producción. En producción no ` +
+        `usa las credenciales del servidor: cobraría con la cuenta de quien desplegó la ` +
+        `API. Envíe las credenciales de su propia cuenta de ${name} en ` +
+        `${CLIENT_CREDENTIAL_HEADERS.join(" y ")}. Falta: ${missingHeaders.join(", ")}.`,
+    );
+    this.name = "ClientCredentialsRequiredError";
+  }
+}
+
 export interface ResolvedCredentials {
   credentials: Credentials;
   source: "server" | "client";
@@ -72,7 +100,7 @@ function getHeaderValue(headers: RequestHeaders, headerName: string): string | u
  * 1. Cabeceras del cliente (x-gateway-public-key, x-gateway-private-key, x-gateway-integrity-secret).
  * 2. Perfil del servidor (.env / process.env).
  *
- * El webhookSecret NUNCA se acepta por cabecera y siempre proviene del perfil del servidor.
+ * El webhookSecret NUNCA se acepta por cabecera: solo existe en el perfil del servidor.
  */
 export class CredentialResolver {
   private readonly env: Record<string, string | undefined>;
@@ -111,6 +139,17 @@ export class CredentialResolver {
   }
 
   /**
+   * Cabeceras de credenciales que la petición no trae. Vacío significa que el
+   * cliente mandó credenciales completas; una sola significa que las mandó a medias,
+   * que es el caso que hoy cae en silencio al perfil del servidor.
+   */
+  public missingClientHeaders(headers?: RequestHeaders): string[] {
+    return CLIENT_CREDENTIAL_HEADERS.filter(
+      (header) => !headers || !getHeaderValue(headers, header),
+    );
+  }
+
+  /**
    * Obtiene las credenciales del perfil del servidor para una pasarela dada.
    */
   public getServerCredentials(gateway: Gateway): Credentials | undefined {
@@ -139,12 +178,9 @@ export class CredentialResolver {
       }
     }
 
-    // El webhookSecret NUNCA se toma de las cabeceras; siempre se asocia el del servidor si existe
-    const serverWebhookSecret = this.getServerWebhookSecret(gateway);
-    if (serverWebhookSecret) {
-      credentials.webhookSecret = serverWebhookSecret;
-    }
-
+    // Sin webhookSecret: ni el del cliente ni el del servidor. Los webhooks se verifican
+    // con el perfil del servidor (`getWebhookVerifier()`), y pegar aquí su secreto lo
+    // mezclaría con llaves ajenas, incluidas las de producción (punto 70).
     return credentials;
   }
 
@@ -196,31 +232,15 @@ export class CredentialResolver {
         const privateKey = this.env.RAPYD_API_SECRET_KEY?.trim();
         if (!publicKey || !privateKey) return undefined;
 
-        // Rapyd reutiliza su secret_key para webhooks
-        return {
-          publicKey,
-          privateKey,
-          webhookSecret: privateKey,
-        };
+        // Rapyd reutiliza su secret_key para webhooks, y firma además la URL registrada
+        // en su panel, que solo puede salir de la configuración (punto 67).
+        const creds: Credentials = { publicKey, privateKey, webhookSecret: privateKey };
+        const webhookUrl = this.env.RAPYD_WEBHOOK_URL?.trim();
+        if (webhookUrl) creds.webhookUrl = webhookUrl;
+
+        return creds;
       }
 
-      default:
-        return undefined;
-    }
-  }
-
-  private getServerWebhookSecret(gateway: Gateway): string | undefined {
-    switch (gateway) {
-      case Gateway.WOMPI:
-        return this.env.WOMPI_EVENTS_SECRET?.trim();
-      case Gateway.MERCADOPAGO:
-        return this.env.MERCADOPAGO_WEBHOOK_SECRET?.trim();
-      case Gateway.KUSHKI:
-        return (
-          this.env.KUSHKI_WEBHOOK_SECRET ?? this.env.KUSHKI_WEBHOOK_SIGNATURE_ID
-        )?.trim();
-      case Gateway.RAPYD:
-        return this.env.RAPYD_API_SECRET_KEY?.trim();
       default:
         return undefined;
     }

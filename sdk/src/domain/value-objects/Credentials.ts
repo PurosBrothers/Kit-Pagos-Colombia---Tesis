@@ -57,4 +57,15 @@ export interface Credentials {
    * juntos en el panel, intercambiarlos es fácil, y el síntoma no dice cuál es el problema.
    */
   webhookSecret?: string;
+
+  /**
+   * URL registrada en el panel de la pasarela para recibir webhooks, escrita **exactamente**
+   * como está allí: una barra final de más produce otra firma.
+   *
+   * Solo Rapyd la usa, y es obligatoria para verificar sus webhooks: la incluye en el texto
+   * que firma y no la manda en la notificación. Va en la configuración y no en la petición
+   * porque es lo que ata la firma a este destino; si el emisor pudiera elegirla, un webhook
+   * capturado para otro endpoint se aceptaría aquí (punto 67 del `architecture-log.md`).
+   */
+  webhookUrl?: string;
 }

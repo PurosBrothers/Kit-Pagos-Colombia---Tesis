@@ -265,9 +265,10 @@ function printTable(outcomes: readonly GatewayOutcome[]): void {
  * entre sí, no cuál es la correcta.
  *
  * El monto se compara con `equals()` y no con `===` sobre la cadena, porque
- * `"150000"` y `"150000.00"` son el mismo monto escrito distinto, y las cuatro
- * pasarelas devuelven la escala a su manera. Comparar cadenas aquí produciría un
- * fallo que no es un fallo.
+ * `"150000"` y `"150000.00"` son el mismo monto escrito distinto. Hoy el SDK
+ * devuelve los cuatro con los decimales de la divisa (punto 72), pero la
+ * igualdad de dinero es por valor, y comparar cadenas ataría el ejemplo a
+ * cómo se escribe el monto y no a cuánto vale.
  *
  * La referencia de la orden entra en la comparación porque es la que usa el
  * comercio para conciliar: una pasarela que devuelve otra referencia rompe la

@@ -98,7 +98,7 @@ export type PaymentResult = TransactionOutcome | RedirectRequiredOutcome;
 
 `PaymentMethod.card(token)` y `PaymentMethod.pse({ bankCode, payerKind })`. Recibe un **token**, nunca un número de tarjeta: la tokenización vive en el frontend con la librería del proveedor, y aceptar el número metería al comercio en el alcance de PCI DSS.
 
-`bankCode` es una **cadena opaca** y no un enum, porque los códigos de banco no son portables entre pasarelas y mantener un catálogo de equivalencias sincronizado con cuatro proveedores es peor que no tenerlo: uno desactualizado manda al pagador al banco equivocado.
+`bankCode` acepta un valor de `PseBankCode`, el código de compensación de ACH Colombia, que sirve en las cuatro pasarelas, o el `code` que devolvió `getPseBanks()`, que solo sirve en la pasarela que lo dio. Rapyd es la única que necesita traducción, y la tabla está en `rapyd-pse-banks.ts` (punto 68).
 
 #### `TaxBreakdown` — el desglose que solo Kushki exige
 
@@ -114,7 +114,7 @@ Kushki pide un objeto con subtotal gravado, subtotal exento, IVA y divisa, en lu
 | `GatewayTransactionId` | El id nativo **más** la pasarela que lo emitió. Van juntos porque un id sin su pasarela no se puede consultar |
 | `RejectionReason` | Código de rechazo nativo más su categoría normalizada |
 | `ReturnUrlConfig` | Una URL de retorno o una por desenlace, con `resolveFor(status)`. Existe porque las pasarelas admiten entre una y tres |
-| `PseBank` | Código opaco más nombre |
+| `PseBank` | Código de la pasarela, nombre y, cuando existe, el `achCode` de `PseBankCode` |
 | `Credentials` | `publicKey`, `privateKey`, y los opcionales `webhookSecret` e `integritySecret` |
 | `WebhookEvent` | El evento normalizado que devuelve la validación |
 | `TransactionStatus` | Los seis estados normalizados |

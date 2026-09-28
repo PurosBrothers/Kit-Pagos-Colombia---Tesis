@@ -68,7 +68,7 @@ El ejemplo rápido de código, con la firma exacta de cada llamada, está en la 
 
 ## Lo que el proyecto no hace
 
-- Los **códigos de banco de PSE no son portables** entre pasarelas: en Wompi es `1`, en Mercado Pago `1007`, en Rapyd `co_pse_bancolombia_bank`. El SDK unifica cómo se piden, no los códigos.
+- Los **códigos de banco de PSE** son distintos en cada pasarela (en Mercado Pago `1007`, en Rapyd `co_pse_bancolombia_bank`), pero `PseBankCode.BANCOLOMBIA` sirve en las cuatro: es el código de compensación de ACH Colombia, y el SDK lo traduce donde hace falta. Los bancos ficticios de los sandboxes solo existen con el código que devuelve `getPseBanks()`.
 - El **token de tarjeta tampoco** es portable: lo emite el frontend de cada pasarela.
 - **Solo tarjeta y PSE.** No hay efectivo, ni Nequi, ni suscripciones, ni reembolsos.
 - **La redirección no desaparece.** Con PSE redirigen las cuatro.

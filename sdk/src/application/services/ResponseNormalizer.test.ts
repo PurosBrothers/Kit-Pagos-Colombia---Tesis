@@ -298,7 +298,7 @@ describe("ResponseNormalizer", () => {
         Gateway.RAPYD
       );
 
-      expect(transaction.amount.getValue()).toBe("150000");
+      expect(transaction.amount.getValue()).toBe("150000.00");
     });
 
     it("lee la divisa de currency_code y no de currency", () => {
@@ -384,7 +384,7 @@ describe("ResponseNormalizer", () => {
     it("normalizes nominal tax components and the native APPROVAL status", () => {
       const transaction = normalizer.normalize(kushkiResponse, Gateway.KUSHKI);
 
-      expect(transaction.amount.getValue()).toBe("50000");
+      expect(transaction.amount.getValue()).toBe("50000.00");
       expect(transaction.getStatus()).toBe("APPROVED");
       expect(transaction.rawStatus).toBe("APPROVAL");
       expect(transaction.gatewayTransactionId.value).toBe("kushki-ticket-123");
@@ -440,7 +440,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.rawStatus).toBe("approved"); // Conserva minúsculas nativas
       expect(transaction.gatewayTransactionId.value).toBe("1234567890");
       expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.MERCADOPAGO);
-      expect(transaction.amount.getValue()).toBe("50000");
+      expect(transaction.amount.getValue()).toBe("50000.00");
       expect(transaction.currency.getCode()).toBe("COP");
       expect(transaction.orderReference.getValue()).toBe("ORDER-MP-123");
       expect(transaction.payer.email).toBe("cliente.mp@example.com");
@@ -451,7 +451,7 @@ describe("ResponseNormalizer", () => {
       const transaction = normalizer.normalize(jsonString, Gateway.MERCADOPAGO);
 
       expect(transaction.gatewayTransactionId.value).toBe("1234567890");
-      expect(transaction.amount.getValue()).toBe("50000");
+      expect(transaction.amount.getValue()).toBe("50000.00");
     });
 
     it("mapea correctamente todos los estados nativos en minúsculas", () => {
@@ -461,6 +461,11 @@ describe("ResponseNormalizer", () => {
         { raw: "pending", expected: "PENDING" },
         { raw: "in_process", expected: "PENDING" },
         { raw: "cancelled", expected: "VOIDED" },
+        // Vocabulario de la Orders API (punto 46). Desde el punto 70 solo lo traduce
+        // esta tabla: el webhook de Mercado Pago ya no lee estados.
+        { raw: "action_required", expected: "PENDING" },
+        { raw: "processed", expected: "APPROVED" },
+        { raw: "expired", expected: "EXPIRED" },
         { raw: "other_unknown", expected: "ERROR" },
       ];
 

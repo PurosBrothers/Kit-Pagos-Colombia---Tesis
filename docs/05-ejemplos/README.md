@@ -77,15 +77,15 @@ Vale la pena mirar las cuatro columnas de estado nativo que imprime el ejemplo 1
 ```text
 Pasarela      Estado normalizado  Estado nativo  Monto          ID en la pasarela
 ──────────────────────────────────────────────────────────────────────────────────
-WOMPI         APPROVED            APPROVED       150000.00 COP  7b3417c7-47d5-...
-RAPYD         APPROVED            CLO            150000.00 COP  payment_e50976...
-MERCADOPAGO   APPROVED            approved       150000 COP     8388481045
-KUSHKI        APPROVED            APPROVAL       150000 COP     bea2f927a07d47...
+WOMPI         APPROVED            APPROVED       150000.00 COP  b256c180-68fa-...
+RAPYD         APPROVED            CLO            150000.00 COP  payment_542f13...
+MERCADOPAGO   APPROVED            approved       150000.00 COP  8808182579
+KUSHKI        APPROVED            APPROVAL       150000.00 COP  5f5473fc9cfd48...
 ```
 
 Cuatro vocabularios para decir lo mismo. Y uno de ellos, `CLO`, **no significa "pagado"**: significa "cerrado", y Rapyd lo usa tanto para el cobro exitoso como para el cerrado sin pagar. Distinguirlos requiere leer `paid: true` aparte del estado.
 
-Los montos también difieren: `150000.00` contra `150000`. Es el mismo monto con distinta escala, y por eso el ejemplo los compara con `Amount.equals()` y no con `===` sobre la cadena. Compararlos como texto produciría un fallo que no es un fallo.
+Los montos, en cambio, coinciden. Mercado Pago y Kushki reportan `150000` como número, sin los ceros de la derecha, y el SDK lo devuelve con los decimales de COP (punto 72 del `architecture-log.md`). El ejemplo igual los compara con `Amount.equals()` y no con `===` sobre la cadena, porque la igualdad de dinero es por valor.
 
 ---
 

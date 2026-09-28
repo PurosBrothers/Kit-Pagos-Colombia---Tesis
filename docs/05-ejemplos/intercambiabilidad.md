@@ -82,10 +82,10 @@ esconderse.
 ```text
 Pasarela      Estado normalizado  Estado nativo  Monto          ID en la pasarela
 ──────────────────────────────────────────────────────────────────────────────────────
-WOMPI         APPROVED            APPROVED       150000.00 COP  7b3417c7-47d5-4f12-...
-RAPYD         APPROVED            CLO            150000.00 COP  payment_e5097603a3f0...
-MERCADOPAGO   APPROVED            approved       150000 COP     8388481045
-KUSHKI        APPROVED            APPROVAL       150000 COP     bea2f927a07d474b84
+WOMPI         APPROVED            APPROVED       150000.00 COP  b256c180-68fa-4c81-...
+RAPYD         APPROVED            CLO            150000.00 COP  payment_542f1324c58e...
+MERCADOPAGO   APPROVED            approved       150000.00 COP  8808182579
+KUSHKI        APPROVED            APPROVAL       150000.00 COP  5f5473fc9cfd48edb2
 ```
 
 La columna que importa es la del estado nativo, porque es la que cambia: `APPROVED`, `CLO`,
@@ -99,10 +99,11 @@ El ejemplo termina comparando por código que las cuatro transacciones coinciden
 sale con código distinto de cero si alguna no coincide:
 
 1. **Estado normalizado.** Lo que el issue #58 exige.
-2. **Monto**, comparado con `Amount.equals()` y no con `===` sobre la cadena. Es necesario:
-   Wompi y Rapyd devuelven `150000.00` y Mercado Pago y Kushki `150000`. Son el mismo monto
-   escrito con distinta escala, y comparar cadenas produciría un fallo que no es un fallo. Se ve
-   en la tabla de arriba.
+2. **Monto**, comparado con `Amount.equals()` y no con `===` sobre la cadena. Mercado Pago y
+   Kushki reportan `150000` como número, sin los ceros de la derecha. Desde el punto 72 del
+   `architecture-log.md`, el SDK los devuelve con los decimales de COP, y por eso la tabla muestra
+   `150000.00` en las cuatro. La comparación sigue siendo por valor, porque la igualdad de dinero
+   no depende de cómo se escriba el monto.
 3. **Referencia de la orden.** No lo pedía el issue, pero es la que el comercio usa para
    conciliar: una pasarela que devuelve otra referencia rompe la conciliación aunque el estado y
    el monto coincidan. Es exactamente el defecto que tenía Kushki, documentado en el punto 41 del

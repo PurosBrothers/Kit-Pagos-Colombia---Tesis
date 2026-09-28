@@ -50,7 +50,12 @@ import {
 } from "../../../domain/services/native-status";
 import { KitPagosError } from "../../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../../domain/value-objects/KitPagosErrorCode";
-import { mapValueObjectError, amountToString, firstNonEmptyString } from "./payload-utils";
+import {
+  mapValueObjectError,
+  amountToString,
+  atCurrencyScale,
+  firstNonEmptyString,
+} from "./payload-utils";
 
 const FALLBACK_EMAIL = "customer@kushki.com";
 
@@ -118,10 +123,13 @@ export function normalizeKushkiTransfer(
   // se pidió el token, así que el total se reconstruye sumándolos.
   const amount = mapValueObjectError(
     () =>
-      new Amount(amountToString(amountData.subtotalIva0))
-        .add(new Amount(amountToString(amountData.subtotalIva)))
-        .add(new Amount(amountToString(amountData.iva)))
-        .add(new Amount(amountToString(amountData.ice))),
+      atCurrencyScale(
+        new Amount(amountToString(amountData.subtotalIva0))
+          .add(new Amount(amountToString(amountData.subtotalIva)))
+          .add(new Amount(amountToString(amountData.iva)))
+          .add(new Amount(amountToString(amountData.ice))),
+        currency,
+      ),
     Gateway.KUSHKI,
     rawResponse,
     "Malformed amount in Kushki transfer response",

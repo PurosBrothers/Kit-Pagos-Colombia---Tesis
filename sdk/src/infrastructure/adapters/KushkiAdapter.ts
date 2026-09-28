@@ -227,9 +227,12 @@ export class KushkiAdapter implements PaymentGatewayPort {
     secret: string,
   ): boolean {
     return this.webhookVerifier.verify(
-      payload,
-      headers,
-      secret,
+      { payload, headers },
+      {
+        secret,
+        publicKey: this.credentials?.publicKey,
+        webhookUrl: this.credentials?.webhookUrl,
+      },
       Gateway.KUSHKI,
     );
   }

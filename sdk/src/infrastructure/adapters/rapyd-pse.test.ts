@@ -12,6 +12,7 @@ import { Payer } from "../../domain/value-objects/Payer";
 import { PaymentMethod } from "../../domain/value-objects/PaymentMethod";
 import { ReturnUrlConfig } from "../../domain/value-objects/ReturnUrlConfig";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
+import { PseBankCode } from "../../domain/value-objects/PseBankCode";
 import type { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
 
 /**
@@ -82,27 +83,37 @@ describe("assertPseRequirements", () => {
   });
 
   /**
-   * El caso que esto ataja es concreto: un comercio que venía de Wompi o Mercado
-   * Pago, donde el código de banco es un número, y cambió de pasarela sin cambiar el
-   * valor. Rapyd contesta a eso `ERROR_GET_PAYMENT_METHOD_TYPE` con un mensaje que no
-   * dice de dónde sacar el valor bueno.
+   * El caso que esto ataja es un código que solo existe en el sandbox de otra
+   * pasarela: el `"1"` de Wompi no es un código de PSE ni un método de Rapyd, y
+   * Rapyd contesta a eso `ERROR_GET_PAYMENT_METHOD_TYPE` con un mensaje que no dice
+   * de dónde sacar el valor bueno.
    */
-  it("rechaza un código de banco de otra pasarela y dice cómo conseguir el correcto", () => {
-    const conCodigoNumerico: CreatePaymentRequest = {
+  it("should reject a code that is neither a Rapyd type nor a PSE code, and say how to get one", () => {
+    const conCodigoDeSandbox: CreatePaymentRequest = {
       ...completeRequest(),
-      paymentMethod: PaymentMethod.pse({ bankCode: "1051" }),
+      paymentMethod: PaymentMethod.pse({ bankCode: "1" }),
     };
 
     try {
-      assertPseRequirements(conCodigoNumerico);
+      assertPseRequirements(conCodigoDeSandbox);
       throw new Error("debió lanzar");
     } catch (error) {
       expect((error as { code: string }).code).toBe(
         KitPagosErrorCode.INVALID_REQUEST,
       );
       expect((error as Error).message).toContain("co_pse_");
+      expect((error as Error).message).toContain("PseBankCode");
       expect((error as Error).message).toContain("getPseBanks()");
     }
+  });
+
+  it("should accept a PSE code from the catalog", () => {
+    expect(() =>
+      assertPseRequirements({
+        ...completeRequest(),
+        paymentMethod: PaymentMethod.pse({ bankCode: PseBankCode.DAVIVIENDA }),
+      }),
+    ).not.toThrow();
   });
 });
 
@@ -127,6 +138,20 @@ describe("buildCustomerPayload", () => {
 });
 
 describe("buildPsePaymentPayload", () => {
+  it("should translate a PSE code into its Rapyd payment method type", () => {
+    const payload = buildPsePaymentPayload(
+      {
+        ...completeRequest(),
+        paymentMethod: PaymentMethod.pse({ bankCode: PseBankCode.BANCOLOMBIA }),
+      },
+      "cus_abc123",
+    );
+
+    expect((payload.payment_method as { type: string }).type).toBe(
+      "co_pse_bancolombia_bank",
+    );
+  });
+
   it("arma el pago con el cliente y el método de PSE", () => {
     const payload = buildPsePaymentPayload(completeRequest(), "cus_abc123");
 
@@ -215,11 +240,21 @@ describe("parseRapydPseBanks", () => {
     ],
   };
 
-  it("devuelve el tipo completo como código, que es lo que PaymentMethod.pse espera", () => {
+  it("should return the full type as code and its PSE code as achCode", () => {
     expect(parseRapydPseBanks(catalogo)).toEqual([
-      { code: "co_pse_bancolombia_bank", name: "Bancolombia" },
-      { code: "co_pse_banco_davivienda_bank", name: "Banco Davivienda" },
+      { code: "co_pse_bancolombia_bank", name: "Bancolombia", achCode: "1007" },
+      { code: "co_pse_banco_davivienda_bank", name: "Banco Davivienda", achCode: "1051" },
     ]);
+  });
+
+  /**
+   * Un método que Rapyd agregue después de la tabla tiene que seguir apareciendo:
+   * se puede cobrar con su `type` aunque el catálogo todavía no lo conozca.
+   */
+  it("should keep a PSE method missing from the translation table, without achCode", () => {
+    expect(
+      parseRapydPseBanks({ data: [{ type: "co_pse_banco_nuevo_bank", name: "Banco Nuevo" }] }),
+    ).toEqual([{ code: "co_pse_banco_nuevo_bank", name: "Banco Nuevo" }]);
   });
 
   /**

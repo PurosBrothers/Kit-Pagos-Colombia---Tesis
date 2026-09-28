@@ -658,20 +658,29 @@ describe("RapydAdapter", () => {
   });
 
   describe("verifySignature()", () => {
-    it("delega en WebhookVerifier con Gateway.RAPYD", () => {
+    it("should delegate to WebhookVerifier with the access key and webhook URL from its credentials", () => {
       const verify = jest.fn().mockReturnValue(true);
-      const adapter = new RapydAdapter(undefined, undefined, {
-        verify,
-      } as never);
+      const adapter = new RapydAdapter(
+        undefined,
+        {
+          publicKey: "rapyd_access_key_test",
+          privateKey: "rapyd_secret_key_test",
+          webhookUrl: "https://tienda.example.com/webhooks/rapyd",
+        },
+        { verify } as never,
+      );
 
       const resultado = adapter.verifySignature("{}", { salt: "s" }, "secreto");
 
       expect(resultado).toBe(true);
       expect(verify).toHaveBeenCalledWith(
-        "{}",
-        { salt: "s" },
-        "secreto",
-        Gateway.RAPYD
+        { payload: "{}", headers: { salt: "s" } },
+        {
+          secret: "secreto",
+          publicKey: "rapyd_access_key_test",
+          webhookUrl: "https://tienda.example.com/webhooks/rapyd",
+        },
+        Gateway.RAPYD,
       );
     });
   });
@@ -865,7 +874,7 @@ describe("RapydAdapter con PSE", () => {
         "https://api.example.com/v1/payment_methods/country?country=CO",
       );
       expect(banks).toEqual([
-        { code: "co_pse_bancolombia_bank", name: "Bancolombia" },
+        { code: "co_pse_bancolombia_bank", name: "Bancolombia", achCode: "1007" },
       ]);
     });
 

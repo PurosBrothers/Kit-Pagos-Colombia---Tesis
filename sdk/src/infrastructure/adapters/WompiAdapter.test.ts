@@ -408,7 +408,7 @@ describe("WompiAdapter", () => {
         },
         timestamp,
         signature: {
-          properties: ["data.transaction.id", "data.transaction.status"],
+          properties: ["transaction.id", "transaction.status"],
           checksum,
         },
       });
@@ -433,7 +433,7 @@ describe("WompiAdapter", () => {
         },
         timestamp,
         signature: {
-          properties: ["data.transaction.id", "data.transaction.status"],
+          properties: ["transaction.id", "transaction.status"],
           checksum: "invalid_checksum",
         },
       });

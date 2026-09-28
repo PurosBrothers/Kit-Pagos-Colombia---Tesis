@@ -28,6 +28,7 @@ simulator-api/src/
 ├── app.ts                    construye la instancia de Fastify, hooks y registra las rutas
 ├── auth/
 │   ├── CredentialResolver.ts resolución híbrida de credenciales (headers > env)
+│   ├── targetEnvironment.ts  clasifica la URL base: simulador, sandbox o producción
 │   └── authHook.ts           hook onRequest de autenticación Bearer en tiempo constante
 ├── services/
 │   └── KitPagosProvider.ts   ciclo de vida e instanciación del SDK (workspace)
@@ -35,7 +36,10 @@ simulator-api/src/
 │   └── redactSerializer.ts   redacción estricta de credenciales en logs de Pino
 ├── kit-pagos-api/            capa REST propia bajo /v1/api
 │   ├── index.ts              plugin del módulo: CORS y registro de rutas
+│   ├── gateway-param.ts      parseo compartido del identificador de pasarela
+│   ├── gateway-client.ts     SDK por petición, con la regla de credenciales y su advertencia
 │   ├── routes/gateways.ts    GET /v1/api/gateways
+│   ├── routes/webhooks.ts    POST /v1/api/webhooks/:gateway, con cuerpo crudo
 │   └── errors/               traducción de KitPagosError a HTTP
 ├── routes/
 │   ├── health.ts             GET /health
@@ -58,16 +62,37 @@ simulator-api/src/
 
 **Capa de autenticación y resolución de credenciales (`src/auth/`):**
 - `CredentialResolver`: Implementa la resolución híbrida. Primero inspecciona las cabeceras `x-gateway-public-key`, `x-gateway-private-key` (e `integrity-secret`). Si no están presentes, recurre al perfil de sandbox del `.env` del servidor. Por seguridad estricta, `webhookSecret` **nunca** se acepta desde el cliente HTTP para evitar invalidar la verificación criptográfica. Si faltan credenciales, lanza `MissingCredentialsError` (HTTP 401).
+- `targetEnvironment`: Clasifica la URL base de cada pasarela como simulador, sandbox o producción. El respaldo al perfil del servidor depende de esa clasificación:
+
+  | Destino | Sin credenciales propias completas |
+  |---|---|
+  | Simulador (`/v1/sim/<pasarela>`, o sin URL) | Usa el perfil del servidor |
+  | Sandbox conocido (`sandbox.wompi.co`, `sandboxapi.rapyd.net`, `api-uat.kushkipagos.com`) | Usa el perfil del servidor y lo advierte en la cabecera `x-kit-pagos-warning` y en el campo `warnings` del cuerpo JSON, también en las respuestas de error |
+  | Cualquier otra URL, incluida `api.mercadopago.com` | `ClientCredentialsRequiredError` (HTTP 401), con las cabeceras que faltan |
+
+  Mercado Pago cae siempre en producción porque usa el mismo host para prueba y para producción, y sus llaves de prueba empiezan igual que las reales. La verificación de webhooks no pasa por esta regla, porque no llama a la pasarela (punto 69). Al arrancar, el log dice por pasarela a dónde apunta y qué regla aplica, y las credenciales del cliente nunca llevan el `webhookSecret` del servidor (punto 70).
 - `authHook`: Hook `onRequest` que protege los endpoints REST mediante token Bearer (`API_AUTH_TOKEN`). Realiza comparaciones en tiempo constante (`crypto.timingSafeEqual`) para mitigar ataques de temporización. Si `API_AUTH_TOKEN` no está configurado, opera en modo desarrollo abierto con advertencia en logs. Rutas públicas como `/health` y los endpoints mock `/v1/sim/*` están exentos por prefijo. El preflight de CORS (`OPTIONS` con `Access-Control-Request-Method`) también pasa sin token, porque el navegador nunca le agrega `Authorization`.
 
 **El módulo REST propio (`src/kit-pagos-api/`):** se registra en `buildApp()` con el prefijo `/v1/api` y queda separado de `src/routes/` y `src/gateways/`, porque `/v1/sim` finge ser un tercero y `/v1/api` expone lo propio. No reimplementa reglas del SDK: traduce HTTP a llamadas de la fachada `KitPagos`.
 - `GET /v1/api/gateways` devuelve las pasarelas que soporta el SDK, tomadas de su enum `Gateway`. Sirve como prueba de vida del montaje, sin depender de credenciales.
-- `POST /v1/api/payments` expone `createPayment`. Recibe `gateway`, `amount` (como string decimal estricto para proteger la escala exacta en HMAC y cálculos), `currency`, `orderReference`, `payer` y opcionales como `paymentMethod`, `returnUrlConfig`, `taxBreakdown` e `ipAddress`. Discrimina la respuesta HTTP 201 mediante `outcome: "TRANSACTION"` (junto a `rawStatus` y la transacción normalizada) o `outcome: "REDIRECT_REQUIRED"` (con `redirectUrl`, `gatewayTransactionId` y `rawStatus`). Las cuatro pasarelas funcionan por el mismo endpoint sin condicionales por pasarela.
+- `POST /v1/api/payments` expone `createPayment`. Recibe `gateway`, `amount` (como string decimal estricto para proteger la escala exacta en HMAC y cálculos), `currency`, `orderReference`, `payer` y opcionales como `paymentMethod`, `returnUrlConfig`, `taxBreakdown` e `ipAddress`. Discrimina la respuesta HTTP 201 mediante `outcome: "TRANSACTION"` (junto a `rawStatus` y la transacción normalizada) o `outcome: "REDIRECT_REQUIRED"` (con `redirectUrl`, `gatewayTransactionId` y `rawStatus`). Las cuatro pasarelas funcionan por el mismo endpoint sin condicionales por pasarela. Además:
+  - **Campos que no se pueden interpretar.** Un opcional que viene mal formado responde 400 en vez de descartarse: `paymentMethod` sin `type`, `installments` que no es un entero, un `payerKind` distinto de `NATURAL` o `LEGAL`, o un `taxBreakdown` incompleto o con `rate` numérico. Descartado, el cobro saldría con el valor por omisión; en Kushki, sin desglose, el monto completo se cobra como exento de IVA.
+  - **Credenciales.** Resuelve el cliente con `gatewayClientFor()`, así que aplica la regla del punto 69: contra producción nunca usa las credenciales del servidor.
+  - **Monto de la respuesta.** Es el que reporta la pasarela, con los decimales de su divisa según ISO 4217: `"75000.00"` en las cuatro pasarelas, aunque Mercado Pago y Kushki lo reporten como número (punto 72).
+  - El razonamiento está en los puntos 65 y 71.
 - Un `KitPagosError` lanzado en cualquier ruta se traduce al código HTTP de su `KitPagosErrorCode` (400, 401, 404, 429, 502, 504 o 500), con un cuerpo `{ code, message }` y nada más: el `originalPayload` con el cuerpo crudo de la pasarela no sale de la API.
 - `@fastify/cors` se registra dentro del módulo, así que solo `/v1/api` responde cabeceras CORS; las rutas de simulación siguen iguales. El detalle de las decisiones está en los puntos 64 y 65 del `architecture-log.md`.
+- `POST /v1/api/webhooks/:gateway` verifica una notificación con `validateWebhook()` y devuelve la pasarela y el estado normalizado:
+  - **Cuerpo crudo.** Recibe el cuerpo como la cadena exacta que llegó, gracias a un parser propio que solo aplica a esa ruta; las firmas de Kushki y Rapyd se calculan sobre esos bytes.
+  - **Credenciales.** Las toma solo del perfil del servidor y exige un `webhookSecret` configurado; ignora cualquier cabecera `x-gateway-*`.
+  - **Rechazos.** Todo rechazo (firma falsa, cuerpo malformado, marca de tiempo vencida, secreto sin configurar) responde el mismo 401.
+  - **Ventana de tolerancia.** Se configura con `WEBHOOK_TOLERANCE_SECONDS`.
+  - **Rapyd** exige además `RAPYD_WEBHOOK_URL`, la URL registrada en su panel; una cabecera `x-webhook-url` se ignora.
+  - **Contrato de reenvío.** La ruta exige el Bearer de `/v1/api`, así que la pasarela no apunta a ella: el comercio recibe el webhook y lo reenvía. Tiene que reenviar el cuerpo byte a byte, las cabeceras originales de la pasarela y el query string, porque Mercado Pago firma el `data.id` que viaja en la URL.
+  - El razonamiento está en los puntos 66 y 67.
 
 **Capa de servicio SDK (`src/services/`):**
-- `KitPagosProvider`: Administra las instancias de `KitPagos` (consumido desde el workspace local `file:../sdk`, alineado con la política de detección temprana de rupturas de CI del punto 62). Para credenciales del servidor, mantiene un caché singleton por pasarela. Para credenciales inyectadas por el cliente en cabeceras HTTP, crea instancias al vuelo aisladas por petición, garantizando que no exista fuga ni contaminación cruzada entre clientes concurrentes.
+- `KitPagosProvider`: Administra las instancias de `KitPagos` (consumido desde el workspace local `file:../sdk`, alineado con la política de detección temprana de rupturas de CI del punto 62). Para credenciales del servidor, mantiene un caché singleton por pasarela. Para credenciales inyectadas por el cliente en cabeceras HTTP, crea instancias al vuelo aisladas por petición, garantizando que no exista fuga ni contaminación cruzada entre clientes concurrentes. Expone dos accesos: `resolveClient()` aplica la regla de `targetEnvironment` para las operaciones que llaman a la pasarela, y `getWebhookVerifier()` usa siempre el perfil del servidor. Las rutas que llaman a la pasarela pasan por `gatewayClientFor()` en `src/kit-pagos-api/gateway-client.ts`, que además deja la advertencia en la respuesta. La de cobro (issue #102) ya lo hace; las de consulta y bancos (issue #103) deben hacerlo también.
 
 **Seguridad en observabilidad (`src/logger/`):**
 - `redactSerializer`: Redactor para Fastify/Pino que reemplaza por `"[REDACTED]"` cualquier cabecera sensible (`authorization`, `x-gateway-*`), impidiendo que secretos o API keys aparezcan en texto claro en consolas o servicios de agregación de logs.
@@ -181,7 +206,7 @@ cd simulator-api && npm install && npm run dev
 curl http://localhost:3000/health
 ```
 
-Las suites de prueba (16 suites con 175 pruebas en total) corren con `npm test` y no necesitan que el servidor esté levantado, porque usan `app.inject()`.
+Las suites de prueba (20 suites con 259 pruebas en total) corren con `npm test` y no necesitan que el servidor esté levantado, porque usan `app.inject()`.
 
 ---
 

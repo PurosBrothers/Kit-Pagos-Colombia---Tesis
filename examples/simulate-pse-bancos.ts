@@ -19,15 +19,14 @@
  * | Rapyd        | no tiene lista: son 47 métodos `co_pse_*` dentro del catálogo del país |
  * | Kushki       | `GET /transfer/v1/bankList`, y en Colombia es obligatoria    |
  *
- * ## Lo que el ejemplo no esconde
+ * ## Dos clases de código
  *
- * Que los códigos **no son intercambiables**. El `"1"` de Wompi no significa nada en
- * Rapyd, cuyo código es `"co_pse_bancolombia_bank"`. El SDK no los traduce a un
- * catálogo propio, y la razón es que no hace falta: el código solo se usa para volver
- * a entrar al SDK, en `PaymentMethod.pse({ bankCode })`. El comercio nunca lo
- * interpreta, lo pasa. Lo que sí tiene que recordar es volver a pedir la lista si
- * cambia de pasarela, y por eso el ejemplo imprime los códigos de las cuatro juntos:
- * verlos al lado es lo que hace evidente que no se parecen.
+ * El `code` de cada banco es el de su pasarela y no se parece entre ellas: Bancolombia
+ * es `"1007"` en Mercado Pago y `"co_pse_bancolombia_bank"` en Rapyd. El `achCode` es
+ * el código de compensación de ACH Colombia, que es el mismo en las cuatro, y
+ * `PseBankCode.BANCOLOMBIA` sirve en cualquiera porque el SDK lo traduce para Rapyd
+ * (punto 68 del `architecture-log.md`). Lo que no se traduce son los bancos ficticios
+ * de los sandboxes, como el `"1"` de Wompi, y el ejemplo termina mostrando ese rechazo.
  *
  * Requisito para correrlo: la API de Simulación arriba en el puerto 3000.
  */
@@ -39,8 +38,10 @@ import {
   OrderReference,
   Payer,
   PaymentMethod,
+  PseBankCode,
   KitPagosError,
   KitPagosErrorCode,
+  type CreatePaymentRequest,
   type SDKOptions,
   type PseBank,
 } from "kit-pagos-colombia";
@@ -89,6 +90,23 @@ function buildOptions(gateway: Gateway, baseUrl: string): SDKOptions {
   };
 }
 
+/** Un PSE con los datos del pagador que Rapyd exige. */
+function pseRequest(paymentMethod: PaymentMethod): CreatePaymentRequest {
+  return {
+    amount: new Amount("150000.00"),
+    currency: new Currency("COP"),
+    orderReference: new OrderReference(`ORDER-PSE-${Date.now()}`),
+    payer: new Payer({
+      email: "jaime.pavlich@example.com",
+      fullName: "Jaime Pavlich Mariscal",
+      phone: "3001234567",
+      documentType: "CC",
+      documentNumber: "1099888777",
+    }),
+    paymentMethod,
+  };
+}
+
 async function main(): Promise<void> {
   console.log("=== Kit Pagos Colombia — bancos de PSE en las cuatro pasarelas ===\n");
 
@@ -104,7 +122,8 @@ async function main(): Promise<void> {
 
     console.log(`${gateway}  (${banks.length} banco(s) — ${nota})`);
     for (const bank of banks) {
-      console.log(`    ${bank.code.padEnd(30)} ${bank.name}`);
+      const achCode = bank.achCode ? `achCode ${bank.achCode}` : "sin achCode";
+      console.log(`    ${bank.code.padEnd(30)} ${achCode.padEnd(13)} ${bank.name}`);
     }
     console.log();
   }
@@ -128,39 +147,40 @@ async function main(): Promise<void> {
   }
 
   /**
-   * Y la advertencia que importa: los códigos son de la pasarela que los dio. Un
-   * comercio que cambia de pasarela sin volver a pedir la lista le manda a la nueva
-   * un código que no entiende.
+   * El mismo banco sin pedir la lista: `PseBankCode.BANCOLOMBIA` en Rapyd, que es la
+   * única pasarela donde el SDK tiene que traducirlo.
    */
-  console.log("\nY por qué hay que volver a pedirla al cambiar de pasarela:\n");
+  console.log("\nEl mismo banco sin conocer el código de Rapyd:\n");
+  const kitPagosRapyd = new KitPagos(
+    buildOptions(Gateway.RAPYD, "http://localhost:3000/v1/sim/rapyd"),
+  );
+  const bancolombia = await kitPagosRapyd.createPayment(
+    pseRequest(PaymentMethod.pse({ bankCode: PseBankCode.BANCOLOMBIA })),
+  );
+  console.log(
+    `  PaymentMethod.pse({ bankCode: PseBankCode.BANCOLOMBIA })  ->  "${PseBankCode.BANCOLOMBIA}"` +
+      `  ->  ${bancolombia.outcome}`,
+  );
+
+  /**
+   * Y el caso que no se traduce: un banco ficticio de un sandbox, que solo existe en
+   * la pasarela que lo dio.
+   */
+  console.log("\nY lo que sí hay que volver a pedir al cambiar de pasarela:\n");
   const wompi = porPasarela.get(Gateway.WOMPI)?.[0];
   const rapyd = porPasarela.get(Gateway.RAPYD)?.[0];
   console.log(`  El primer banco de Wompi es "${wompi?.code}" (${wompi?.name})`);
   console.log(`  El primero de Rapyd es     "${rapyd?.code}" (${rapyd?.name})`);
   console.log(
-    "  Son la misma clase de dato y ninguno sirve en la otra pasarela. El SDK lo\n" +
-      "  detecta y lo dice, en vez de dejar que la pasarela responda un error propio:",
-  );
-
-  const kitPagosRapyd = new KitPagos(
-    buildOptions(Gateway.RAPYD, "http://localhost:3000/v1/sim/rapyd"),
+    "  El de Wompi es un banco de prueba sin achCode, así que no sirve en Rapyd. El\n" +
+      "  SDK lo detecta y lo dice, en vez de dejar que la pasarela responda un error propio:",
   );
 
   try {
-    await kitPagosRapyd.createPayment({
-      amount: new Amount("150000.00"),
-      currency: new Currency("COP"),
-      orderReference: new OrderReference(`ORDER-PSE-${Date.now()}`),
-      payer: new Payer({
-        email: "jaime.pavlich@example.com",
-        fullName: "Jaime Pavlich Mariscal",
-        phone: "3001234567",
-        documentType: "CC",
-        documentNumber: "1099888777",
-      }),
-      // El código de Wompi, mandado a Rapyd.
-      paymentMethod: PaymentMethod.pse({ bankCode: wompi?.code ?? "1" }),
-    });
+    // El código de Wompi, mandado a Rapyd.
+    await kitPagosRapyd.createPayment(
+      pseRequest(PaymentMethod.pse({ bankCode: wompi?.code ?? "1" })),
+    );
     console.error("\n  Se esperaba un rechazo y el pago pasó.");
     process.exit(1);
   } catch (error) {

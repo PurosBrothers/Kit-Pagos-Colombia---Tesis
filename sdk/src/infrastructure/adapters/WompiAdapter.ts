@@ -264,6 +264,14 @@ export class WompiAdapter implements PaymentGatewayPort {
     headers: Record<string, string>,
     secret: string,
   ): boolean {
-    return this.webhookVerifier.verify(payload, headers, secret, Gateway.WOMPI);
+    return this.webhookVerifier.verify(
+      { payload, headers },
+      {
+        secret,
+        publicKey: this.credentials?.publicKey,
+        webhookUrl: this.credentials?.webhookUrl,
+      },
+      Gateway.WOMPI,
+    );
   }
 }

@@ -9,6 +9,8 @@
  * Son funciones de modulo porque son puras y no pertenecen a ninguna pasarela
  * en particular. Ver architecture-log.md, punto 34.
  */
+import { Amount } from "../../../domain/value-objects/Amount";
+import { Currency } from "../../../domain/value-objects/Currency";
 import { Gateway } from "../../../domain/value-objects/Gateway";
 import { KitPagosError } from "../../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../../domain/value-objects/KitPagosErrorCode";
@@ -105,13 +107,26 @@ export function mapValueObjectError<T>(
  * JSON.
  *
  * Cuando llega como numero la escala ya se perdio antes del SDK: `150000.00` es
- * indistinguible de `150000` despues del parseo de JSON. No es algo que el SDK
- * pueda arreglar del lado entrante, y es exactamente la razon por la que si se
- * envia como string en la peticion, donde la escala participa del calculo de la
- * firma.
+ * indistinguible de `150000` despues del parseo de JSON. Por eso se envia como
+ * string en la peticion, donde la escala participa del calculo de la firma, y
+ * por eso la respuesta pasa ademas por atCurrencyScale().
  */
 export function amountToString(rawAmount: unknown): string {
   return typeof rawAmount === "number" ? rawAmount.toString() : String(rawAmount ?? "");
+}
+
+/**
+ * Lleva un monto de la respuesta a los decimales que su divisa tiene segun
+ * ISO 4217, rellenando con ceros: el `75000` de Mercado Pago sale como
+ * `"75000.00"`, la misma forma que da el `amount_in_cents` de Wompi. Sin esto,
+ * el mismo cobro se leeria distinto segun la pasarela (punto 72).
+ *
+ * Nunca quita decimales: si la pasarela reporta mas de los que admite la
+ * divisa, el monto queda como llego.
+ */
+export function atCurrencyScale(amount: Amount, currency: Currency): Amount {
+  const exponent = currency.getMinorUnitExponent();
+  return amount.getScale() < exponent ? new Amount(amount.toFixedScale(exponent)) : amount;
 }
 
 /**

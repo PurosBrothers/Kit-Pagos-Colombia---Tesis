@@ -15,23 +15,21 @@
  * buena. Lo que sí aporta este objeto es saber **cuándo ese dato pasa a ser
  * obligatorio**, que es lo que expone `requiresPayerDocument()`.
  *
- * ## El campo `bankCode` no es portable entre pasarelas
+ * ## El campo `bankCode` acepta dos clases de código
  *
- * Esta es la limitación honesta del modelo y conviene tenerla escrita. Las
- * cuatro pasarelas piden el banco de PSE, pero **ninguna usa el mismo
- * identificador**:
+ * Las cuatro pasarelas piden el banco de PSE, pero no con la misma forma:
  *
- * - Wompi lo recibe en `financial_institution_code` (en sandbox, `"1"` aprueba
- *   y `"2"` declina).
- * - Kushki lo recibe en `bankId`, tomado de `GET /transfer/v1/bankList`.
+ * - Mercado Pago lo recibe en `financial_institution` y Wompi en
+ *   `financial_institution_code`, las dos con el código de compensación de ACH.
+ *   En el sandbox de Wompi, en cambio, los bancos son `"1"`, `"2"` y `"3"`.
+ * - Kushki lo recibe en `bankId`; en UAT sus bancos son ficticios (`"0001"`).
  * - Rapyd no lo recibe como campo: lo **concatena en el nombre del método**,
  *   con el patrón `co_pse_{banco}_bank` (ver `architecture-log.md`, punto 19).
  *
- * Por eso `bankCode` es un string opaco con alcance de pasarela: el adaptador
- * sabe cómo interpretarlo, el dominio no. La consecuencia para el comercio es
- * que **el código de banco no se puede reutilizar al cambiar de pasarela**, a
- * diferencia del monto, la divisa o la referencia. Es el único dato del contrato
- * con esa propiedad, y está documentado en `docs/testing-data/`.
+ * `bankCode` acepta un código de `PseBankCode`, que sirve igual en las cuatro
+ * pasarelas porque Rapyd lo traduce, o el `code` que devolvió `getPseBanks()`,
+ * que solo sirve en la pasarela que lo dio. Los bancos de prueba de los sandboxes
+ * solo existen de la segunda forma (punto 68).
  */
 
 /**
@@ -114,7 +112,8 @@ export class PaymentMethod {
    * PSE, contra un banco concreto.
    *
    * `bankCode` es obligatorio porque en PSE no existe "el banco por defecto":
-   * el pagador siempre elige uno, y la lista sale de la pasarela activa.
+   * el pagador siempre elige uno. Puede ser un código de `PseBankCode`, como
+   * `PseBankCode.BANCOLOMBIA`, o el `code` de un banco de `getPseBanks()`.
    * `payerKind` es por defecto `NATURAL`, que es el caso mayoritario, en vez de
    * obligar a informarlo en cada llamada.
    */

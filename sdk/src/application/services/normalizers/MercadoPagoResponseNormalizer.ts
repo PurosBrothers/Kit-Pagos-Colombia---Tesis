@@ -16,6 +16,7 @@ import {
   requireData,
   mapValueObjectError,
   amountToString,
+  atCurrencyScale,
 } from "./payload-utils";
 
 /** Email de relleno cuando la respuesta no trae el del pagador. */
@@ -46,7 +47,11 @@ export class MercadoPagoResponseNormalizer implements GatewayResponseNormalizer 
     // Payments API lo llama `transaction_amount` y lo manda como numero; la
     // Orders API lo llama `total_amount` y lo manda como string.
     const amount = mapValueObjectError(
-      () => new Amount(amountToString(data.transaction_amount ?? data.total_amount)),
+      () =>
+        atCurrencyScale(
+          new Amount(amountToString(data.transaction_amount ?? data.total_amount)),
+          currency,
+        ),
       Gateway.MERCADOPAGO,
       rawResponse,
       "Malformed amount in Mercado Pago response",

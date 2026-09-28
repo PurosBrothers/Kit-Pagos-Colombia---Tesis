@@ -99,7 +99,7 @@ describe("KushkiAdapter", () => {
       expect(transaction.gatewayTransactionId.gateway).toBe(
         Gateway.KUSHKI,
       );
-      expect(transaction.amount.getValue()).toBe("50000");
+      expect(transaction.amount.getValue()).toBe("50000.00");
       expect(transaction.currency.getCode()).toBe("COP");
     });
 

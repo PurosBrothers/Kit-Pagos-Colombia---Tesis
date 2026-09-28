@@ -3,7 +3,7 @@ import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode"
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { GatewayTransactionId } from "../../domain/value-objects/GatewayTransactionId";
 import type { PendingRedirect } from "../../domain/value-objects/PaymentResult";
-import type { PseBank } from "../../domain/value-objects/PseBank";
+import { describePseBank, type PseBank } from "../../domain/value-objects/PseBank";
 import type { PayerKind } from "../../domain/value-objects/PaymentMethod";
 import type { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
 import type { TaxBreakdown } from "../../domain/value-objects/TaxBreakdown";
@@ -319,7 +319,7 @@ export function parseKushkiPseBanks(rawResponse: unknown): PseBank[] {
     }
 
     const name = bank.name ?? bank.description;
-    return [{ code, name: typeof name === "string" ? name : code }];
+    return [describePseBank(code, typeof name === "string" ? name : code)];
   });
 }
 

@@ -158,26 +158,26 @@ describe("KitPagos", () => {
       }
     });
 
-    it("lanza INVALID_REQUEST con los nombres de los campos que faltan", async () => {
+    it("should throw INVALID_REQUEST naming the missing fields", async () => {
       const sdk = buildConfiguredSdk();
 
-      const sinMonto = {
+      const withoutAmount = {
         ...validRequest,
         amount: undefined as unknown as typeof validRequest.amount,
       };
-      await expect(sdk.createPayment(sinMonto)).rejects.toMatchObject({
+      await expect(sdk.createPayment(withoutAmount)).rejects.toMatchObject({
         code: KitPagosErrorCode.INVALID_REQUEST,
         gateway: Gateway.WOMPI,
         message: expect.stringContaining("amount"),
       });
 
-      const sinVarios = {
+      const withoutAnyRequiredField = {
         amount: undefined as unknown as typeof validRequest.amount,
         currency: undefined as unknown as typeof validRequest.currency,
         orderReference: undefined as unknown as typeof validRequest.orderReference,
         payer: undefined as unknown as typeof validRequest.payer,
       };
-      await expect(sdk.createPayment(sinVarios)).rejects.toMatchObject({
+      await expect(sdk.createPayment(withoutAnyRequiredField)).rejects.toMatchObject({
         code: KitPagosErrorCode.INVALID_REQUEST,
         message: expect.stringMatching(/amount.*currency.*orderReference.*payer/),
       });
@@ -291,7 +291,7 @@ describe("KitPagos", () => {
           },
           timestamp,
           signature: {
-            properties: ["data.transaction.id", "data.transaction.status"],
+            properties: ["transaction.id", "transaction.status"],
             checksum,
           },
         });
@@ -323,24 +323,18 @@ describe("KitPagos", () => {
           },
         });
 
+        // docs.rapyd.net/en/webhook-authentication.html: base64 del texto hexadecimal del
+        // HMAC, y Rapyd solo manda salt, timestamp y signature (punto 67).
         const toSign = webhookUrl + salt + timestamp + rapydAccessKey + rapydSecret + payload;
-        const signature = crypto
-          .createHmac("sha256", rapydSecret)
-          .update(toSign)
-          .digest("base64");
+        const hex = crypto.createHmac("sha256", rapydSecret).update(toSign).digest("hex");
+        const signature = Buffer.from(hex).toString("base64");
 
-        const headers = {
-          signature,
-          access_key: rapydAccessKey,
-          salt,
-          timestamp,
-          "x-webhook-url": webhookUrl,
-        };
+        const headers = { signature, salt, timestamp };
 
         const sdk = new KitPagos({
           gateway: Gateway.RAPYD,
           credentials: {
-            [Gateway.RAPYD]: { publicKey: rapydAccessKey, privateKey: rapydSecret },
+            [Gateway.RAPYD]: { publicKey: rapydAccessKey, privateKey: rapydSecret, webhookUrl },
           },
         });
 
@@ -362,7 +356,6 @@ describe("KitPagos", () => {
 
         const payload = JSON.stringify({
           action: "payment.updated",
-          status: "approved",
           data: { id: dataId },
         });
 
@@ -382,7 +375,7 @@ describe("KitPagos", () => {
 
         expect(event.gateway).toBe(Gateway.MERCADOPAGO);
         expect(event.gatewayTransactionId).toBe(dataId);
-        expect(event.newStatus).toBe("APPROVED");
+        expect(event.newStatus).toBe("PENDING");
       });
 
       it("should validate and parse a valid Kushki webhook event", () => {
@@ -438,7 +431,7 @@ describe("KitPagos", () => {
           },
           timestamp,
           signature: {
-            properties: ["data.transaction.id", "data.transaction.status"],
+            properties: ["transaction.id", "transaction.status"],
             checksum,
           },
         });
@@ -496,7 +489,7 @@ describe("KitPagos", () => {
         }
       });
 
-      it("should throw KitPagosError(MALFORMED_RESPONSE) when Rapyd webhook is missing x-webhook-url header", () => {
+      it("should throw INVALID_CREDENTIALS, not MALFORMED_RESPONSE, when Rapyd has no webhookUrl configured", () => {
         const rapydSecret = "rapyd_sec_999";
         const sdk = new KitPagos({
           gateway: Gateway.RAPYD,
@@ -508,10 +501,9 @@ describe("KitPagos", () => {
         const payload = JSON.stringify({ type: "PAYMENT_COMPLETED", data: { id: "p-1" } });
         const headers = {
           signature: "some-sig",
-          access_key: "ak",
           salt: "salt",
           timestamp: "1727001234",
-          // missing x-webhook-url
+          "x-webhook-url": "https://tienda.example.com/webhooks/rapyd",
         };
 
         try {
@@ -519,10 +511,35 @@ describe("KitPagos", () => {
           fail("Should have thrown KitPagosError");
         } catch (error) {
           const sdkError = error as KitPagosError;
-          expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
-          expect(sdkError.message).toContain("x-webhook-url");
+          expect(sdkError.code).toBe(KitPagosErrorCode.INVALID_CREDENTIALS);
+          expect(sdkError.message).toContain("credentials.webhookUrl");
           expect(sdkError.originalPayload).toBeNull();
         }
+      });
+
+      it("should verify a Mercado Pago webhook against the data.id passed in options.query", () => {
+        const mpSecret = "mp_secret_query";
+        const orderId = "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3";
+        const requestId = "2066ca19-c6f1-498a-be75-1923005edd06";
+        const ts = String(Math.floor(Date.now() / 1000));
+        const v1 = crypto
+          .createHmac("sha256", mpSecret)
+          .update(`id:${orderId.toLowerCase()};request-id:${requestId};ts:${ts};`)
+          .digest("hex");
+        const sdk = new KitPagos({
+          gateway: Gateway.MERCADOPAGO,
+          credentials: {
+            [Gateway.MERCADOPAGO]: { publicKey: "pub", privateKey: "APP_USR-x", webhookSecret: mpSecret },
+          },
+        });
+
+        const event = sdk.validateWebhook(
+          JSON.stringify({ action: "order.processed", data: { id: orderId } }),
+          { "x-signature": `ts=${ts},v1=${v1}`, "x-request-id": requestId },
+          { query: { "data.id": orderId, type: "order" } },
+        );
+
+        expect(event.gatewayTransactionId).toBe(orderId);
       });
 
       it("should throw KitPagosError(MALFORMED_RESPONSE) when Wompi webhook lacks signature properties", () => {
@@ -558,7 +575,7 @@ describe("KitPagos", () => {
           data: { transaction: { id: txId, status } },
           timestamp: ts,
           signature: {
-            properties: ["data.transaction.id", "data.transaction.status"],
+            properties: ["transaction.id", "transaction.status"],
             checksum,
           },
         });
@@ -666,7 +683,7 @@ describe("KitPagos", () => {
             data: { transaction: { id: txId, status } },
             timestamp,
             signature: {
-              properties: ["data.transaction.id", "data.transaction.status"],
+              properties: ["transaction.id", "transaction.status"],
               checksum,
             },
           }),
@@ -744,7 +761,7 @@ describe("KitPagos", () => {
           data: { transaction: { id: txId, status } },
           timestamp,
           signature: {
-            properties: ["data.transaction.id", "data.transaction.status"],
+            properties: ["transaction.id", "transaction.status"],
             checksum,
           },
         });
@@ -785,7 +802,7 @@ describe("KitPagos", () => {
           data: { transaction: { id: txId, status: "APPROVED" } },
           timestamp,
           signature: {
-            properties: ["data.transaction.id", "data.transaction.status"],
+            properties: ["transaction.id", "transaction.status"],
             checksum,
           },
         });
@@ -893,7 +910,7 @@ describe("KitPagos", () => {
         expect(transaction.isApproved()).toBe(true);
         expect(transaction.getStatus()).toBe("APPROVED");
         expect(transaction.rawStatus).toBe("approved");
-        expect(transaction.amount.getValue()).toBe("150000");
+        expect(transaction.amount.getValue()).toBe("150000.00");
         expect(transaction.currency.getCode()).toBe("COP");
         expect(transaction.orderReference.getValue()).toBe("ORDER-MP-99");
         expect(transaction.payer.email).toBe("cliente@example.com");

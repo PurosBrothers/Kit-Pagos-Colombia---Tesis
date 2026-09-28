@@ -4,7 +4,12 @@ import { WebhookEvent } from "../../domain/value-objects/WebhookEvent";
 import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
 import { SdkConfigurator, SDKOptions } from "../config/SDKConfigurator";
 import { GatewayFactory } from "../factories/GatewayFactory";
-import { WebhookVerifier, WebhookVerificationOptions } from "../../domain/services/WebhookVerifier";
+import {
+  IncomingWebhook,
+  WebhookSigningContext,
+  WebhookVerifier,
+  WebhookVerificationOptions,
+} from "../../domain/services/WebhookVerifier";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import { RetryHandler } from "../../application/services/RetryHandler";
@@ -24,6 +29,12 @@ export { WebhookVerificationOptions } from "../../domain/services/WebhookVerifie
 export interface ValidateWebhookOptions extends WebhookVerificationOptions {
   /** Pasarela emisora. Por defecto: la activa. Solo necesita estar en `credentials`, no activa. */
   gateway?: Gateway;
+  /**
+   * Parámetros de la URL con que llegó el webhook (`req.query`). Mercado Pago firma el
+   * `data.id` que viaja ahí y no el del cuerpo; sin ellos se verifica con el del cuerpo,
+   * que coincide en la Payments API pero no en los ids alfanuméricos de la Orders API.
+   */
+  query?: Record<string, string>;
 }
 
 /**
@@ -149,6 +160,7 @@ export class KitPagos {
    * app.post("/webhooks/:pasarela", (req, res) => {
    *   const evento = kit.validateWebhook(req.rawBody, req.headers, {
    *     gateway: PASARELAS[req.params.pasarela],
+   *     query: req.query,
    *   });
    * });
    * ```
@@ -178,7 +190,12 @@ export class KitPagos {
      * atrás en las otras tres, donde contra la pasarela real va a fallar la verificación.
      * La tabla de dónde sale el valor en cada una está en `Credentials.webhookSecret`.
      */
-    const secret = credentials.webhookSecret ?? credentials.privateKey;
+    const context: WebhookSigningContext = {
+      secret: credentials.webhookSecret ?? credentials.privateKey,
+      publicKey: credentials.publicKey,
+      webhookUrl: credentials.webhookUrl,
+    };
+    const webhook: IncomingWebhook = { payload, headers, query: options?.query };
 
     const verificationOptions: WebhookVerificationOptions = {
       toleranceSeconds: options?.toleranceSeconds ?? this.configurator.getWebhookToleranceSeconds(),
@@ -186,8 +203,13 @@ export class KitPagos {
     };
     let isValid: boolean;
     try {
-      isValid = this.verifier.verify(payload, headers, secret, gateway, verificationOptions);
+      isValid = this.verifier.verify(webhook, context, gateway, verificationOptions);
     } catch (error) {
+      // Una configuración incompleta llega ya tipada y no es un webhook malformado:
+      // reportarla como tal escondería al comercio que el problema es suyo.
+      if (error instanceof KitPagosError) {
+        throw error;
+      }
       const msg = error instanceof Error ? error.message : "Malformed webhook payload or headers";
       throw new KitPagosError(
         KitPagosErrorCode.MALFORMED_RESPONSE,
@@ -207,7 +229,7 @@ export class KitPagos {
     }
 
     try {
-      return this.verifier.parse(payload, gateway);
+      return this.verifier.parse(webhook, gateway);
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Failed to parse webhook payload";
       throw new KitPagosError(

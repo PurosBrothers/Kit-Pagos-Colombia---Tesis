@@ -99,7 +99,7 @@ describe("kushki-card", () => {
       expect(transaction.getStatus()).toBe("APPROVED");
       expect(transaction.gatewayTransactionId.value).toBe("978471849144483984");
       expect(transaction.orderReference.getValue()).toBe("ord-12345");
-      expect(transaction.amount.getValue()).toBe("50000");
+      expect(transaction.amount.getValue()).toBe("50000.00");
       expect(transaction.currency.getCode()).toBe("COP");
       expect(transaction.payer.email).toBe("comprador@example.com");
     });
