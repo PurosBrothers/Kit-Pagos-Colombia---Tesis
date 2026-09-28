@@ -172,6 +172,8 @@ El issue #115 evalúa si este trabajo debería ser un objetivo específico. La r
 
 **Implementar Wompi y Mercado Pago. Dejar Kushki como trabajo futuro. Documentar Rapyd como límite de diseño.**
 
+> **Prioridad:** Este módulo es un **valor agregado final**, no un entregable bloqueante. Se aborda únicamente después de que todos los issues mínimos del SDK, la API de Simulación y la documentación de la tesis estén cerrados. Si el tiempo no alcanza, este documento de investigación es el entregable en sí mismo.
+
 Implementar el SDK de navegador completo para las cuatro pasarelas está fuera del alcance razonable: la asimetría de Rapyd hace que la abstracción nunca pueda ofrecer la misma interfaz para las cuatro con la misma firma, y Kushki con Hosted Fields tiene una complejidad de iframes desproporcionada para el tiempo disponible. Ambas limitaciones se documentan como resultado de diseño, no se ocultan.
 
 El alcance concreto de implementación:
