@@ -2125,6 +2125,21 @@ Se descartaron dos alternativas:
 
 **Estado:** Resuelto en código (`sdk/src/application/services/normalizers/payload-utils.ts`, usado por `MercadoPagoResponseNormalizer`, `RapydResponseNormalizer`, `KushkiResponseNormalizer` y `kushki-transfer.ts`).
 
+### 74. Los objetivos específicos de la tesis se escribieron en el repositorio, con la fuente en el SPMP (issue #115)
+
+**Responsable:** Henao (issue #115).
+
+**Contexto.** Hasta el 28 de septiembre de 2026, la expresión "objetivo específico" aparecía en `docs/` solo como pregunta de pasada en `6-tokenizacion-frontend.md` (si el trabajo del issue #110 debía convertirse en un objetivo); no existía una lista de los objetivos con su fuente ni un rastreo del trabajo diario contra ellos. Los objetivos vivían en el SPMP (`SPMP - Kit Pagos Colombia.md`, **fuera del repositorio**, sección 1.2.3) y en la memoria del equipo, y la Fase 2 del SPMP pedía *"proyectos prototípicos definidos"* sin que nadie los hubiera escrito. La revisión del issue #115 detectó que, al margen de los seis objetivos, el proyecto ejecutaba trabajo que el SPMP no contempla (la capa REST `/v1/api` y los patrones de integración P2 y P3).
+
+**Decisiones, todas documentadas en `docs/project-management/thesis-objectives.md`:**
+
+- **Los objetivos viven en un documento aparte, no dentro de la matriz de trazabilidad.** La matriz es un artefacto del DoD (condición 5) con columnas fijas (RF, componentes, estado, issue, PR, pruebas); un objetivo no tiene issue, PR ni pruebas por fila y rompería ese contrato. La conexión es por referencias cruzadas: cada OE lista los RFs que aportan evidencia (sección 2) y la matriz ganó una nota apuntando al documento.
+- **Los seis objetivos se transcriben del SPMP sin reescribirse**; las divergencias entre el texto aprobado y lo ejecutado se nombran (sección 4) en vez de disimularse: la capa REST no existe en el SPMP, el patrón P2 implica un frente web que el SPMP excluye explícitamente ("interfaces de usuario para flujos de pago"), y P3 se cerró como investigación sin agregar un OE-07.
+- **Los tres prototipos quedan definidos:** A (checkout directo, control), B (checkout con SDK, tratamiento) y C (checkout frontend → REST, demuestra el patrón P2). A/B son el par medido del experimento de la Fase 5; C no participa de la comparación formal. Cada fila fija el caso de comercio, las pasarelas, el patrón y el objetivo que demuestra.
+- **Ninguna cifra de comparación se agrega al documento:** las únicas cifras válidas las produce el experimento de la Fase 5, y no existen aún.
+
+**Estado:** Resuelto en documentación (`docs/project-management/thesis-objectives.md`, nota en `docs/project-management/traceability-matrix.md`, índice en `docs/README.md`). La descripción normativa de los tres patrones en el SAD queda a cargo de #108; este punto solo registra la decisión de dónde vive la trazabilidad de objetivos.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
