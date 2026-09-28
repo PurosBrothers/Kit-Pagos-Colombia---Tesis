@@ -2125,6 +2125,27 @@ Se descartaron dos alternativas:
 
 **Estado:** Resuelto en código (`sdk/src/application/services/normalizers/payload-utils.ts`, usado por `MercadoPagoResponseNormalizer`, `RapydResponseNormalizer`, `KushkiResponseNormalizer` y `kushki-transfer.ts`).
 
+### 73. La REST de lectura del #103: dos endpoints que solo traducen HTTP a la fachada, sin reimplementar reglas
+
+**Responsable:** Henao (issue #103).
+
+**Contexto.** El módulo REST (`src/kit-pagos-api/`) tenía una sola operación de negocio —`POST /v1/api/payments` (issue #102)— y del issue #100 quedó el contrato del resto: consultar el estado de una transacción y listar los bancos de PSE. La regla del módulo es que no reimplementa reglas del SDK, solo traduce HTTP a llamadas de la fachada `KitPagos`, así que ambos endpoints son delegación directa a `getPaymentStatus()` y `getPseBanks()`.
+
+**Decisiones, todas surgidas al implementar:**
+
+- **La pasarela de la consulta viaja en el query, obligatoria, no en la ruta ni deducida del almacén.** `GET /v1/api/payments/:id?gateway=<pasarela>` recibe la pasarela como param de query y responde 400 si falta o no es una soportada. Deducirla del `TransactionStore` acoplaría la REST al simulador: la transacción la creó una pasarela y solo esa pasarela sabe consultarla —los ids no son intercambiables entre pasarelas, igual que los códigos de banco—. En producción no hay `TransactionStore`, y la REST tiene que funcionar contra pasarelas reales.
+- **La respuesta 200 es `{ gateway, transaction }`, con la misma serialización que el POST.** Reutiliza `serializeTransaction()`, así que el `status` normalizado y el `rawStatus` nativo viajan juntos, igual que en la creación. El POST duplicaba `rawStatus` fuera de la serialización; el GET no lo repite, porque ahí no hay ambigüedad sobre en cuál de las dos ramas está el cliente.
+- **Sin reintentos propios.** `getPaymentStatus()` ya va envuelto en `RetryHandler` dentro del SDK (es lectura idempotente). Agregar reintentos en la ruta sería la segunda capa del mismo mecanismo.
+- **Kushki con tarjeta responde 400 `UNSUPPORTED_OPERATION`, sin fingir que la transacción no existe.** Kushki no publica ruta de consulta para cobros con tarjeta (punto 48), y el adaptador produce ese código tras probar las rutas que existen. La traducción de `KitPagosError` a HTTP ya existía (issue #100, `errors/kitPagosErrorResponse.ts`), así que el código —400— llega solo al error handler global. Que sea 400 y no 404 importa: un 404 dice "esta transacción no existe" y un 400 dice "esta operación no se puede hacer", y un comercio que busca en el lugar equivocado ahorra horas de depuración.
+- **`GET /v1/api/pse-banks` agrupa la lista por pasarela, porque los códigos no son portables.** Las cuatro listas existen como un solo recurso porque el módulo es la fachada de las cuatro pasarelas, pero cada `code` solo sirve en su pasarela (punto 68), así que la respuesta es `{ pseBanks: [{ gateway, banks }] }` y cada banco lleva su `achCode` solo cuando existe: los bancos ficticios de los sandboxes de Wompi y Kushki no tienen código de compensación ACH y no pueden llevarlo falsificado.
+- **Sin cache.** La lista de bancos cambia en la pasarela (entran y salen entidades), y una cache invalidable no aporta frente a cuatro llamadas idempotentes ya protegidas por `RetryHandler`.
+- **Falla rápido.** Si una pasarela no responde, el `KitPagosError` viaja al error handler global en vez de devolver una lista parcial que el cliente tomaría por completa.
+- **Los dos endpoints pasan por `gatewayClientFor()`** (puntos 69 y 70): la advertencia del respaldo en sandbox aparece en la cabecera, en el cuerpo y en el log también para las lecturas.
+
+**Lo medido (28 de septiembre de 2026).** `test/read-endpoints.test.ts`, nuevo, tiene 6 pruebas con el patrón `app.inject()` del módulo: un GET devuelve 200 con el estado normalizado y nativo de una transacción creada por el mismo endpoint POST; un id inexistente responde 404 `RESOURCE_NOT_FOUND` (que llega del simulador como 404 nativo); faltar o desconocer la pasarela responde 400; una tarjeta de Kushki responde 400 `UNSUPPORTED_OPERATION` (inyectando un `KitPagos` que produce ese código, porque el simulador contesta 200 a su `GET /charges/:ticketNumber` a propósito, punto 50); y `GET /pse-banks` devuelve las cuatro listas —Wompi con sus tres bancos de prueba, Mercado Pago con cinco entidades reales y su `achCode`, Kushki sin el placeholder del `<select>`, Rapyd solo los métodos `co_pse_*` del catálogo— y comprueba que los códigos de una no aparecen en las otras. `simulator-api`: 21 suites y 265 pruebas; lint y `tsc` sin errores.
+
+**Estado:** Resuelto en código (`routes/payments.ts`, `routes/pse-banks.ts`, `index.ts` del módulo, y `test/read-endpoints.test.ts`).
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
