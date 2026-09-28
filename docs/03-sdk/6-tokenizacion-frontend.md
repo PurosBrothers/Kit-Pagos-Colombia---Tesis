@@ -131,7 +131,24 @@ Las opciones son:
 | **B. Paquete separado** `kit-pagos-colombia-browser` | Build independiente, sin afectar el SDK actual | Duplica tipos o crea dependencia entre paquetes |
 | **C. Solo guías + helpers de inicialización** | Cero complejidad de build | No unifica la experiencia; el comercio sigue conociendo las librerías de cada pasarela |
 
-La Opción A es la más coherente con el objetivo de la tesis. La Opción C no responde la pregunta.
+La Opción A es la más coherente con el objetivo de la tesis. La Opción C no responde la pregunta. La estructura de archivos propuesta para la Opción A:
+
+```
+sdk/
+├── src/
+│   ├── domain/          ← Sin cambios
+│   ├── application/     ← Sin cambios
+│   └── infrastructure/  ← Sin cambios
+└── src-browser/         ← Nuevo módulo frontend
+    ├── tokenizers/
+    │   ├── WompiTokenizer.ts
+    │   ├── MercadoPagoTokenizer.ts
+    │   └── KushkiTokenizer.ts
+    ├── KitPagosBrowser.ts   ← Fachada frontend
+    └── index.ts
+```
+
+`KushkiTokenizer.ts` se incluye en la estructura aunque su implementación queda como trabajo futuro (ver sección 7). `WompiTokenizer.ts` y `MercadoPagoTokenizer.ts` son el alcance de la implementación inicial.
 
 ---
 
@@ -153,19 +170,21 @@ El issue #115 evalúa si este trabajo debería ser un objetivo específico. La r
 
 ## 7. Recomendación
 
-**Alcance reducido, bien definido, como trabajo futuro.**
+**Implementar Wompi y Mercado Pago. Dejar Kushki como trabajo futuro. Documentar Rapyd como límite de diseño.**
 
-Implementar el SDK de navegador completo está fuera del alcance razonable de la tesis. La asimetría de Rapyd hace que la abstracción nunca pueda ofrecer la misma interfaz para las cuatro pasarelas, y esa limitación debería documentarse como resultado de diseño, no ocultarse.
+Implementar el SDK de navegador completo para las cuatro pasarelas está fuera del alcance razonable: la asimetría de Rapyd hace que la abstracción nunca pueda ofrecer la misma interfaz para las cuatro con la misma firma, y Kushki con Hosted Fields tiene una complejidad de iframes desproporcionada para el tiempo disponible. Ambas limitaciones se documentan como resultado de diseño, no se ocultan.
 
-Lo que sí tiene valor como entregable de tesis:
+El alcance concreto de implementación:
 
-1. **Este documento** — que responde la pregunta del issue con evidencia y justificación. Es un resultado de investigación válido y publicable.
+1. **`WompiTokenizer.ts`** — REST directo contra `POST /v1/tokens/cards` con la clave pública. Sin librería propietaria. El caso más simple y el que se puede testear con un servidor Node.js de prueba sin necesitar un browser real.
 
-2. **Una implementación de prueba de concepto para Wompi** — que es el caso más simple (REST directo, sin librería propietaria) y que puede implementarse y probarse en 2–3 días. Demostraría que el patrón funciona para las pasarelas que lo permiten.
+2. **`MercadoPagoTokenizer.ts`** — envuelve los Core Methods de `@mercadopago/sdk-js`. Mercado Pago es la segunda pasarela con mayor penetración en Colombia y su SDK JS está bien documentado y estable.
 
-3. **Documentar el modelo de Rapyd como una limitación de diseño** — que es honesto y más valioso que ignorarlo. Una abstracción que declara sus límites es más útil que una que los esconde.
+3. **`KitPagosBrowser.ts`** — fachada que expone `tokenizeCard()` con la misma semántica para las dos pasarelas implementadas, y que devuelve un valor de tipo `CardToken` directamente utilizable como `paymentMethod.cardToken` en el SDK de servidor.
 
-La pregunta que conviene resolver con el director: si el alcance de la tesis incluye la prueba de concepto de Wompi, o si el documento de investigación es suficiente como entregable.
+4. **`KushkiTokenizer.ts`** — declarado como stub (`throw new Error("aun no esta implementado")`). La estructura queda lista para implementarlo cuando se disponga de tiempo para gestionar el ciclo de vida de los Hosted Fields.
+
+5. **Documentar Rapyd** — en este mismo documento queda explicado por qué Rapyd no entra en el modelo de tokenización y qué alternativa existe (`REDIRECT_REQUIRED` vía el SDK de servidor).
 
 ---
 
