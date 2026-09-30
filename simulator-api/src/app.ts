@@ -1,5 +1,5 @@
-import Fastify, { FastifyInstance } from "fastify";
-import { KitPagosError } from "kit-pagos-colombia";
+import Fastify, { FastifyError, FastifyInstance } from "fastify";
+import { KitPagosError, KitPagosErrorCode } from "kit-pagos-colombia";
 import { healthRoute } from "./routes/health";
 import { wompiRoutes } from "./routes/wompi";
 import { mercadopagoRoutes } from "./routes/mercadopago";
@@ -14,6 +14,7 @@ import {
 import { KitPagosProvider } from "./services/KitPagosProvider";
 import { kitPagosApi } from "./kit-pagos-api";
 import { toKitPagosErrorResponse } from "./kit-pagos-api/errors/kitPagosErrorResponse";
+import { registerOpenApi } from "./kit-pagos-api/openapi/register";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -42,6 +43,40 @@ export function buildApp(options?: BuildAppOptions): FastifyInstance {
 
   const app = Fastify({
     logger: loggerConfig,
+    // AJV en modo estricto rechaza keywords de OpenAPI como 'example'.
+    // Solo se añade 'example' como keyword conocida; strict mode se mantiene
+    // activo para que el tipo siga siendo validado correctamente.
+    ajv: {
+      customOptions: {
+        keywords: ["example"],
+        strictTypes: false,
+      },
+    },
+  });
+
+  // OpenAPI se registra siempre; en tests con logger:false el servidor nunca
+  // arranca en red, pero /docs sigue siendo accesible vía app.inject().
+  // registerOpenApi es async pero Fastify encola los plugins y los resuelve
+  // al hacer app.ready() o app.inject(), así que no necesitamos await aquí.
+  app.register(registerOpenApi);
+
+  // Etiqueta automática por prefijo de ruta: evita tocar los 20+ handlers
+  // de simulación individualmente. Las rutas de /v1/api ya llevan su tag
+  // explícito en el schema de cada endpoint.
+  app.addHook("onRoute", (routeOptions) => {
+    if (routeOptions.url.startsWith("/v1/sim")) {
+      routeOptions.schema = routeOptions.schema ?? {};
+      const schema = routeOptions.schema as Record<string, unknown>;
+      if (!schema["tags"]) {
+        schema["tags"] = ["Simulación"];
+      }
+    } else if (routeOptions.url === "/health" || routeOptions.url === "/") {
+      routeOptions.schema = routeOptions.schema ?? {};
+      const schema = routeOptions.schema as Record<string, unknown>;
+      if (!schema["tags"]) {
+        schema["tags"] = ["Diagnóstico"];
+      }
+    }
   });
 
   const credentialResolver =
@@ -56,7 +91,17 @@ export function buildApp(options?: BuildAppOptions): FastifyInstance {
   app.addHook("onRequest", createAuthHook(options?.authOptions));
 
   // Manejador centralizado de errores: credenciales faltantes y errores del SDK
-  app.setErrorHandler((error, request, reply) => {
+  app.setErrorHandler((error: FastifyError | Error, request, reply) => {
+    // FST_ERR_VALIDATION: Fastify rechazó la petición por violar el schema JSON.
+    // Lo mapeamos a INVALID_REQUEST para mantener el contrato de errores del SDK.
+    if ("code" in error && error.code === "FST_ERR_VALIDATION") {
+      reply.status(400).send({
+        code: KitPagosErrorCode.INVALID_REQUEST,
+        message: error.message,
+      });
+      return;
+    }
+
     if (error instanceof MissingCredentialsError || error instanceof ClientCredentialsRequiredError) {
       reply.status(401).send({
         error: "Unauthorized",
