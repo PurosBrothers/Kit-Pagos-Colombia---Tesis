@@ -1,6 +1,6 @@
 # Las pruebas del SDK
 
-Qué se prueba, con qué, qué corre en CI y qué no. Los números son de la última corrida verificada.
+Qué se prueba, con qué, qué corre en CI y qué no. Los números son de la corrida del 29 de septiembre de 2026; la cifra vigente la imprime cada suite al ejecutarse.
 
 ---
 
@@ -8,16 +8,16 @@ Qué se prueba, con qué, qué corre en CI y qué no. Los números son de la úl
 
 | Suite | Dónde | Qué corre | Necesita |
 |---|---|---|---|
-| **Unitarias del SDK** | `sdk/src/**/*.test.ts` | 35 archivos, **586 pruebas** | Nada: ni red, ni credenciales |
-| **De la API de Simulación** | `simulator-api/test/*.test.ts` | 9 archivos, **81 pruebas** | Nada: usan `app.inject()` |
-| **De contrato** | `sdk/test/sandbox/*.sandbox.test.ts` | 4 archivos, **16 pruebas** | Credenciales reales y red |
+| **Unitarias del SDK** | `sdk/src/**/*.test.ts` | 39 archivos, **631 pruebas** | Nada: ni red, ni credenciales |
+| **De la API de Simulación** | `simulator-api/test/*.test.ts` | 20 archivos, **259 pruebas** | Nada: usan `app.inject()` |
+| **De contrato** | `sdk/test/sandbox/*.sandbox.test.ts` | 4 archivos, **18 pruebas** | Credenciales reales y red |
 
-Más una cuarta comprobación que no es una suite de pruebas pero cumple la misma función: `cd examples && npm run typecheck` compila los diez ejemplos contra los tipos publicados del SDK.
+Más una cuarta comprobación que no es una suite de pruebas pero cumple la misma función: `cd examples && npm run typecheck` compila los once ejemplos contra los tipos publicados del SDK.
 
 ```bash
-cd sdk && npx jest               # 586 pruebas en ~7 s
-cd simulator-api && npx jest     # 81 pruebas en ~2 s
-cd sdk && npm run test:sandbox   # 16 pruebas contra los sandboxes reales
+cd sdk && npx jest               # 631 pruebas en ~17 s
+cd simulator-api && npx jest     # 259 pruebas en ~12 s
+cd sdk && npm run test:sandbox   # 18 pruebas contra los sandboxes reales
 cd examples && npm run typecheck # los 10 ejemplos contra la superficie pública
 ```
 
@@ -68,7 +68,9 @@ Por cada pasarela: una firma válida verifica, una firma alterada no, un timesta
 
 ### Las rutas del simulador: con `app.inject()`
 
-Las 81 pruebas del simulador llaman a la aplicación real de Fastify sin abrir un socket. Eso las hace rápidas, pero el beneficio principal es otro: **no pueden quedarse colgadas esperando la red ni fallar porque el puerto esté ocupado.** Y prueban la misma instancia que corre en producción, no una versión especial para pruebas.
+Las pruebas del simulador llaman a la aplicación real de Fastify sin abrir un socket. Eso las hace rápidas, pero el beneficio principal es otro: **no pueden quedarse colgadas esperando la red ni fallar porque el puerto esté ocupado.** Y prueban la misma instancia que corre en producción, no una versión especial para pruebas.
+
+La excepción es `test/payments.test.ts`. `POST /v1/api/payments` cobra a través del SDK, y el SDK llama por HTTP a los mocks de `/v1/sim`, así que la prueba levanta la misma aplicación en un puerto que asigna el sistema operativo (`port: 0`). Sigue sin depender de la red externa y no puede chocar con un puerto ocupado.
 
 ---
 
@@ -117,7 +119,7 @@ Es también el antecedente directo de la regla que la landing page va a tener de
 
 ## 6. Lo que las pruebas unitarias no pueden encontrar
 
-Las 586 pruebas pasan, y aun así el proyecto encontró varios defectos graves ejecutando código contra otra cosa. Vale la pena saber cuáles, porque explica por qué las otras suites existen:
+Las pruebas unitarias pasan, y aun así el proyecto encontró varios defectos graves ejecutando código contra otra cosa. Vale la pena saber cuáles, porque explica por qué las otras suites existen:
 
 | Defecto | Cómo se encontró |
 |---|---|

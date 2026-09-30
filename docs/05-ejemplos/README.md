@@ -1,6 +1,6 @@
 # 05 · Los ejemplos ejecutables
 
-Diez programas que se corren de verdad, contra la API de Simulación, y que imprimen lo que pasó. No son fragmentos de documentación: son un paquete npm aparte que **importa el SDK por su nombre publicado**, igual que lo haría un comercio.
+Once programas que se corren de verdad, contra la API de Simulación, y que imprimen lo que pasó. No son fragmentos de documentación: son un paquete npm aparte que **importa el SDK por su nombre publicado**, igual que lo haría un comercio.
 
 Esa decisión es lo que les da valor como verificación. Si un tipo no está exportado en `sdk/src/index.ts`, los ejemplos no compilan; si la superficie pública no alcanza para integrar un pago, se nota acá y no en producción.
 
@@ -110,7 +110,7 @@ El ejemplo 11 imprime ese número medido en cada corrida, así que la tabla de a
 
 - **La validación de webhooks.** Necesita un servidor HTTP que reciba peticiones, y eso no encaja en un script que corre y termina. Está documentada en [03-sdk/4-guia-de-implementacion.md](../03-sdk/4-guia-de-implementacion.md) §7 con los manejadores de Express y Fastify completos.
 - **Los escenarios de rechazo, timeout y error.** El simulador todavía responde `501` a cualquier valor de `x-simulate-scenario` que no sea `APPROVED`. Es uno de los entregables de la Iteración 3, y es un prerrequisito del experimento de la Fase 5: sin él, la lista de verificación funcional de los prototipos no se puede completar.
-- **Las pasarelas reales.** Para eso están las 16 pruebas de contrato: `cd sdk && npm run test:sandbox`, documentadas en [04-metricas-y-pruebas/3-pruebas-de-contrato.md](../04-metricas-y-pruebas/3-pruebas-de-contrato.md).
+- **Las pasarelas reales.** Para eso están las 18 pruebas de contrato: `cd sdk && npm run test:sandbox`, documentadas en [04-metricas-y-pruebas/3-pruebas-de-contrato.md](../04-metricas-y-pruebas/3-pruebas-de-contrato.md).
 
 ---
 

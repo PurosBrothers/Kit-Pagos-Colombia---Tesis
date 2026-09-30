@@ -129,7 +129,7 @@ Son del simulador, no del SDK, y conviene tenerlos presentes al leer la salida.
   una tabla de datos, no una cadena de condicionales: agregar una quinta pasarela es agregar una
   fila. Desde el punto 57 del architecture-log, `baseUrl` **admite directamente un mapa por
   pasarela** además de una cadena, así que esa tabla se puede pasar tal cual en una sola
-  instancia del SDK: es lo que hacen las 16 pruebas de contrato para hablarle a los cuatro
+  instancia del SDK: es lo que hacen las 18 pruebas de contrato para hablarle a los cuatro
   sandboxes reales.
 - **Las credenciales se declaran una sola vez.** `SDKOptions.credentials` es un mapa por
   pasarela, así que el comercio registra las cuatro y el SDK usa las de la activa. No hace falta
