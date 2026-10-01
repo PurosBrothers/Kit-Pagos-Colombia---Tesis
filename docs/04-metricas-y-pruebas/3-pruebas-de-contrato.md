@@ -1,6 +1,6 @@
 # Las pruebas de contrato contra los sandboxes reales
 
-Dieciséis pruebas que llaman a las APIs reales de las cuatro pasarelas. Son la suite más pequeña del proyecto y la que encontró los defectos más graves.
+Dieciocho pruebas que llaman a las APIs reales de las cuatro pasarelas. Son la suite más pequeña del proyecto y la que encontró los defectos más graves.
 
 ```bash
 cd sdk && npm run test:sandbox
@@ -18,16 +18,16 @@ No reemplazan a las unitarias ni compiten con ellas. Las unitarias prueban la l�
 
 ---
 
-## 2. Las 16 pruebas
+## 2. Las 18 pruebas
 
 | Pasarela | Qué afirma cada prueba |
 |---|---|
 | **Wompi** (3) | Que la lista de bancos de PSE responde con código y nombre; que un cobro con tarjeta queda consultable; y que **sigue rechazando** una transacción sin firma de integridad |
-| **Mercado Pago** (4) | Bancos de PSE; que un cobro con tarjeta devuelve una transacción legible; que **sigue rechazando** un cobro con token y sin cuotas; y que **sigue pidiendo** el token nombrando `payment_method_id` |
+| **Mercado Pago** (5) | Bancos de PSE; que la lista trae **exactamente** las entidades de `PseBankCode`, cada una con su `achCode` (punto 68); que un cobro con tarjeta devuelve una transacción legible; que **sigue rechazando** un cobro con token y sin cuotas; y que **sigue pidiendo** el token nombrando `payment_method_id` |
 | **Kushki** (5) | Bancos de PSE; cobro con tarjeta legible; que la ruta vieja de consulta **sigue respondiendo 403** igual que una ruta inventada; que el SDK **explica** que no hay consulta de tarjeta en vez de culpar a las credenciales; y que la respuesta **sigue viniendo** sin monto ni estado cuando no se pide `fullResponse` |
-| **Rapyd** (4) | Bancos de PSE; que se crea una página de pago para la tarjeta y devuelve su URL; que se puede consultar esa página antes de que el pagador pague; y que **sigue rechazando** un cobro de tarjeta con token en `/payments` |
+| **Rapyd** (5) | Bancos de PSE; que la lista trae **exactamente** los métodos PSE de la tabla de traducción de `rapyd-pse-banks.ts` (punto 68); que se crea una página de pago para la tarjeta y devuelve su URL; que se puede consultar esa página antes de que el pagador pague; y que **sigue rechazando** un cobro de tarjeta con token en `/payments` |
 
-**La mitad de las pruebas afirma que un defecto ajeno sigue presente.** Eso es deliberado y es lo más valioso de esta suite: cada una de esas afirmaciones corresponde a una limitación medida que obligó a que el SDK haga algo raro. Si la pasarela algún día la corrige, **esa prueba falla**, y eso es exactamente lo que se quiere: es la notificación de que el SDK puede simplificarse.
+**Seis de las dieciocho pruebas afirman que un defecto ajeno sigue presente.** Eso es deliberado y es lo más valioso de esta suite: cada una de esas afirmaciones corresponde a una limitación medida que obligó a que el SDK haga algo raro. Si la pasarela algún día la corrige, **esa prueba falla**, y eso es exactamente lo que se quiere: es la notificación de que el SDK puede simplificarse.
 
 Es una forma poco común de usar una prueba —afirmar el estado del mundo en lugar del propio comportamiento— y para este proyecto encaja, porque casi todas las rarezas del código son consecuencia de una rareza ajena.
 
@@ -84,7 +84,7 @@ Vale notar que esto es posible porque `baseUrl` admite un mapa por pasarela (pun
 
 ## 5. Los defectos que encontraron
 
-Esta es la justificación de la suite, y son defectos que las 586 pruebas unitarias no podían ver.
+Esta es la justificación de la suite, y son defectos que las pruebas unitarias no podían ver.
 
 ### Wompi rechazaba todos los cobros (punto 44)
 

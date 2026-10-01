@@ -2140,6 +2140,29 @@ Se descartaron dos alternativas:
 
 **Estado:** Resuelto en documentación (`docs/project-management/thesis-objectives.md`, nota en `docs/project-management/traceability-matrix.md`, índice en `docs/README.md`). La descripción normativa de los tres patrones en el SAD queda a cargo de #108; este punto solo registra la decisión de dónde vive la trazabilidad de objetivos.
 
+### 75. Las cifras del README se quedaron atrás del repositorio, y el punto 14 estaba repetido
+
+**Responsable:** Orduz (issue #111).
+
+**Contexto.** El README de la raíz afirmaba 586 pruebas unitarias, 16 pruebas de contrato, diez ejemplos con dos recorridos y 59 puntos en este registro. Medido el 29 de septiembre de 2026, son 631 pruebas, 18 de contrato (las dos del catálogo PSE del punto 68), once ejemplos con tres recorridos y 74 puntos. Las mismas cifras viejas estaban copiadas en otros nueve documentos de `docs/`. Tampoco aparecía la cara REST de la API de Simulación, y la fila de Rapyd seguía describiendo la firma de antes del punto 67 («HMAC-SHA256 en base64»).
+
+Además, el número 14 lo usaban dos puntos: el de RF-03 en la Sección B y el de la reorganización de `docs/` en la Sección E. Una cita a «punto 14» era ambigua.
+
+**Decisiones.**
+
+- **El README da mínimos, no conteos exactos, para lo que cambia en cada pull request.** Dice «más de 600 pruebas unitarias» y «más de setenta puntos», y remite a `docs/04-metricas-y-pruebas/2-pruebas-del-sdk.md`, que tiene el conteo exacto con la fecha de la corrida. Se descartó poner el conteo exacto en el README porque ya demostró que se desactualiza sin que nada lo detecte: `check:readme` compila los fragmentos de `sdk/README.md`, no revisa cifras del de la raíz. También se descartó quitar las cifras, porque la magnitud es la evidencia de que las cuatro pasarelas están probadas. Las cifras que cambian poco (18 pruebas de contrato, once ejemplos) quedan exactas.
+- **El punto que conserva el 14 es el de RF-03.** Es el más antiguo y lo citan la tabla de responsables de la Sección A y el punto 6. Además es una corrección pendiente en el SAD, que se hace fuera del repositorio con ese número a la vista. El de la reorganización pasa a ser el 76. Solo lo citaban dos puntos de este mismo archivo, que se actualizaron, y ningún archivo de código. Se descartó numerarlo «14 bis» porque una búsqueda de «punto 14» lo seguiría encontrando, y las citas desde el código usan números enteros.
+- **El README de la raíz pasa a español neutro.** Estaba en voseo rioplatense («Integrá», «Empezá»), y es la cara pública de un trabajo que se sustenta en Colombia. El cambio se aplicó a todo el archivo. El resto de `docs/` conserva voseo en varios lugares; normalizarlo no es parte de este punto.
+
+**Lo medido (29 de septiembre de 2026).**
+
+- `sdk`: 39 suites y 631 pruebas en unos 17 s. `simulator-api`: 20 suites y 259 pruebas en unos 12 s. `test:sandbox`, filtrado para no llamar a la red: 4 suites y 18 pruebas.
+- `sdk/src` tiene 63 archivos de producción, de los que 31 declaran una clase; `npm run metrics` mide esas 31.
+- El arranque por REST que ahora muestra el README se ejecutó contra una instancia sin `.env`. `GET /v1/api/gateways` responde las cuatro pasarelas. `POST /v1/api/payments` sin cabeceras `x-gateway-*` responde 401. Con dos cabeceras de valor arbitrario, Mercado Pago responde 201 `APPROVED`, Kushki 201 `APPROVED`, Rapyd 201 `REDIRECT_REQUIRED` y Wompi 201 `PENDING`; Wompi necesita además `x-gateway-integrity-secret`.
+- Al corregir `2-pruebas-del-sdk.md` apareció otra afirmación falsa: que ninguna prueba del simulador abre un socket. `payments.test.ts` levanta la aplicación en un puerto efímero, porque el SDK que usa `POST /v1/api/payments` llama por HTTP a `/v1/sim`. El documento lo explica ahora como excepción.
+
+**Estado:** Resuelto en documentación, con una deuda nombrada. `/docs` (especificación OpenAPI, #105) y las rutas de lectura de `GET /v1/api/payments/:id` y `/pse-banks` (#103, PR #120) no están en `devops`, así que el README no las menciona; se agregan cuando se integren.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
@@ -2529,9 +2552,11 @@ correspondiente por el PNG regenerado.
 
 **Encontrado:** Este documento describe `domain/enums/EstadoTransaccion.ts`, `domain/interfaces/IIntencionPago.ts`, `domain/errors/ErrorNormalizado.ts` y el facade en `application/KitPagos.ts`. Ninguno de estos nombres ni rutas coincide con la estructura vigente (`domain/entities`, `domain/value-objects`, `domain/errors`, `domain/services`, `application/ports`, `infrastructure/facade/KitPagos.ts`).
 
-**Estado: resuelto.** El documento se reescribió completo como [`docs/00-entorno-de-desarrollo.md`](../00-entorno-de-desarrollo.md), verificado contra la estructura real del repositorio: los tres paquetes, el orden de instalación (el de ejemplos consume `dist/`, así que el SDK se construye primero), todos los scripts de npm por paquete, y la configuración del `.env`. La reescritura ocurrió dentro de la reorganización del punto 14.
+**Estado: resuelto.** El documento se reescribió completo como [`docs/00-entorno-de-desarrollo.md`](../00-entorno-de-desarrollo.md), verificado contra la estructura real del repositorio: los tres paquetes, el orden de instalación (el de ejemplos consume `dist/`, así que el SDK se construye primero), todos los scripts de npm por paquete, y la configuración del `.env`. La reescritura ocurrió dentro de la reorganización del punto 76.
 
-### 14. Reorganización de la documentación en un camino de lectura por concepto
+### 76. Reorganización de la documentación en un camino de lectura por concepto
+
+> Hasta el 29 de septiembre de 2026 este punto llevaba el número 14, repetido con el punto 14 de la Sección B. Se renumeró en el punto 75.
 
 **Responsable:** No corresponde a ninguna sección del SAD; es estructura de repositorio.
 
@@ -2586,7 +2611,7 @@ El `README.md` de la raíz también tenía un ejemplo de código roto —`new Am
 
 **Decisión:** Se mantiene la matriz de equivalencias por pasarela (Wompi/Rapyd/Mercado Pago/Kushki) tal como está, porque es investigación de campo valiosa y en gran parte independiente de la reestructuración del dominio. Se corrige puntualmente el snippet de `SdkError` y se agrega una nota de vigencia al inicio del documento.
 
-**Estado:** Resuelto. Se ejecutó la pasada completa de sincronización en `docs/architecture/ubiquitous-language.md`, reemplazando el enum `EstadoTransaccion` por `TransactionStatus`, `SdkErrorCode` por `KitPagosErrorCode` y `SdkError` por `KitPagosError`. El lenguaje ubicuo queda 100% alineado con las entidades de dominio y el catálogo de errores tipados del SDK. El archivo vive hoy en [`docs/02-arquitectura/ubiquitous-language.md`](../02-arquitectura/ubiquitous-language.md), por la reorganización del punto 14; su contenido no cambió al moverse.
+**Estado:** Resuelto. Se ejecutó la pasada completa de sincronización en `docs/architecture/ubiquitous-language.md`, reemplazando el enum `EstadoTransaccion` por `TransactionStatus`, `SdkErrorCode` por `KitPagosErrorCode` y `SdkError` por `KitPagosError`. El lenguaje ubicuo queda 100% alineado con las entidades de dominio y el catálogo de errores tipados del SDK. El archivo vive hoy en [`docs/02-arquitectura/ubiquitous-language.md`](../02-arquitectura/ubiquitous-language.md), por la reorganización del punto 76; su contenido no cambió al moverse.
 
 ### 12. `sdk/package.json` sin scripts reales y con licencia incorrecta
 

@@ -177,7 +177,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   - Cobro con tarjeta: `payment_method: {type: "CARD", token, installments}`. Sin ese campo responde `422 "No se especificó método de pago o fuente de pago"`, y **el cobro nace `PENDING`, no `APPROVED`**: se resuelve solo unos cientos de milisegundos después, así que el resultado nunca está en la respuesta de creación y el comercio tiene que consultarlo (punto 50 del `architecture-log.md`).
   - Mapeo de estado: campo `data.status` con valores `APPROVED`, `DECLINED`, `VOIDED`, `PENDING`.
   - Verificación de firma: SHA-256 sobre cadena de propiedades + timestamp + secreto de integridad.
-- **Prioridad:** Alta. Es el adaptador de referencia del proyecto: implementación completa y 16 pruebas de contrato contra el sandbox real (`sdk/test/sandbox/wompi.sandbox.test.ts`), además de los hallazgos medidos de los puntos 43, 44 y 50 del `architecture-log.md`.
+- **Prioridad:** Alta. Es el adaptador de referencia del proyecto: implementación completa y 3 pruebas de contrato contra el sandbox real (`sdk/test/sandbox/wompi.sandbox.test.ts`), además de los hallazgos medidos de los puntos 43, 44 y 50 del `architecture-log.md`.
 - **Modo simulación:** Redirige solicitudes al simulador con el header `x-simulate-scenario`. Es el **único** header que el simulador intercepta: el `x-simulate-delay` descrito en versiones anteriores no existe (ver sección 3.1).
 
 ---

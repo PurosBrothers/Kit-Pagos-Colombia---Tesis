@@ -1,6 +1,6 @@
 # Recorrido: un pago simulado con Wompi
 
-El primer ejemplo del proyecto, de punta a punta. Es el más comentado de los diez y el mejor punto de entrada para entender qué hace el SDK por dentro.
+El primer ejemplo del proyecto, de punta a punta. Es el más comentado de los once y el mejor punto de entrada para entender qué hace el SDK por dentro.
 
 **Archivo:** [examples/simulate-wompi-payment.ts](../../examples/simulate-wompi-payment.ts) · **Comando:** `npm run simulate:wompi`
 
@@ -186,4 +186,4 @@ Con un solo campo faltante, el ejemplo habría sido engañoso justo en el dato m
 
 ## Qué sigue
 
-El [índice de los diez ejemplos](README.md).
+El [índice de los once ejemplos](README.md).
