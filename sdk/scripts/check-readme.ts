@@ -65,20 +65,32 @@ function bloquesTypeScript(markdown: string): string[] {
  */
 function armarModulo(bloques: string[]): string {
   const simbolos = new Set<string>();
+  const simbolosBrowser = new Set<string>();
   const cuerpos: string[] = [];
   let yaDeclaroSdk = false;
 
   for (const bloque of bloques) {
-    const sinImports = bloque.replace(
-      /import\s*\{([\s\S]*?)\}\s*from\s*["']kit-pagos-colombia["'];?\n?/g,
-      (_todo, lista: string) => {
-        for (const simbolo of lista.split(",")) {
-          const limpio = simbolo.trim();
-          if (limpio) simbolos.add(limpio);
-        }
-        return "";
-      },
-    );
+    const sinImports = bloque
+      .replace(
+        /import\s*\{([^}]+)\}\s*from\s*["']kit-pagos-colombia\/browser["'];?\r?\n?/g,
+        (_todo, lista: string) => {
+          for (const simbolo of lista.split(",")) {
+            const limpio = simbolo.trim();
+            if (limpio) simbolosBrowser.add(limpio);
+          }
+          return "";
+        },
+      )
+      .replace(
+        /import\s*\{([^}]+)\}\s*from\s*["']kit-pagos-colombia["'];?\r?\n?/g,
+        (_todo, lista: string) => {
+          for (const simbolo of lista.split(",")) {
+            const limpio = simbolo.trim();
+            if (limpio) simbolos.add(limpio);
+          }
+          return "";
+        },
+      );
 
     const lineas: string[] = [];
     for (const linea of sinImports.split("\n")) {
@@ -92,15 +104,19 @@ function armarModulo(bloques: string[]): string {
     cuerpos.push(lineas.join("\n"));
   }
 
+  const importsRoot = simbolos.size > 0 ? `import { ${[...simbolos].join(", ")} } from "kit-pagos-colombia";` : "";
+  const importsBrowser = simbolosBrowser.size > 0 ? `import { ${[...simbolosBrowser].join(", ")} } from "kit-pagos-colombia/browser";` : "";
+
   return [
     "/* Generado por scripts/check-readme.ts. No editar. */",
     "/* eslint-disable */",
     // El README usa Express en el ejemplo de webhooks sin declararlo, porque el lector ya
     // tiene su servidor. Acá se declara para que el bloque compile aislado.
     "declare const app: { post(ruta: string, manejador: (req: any, res: any) => void): void };",
-    `import { ${[...simbolos].join(", ")} } from "kit-pagos-colombia";`,
+    importsRoot,
+    importsBrowser,
     ...cuerpos,
-  ].join("\n\n");
+  ].filter(Boolean).join("\n\n");
 }
 
 function main(): void {
@@ -143,13 +159,14 @@ function main(): void {
           strict: true,
           target: "ES2020",
           module: "commonjs",
-          lib: ["ES2020"],
+          lib: ["ES2020", "DOM"],
           esModuleInterop: true,
           skipLibCheck: true,
           types: ["node"],
           typeRoots: [path.join(sdkRoot, "node_modules", "@types")],
           paths: {
             "kit-pagos-colombia": [path.join(sdkRoot, "dist", "index.d.ts")],
+            "kit-pagos-colombia/browser": [path.join(sdkRoot, "dist", "browser", "index.d.ts")],
           },
         },
         files: [archivo],

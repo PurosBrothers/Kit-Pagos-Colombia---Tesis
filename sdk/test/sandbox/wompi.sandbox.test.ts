@@ -7,6 +7,7 @@ import { Payer } from "../../src/domain/value-objects/Payer";
 import { PaymentMethod } from "../../src/domain/value-objects/PaymentMethod";
 import { describeSandbox, uniqueReference } from "./sandbox-env";
 import { tokenizeWompiCard } from "./tokenize";
+import { KitPagosBrowser } from "../../src-browser/KitPagosBrowser";
 
 /**
  * Contrato de Wompi, medido contra `sandbox.wompi.co`.
@@ -77,6 +78,39 @@ describeSandbox(Gateway.WOMPI, (credentials, baseUrl) => {
     expect(["APPROVED", "PENDING", "DECLINED"]).toContain(
       consulted.getStatus(),
     );
+  });
+
+  it("permite tokenizar con KitPagosBrowser y cobrar con KitPagos", async () => {
+    const tokenResult = await KitPagosBrowser.tokenizeCard({
+      gateway: Gateway.WOMPI,
+      publicKey: credentials.publicKey!,
+      baseUrl,
+      card: {
+        number: "4242424242424242",
+        cvc: "123",
+        expMonth: "11",
+        expYear: "30",
+        cardHolder: "Jaime Pavlich",
+      },
+    });
+
+    expect(tokenResult.token).toBeTruthy();
+    expect(tokenResult.token.startsWith("tok_")).toBe(true);
+    expect(tokenResult.gateway).toBe(Gateway.WOMPI);
+
+    const result = await kitPagos.createPayment({
+      amount: new Amount("15000"),
+      currency: new Currency("COP"),
+      orderReference: new OrderReference(uniqueReference("SBX-WOMPI-BROWSER-CARD")),
+      payer: new Payer({ email: "jaime.pavlich@example.com" }),
+      paymentMethod: PaymentMethod.card(tokenResult.token, { installments: 1 }),
+    });
+
+    if (result.outcome === "REDIRECT_REQUIRED") {
+      throw new Error(`Wompi devolvió una redirección inesperada para tarjeta`);
+    }
+
+    expect(result.transaction.gatewayTransactionId.value).toBeTruthy();
   });
 
   /**
