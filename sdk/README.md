@@ -18,6 +18,7 @@ Diseñado bajo los principios de **Arquitectura Hexagonal (Ports & Adapters)** y
 - **Verificación criptográfica de Webhooks:** Validación de firmas nativas (HMAC-SHA256, SHA-256) con comparación en tiempo constante (`crypto.timingSafeEqual`) y **protección contra ataques de repetición (*anti-replay attacks*)** con ventana de tolerancia temporal configurable.
 - **Gestión de fallos y resiliencia:** Política de reintentos automáticos con retroceso exponencial (*exponential backoff*) y fluctuación (*jitter*) ante fallos de red transitorios, aislando errores permanentes de negocio.
 - **Seguridad y privacidad por diseño (RF-08):** Sanitización automática de llaves privadas, tokens `Bearer` y secretos en mensajes de error y registros para evitar filtraciones en logs de producción.
+- **Tokenización segura en navegador (`kit-pagos-colombia/browser`):** Módulo frontend ultraligero (~7 KB) sin dependencias de Node.js para tokenizar tarjetas directamente contra la pasarela respetando PCI DSS.
 
 ---
 
@@ -145,6 +146,38 @@ async function cobrarConTarjeta() {
 
 > Con tarjeta también podés recibir `REDIRECT_REQUIRED`: Rapyd cobra en su página alojada, y
 > cualquiera de las cuatro puede pedir autenticación 3DS. Tratá las dos ramas siempre.
+
+#### 2.1 Tokenización en el Navegador (`kit-pagos-colombia/browser`)
+
+Para cumplir con **PCI DSS**, los datos sensibles de la tarjeta (número PAN, CVC, fecha de expiración) **nunca deben entrar al backend del comercio ni al SDK de servidor**.
+
+El paquete exporta un punto de entrada independiente y ultraligero para el frontend (`kit-pagos-colombia/browser`, ~7 KB, sin módulos de Node.js):
+
+```typescript
+import { KitPagosBrowser } from "kit-pagos-colombia/browser";
+import { Gateway } from "kit-pagos-colombia";
+
+async function tokenizarTarjetaEnNavegador() {
+  const result = await KitPagosBrowser.tokenizeCard({
+    gateway: Gateway.WOMPI,
+    publicKey: "pub_prod_1234567890", // O pub_test_... para sandbox
+    environment: "sandbox",          // "sandbox" | "production" | "simulator"
+    card: {
+      number: "4242424242424242",
+      cvc: "123",
+      expMonth: "12",
+      expYear: "2030",
+      cardHolder: "Juan Pérez",
+    },
+  });
+
+  // El token resultante ("tok_...") se envía a TU backend para llamar a PaymentMethod.card()
+  console.log(`Token generado: ${result.token}`);
+  console.log(`Franquicia: ${result.brand}, Últimos 4: ${result.lastFour}`);
+}
+```
+
+> **PCI DSS:** Al usar `KitPagosBrowser`, el número de tarjeta viaja exclusivamente entre el navegador del pagador y los servidores de la pasarela. Tu backend solo recibe y almacena el token opaco `tok_...`.
 
 ---
 
