@@ -336,3 +336,150 @@ describe("GET /v1/sim/wompi/transactions/:id", () => {
     await app.close();
   });
 });
+
+describe("POST /v1/sim/wompi/tokens/cards", () => {
+  const validCardBody = {
+    number: "4242424242424242",
+    cvc: "123",
+    exp_month: "12",
+    exp_year: "30",
+    card_holder: "JUAN PEREZ",
+  };
+
+  it("crea un token de tarjeta exitosamente con código 201 y formato nativo de Wompi", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer pub_test_1234567890",
+      },
+      payload: validCardBody,
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.status).toBe("CREATED");
+    expect(body.data).toBeDefined();
+    expect(body.data.id).toMatch(/^tok_sim_[a-f0-9]{16}$/);
+    expect(body.data.brand).toBe("VISA");
+    expect(body.data.last_four).toBe("4242");
+    expect(body.data.bin).toBe("424242");
+    expect(body.data.exp_month).toBe("12");
+    expect(body.data.exp_year).toBe("30");
+    expect(body.data.card_holder).toBe("JUAN PEREZ");
+    expect(body.data.created_with_cvc).toBe(true);
+    expect(body.data.validity_ends_at).toBeNull();
+
+    await app.close();
+  });
+
+  it("rechaza la petición con 401 si falta la cabecera Authorization", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      payload: validCardBody,
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = response.json();
+    expect(body.error.type).toBe("UNAUTHORIZED");
+
+    await app.close();
+  });
+
+  it("rechaza la petición con 401 si la cabecera Authorization no tiene clave válida", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer ",
+      },
+      payload: validCardBody,
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.type).toBe("UNAUTHORIZED");
+
+    await app.close();
+  });
+
+  it("rechaza la petición con 422 si faltan campos obligatorios", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer pub_test_12345",
+      },
+      payload: {
+        number: "4242424242424242",
+        // cvc faltante
+        exp_month: "12",
+        exp_year: "30",
+        card_holder: "JUAN PEREZ",
+      },
+    });
+
+    expect(response.statusCode).toBe(422);
+    const body = response.json();
+    expect(body.error.type).toBe("INPUT_VALIDATION_ERROR");
+
+    await app.close();
+  });
+
+  it("rechaza la petición con 422 si el número de tarjeta no es válido", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer pub_test_12345",
+      },
+      payload: {
+        ...validCardBody,
+        number: "123", // Muy corto
+      },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json().error.type).toBe("INPUT_VALIDATION_ERROR");
+
+    await app.close();
+  });
+
+  it("soporta escenarios técnicos como SERVER_ERROR o TIMEOUT", async () => {
+    const app = buildApp();
+
+    const serverErrRes = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer pub_test_12345",
+        "x-simulate-scenario": "SERVER_ERROR",
+      },
+      payload: validCardBody,
+    });
+    expect(serverErrRes.statusCode).toBe(500);
+
+    const timeoutRes = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer pub_test_12345",
+        "x-simulate-scenario": "TIMEOUT",
+      },
+      payload: validCardBody,
+    });
+    expect(timeoutRes.statusCode).toBe(504);
+
+    await app.close();
+  });
+});
