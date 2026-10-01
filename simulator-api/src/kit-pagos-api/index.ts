@@ -4,6 +4,7 @@ import { CREDENTIAL_WARNING_HEADER } from "../services/KitPagosProvider";
 import { attachCredentialWarnings, logCredentialPolicy } from "./gateway-client";
 import { gatewaysRoute } from "./routes/gateways";
 import { paymentsRoute } from "./routes/payments";
+import { pseBanksRoute } from "./routes/pse-banks";
 import { webhooksRoute } from "./routes/webhooks";
 
 /**
@@ -26,5 +27,6 @@ export async function kitPagosApi(app: FastifyInstance): Promise<void> {
   logCredentialPolicy(app);
   app.register(gatewaysRoute);
   app.register(paymentsRoute);
+  app.register(pseBanksRoute);
   app.register(webhooksRoute);
 }
