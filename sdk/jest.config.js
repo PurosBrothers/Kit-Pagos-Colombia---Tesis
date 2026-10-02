@@ -9,8 +9,11 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/', '\\.sandbox\\.test\\.ts$'],
   collectCoverageFrom: [
     'src/**/*.ts',
+    'src-browser/**/*.ts',
     '!src/index.ts',
-    '!src/**/*.d.ts'
+    '!src-browser/index.ts',
+    '!src/**/*.d.ts',
+    '!src-browser/**/*.d.ts'
   ],
   coverageThreshold: {
     global: {

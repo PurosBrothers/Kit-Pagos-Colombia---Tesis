@@ -139,16 +139,16 @@ sdk/
 │   ├── domain/          ← Sin cambios
 │   ├── application/     ← Sin cambios
 │   └── infrastructure/  ← Sin cambios
-└── src-browser/         ← Nuevo módulo frontend
+└── src-browser/         ← Módulo frontend (kit-pagos-colombia/browser)
     ├── tokenizers/
     │   ├── WompiTokenizer.ts
-    │   ├── MercadoPagoTokenizer.ts
-    │   └── KushkiTokenizer.ts
+    │   └── MercadoPagoTokenizer.ts
     ├── KitPagosBrowser.ts   ← Fachada frontend
+    ├── types.ts
     └── index.ts
 ```
 
-`KushkiTokenizer.ts` se incluye en la estructura aunque su implementación queda como trabajo futuro (ver sección 7). `WompiTokenizer.ts` y `MercadoPagoTokenizer.ts` son el alcance de la implementación inicial.
+> **Decisión de alcance (30 de septiembre de 2026):** No se crea `KushkiTokenizer.ts` como stub. Kushki exige Hosted Fields dentro de iframes y pretender que cabe en la misma interfaz sin implementarlo escondería la asimetría en vez de documentarla. Si un consumidor en JavaScript intenta invocar `KitPagosBrowser.tokenizeCard()` con Kushki o Rapyd, la fachada lanza de inmediato `UNSUPPORTED_OPERATION` sin realizar llamadas de red.
 
 ---
 
@@ -168,25 +168,23 @@ El issue #115 evalúa si este trabajo debería ser un objetivo específico. La r
 
 ---
 
-## 7. Recomendación
+## 7. Decisión y Alcance de Implementación
 
-**Implementar Wompi y Mercado Pago. Dejar Kushki como trabajo futuro. Documentar Rapyd como límite de diseño.**
+**Implementar Wompi y Mercado Pago. Excluir Kushki y Rapyd con `UNSUPPORTED_OPERATION`.**
 
-> **Prioridad:** Este módulo es un **valor agregado final**, no un entregable bloqueante. Se aborda únicamente después de que todos los issues mínimos del SDK, la API de Simulación y la documentación de la tesis estén cerrados. Si el tiempo no alcanza, este documento de investigación es el entregable en sí mismo.
-
-Implementar el SDK de navegador completo para las cuatro pasarelas está fuera del alcance razonable: la asimetría de Rapyd hace que la abstracción nunca pueda ofrecer la misma interfaz para las cuatro con la misma firma, y Kushki con Hosted Fields tiene una complejidad de iframes desproporcionada para el tiempo disponible. Ambas limitaciones se documentan como resultado de diseño, no se ocultan.
+> **Resolución formal (30 de septiembre de 2026, issues #126 y #127):** El SDK implementa el punto de entrada exportado `kit-pagos-colombia/browser` empaquetado como ESM independiente (~7 KB) mediante `esbuild`. Se incrementa la versión menor a `0.2.0` en `package.json` para reflejar la adición de la especificación de `exports`.
 
 El alcance concreto de implementación:
 
-1. **`WompiTokenizer.ts`** — REST directo contra `POST /v1/tokens/cards` con la clave pública. Sin librería propietaria. El caso más simple y el que se puede testear con un servidor Node.js de prueba sin necesitar un browser real.
+1. **`WompiTokenizer.ts` (Issue #126)** — REST directo contra `POST /v1/tokens/cards` con la clave pública Bearer. Sin librerías propietarias. Soporta ambientes `sandbox`, `production` y `simulator` (con endpoint mock en `simulator-api`).
 
-2. **`MercadoPagoTokenizer.ts`** — envuelve los Core Methods de `@mercadopago/sdk-js`. Mercado Pago es la segunda pasarela con mayor penetración en Colombia y su SDK JS está bien documentado y estable.
+2. **`MercadoPagoTokenizer.ts` (Issue #127)** — Tokenización de tarjeta con clave pública para Mercado Pago.
 
-3. **`KitPagosBrowser.ts`** — fachada que expone `tokenizeCard()` con la misma semántica para las dos pasarelas implementadas, y que devuelve un valor de tipo `CardToken` directamente utilizable como `paymentMethod.cardToken` en el SDK de servidor.
+3. **`KitPagosBrowser.ts`** — Fachada unificada que expone `tokenizeCard()` con la misma semántica, devolviendo un `CardTokenResult` con `{ token, gateway, lastFour, brand }`, consumible directamente en `PaymentMethod.card(token)`.
 
-4. **`KushkiTokenizer.ts`** — declarado como stub (`throw new Error("aun no esta implementado")`). La estructura queda lista para implementarlo cuando se disponga de tiempo para gestionar el ciclo de vida de los Hosted Fields.
+4. **Kushki y Rapyd no se proveen** — A diferencia de lo propuesto originalmente, no se deja stub de `KushkiTokenizer`: `KitPagosBrowser` rechaza activamente `Gateway.KUSHKI` y `Gateway.RAPYD` lanzando `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones.
 
-5. **Documentar Rapyd** — en este mismo documento queda explicado por qué Rapyd no entra en el modelo de tokenización y qué alternativa existe (`REDIRECT_REQUIRED` vía el SDK de servidor).
+5. **Documentar Rapyd** — Queda evidenciado que Rapyd no provee tokenización inline para comercios sin certificación PCI Level 1; su modelo de integración es Hosted Checkout (`REDIRECT_REQUIRED`).
 
 ---
 

@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import {
   WompiCreateTransactionRequestBody,
   WompiMerchantResponse,
+  WompiTokenizeCardRequestBody,
+  WompiTokenizeCardResponse,
   WompiTransaction,
   WompiTransactionResponse,
 } from "./types";
@@ -257,6 +259,44 @@ export class GatewayMockFactory {
           acceptance_token: `sim_acceptance_${randomUUID()}`,
           permalink: "http://localhost:3000/v1/sim/wompi/terms",
         },
+      },
+    };
+  }
+
+  /**
+   * Construye una respuesta de tokenización de tarjeta (issue #126).
+   * Reproduce la estructura exacta devuelta por Wompi en POST /v1/tokens/cards.
+   */
+  buildTokenCardResponse(
+    requestBody: WompiTokenizeCardRequestBody,
+  ): WompiTokenizeCardResponse {
+    const cleanNumber = requestBody.number.replace(/\s+/g, "");
+    const lastFour = cleanNumber.slice(-4);
+    const bin = cleanNumber.slice(0, 6);
+    const tokenId = `tok_sim_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+
+    let brand = "VISA";
+    if (cleanNumber.startsWith("5")) {
+      brand = "MASTERCARD";
+    } else if (cleanNumber.startsWith("3")) {
+      brand = "AMEX";
+    }
+
+    return {
+      status: "CREATED",
+      data: {
+        id: tokenId,
+        created_at: new Date().toISOString(),
+        brand,
+        name: requestBody.card_holder,
+        last_four: lastFour,
+        bin,
+        exp_year: requestBody.exp_year,
+        exp_month: requestBody.exp_month,
+        card_holder: requestBody.card_holder,
+        created_with_cvc: Boolean(requestBody.cvc),
+        expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+        validity_ends_at: null,
       },
     };
   }

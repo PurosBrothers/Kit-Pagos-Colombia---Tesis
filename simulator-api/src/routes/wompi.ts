@@ -6,7 +6,11 @@ import {
   UnsupportedScenarioError,
 } from "../scenarios/ScenarioEngine";
 import { GatewayMockFactory } from "../gateways/wompi/GatewayMockFactory";
-import { WompiCreateTransactionRequestBody, WompiTransaction } from "../gateways/wompi/types";
+import {
+  WompiCreateTransactionRequestBody,
+  WompiTokenizeCardRequestBody,
+  WompiTransaction,
+} from "../gateways/wompi/types";
 import { transactionStore } from "../store/TransactionStore";
 
 /**
@@ -194,6 +198,82 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         ],
         meta: {},
       });
+    },
+  );
+
+  // ── POST /v1/sim/wompi/tokens/cards (issue #126) ─────────────────────────
+  app.post(
+    "/v1/sim/wompi/tokens/cards",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const authHeader = request.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return reply.code(401).send({
+          error: {
+            type: "UNAUTHORIZED",
+            reason: "Tu petición no contiene autorización válida",
+          },
+        });
+      }
+
+      const publicKey = authHeader.slice(7).trim();
+      if (!publicKey) {
+        return reply.code(401).send({
+          error: {
+            type: "UNAUTHORIZED",
+            reason: "Tu petición no contiene autorización válida",
+          },
+        });
+      }
+
+      const scenario = getSimulatorScenario(request);
+      if (scenario === "TIMEOUT" || scenario === "GATEWAY_TIMEOUT") {
+        return reply.code(504).send(mockFactory.buildTimeoutResponse());
+      }
+      if (scenario === "NETWORK_ERROR" || scenario === "CONNECTION_ERROR") {
+        return ScenarioEngine.handleNetworkError(request, reply);
+      }
+      if (scenario === "RATE_LIMIT" || scenario === "TOO_MANY_REQUESTS" || scenario === "429") {
+        return reply.code(429).send(mockFactory.buildRateLimitResponse());
+      }
+      if (scenario === "SERVER_ERROR" || scenario === "INTERNAL_ERROR" || scenario === "500") {
+        return reply.code(500).send(mockFactory.buildServerErrorResponse(500));
+      }
+      if (scenario === "BAD_GATEWAY" || scenario === "502") {
+        return reply.code(502).send(mockFactory.buildServerErrorResponse(502));
+      }
+      if (scenario === "SERVICE_UNAVAILABLE" || scenario === "503") {
+        return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+      }
+
+      const body = request.body as WompiTokenizeCardRequestBody;
+      if (
+        !body ||
+        !body.number ||
+        !body.cvc ||
+        !body.exp_month ||
+        !body.exp_year ||
+        !body.card_holder
+      ) {
+        return reply.code(422).send({
+          error: {
+            type: "INPUT_VALIDATION_ERROR",
+            reason: "Faltan datos obligatorios para la tokenización de tarjeta (number, cvc, exp_month, exp_year, card_holder)",
+          },
+        });
+      }
+
+      const cleanNumber = String(body.number).replace(/\s+/g, "");
+      if (cleanNumber.length < 13 || !/^\d+$/.test(cleanNumber)) {
+        return reply.code(422).send({
+          error: {
+            type: "INPUT_VALIDATION_ERROR",
+            reason: "El número de tarjeta no es válido",
+          },
+        });
+      }
+
+      const response = mockFactory.buildTokenCardResponse(body);
+      return reply.code(201).send(response);
     },
   );
 }
