@@ -1,9 +1,15 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
+import { execFileSync } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
 
 describe("Browser Bundle Verification", () => {
   const bundlePath = path.resolve(__dirname, "../../dist/browser/index.js");
   const dtsPath = path.resolve(__dirname, "../../dist/browser/index.d.ts");
+
+  beforeAll(() => {
+    const buildScript = path.resolve(__dirname, "../../scripts/build-browser.js");
+    execFileSync(process.execPath, [buildScript], { stdio: "pipe" });
+  });
 
   it("genera dist/browser/index.js y dist/browser/index.d.ts", () => {
     expect(fs.existsSync(bundlePath)).toBe(true);

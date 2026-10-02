@@ -17,6 +17,7 @@ async function build() {
 
   // 2. Exportación de definiciones TypeScript limpias en dist/browser/index.d.ts
   const dtsPath = path.join(rootDir, 'dist', 'browser', 'index.d.ts');
+  fs.mkdirSync(path.dirname(dtsPath), { recursive: true });
   fs.writeFileSync(dtsPath, 'export * from "./src-browser/index";\n');
 }
 
