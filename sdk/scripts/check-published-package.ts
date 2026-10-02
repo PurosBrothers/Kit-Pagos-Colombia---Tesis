@@ -38,10 +38,10 @@
  * request: la versión publicada va por detrás de la rama, y hacerlo obligatorio
  * pondría rojo un pull request por un desfase que es normal.
  */
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { execFileSync } from "child_process";
+import { mkdtempSync, writeFileSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import path from "path";
 
 const PACKAGE_NAME = "kit-pagos-colombia";
 
