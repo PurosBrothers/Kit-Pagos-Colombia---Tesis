@@ -2641,6 +2641,37 @@ El `README.md` de la raíz también tenía un ejemplo de código roto —`new Am
 
 **Estado:** Resuelto en código y documentación (`sdk/src-browser/`, `simulator-api/src/routes/wompi.ts`, `docs/03-sdk/6-tokenizacion-frontend.md`).
 
+### 78. Tokenización de tarjeta de Mercado Pago en el módulo de navegador (`MercadoPagoTokenizer`)
+
+**Responsable:** Orduz (issue #127).
+
+**Contexto.**
+En el punto 77 se estableció la arquitectura de tokenización en el frontend mediante `kit-pagos-colombia/browser` y se implementó `WompiTokenizer`. Este punto aborda la segunda mitad de la decisión del 30 de septiembre de 2026: la tokenización de tarjeta con Mercado Pago.
+
+**Hallazgo empírico sobre la sección 2.2 de `docs/03-sdk/6-tokenizacion-frontend.md`.**
+El documento original asignaba nivel 3 de evidencia a Mercado Pago, indicando que "no se ejecutó contra el sandbox porque requiere un contexto de navegador", y recomendaba envolver los Core Methods de `@mercadopago/sdk-js`.
+Sin embargo, se comprobó que el repositorio ya realizaba tokenización directa sin navegador en `sdk/test/sandbox/tokenize.ts` (líneas 80-108) mediante `POST /v1/card_tokens?public_key=<llave pública>`.
+Asimismo, se midió el comportamiento de CORS el 30 de septiembre de 2026: una solicitud preflight OPTIONS a `https://api.mercadopago.com/v1/card_tokens` con `Origin: http://localhost:5173` responde HTTP 200 y cabecera `access-control-allow-origin: *`. Por tanto, la llamada puede emitirse de forma directa y nativa desde el navegador del pagador.
+
+**Decisión entre alternativas arquitectónicas:**
+1. *Opción elegida: REST directo a `POST /v1/card_tokens?public_key=...`.*
+   - Ventajas: Mantiene coherencia estricta con la arquitectura de `WompiTokenizer`; sin dependencias externas pesadas ni carga dinámica de scripts de terceros en tiempo de ejecución; bundle ESM nativo ultraligero (~7 KB); testeable en Node.js mediante mocking de `fetch`; y simulable localmente en `simulator-api`.
+   - Requisitos de dominio: Requiere enviar el número de documento de identificación del titular (`docType` y `docNumber` en `cardholder.identification`), el cual es obligatorio en la API de Mercado Pago. Si este dato falta, `MercadoPagoTokenizer` falla antes de emitir cualquier petición con `KitPagosError(INVALID_REQUEST)` nombrando los campos faltantes.
+2. *Alternativa descartada: Envolver Core Methods de `@mercadopago/sdk-js`.*
+   - Motivo de descarte: Obliga a cargar un script externo de terceros desde los servidores de Mercado Pago en el DOM del comercio, incrementando la fragilidad ante caídas de CDN, requiriendo mockeos complejos de objetos globales de navegador en pruebas automatizadas y aumentando el tamaño final y complejidad del módulo sin aportar ventajas frente a la API REST abierta.
+
+**Implementación realizada:**
+1. `MercadoPagoTokenizer.ts`: Implementación de tokenización directa en `sdk/src-browser/tokenizers/MercadoPagoTokenizer.ts` utilizando `globalThis.fetch`. Conecta los catálogos de `sandbox`, `production` y `simulator`.
+2. Integración en `KitPagosBrowser.ts`: Soporta `Gateway.MERCADOPAGO` devolviendo `CardTokenResult`.
+3. Intercambiabilidad de formulario: El mismo formulario del comercio (`CardData` con campos de tarjeta y documento) tokeniza en Wompi y Mercado Pago alternando únicamente el parámetro `gateway`.
+4. Endpoint de simulación en `simulator-api`: Se implementó `POST /v1/sim/mercadopago/card_tokens` en `simulator-api/src/routes/mercadopago.ts` y `GatewayMockFactory.ts`, validando autenticación por query param o Bearer token, campos obligatorios, identificación del titular y soportando escenarios adversos (`TIMEOUT`, `RATE_LIMIT`, `SERVER_ERROR`).
+5. Pruebas de contrato y unitarias:
+   - Unitarias en `sdk/test/browser/MercadoPagoTokenizer.test.ts` y `KitPagosBrowser.test.ts`.
+   - Pruebas en `simulator-api/test/mercadopago.test.ts`.
+   - Prueba de contrato en `sdk/test/sandbox/mercadopago.sandbox.test.ts` que tokeniza con `KitPagosBrowser` y cobra mediante `KitPagos.createPayment()` en el sandbox real de Mercado Pago (4 de octubre de 2026).
+
+**Estado:** Resuelto en código y documentación (`sdk/src-browser/`, `simulator-api/src/routes/mercadopago.ts`, `docs/03-sdk/6-tokenizacion-frontend.md`).
+
 ### 9. Archivo de imagen suelto dentro del código fuente
 
 **Responsable:** No corresponde a ninguna sección del SAD; limpieza de repositorio, cualquiera puede resolverlo.

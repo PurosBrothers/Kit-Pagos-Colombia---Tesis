@@ -44,15 +44,15 @@ Wompi es el caso más simple: la tokenización es una llamada REST estándar que
 
 | Aspecto | Detalle |
 |---|---|
-| Carga | `npm install @mercadopago/sdk-js` o `<script src="https://sdk.mercadopago.com/js/v2">` |
-| Mecanismo de tokenización | Bricks (formulario visual completo) o Core Methods (control total) |
-| Entrada Core Methods | `{ cardNumber, cardholderName, cardExpirationMonth, cardExpirationYear, securityCode, identificationType, identificationNumber }` |
-| Salida | `token.id` — cadena opaca de un solo uso |
+| Carga | REST directo con `globalThis.fetch` (sin dependencias) o SDK oficial `npm install @mercadopago/sdk-js` |
+| Mecanismo de tokenización | REST directo a `POST /v1/card_tokens?public_key=...` con CORS abierto, o Bricks / Core Methods |
+| Entrada | `{ number, cvc, expMonth, expYear, cardHolder, docType, docNumber }` |
+| Salida | `token.id` — cadena opaca de un solo uso (`tok_...` o hash hexadecimal) |
 | Documentación | [mercadopago.com.co/developers](https://www.mercadopago.com.co/developers/es/docs) |
 
-Mercado Pago ofrece dos variantes. Los **Bricks** renderizan un formulario completo y entregan el token en el callback `onSubmit`; son la opción recomendada por MercadoPago para integraciones nuevas. Los **Core Methods** dan control total sobre el formulario HTML pero exigen que el desarrollador maneje el ciclo de vida de los campos. Para una abstracción del SDK, Core Methods es la variante envolvible.
+Mercado Pago admite tokenización directa vía REST con clave pública enviada como parámetro de consulta. Aunque la documentación oficial destaca **Bricks** (formulario visual prediseñado) y **Core Methods** (gestión de eventos de campos), la API HTTP de `/v1/card_tokens` cuenta con soporte CORS completo (`access-control-allow-origin: *`). Esto permite tokenizar directamente desde el navegador del pagador sin descargar scripts de terceros, reduciendo la superficie de ataque y el tamaño del bundle a solo ~7 KB en formato ESM.
 
-**Nivel de evidencia:** Nivel 3 — tomado de la documentación oficial. No se ejecutó contra el sandbox porque requiere un contexto de navegador.
+**Nivel de evidencia:** Nivel 1 — medido contra el sandbox real el 27 de septiembre de 2026 (punto 72) y CORS medido el 30 de septiembre de 2026. Un preflight OPTIONS a `https://api.mercadopago.com/v1/card_tokens` con `Origin: http://localhost:5173` responde 200 y `access-control-allow-origin: *`. Se verificó que el nombre del titular selecciona el desenlace en sandbox (`APRO` aprueba) y que el documento de identificación (`type` y `number`) es estrictamente obligatorio para emitir el token. Validación de contrato extremo a extremo completada el 4 de octubre de 2026 (punto 78).
 
 ---
 
@@ -178,7 +178,7 @@ El alcance concreto de implementación:
 
 1. **`WompiTokenizer.ts` (Issue #126)** — REST directo contra `POST /v1/tokens/cards` con la clave pública Bearer. Sin librerías propietarias. Soporta ambientes `sandbox`, `production` y `simulator` (con endpoint mock en `simulator-api`).
 
-2. **`MercadoPagoTokenizer.ts` (Issue #127)** — Tokenización de tarjeta con clave pública para Mercado Pago.
+2. **`MercadoPagoTokenizer.ts` (Issue #127)** — REST directo contra `POST /v1/card_tokens?public_key=...` con la clave pública en query param, usando `fetch` nativo sin librerías externas. Se descartó la alternativa de envolver los Core Methods de `@mercadopago/sdk-js` para mantener el bundle ligero y autónomo (~7 KB) y evitar la carga de scripts de terceros en el DOM del comercio. Exige obligatoriamente el documento de identidad del titular (`docType` y `docNumber`), validado antes de la petición con `KitPagosError(INVALID_REQUEST)`. Un mismo formulario frontend (`CardData`) permite tokenizar de forma transparente en Wompi y Mercado Pago cambiando únicamente el valor de `gateway`.
 
 3. **`KitPagosBrowser.ts`** — Fachada unificada que expone `tokenizeCard()` con la misma semántica, devolviendo un `CardTokenResult` con `{ token, gateway, lastFour, brand }`, consumible directamente en `PaymentMethod.card(token)`.
 

@@ -158,26 +158,40 @@ import { KitPagosBrowser } from "kit-pagos-colombia/browser";
 import { Gateway } from "kit-pagos-colombia";
 
 async function tokenizarTarjetaEnNavegador() {
-  const result = await KitPagosBrowser.tokenizeCard({
+  // Un mismo formulario captura los datos de la tarjeta y el documento de identidad:
+  const datosFormulario = {
+    number: "4242424242424242",
+    cvc: "123",
+    expMonth: "12",
+    expYear: "2030",
+    cardHolder: "Juan Pérez",
+    docType: "CC",            // Obligatorio en Mercado Pago, opcional en Wompi
+    docNumber: "19119119100",  // Obligatorio en Mercado Pago, opcional en Wompi
+  };
+
+  // 1. Tokenización contra Wompi:
+  const wompiResult = await KitPagosBrowser.tokenizeCard({
     gateway: Gateway.WOMPI,
     publicKey: "pub_prod_1234567890", // O pub_test_... para sandbox
     environment: "sandbox",          // "sandbox" | "production" | "simulator"
-    card: {
-      number: "4242424242424242",
-      cvc: "123",
-      expMonth: "12",
-      expYear: "2030",
-      cardHolder: "Juan Pérez",
-    },
+    card: datosFormulario,
   });
 
-  // El token resultante ("tok_...") se envía a TU backend para llamar a PaymentMethod.card()
-  console.log(`Token generado: ${result.token}`);
-  console.log(`Franquicia: ${result.brand}, Últimos 4: ${result.lastFour}`);
+  // 2. Tokenización contra Mercado Pago (exactamente con los mismos datos de entrada):
+  const mpResult = await KitPagosBrowser.tokenizeCard({
+    gateway: Gateway.MERCADOPAGO,
+    publicKey: "APP_USR-public-key",
+    environment: "sandbox",
+    card: datosFormulario,
+  });
+
+  // El token resultante se envía a TU backend para llamar a PaymentMethod.card()
+  console.log(`Token Wompi: ${wompiResult.token}`);
+  console.log(`Token Mercado Pago: ${mpResult.token}`);
 }
 ```
 
-> **PCI DSS:** Al usar `KitPagosBrowser`, el número de tarjeta viaja exclusivamente entre el navegador del pagador y los servidores de la pasarela. Tu backend solo recibe y almacena el token opaco `tok_...`.
+> **PCI DSS:** Al usar `KitPagosBrowser`, el número de tarjeta viaja exclusivamente entre el navegador del pagador y los servidores de la pasarela. Tu backend solo recibe y almacena el token opaco `tok_...`. El SDK rechaza activamente pasarelas que no soportan tokenización inline en frontend (como Kushki y Rapyd) con `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones.
 
 ---
 
