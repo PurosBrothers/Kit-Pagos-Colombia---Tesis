@@ -3,6 +3,7 @@ import { GatewayMockFactory } from "../gateways/mercadopago/GatewayMockFactory";
 import {
   MercadoPagoCreateOrderRequestBody,
   MercadoPagoCreatePaymentRequestBody,
+  MercadoPagoTokenizeCardRequestBody,
 } from "../gateways/mercadopago/types";
 import {
   getSimulatorScenario,
@@ -392,6 +393,98 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
           ],
         },
       ]);
+    },
+  );
+
+  // ── POST /v1/sim/mercadopago/card_tokens (issue #127) ────────────────────
+  app.post(
+    "/v1/sim/mercadopago/card_tokens",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const query = request.query as { public_key?: string } | undefined;
+      let publicKey = query?.public_key;
+
+      if (!publicKey) {
+        const authHeader = request.headers.authorization;
+        if (authHeader && authHeader.startsWith("Bearer ")) {
+          publicKey = authHeader.slice(7).trim();
+        }
+      }
+
+      if (!publicKey || !publicKey.trim()) {
+        return reply.code(401).send({
+          message: "Unauthorized",
+          status: 401,
+          error: "bad_request",
+        });
+      }
+
+      const scenario = getSimulatorScenario(request);
+      if (scenario === "TIMEOUT" || scenario === "GATEWAY_TIMEOUT") {
+        return reply.code(504).send(mockFactory.buildTimeoutResponse());
+      }
+      if (scenario === "NETWORK_ERROR" || scenario === "CONNECTION_ERROR") {
+        return ScenarioEngine.handleNetworkError(request, reply);
+      }
+      if (scenario === "RATE_LIMIT" || scenario === "TOO_MANY_REQUESTS" || scenario === "429") {
+        return reply.code(429).send(mockFactory.buildRateLimitResponse());
+      }
+      if (scenario === "SERVER_ERROR" || scenario === "INTERNAL_ERROR" || scenario === "500") {
+        return reply.code(500).send(mockFactory.buildServerErrorResponse(500));
+      }
+      if (scenario === "BAD_GATEWAY" || scenario === "502") {
+        return reply.code(502).send(mockFactory.buildServerErrorResponse(502));
+      }
+      if (scenario === "SERVICE_UNAVAILABLE" || scenario === "503") {
+        return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+      }
+
+      const body = request.body as MercadoPagoTokenizeCardRequestBody;
+      if (
+        !body ||
+        !body.card_number ||
+        !body.security_code ||
+        body.expiration_month === undefined ||
+        body.expiration_year === undefined ||
+        !body.cardholder?.name
+      ) {
+        return reply.code(400).send({
+          message: "Invalid parameter: card details are missing",
+          status: 400,
+          error: "bad_request",
+        });
+      }
+
+      // En Mercado Pago, la identificación del titular (type y number) es OBLIGATORIA
+      if (
+        !body.cardholder.identification ||
+        !body.cardholder.identification.type ||
+        !body.cardholder.identification.number
+      ) {
+        return reply.code(400).send({
+          message: "Invalid parameter: cardholder.identification",
+          status: 400,
+          error: "bad_request",
+          cause: [
+            {
+              code: "324",
+              description: "Invalid parameter cardholder.identification",
+              data: null,
+            },
+          ],
+        });
+      }
+
+      const cleanNumber = String(body.card_number).replace(/\s+/g, "");
+      if (cleanNumber.length < 13 || !/^\d+$/.test(cleanNumber)) {
+        return reply.code(400).send({
+          message: "Invalid parameter: card_number",
+          status: 400,
+          error: "bad_request",
+        });
+      }
+
+      const response = mockFactory.buildTokenCardResponse(body);
+      return reply.code(201).send(response);
     },
   );
 }

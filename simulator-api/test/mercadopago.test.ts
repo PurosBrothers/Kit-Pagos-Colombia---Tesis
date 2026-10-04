@@ -398,4 +398,144 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
   });
+
+  describe("POST /v1/sim/mercadopago/card_tokens (issue #127)", () => {
+    const validCardPayload = {
+      card_number: "4013540682746260",
+      expiration_month: 11,
+      expiration_year: 2030,
+      security_code: "123",
+      cardholder: {
+        name: "APRO",
+        identification: { type: "CC", number: "19119119100" },
+      },
+    };
+
+    it("responde 401 si no se envía llave pública ni en query ni en cabecera", async () => {
+      const app = buildApp();
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/card_tokens",
+        payload: validCardPayload,
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json().error).toBe("bad_request");
+      await app.close();
+    });
+
+    it("responde 400 si faltan datos de la tarjeta", async () => {
+      const app = buildApp();
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/card_tokens?public_key=TEST-pub-key",
+        payload: { card_number: "4013540682746260" },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().message).toContain("card details are missing");
+      await app.close();
+    });
+
+    it("responde 400 si falta cardholder.identification (obligatorio en Mercado Pago)", async () => {
+      const app = buildApp();
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/card_tokens?public_key=TEST-pub-key",
+        payload: {
+          card_number: "4013540682746260",
+          expiration_month: 11,
+          expiration_year: 2030,
+          security_code: "123",
+          cardholder: { name: "APRO" },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().message).toContain("cardholder.identification");
+      await app.close();
+    });
+
+    it("responde 400 si el número de tarjeta no es válido", async () => {
+      const app = buildApp();
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/card_tokens?public_key=TEST-pub-key",
+        payload: {
+          ...validCardPayload,
+          card_number: "123",
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().message).toContain("card_number");
+      await app.close();
+    });
+
+    it("responde 201 y emite un token de tarjeta con public_key en query param", async () => {
+      const app = buildApp();
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/card_tokens?public_key=TEST-pub-key",
+        payload: validCardPayload,
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.id).toMatch(/^tok_sim_mp_/);
+      expect(body.status).toBe("active");
+      expect(body.first_six_digits).toBe("401354");
+      expect(body.last_four_digits).toBe("6260");
+      expect(body.expiration_month).toBe(11);
+      expect(body.expiration_year).toBe(2030);
+      expect(body.cardholder.name).toBe("APRO");
+      expect(body.cardholder.identification.number).toBe("19119119100");
+      await app.close();
+    });
+
+    it("responde 201 y emite un token de tarjeta con Authorization: Bearer <pub_key>", async () => {
+      const app = buildApp();
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/card_tokens",
+        headers: { authorization: "Bearer TEST-bearer-pub-key" },
+        payload: validCardPayload,
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.id).toMatch(/^tok_sim_mp_/);
+      await app.close();
+    });
+
+    it("responde según escenarios del motor de simulación (TIMEOUT, RATE_LIMIT, SERVER_ERROR)", async () => {
+      const app = buildApp();
+
+      const timeoutRes = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/card_tokens?public_key=TEST-pub-key",
+        headers: { "x-simulate-scenario": "TIMEOUT" },
+        payload: validCardPayload,
+      });
+      expect(timeoutRes.statusCode).toBe(504);
+
+      const rateLimitRes = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/card_tokens?public_key=TEST-pub-key",
+        headers: { "x-simulate-scenario": "RATE_LIMIT" },
+        payload: validCardPayload,
+      });
+      expect(rateLimitRes.statusCode).toBe(429);
+
+      const serverErrorRes = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/card_tokens?public_key=TEST-pub-key",
+        headers: { "x-simulate-scenario": "SERVER_ERROR" },
+        payload: validCardPayload,
+      });
+      expect(serverErrorRes.statusCode).toBe(500);
+
+      await app.close();
+    });
+  });
 });

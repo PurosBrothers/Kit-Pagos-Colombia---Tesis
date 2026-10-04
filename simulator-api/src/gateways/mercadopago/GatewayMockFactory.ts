@@ -1,9 +1,11 @@
 import {
+  MercadoPagoCardTokenResponse,
   MercadoPagoCreateOrderRequestBody,
   MercadoPagoCreatePaymentRequestBody,
   MercadoPagoOrderResponse,
   MercadoPagoOrderStatus,
   MercadoPagoPaymentResponse,
+  MercadoPagoTokenizeCardRequestBody,
 } from "./types";
 
 /**
@@ -240,6 +242,37 @@ export class GatewayMockFactory {
             },
           },
         ],
+      },
+    };
+  }
+
+  /**
+   * Construye la respuesta nativa de tokenización de tarjeta (POST /v1/card_tokens).
+   */
+  buildTokenCardResponse(
+    requestBody: MercadoPagoTokenizeCardRequestBody,
+  ): MercadoPagoCardTokenResponse {
+    const cleanNumber = String(requestBody.card_number || "").replace(/\s+/g, "");
+    const now = new Date();
+    const dueDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    return {
+      id: `tok_sim_mp_${Math.random().toString(36).substring(2, 12)}`,
+      status: "active",
+      first_six_digits: cleanNumber.slice(0, 6) || "401354",
+      last_four_digits: cleanNumber.slice(-4) || "6260",
+      expiration_month: Number(requestBody.expiration_month),
+      expiration_year: Number(requestBody.expiration_year),
+      security_code_length: String(requestBody.security_code || "").length || 3,
+      date_created: now.toISOString(),
+      date_last_updated: now.toISOString(),
+      date_due: dueDate.toISOString(),
+      cardholder: {
+        name: requestBody.cardholder?.name ?? "APRO",
+        identification: {
+          type: requestBody.cardholder?.identification?.type ?? "CC",
+          number: requestBody.cardholder?.identification?.number ?? "19119119100",
+        },
       },
     };
   }
