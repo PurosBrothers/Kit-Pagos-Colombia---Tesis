@@ -51,7 +51,6 @@ export class KitPagosBrowser {
       return MercadoPagoTokenizer.tokenize({
         ...params,
         environment,
-        baseUrl,
       });
     }
 

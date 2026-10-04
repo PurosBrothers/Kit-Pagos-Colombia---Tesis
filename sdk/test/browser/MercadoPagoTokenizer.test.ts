@@ -116,13 +116,31 @@ describe("MercadoPagoTokenizer", () => {
     expect(body.expiration_year).toBe(2035);
   });
 
-  it("resuelve las URLs base según el ambiente configurado", () => {
+  it("resuelve las URLs base según el catálogo cerrado", () => {
     expect(MercadoPagoTokenizer.resolveBaseUrl("sandbox")).toBe("https://api.mercadopago.com/v1");
     expect(MercadoPagoTokenizer.resolveBaseUrl("production")).toBe("https://api.mercadopago.com/v1");
     expect(MercadoPagoTokenizer.resolveBaseUrl("simulator")).toBe("http://localhost:3000/v1/sim/mercadopago");
-    expect(MercadoPagoTokenizer.resolveBaseUrl("sandbox", "http://custom-host:8080/")).toBe(
-      "http://custom-host:8080",
+  });
+
+  it("ignora una URL colada desde JavaScript: el host sale solo del catálogo", async () => {
+    let capturedUrl = "";
+    const mockFetch = jest.fn(async (url: string | URL | Request) => {
+      capturedUrl = String(url);
+      return mockSuccessResponse();
+    });
+
+    // El tipo ya no tiene baseUrl; esto simula a quien lo pasa igual desde JS.
+    await MercadoPagoTokenizer.tokenize(
+      {
+        gateway: Gateway.MERCADOPAGO,
+        publicKey: "TEST-pub-key-123",
+        card: validCard,
+        baseUrl: "https://mi-backend.com",
+      } as unknown as Parameters<typeof MercadoPagoTokenizer.tokenize>[0],
+      mockFetch as unknown as typeof fetch,
     );
+
+    expect(capturedUrl).toBe("https://api.mercadopago.com/v1/card_tokens?public_key=TEST-pub-key-123");
   });
 
   it("falla con INVALID_REQUEST antes de la red si falta docType o docNumber", async () => {
@@ -333,5 +351,71 @@ describe("MercadoPagoTokenizer", () => {
         message: expect.stringContaining("Failed to fetch"),
       }),
     );
+  });
+
+  it("lanza GATEWAY_SERVER_ERROR ante un 5xx de Mercado Pago", async () => {
+    const mockFetch500 = jest.fn(async () => ({
+      ok: false,
+      status: 500,
+      text: async () => JSON.stringify({ message: "Internal Server Error", status: 500 }),
+    }));
+
+    await expect(
+      MercadoPagoTokenizer.tokenize(
+        {
+          gateway: Gateway.MERCADOPAGO,
+          publicKey: "TEST-pub-key-123",
+          card: validCard,
+        },
+        mockFetch500 as unknown as typeof fetch,
+      ),
+    ).rejects.toMatchObject({
+      code: KitPagosErrorCode.GATEWAY_SERVER_ERROR,
+      gateway: Gateway.MERCADOPAGO,
+    });
+  });
+
+  it("lanza RATE_LIMIT_EXCEEDED ante un 429 de Mercado Pago", async () => {
+    const mockFetch429 = jest.fn(async () => ({
+      ok: false,
+      status: 429,
+      text: async () => JSON.stringify({ message: "Too Many Requests", status: 429 }),
+    }));
+
+    await expect(
+      MercadoPagoTokenizer.tokenize(
+        {
+          gateway: Gateway.MERCADOPAGO,
+          publicKey: "TEST-pub-key-123",
+          card: validCard,
+        },
+        mockFetch429 as unknown as typeof fetch,
+      ),
+    ).rejects.toMatchObject({
+      code: KitPagosErrorCode.RATE_LIMIT_EXCEEDED,
+      gateway: Gateway.MERCADOPAGO,
+    });
+  });
+
+  it("lanza MALFORMED_RESPONSE si la respuesta fue ok pero no incluye id", async () => {
+    const mockFetchNoId = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ status: "active" }),
+    }));
+
+    await expect(
+      MercadoPagoTokenizer.tokenize(
+        {
+          gateway: Gateway.MERCADOPAGO,
+          publicKey: "TEST-pub-key-123",
+          card: validCard,
+        },
+        mockFetchNoId as unknown as typeof fetch,
+      ),
+    ).rejects.toMatchObject({
+      code: KitPagosErrorCode.MALFORMED_RESPONSE,
+      gateway: Gateway.MERCADOPAGO,
+    });
   });
 });

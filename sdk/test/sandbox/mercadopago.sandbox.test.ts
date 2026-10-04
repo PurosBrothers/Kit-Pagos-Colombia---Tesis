@@ -91,7 +91,7 @@ describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
     const tokenResult = await KitPagosBrowser.tokenizeCard({
       gateway: Gateway.MERCADOPAGO,
       publicKey: credentials.publicKey,
-      baseUrl,
+      environment: "sandbox",
       card: {
         number: "4013540682746260",
         cvc: "123",

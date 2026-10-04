@@ -8,8 +8,11 @@ import {
   TokenizeCardParams,
 } from "../types";
 
-/** Catálogo cerrado de URLs base oficiales de Mercado Pago. */
-const MERCADOPAGO_BASE_URLS: Record<BrowserEnvironment, string> = {
+/**
+ * Catálogo cerrado de URLs base de Mercado Pago. Es el único lugar de donde sale el host al
+ * que viaja la tarjeta: el comercio elige el ambiente y no puede escribir una URL.
+ */
+const MERCADOPAGO_BASE_URLS: Readonly<Record<BrowserEnvironment, string>> = {
   sandbox: "https://api.mercadopago.com/v1",
   production: "https://api.mercadopago.com/v1",
   simulator: "http://localhost:3000/v1/sim/mercadopago",
@@ -27,27 +30,22 @@ const MERCADOPAGO_BASE_URLS: Record<BrowserEnvironment, string> = {
  * Mercado Pago para asociar el token al pagador.
  */
 export class MercadoPagoTokenizer {
-  /**
-   * Resuelve la URL base de Mercado Pago según el ambiente configurado o una URL explícita.
-   */
-  static resolveBaseUrl(
-    environment: BrowserEnvironment = "sandbox",
-    customBaseUrl?: string,
-  ): string {
-    if (customBaseUrl) {
-      return customBaseUrl.replace(/\/+$/, "");
-    }
+  /** Resuelve la URL base de Mercado Pago desde el catálogo cerrado. */
+  static resolveBaseUrl(environment: BrowserEnvironment = "sandbox"): string {
     return MERCADOPAGO_BASE_URLS[environment] ?? MERCADOPAGO_BASE_URLS.sandbox;
   }
 
   /**
    * Tokeniza una tarjeta directamente contra Mercado Pago.
+   *
+   * `fetchFn` existe para las pruebas unitarias; no cambia el host, que sigue
+   * saliendo del catálogo.
    */
   static async tokenize(
     params: TokenizeCardParams,
     fetchFn: typeof fetch = globalThis.fetch,
   ): Promise<CardTokenResult> {
-    const { card, publicKey, environment = "sandbox", baseUrl: customBaseUrl } = params;
+    const { card, publicKey, environment = "sandbox" } = params;
 
     if (!publicKey || !publicKey.trim()) {
       throw new KitPagosError(
@@ -60,7 +58,7 @@ export class MercadoPagoTokenizer {
 
     this.validateCardData(card);
 
-    const baseUrl = this.resolveBaseUrl(environment, customBaseUrl);
+    const baseUrl = this.resolveBaseUrl(environment);
     const url = `${baseUrl}/card_tokens?public_key=${encodeURIComponent(publicKey.trim())}`;
 
     const expMonth = parseInt(card.expMonth.trim(), 10);
@@ -142,7 +140,15 @@ export class MercadoPagoTokenizer {
       json = { raw: text };
     }
 
-    if (response.ok && json.id) {
+    if (response.ok) {
+      if (!json.id) {
+        throw new KitPagosError(
+          KitPagosErrorCode.MALFORMED_RESPONSE,
+          Gateway.MERCADOPAGO,
+          json,
+          `Mercado Pago respondió ${response.status} sin id de token: no hay token que devolver.`,
+        );
+      }
       return {
         token: json.id as string,
         gateway: Gateway.MERCADOPAGO,
@@ -160,12 +166,30 @@ export class MercadoPagoTokenizer {
       );
     }
 
-    const causeList = json.cause as Array<{ description?: string }> | undefined;
+    if (response.status === 429) {
+      throw new KitPagosError(
+        KitPagosErrorCode.RATE_LIMIT_EXCEEDED,
+        Gateway.MERCADOPAGO,
+        json,
+        "Mercado Pago excedió el límite de peticiones (429).",
+      );
+    }
+
+    const causeList = json.cause as Array<{ description?: string; code?: string }> | undefined;
     const firstCause = causeList?.[0]?.description;
     const message =
-      (json.message as string | undefined) ??
       firstCause ??
+      (json.message as string | undefined) ??
       `Mercado Pago rechazó la tokenización con estado HTTP ${response.status}.`;
+
+    if (response.status >= 500 && response.status <= 599) {
+      throw new KitPagosError(
+        KitPagosErrorCode.GATEWAY_SERVER_ERROR,
+        Gateway.MERCADOPAGO,
+        json,
+        message,
+      );
+    }
 
     throw new KitPagosError(
       KitPagosErrorCode.INVALID_REQUEST,

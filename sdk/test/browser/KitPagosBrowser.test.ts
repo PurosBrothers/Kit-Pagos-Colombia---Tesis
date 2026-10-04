@@ -120,7 +120,7 @@ describe("KitPagosBrowser", () => {
 
     // Tokenización contra Wompi con el formulario unificado
     const wompiResult = await KitPagosBrowser.tokenizeCard({
-      gateway: "wompi",
+      gateway: Gateway.WOMPI,
       publicKey: "pub_test_wompi",
       card: unifiedFormCard,
     });
@@ -129,7 +129,7 @@ describe("KitPagosBrowser", () => {
 
     // Tokenización contra Mercado Pago con exactamente el mismo formulario
     const mpResult = await KitPagosBrowser.tokenizeCard({
-      gateway: "mercadopago",
+      gateway: Gateway.MERCADOPAGO,
       publicKey: "TEST-pub-mp",
       card: unifiedFormCard,
     });
