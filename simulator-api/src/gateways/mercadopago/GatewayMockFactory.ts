@@ -268,13 +268,34 @@ export class GatewayMockFactory {
    * Si falta cardholder.identification, responde con identification: {}.
    * Si el número no pasa Luhn, emite el token igual con luhn_validation: false: medido con
    * "1234" y con 4013540682746261, que tiene 16 dígitos pero falla el dígito verificador.
+   *
+   * Nivel de evidencia 1 (medido contra api.mercadopago.com el 4 de octubre de 2026 a las
+   * 17:49 −05:00, con 4013540682746260 y la llave pública de prueba del proyecto):
+   * El 201 trae exactamente las claves de MercadoPagoCardTokenResponse. Se replica el
+   * conjunto completo porque un consumidor que lea un campo ausente pasaría contra el
+   * simulador leyendo undefined y fallaría contra la API real.
+   * date_due cae 8 días después de date_created. Una segunda medición independiente, hacia
+   * las 17:40, dio también 8 días y trunc_card_number "525413XXXXXX3564" para
+   * 5254133674403564.
+   * live_mode llegó en true con la llave de prueba. Se replica lo observado sin suponer por
+   * qué; con otra llave podría cambiar.
+   * Dos diferencias deliberadas: el id real son 32 caracteres hexadecimales, y el prefijo
+   * tok_sim_mp_ se conserva para que un token simulado no se confunda con uno real; las
+   * fechas reales llevan desfase −04:00 y aquí van en UTC, que es el mismo instante.
+   * Sin medir: card_number_length y trunc_card_number con números que no tienen 16 dígitos.
+   * Con menos de 10 se solapan los primeros seis y los últimos cuatro, y el valor que
+   * devolvería la API real no se conoce.
    */
   buildTokenCardResponse(
     requestBody: MercadoPagoTokenizeCardRequestBody,
+    publicKey: string,
   ): MercadoPagoCardTokenResponse {
     const cleanNumber = String(requestBody.card_number || "").replace(/\s+/g, "");
     const now = new Date();
-    const dueDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const dueDate = new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000);
+    const firstSixDigits = cleanNumber.slice(0, 6) || "401354";
+    const lastFourDigits = cleanNumber.slice(-4) || "6260";
+    const hiddenDigits = Math.max(cleanNumber.length - 10, 0);
 
     const hasId = Boolean(
       requestBody.cardholder?.identification?.type &&
@@ -290,9 +311,14 @@ export class GatewayMockFactory {
 
     return {
       id: `tok_sim_mp_${Math.random().toString(36).substring(2, 12)}`,
+      public_key: publicKey,
+      live_mode: true,
+      require_esc: false,
       status: "active",
-      first_six_digits: cleanNumber.slice(0, 6) || "401354",
-      last_four_digits: cleanNumber.slice(-4) || "6260",
+      first_six_digits: firstSixDigits,
+      last_four_digits: lastFourDigits,
+      card_number_length: cleanNumber.length,
+      trunc_card_number: `${firstSixDigits}${"X".repeat(hiddenDigits)}${lastFourDigits}`,
       luhn_validation: passesLuhn(cleanNumber),
       expiration_month: Number(requestBody.expiration_month) || 12,
       expiration_year: Number(requestBody.expiration_year) || 2030,

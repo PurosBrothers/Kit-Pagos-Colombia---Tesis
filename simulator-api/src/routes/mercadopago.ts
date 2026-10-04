@@ -500,7 +500,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
        * identification: {}), con número corto ("1234", con luhn_validation: false) o sin
        * security_code. El fallo por luhn ocurre recién al cobrar con el token (error 400, causa 2062).
        */
-      const response = mockFactory.buildTokenCardResponse(body);
+      const response = mockFactory.buildTokenCardResponse(body, publicKey);
       return reply.code(201).send(response);
     },
   );

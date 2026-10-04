@@ -179,9 +179,16 @@ export interface MercadoPagoTokenizeCardRequestBody {
 /** Respuesta nativa de tokenización de tarjeta devuelta por Mercado Pago. */
 export interface MercadoPagoCardTokenResponse {
   id: string;
+  /** La API repite la llave pública que recibió en `?public_key=`. */
+  public_key: string;
+  live_mode: boolean;
+  require_esc: boolean;
   status: string;
   first_six_digits?: string;
   last_four_digits: string;
+  card_number_length: number;
+  /** Primeros seis, una `X` por cada dígito intermedio y últimos cuatro. */
+  trunc_card_number: string;
   luhn_validation?: boolean;
   expiration_month: number;
   expiration_year: number;

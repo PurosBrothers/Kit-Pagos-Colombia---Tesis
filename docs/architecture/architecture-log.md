@@ -2713,8 +2713,11 @@ Asimismo, se midió el comportamiento de CORS el 30 de septiembre de 2026: una s
   * Sin `public_key`: HTTP 401 `{"message":"access is unauthorized","error":"unauthorized","code":"unauthorized_access","cause":[{"description":"access_parameters is required","code":"E212"}]}`.
   * Llave en `Authorization: Bearer`: HTTP 400 `unexpected_processing` (causa G001).
   * Clave pública inexistente: HTTP 500 `internal_error` (causa E731 `"POST tokenization unexpected status"`). Esta respuesta se mapea a `GATEWAY_SERVER_ERROR` en el SDK, registrándose como limitación conocida de la pasarela ante claves inválidas en este endpoint.
+  * Forma completa del 201 (medido a las 17:49, con `4013540682746260`): diecisiete claves. Además de las que el simulador ya replicaba, la respuesta trae `public_key` (la misma llave que se envió en `?public_key=`), `live_mode: true` con la llave de prueba del proyecto, `require_esc: false`, `card_number_length: 16` y `trunc_card_number: "401354XXXXXX6260"`. `date_due` cae **8 días** después de `date_created`; una medición independiente hacia las 17:40 con `5254133674403564` dio también 8 días y `"525413XXXXXX3564"`.
 
-**Estado:** Resuelto en código y documentación (`sdk/src-browser/`, `simulator-api/src/routes/mercadopago.ts`, `docs/03-sdk/6-tokenizacion-frontend.md`).
+**Corrección posterior del simulador (4 de octubre de 2026).** El mock de `POST /v1/sim/mercadopago/card_tokens` devolvía `date_due` a 7 días y omitía esos cinco campos. Nada lo detectaba porque las pruebas afirmaban campo por campo y el SDK no lee ninguno de ellos. Ahora el factory recibe la llave de la petición y la repite. Se descartó una llave fija, porque una prueba no podría distinguir el eco de un valor constante. La prueba compara el conjunto entero de claves, así que detecta tanto un campo que falte como uno inventado. Siguen sin medir `card_number_length` y `trunc_card_number` con números que no tienen 16 dígitos, y si `live_mode` cambia con otra llave.
+
+**Estado:** Resuelto en código y documentación (`sdk/src-browser/`, `simulator-api/src/routes/mercadopago.ts`, `simulator-api/src/gateways/mercadopago/GatewayMockFactory.ts`, `docs/03-sdk/6-tokenizacion-frontend.md`).
 
 ### 9. Archivo de imagen suelto dentro del código fuente
 
