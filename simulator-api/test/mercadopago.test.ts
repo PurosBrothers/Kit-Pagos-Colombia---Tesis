@@ -1,4 +1,6 @@
 import { buildApp } from "../src/app";
+import { CredentialResolver } from "../src/auth/CredentialResolver";
+import { KitPagosProvider } from "../src/services/KitPagosProvider";
 
 describe("Mercado Pago Simulation Routes", () => {
   const validRequestBody = {
@@ -536,6 +538,56 @@ describe("Mercado Pago Simulation Routes", () => {
       expect(serverErrorRes.statusCode).toBe(500);
 
       await app.close();
+    });
+
+    it("completa un cobro con tarjeta de Mercado Pago de punta a punta: mock de tokens y POST /v1/api/payments", async () => {
+      const testEnv: Record<string, string | undefined> = {
+        MERCADOPAGO_PUBLIC_KEY: "TEST-mp-public-key",
+        MERCADOPAGO_ACCESS_TOKEN: "APP_USR-test-mp-token",
+      };
+      const credentialResolver = new CredentialResolver(testEnv);
+      const app = buildApp({
+        logger: false,
+        credentialResolver,
+        kitPagosProvider: new KitPagosProvider(credentialResolver, testEnv),
+      });
+      testEnv.SIMULATOR_SDK_BASE_URL = await app.listen({ port: 0, host: "127.0.0.1" });
+
+      try {
+        // 1. Obtener token de tarjeta en el mock del simulador
+        const tokenRes = await app.inject({
+          method: "POST",
+          url: "/v1/sim/mercadopago/card_tokens?public_key=TEST-mp-public-key",
+          payload: validCardPayload,
+        });
+
+        expect(tokenRes.statusCode).toBe(201);
+        const tokenData = tokenRes.json();
+        expect(tokenData.id).toMatch(/^tok_sim_mp_/);
+
+        // 2. Cobrar con ese token a través de POST /v1/api/payments
+        const paymentRes = await app.inject({
+          method: "POST",
+          url: "/v1/api/payments",
+          payload: {
+            gateway: "MERCADOPAGO",
+            amount: "75000.00",
+            currency: "COP",
+            orderReference: `ORDER-MP-E2E-${Date.now()}`,
+            payer: { email: "comprador@example.com", fullName: "Laura Martinez" },
+            paymentMethod: { type: "CARD", token: tokenData.id, installments: 1 },
+          },
+        });
+
+        expect(paymentRes.statusCode).toBe(201);
+        const paymentData = paymentRes.json();
+        expect(paymentData.outcome).toBe("TRANSACTION");
+        expect(paymentData.transaction.gatewayTransactionId).toBeDefined();
+        expect(paymentData.transaction.amount).toBe("75000.00");
+        expect(paymentData.transaction.currency).toBe("COP");
+      } finally {
+        await app.close();
+      }
     });
   });
 });
