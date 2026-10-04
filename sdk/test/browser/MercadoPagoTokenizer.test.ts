@@ -237,6 +237,63 @@ describe("MercadoPagoTokenizer", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
+  it("falla con INVALID_REQUEST si expMonth o expYear no son numéricos válidos", async () => {
+    const mockFetch = jest.fn();
+
+    // Mes inválido
+    await expect(
+      MercadoPagoTokenizer.tokenize(
+        {
+          gateway: Gateway.MERCADOPAGO,
+          publicKey: "TEST-pub-key-123",
+          card: { ...validCard, expMonth: "13" },
+        },
+        mockFetch as unknown as typeof fetch,
+      ),
+    ).rejects.toThrow(
+      expect.objectContaining({
+        code: KitPagosErrorCode.INVALID_REQUEST,
+        message: expect.stringMatching(/mes de expiración/i),
+      }),
+    );
+
+    // Mes no numérico
+    await expect(
+      MercadoPagoTokenizer.tokenize(
+        {
+          gateway: Gateway.MERCADOPAGO,
+          publicKey: "TEST-pub-key-123",
+          card: { ...validCard, expMonth: "abc" },
+        },
+        mockFetch as unknown as typeof fetch,
+      ),
+    ).rejects.toThrow(
+      expect.objectContaining({
+        code: KitPagosErrorCode.INVALID_REQUEST,
+        message: expect.stringMatching(/mes de expiración/i),
+      }),
+    );
+
+    // Año no numérico
+    await expect(
+      MercadoPagoTokenizer.tokenize(
+        {
+          gateway: Gateway.MERCADOPAGO,
+          publicKey: "TEST-pub-key-123",
+          card: { ...validCard, expYear: "xyz" },
+        },
+        mockFetch as unknown as typeof fetch,
+      ),
+    ).rejects.toThrow(
+      expect.objectContaining({
+        code: KitPagosErrorCode.INVALID_REQUEST,
+        message: expect.stringMatching(/año de expiración/i),
+      }),
+    );
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it("falla con INVALID_CREDENTIALS si no se proporciona publicKey", async () => {
     const mockFetch = jest.fn();
 
