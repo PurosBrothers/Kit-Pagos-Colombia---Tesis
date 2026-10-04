@@ -2681,11 +2681,13 @@ Asimismo, se midió el comportamiento de CORS el 30 de septiembre de 2026: una s
    - Motivo de descarte: Obliga a cargar un script externo de terceros desde los servidores de Mercado Pago en el DOM del comercio, incrementando la fragilidad ante caídas de CDN, requiriendo mockeos complejos de objetos globales de navegador en pruebas automatizadas y aumentando el tamaño final y complejidad del módulo sin aportar ventajas frente a la API REST abierta.
 
 **Implementación realizada:**
-1. `MercadoPagoTokenizer.ts`: Implementación de tokenización directa en `sdk/src-browser/tokenizers/MercadoPagoTokenizer.ts` utilizando `globalThis.fetch`. Conecta los catálogos de `sandbox`, `production` y `simulator`.
+1. `MercadoPagoTokenizer.ts`: Implementación de tokenización directa en `sdk/src-browser/tokenizers/MercadoPagoTokenizer.ts` utilizando `globalThis.fetch`. Conecta exclusivamente los catálogos cerrados de `sandbox`, `production` y `simulator`, sin permitir URLs arbitrarias (`baseUrl`).
 2. Integración en `KitPagosBrowser.ts`: Soporta `Gateway.MERCADOPAGO` devolviendo `CardTokenResult`.
 3. Intercambiabilidad de formulario: El mismo formulario del comercio (`CardData` con campos de tarjeta y documento) tokeniza en Wompi y Mercado Pago alternando únicamente el parámetro `gateway`.
-4. Endpoint de simulación en `simulator-api`: Se implementó `POST /v1/sim/mercadopago/card_tokens` en `simulator-api/src/routes/mercadopago.ts` y `GatewayMockFactory.ts`, validando autenticación por query param o Bearer token, campos obligatorios, identificación del titular y soportando escenarios adversos (`TIMEOUT`, `RATE_LIMIT`, `SERVER_ERROR`).
-5. Pruebas de contrato y unitarias:
+4. Mapeo estricto de errores: Traduce 401/403 a `INVALID_CREDENTIALS`, 429 a `RATE_LIMIT_EXCEEDED`, 5xx a `GATEWAY_SERVER_ERROR` y respuestas sin token `id` a `MALFORMED_RESPONSE`, extrayendo la causa específica de `cause[0].description`.
+5. Endpoint de simulación y prueba E2E en `simulator-api`: Se implementó `POST /v1/sim/mercadopago/card_tokens` en `simulator-api/src/routes/mercadopago.ts` y `GatewayMockFactory.ts`, validando autenticación por query param o Bearer token, campos obligatorios, identificación del titular y soportando escenarios adversos (`TIMEOUT`, `RATE_LIMIT`, `SERVER_ERROR`), junto con una prueba de punta a punta que tokeniza en el mock y cobra por `POST /v1/api/payments`.
+6. Alcance de métricas: `npm run metrics` se mantiene enfocado en `sdk/src` (31 clases del núcleo de servidor), sin distorsionar la serie de métricas de arquitectura hexagonal de la tesis con las fachadas delgadas de navegador.
+7. Pruebas de contrato y unitarias:
    - Unitarias en `sdk/test/browser/MercadoPagoTokenizer.test.ts` y `KitPagosBrowser.test.ts`.
    - Pruebas en `simulator-api/test/mercadopago.test.ts`.
    - Prueba de contrato en `sdk/test/sandbox/mercadopago.sandbox.test.ts` que tokeniza con `KitPagosBrowser` y cobra mediante `KitPagos.createPayment()` en el sandbox real de Mercado Pago (4 de octubre de 2026).
