@@ -1,4 +1,6 @@
 import { buildApp } from "../src/app";
+import { CredentialResolver } from "../src/auth/CredentialResolver";
+import { KitPagosProvider } from "../src/services/KitPagosProvider";
 import { ScenarioEngine } from "../src/scenarios/ScenarioEngine";
 import { transactionStore } from "../src/store/TransactionStore";
 
@@ -334,5 +336,257 @@ describe("GET /v1/sim/wompi/transactions/:id", () => {
     expect(body.error.reason).toContain(nonExistentId);
 
     await app.close();
+  });
+});
+
+describe("POST /v1/sim/wompi/tokens/cards", () => {
+  const validCardBody = {
+    number: "4242424242424242",
+    cvc: "123",
+    exp_month: "12",
+    exp_year: "30",
+    card_holder: "JUAN PEREZ",
+  };
+
+  it("crea un token de tarjeta exitosamente con código 201 y formato nativo de Wompi", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer pub_test_1234567890",
+      },
+      payload: validCardBody,
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.status).toBe("CREATED");
+    expect(body.data).toBeDefined();
+    expect(body.data.id).toMatch(/^tok_sim_[a-f0-9]{16}$/);
+    expect(body.data.brand).toBe("VISA");
+    expect(body.data.last_four).toBe("4242");
+    expect(body.data.bin).toBe("424242");
+    expect(body.data.exp_month).toBe("12");
+    expect(body.data.exp_year).toBe("30");
+    expect(body.data.card_holder).toBe("JUAN PEREZ");
+    expect(body.data.created_with_cvc).toBe(true);
+    expect(body.data.validity_ends_at).toBeNull();
+
+    await app.close();
+  });
+
+  it("rechaza la petición con 401 si falta la cabecera Authorization", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      payload: validCardBody,
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = response.json();
+    expect(body.error.type).toBe("UNAUTHORIZED");
+    expect(body.error.code).toBe("ACCESS_TOKEN_HEADER_NOT_PRESENT");
+    expect(body.error.reason).toBe("Header de autorización 'Authorization' no enviado.");
+
+    await app.close();
+  });
+
+  it("rechaza la petición con 401 si la cabecera Authorization no tiene clave válida", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer ",
+      },
+      payload: validCardBody,
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = response.json();
+    expect(body.error.type).toBe("UNAUTHORIZED");
+    expect(body.error.code).toBe("ACCESS_TOKEN_HEADER_NOT_PRESENT");
+    expect(body.error.reason).toBe("Header de autorización 'Authorization' no enviado.");
+
+    await app.close();
+  });
+
+  it("rechaza la petición con 422 si faltan campos obligatorios", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer pub_test_12345",
+      },
+      payload: {
+        number: "4242424242424242",
+        // cvc faltante
+        exp_month: "12",
+        exp_year: "30",
+        card_holder: "JUAN PEREZ",
+      },
+    });
+
+    expect(response.statusCode).toBe(422);
+    const body = response.json();
+    expect(body.error.type).toBe("INPUT_VALIDATION_ERROR");
+    expect(body.error.messages).toBeDefined();
+    expect(body.error.messages.cvc).toEqual(["debe tener la propiedad requerida cvc."]);
+
+    await app.close();
+  });
+
+  it("rechaza la petición con 422 si el cvc llega vacío (patrón regex)", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer pub_test_12345",
+      },
+      payload: {
+        ...validCardBody,
+        cvc: "",
+      },
+    });
+
+    expect(response.statusCode).toBe(422);
+    const body = response.json();
+    expect(body.error.type).toBe("INPUT_VALIDATION_ERROR");
+    expect(body.error.messages.cvc).toEqual(['debe coincidir con el patron "^\\d{3,4}$"']);
+
+    await app.close();
+  });
+
+  it("rechaza la petición con 422 si el número de tarjeta no es válido", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer pub_test_12345",
+      },
+      payload: {
+        ...validCardBody,
+        number: "123", // Muy corto
+      },
+    });
+
+    expect(response.statusCode).toBe(422);
+    const body = response.json();
+    expect(body.error.type).toBe("INPUT_VALIDATION_ERROR");
+    expect(body.error.messages).toBeDefined();
+    expect(body.error.messages.number).toBeDefined();
+
+    await app.close();
+  });
+
+  it("rechaza la petición con 404 MERCHANT_NOT_FOUND ante llave pública inexistente (medido 2026-10-03)", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer pub_test_inexistente",
+      },
+      payload: validCardBody,
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = response.json();
+    expect(body.error.type).toBe("NOT_FOUND");
+    expect(body.error.code).toBe("MERCHANT_NOT_FOUND");
+
+    await app.close();
+  });
+
+  it("soporta escenarios técnicos como SERVER_ERROR o TIMEOUT", async () => {
+    const app = buildApp();
+
+    const serverErrRes = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer pub_test_12345",
+        "x-simulate-scenario": "SERVER_ERROR",
+      },
+      payload: validCardBody,
+    });
+    expect(serverErrRes.statusCode).toBe(500);
+
+    const timeoutRes = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer pub_test_12345",
+        "x-simulate-scenario": "TIMEOUT",
+      },
+      payload: validCardBody,
+    });
+    expect(timeoutRes.statusCode).toBe(504);
+
+    await app.close();
+  });
+
+  it("completa un cobro con tarjeta de Wompi de punta a punta: mock de tokens y POST /v1/api/payments", async () => {
+    const testEnv: Record<string, string | undefined> = {
+      WOMPI_PUBLIC_KEY: "pub_test_wompi_key_123",
+      WOMPI_PRIVATE_KEY: "prv_test_wompi_key_456",
+      WOMPI_INTEGRITY_SECRET: "test_integrity_secret_789",
+    };
+    const credentialResolver = new CredentialResolver(testEnv);
+    const app = buildApp({
+      logger: false,
+      credentialResolver,
+      kitPagosProvider: new KitPagosProvider(credentialResolver, testEnv),
+    });
+    testEnv.SIMULATOR_SDK_BASE_URL = await app.listen({ port: 0, host: "127.0.0.1" });
+
+    try {
+      // 1. Obtener token de tarjeta en el mock del simulador
+      const tokenRes = await app.inject({
+        method: "POST",
+        url: "/v1/sim/wompi/tokens/cards",
+        headers: { authorization: "Bearer pub_test_wompi_key_123" },
+        payload: validCardBody,
+      });
+
+      expect(tokenRes.statusCode).toBe(201);
+      const tokenData = tokenRes.json().data;
+      expect(tokenData.id).toMatch(/^tok_sim_/);
+
+      // 2. Cobrar con ese token a través de POST /v1/api/payments
+      const paymentRes = await app.inject({
+        method: "POST",
+        url: "/v1/api/payments",
+        payload: {
+          gateway: "wompi",
+          amount: "50000.00",
+          currency: "COP",
+          orderReference: `ORDER-WOMPI-E2E-${Date.now()}`,
+          payer: { email: "usuario@example.com", fullName: "Carlos Gomez" },
+          paymentMethod: { type: "CARD", token: tokenData.id, installments: 1 },
+        },
+      });
+
+      expect(paymentRes.statusCode).toBe(201);
+      const paymentData = paymentRes.json();
+      expect(paymentData.outcome).toBe("TRANSACTION");
+      expect(paymentData.transaction.gatewayTransactionId).toBeDefined();
+      expect(paymentData.transaction.amount).toBe("50000.00");
+      expect(paymentData.transaction.currency).toBe("COP");
+    } finally {
+      await app.close();
+    }
   });
 });

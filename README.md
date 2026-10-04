@@ -6,7 +6,7 @@ Kit Pagos Colombia son **tres componentes**, no uno:
 
 | Componente | Qué es | Dónde vive |
 |---|---|---|
-| **SDK** | Un paquete de TypeScript con arquitectura hexagonal que unifica cuatro pasarelas colombianas | [`sdk/`](sdk/) |
+| **SDK** | Un paquete de TypeScript con arquitectura hexagonal que unifica cuatro pasarelas colombianas en el servidor y expone `kit-pagos-colombia/browser` para tokenización de tarjeta en el navegador | [`sdk/`](sdk/) |
 | **API de Simulación** | Un servidor con dos caras: en `/v1/sim`, cuatro mocks de las pasarelas para probar los flujos que los sandboxes reales no permiten probar; en `/v1/api`, el SDK expuesto como API REST, para cobrar sin instalarlo | [`simulator-api/`](simulator-api/) |
 | **Documentación de datos** | Las tarjetas, bancos y credenciales de prueba de las cuatro pasarelas, con su nivel de evidencia | [`docs/testing-data/`](docs/testing-data/README.md) |
 
@@ -85,7 +85,7 @@ El ejemplo rápido de código, con la firma exacta de cada llamada, está en la 
 ## Lo que el proyecto no hace
 
 - Los **códigos de banco de PSE** son distintos en cada pasarela (en Mercado Pago `1007`, en Rapyd `co_pse_bancolombia_bank`), pero `PseBankCode.BANCOLOMBIA` sirve en las cuatro: es el código de compensación de ACH Colombia, y el SDK lo traduce donde hace falta. Los bancos ficticios de los sandboxes solo existen con el código que devuelve `getPseBanks()`.
-- El **token de tarjeta tampoco** es portable: lo emite el frontend de cada pasarela.
+- El **token de tarjeta tampoco** es portable entre pasarelas: lo emite el frontend (`kit-pagos-colombia/browser`) contra cada pasarela respectiva.
 - **Solo tarjeta y PSE.** No hay efectivo, ni Nequi, ni suscripciones, ni reembolsos.
 - **La redirección no desaparece.** Con PSE redirigen las cuatro.
 - Las **cifras comparativas todavía no existen.** Las produce el experimento de la Fase 5.

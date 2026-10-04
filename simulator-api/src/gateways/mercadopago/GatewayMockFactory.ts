@@ -1,10 +1,27 @@
 import {
+  MercadoPagoCardTokenResponse,
   MercadoPagoCreateOrderRequestBody,
   MercadoPagoCreatePaymentRequestBody,
   MercadoPagoOrderResponse,
   MercadoPagoOrderStatus,
   MercadoPagoPaymentResponse,
+  MercadoPagoTokenizeCardRequestBody,
 } from "./types";
+
+/** Algoritmo de Luhn (ISO/IEC 7812-1) sobre una cadena de solo dígitos. */
+function passesLuhn(digits: string): boolean {
+  if (!/^\d+$/.test(digits)) return false;
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let digit = Number(digits[digits.length - 1 - i]);
+    if (i % 2 === 1) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+  }
+  return sum % 10 === 0;
+}
 
 /**
  * Gateway Mock Factory — Mercado Pago (API de Simulación).
@@ -240,6 +257,52 @@ export class GatewayMockFactory {
             },
           },
         ],
+      },
+    };
+  }
+
+  /**
+   * Construye la respuesta nativa de tokenización de tarjeta (POST /v1/card_tokens).
+   *
+   * Nivel de evidencia 1 (medido contra api.mercadopago.com el 4 de octubre de 2026):
+   * Si falta cardholder.identification, responde con identification: {}.
+   * Si el número no pasa Luhn, emite el token igual con luhn_validation: false: medido con
+   * "1234" y con 4013540682746261, que tiene 16 dígitos pero falla el dígito verificador.
+   */
+  buildTokenCardResponse(
+    requestBody: MercadoPagoTokenizeCardRequestBody,
+  ): MercadoPagoCardTokenResponse {
+    const cleanNumber = String(requestBody.card_number || "").replace(/\s+/g, "");
+    const now = new Date();
+    const dueDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const hasId = Boolean(
+      requestBody.cardholder?.identification?.type &&
+      requestBody.cardholder?.identification?.number,
+    );
+
+    const idObj = hasId
+      ? {
+          type: requestBody.cardholder!.identification!.type,
+          number: requestBody.cardholder!.identification!.number,
+        }
+      : {};
+
+    return {
+      id: `tok_sim_mp_${Math.random().toString(36).substring(2, 12)}`,
+      status: "active",
+      first_six_digits: cleanNumber.slice(0, 6) || "401354",
+      last_four_digits: cleanNumber.slice(-4) || "6260",
+      luhn_validation: passesLuhn(cleanNumber),
+      expiration_month: Number(requestBody.expiration_month) || 12,
+      expiration_year: Number(requestBody.expiration_year) || 2030,
+      security_code_length: String(requestBody.security_code || "").length || 3,
+      date_created: now.toISOString(),
+      date_last_updated: now.toISOString(),
+      date_due: dueDate.toISOString(),
+      cardholder: {
+        name: requestBody.cardholder?.name ?? "APRO",
+        identification: idObj,
       },
     };
   }

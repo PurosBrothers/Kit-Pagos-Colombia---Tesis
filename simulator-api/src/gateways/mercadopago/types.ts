@@ -160,3 +160,40 @@ export interface MercadoPagoWebhookNotification {
   date_created?: string;
   user_id?: string | number;
 }
+
+/** Cuerpo de la solicitud para tokenizar tarjeta (POST /v1/card_tokens). */
+export interface MercadoPagoTokenizeCardRequestBody {
+  card_number?: string;
+  expiration_month?: number;
+  expiration_year?: number;
+  security_code?: string;
+  cardholder?: {
+    name?: string;
+    identification?: {
+      type?: string;
+      number?: string;
+    };
+  };
+}
+
+/** Respuesta nativa de tokenización de tarjeta devuelta por Mercado Pago. */
+export interface MercadoPagoCardTokenResponse {
+  id: string;
+  status: string;
+  first_six_digits?: string;
+  last_four_digits: string;
+  luhn_validation?: boolean;
+  expiration_month: number;
+  expiration_year: number;
+  security_code_length: number;
+  date_created: string;
+  date_last_updated: string;
+  date_due: string;
+  cardholder: {
+    name: string;
+    identification: {
+      type?: string;
+      number?: string;
+    };
+  };
+}

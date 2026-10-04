@@ -44,15 +44,17 @@ Wompi es el caso más simple: la tokenización es una llamada REST estándar que
 
 | Aspecto | Detalle |
 |---|---|
-| Carga | `npm install @mercadopago/sdk-js` o `<script src="https://sdk.mercadopago.com/js/v2">` |
-| Mecanismo de tokenización | Bricks (formulario visual completo) o Core Methods (control total) |
-| Entrada Core Methods | `{ cardNumber, cardholderName, cardExpirationMonth, cardExpirationYear, securityCode, identificationType, identificationNumber }` |
-| Salida | `token.id` — cadena opaca de un solo uso |
+| Carga | REST directo con `globalThis.fetch` (sin dependencias) o SDK oficial `npm install @mercadopago/sdk-js` |
+| Mecanismo de tokenización | REST directo a `POST /v1/card_tokens?public_key=...` con CORS abierto, o Bricks / Core Methods |
+| Entrada | `{ number, cvc, expMonth, expYear, cardHolder, docType, docNumber }` |
+| Salida | `token.id` — cadena opaca de un solo uso (`tok_...` o hash hexadecimal) |
 | Documentación | [mercadopago.com.co/developers](https://www.mercadopago.com.co/developers/es/docs) |
 
-Mercado Pago ofrece dos variantes. Los **Bricks** renderizan un formulario completo y entregan el token en el callback `onSubmit`; son la opción recomendada por MercadoPago para integraciones nuevas. Los **Core Methods** dan control total sobre el formulario HTML pero exigen que el desarrollador maneje el ciclo de vida de los campos. Para una abstracción del SDK, Core Methods es la variante envolvible.
+Mercado Pago admite tokenización directa vía REST con clave pública enviada como parámetro de consulta. Aunque la documentación oficial destaca **Bricks** (formulario visual prediseñado) y **Core Methods** (gestión de eventos de campos con iframes de hosted fields), la API HTTP de `/v1/card_tokens` cuenta con soporte CORS completo (`access-control-allow-origin: *`). Esto permite tokenizar directamente desde el navegador del pagador sin descargar scripts de terceros. El bundle ESM pesa 13 626 bytes sin minificar y 3 464 bytes con gzip (medido el 4 de octubre de 2026).
 
-**Nivel de evidencia:** Nivel 3 — tomado de la documentación oficial. No se ejecutó contra el sandbox porque requiere un contexto de navegador.
+La API de Mercado Pago emite el token aunque se omita la identificación (devuelve `identification: {}`, medido el 4 de octubre de 2026), y la documentación oficial marca `identificationType` e `identificationNumber` como opcionales en [`createCardToken`](https://github.com/mercadopago/sdk-js/blob/main/docs/core-methods.md) y `payer.identification` como opcional al [crear el pago](https://www.mercadopago.com.co/developers/en/reference/online-payments/checkout-api-payments/create-payment/post). Que el SDK exija `docType` y `docNumber` antes de la llamada es una decisión propia, no un requisito de la pasarela: un cobro en sandbox con documento y otro sin él fueron rechazados por antifraude por igual, así que no se sabe si el documento influye en la aprobación, y el formulario de ejemplo de [Core Methods para Colombia](https://www.mercadopago.com.co/developers/en/docs/checkout-api-payments/integration-configuration/card/integrate-via-core-methods) también pide los dos campos. El razonamiento está en el punto 78 del `architecture-log.md`.
+
+**Nivel de evidencia:** Nivel 1 — medido contra el sandbox real el 27 de septiembre de 2026 (punto 72), CORS medido el 30 de septiembre de 2026 y validación de contrato completada el 4 de octubre de 2026 (punto 78). Un preflight OPTIONS a `https://api.mercadopago.com/v1/card_tokens` con `Origin: http://localhost:5173` responde 200 y `access-control-allow-origin: *`. Se verificó que el nombre del titular selecciona el desenlace en sandbox (`APRO` aprueba) y que el cobro real se ejecuta de punta a punta. Se asume el alcance regulatorio SAQ A-EP (ver punto 78 del log).
 
 ---
 
@@ -139,16 +141,16 @@ sdk/
 │   ├── domain/          ← Sin cambios
 │   ├── application/     ← Sin cambios
 │   └── infrastructure/  ← Sin cambios
-└── src-browser/         ← Nuevo módulo frontend
+└── src-browser/         ← Módulo frontend (kit-pagos-colombia/browser)
     ├── tokenizers/
     │   ├── WompiTokenizer.ts
-    │   ├── MercadoPagoTokenizer.ts
-    │   └── KushkiTokenizer.ts
+    │   └── MercadoPagoTokenizer.ts
     ├── KitPagosBrowser.ts   ← Fachada frontend
+    ├── types.ts
     └── index.ts
 ```
 
-`KushkiTokenizer.ts` se incluye en la estructura aunque su implementación queda como trabajo futuro (ver sección 7). `WompiTokenizer.ts` y `MercadoPagoTokenizer.ts` son el alcance de la implementación inicial.
+> **Decisión de alcance (30 de septiembre de 2026):** No se crea `KushkiTokenizer.ts` como stub. Kushki exige Hosted Fields dentro de iframes y pretender que cabe en la misma interfaz sin implementarlo escondería la asimetría en vez de documentarla. Si un consumidor en JavaScript intenta invocar `KitPagosBrowser.tokenizeCard()` con Kushki o Rapyd, la fachada lanza de inmediato `UNSUPPORTED_OPERATION` sin realizar llamadas de red.
 
 ---
 
@@ -168,25 +170,23 @@ El issue #115 evalúa si este trabajo debería ser un objetivo específico. La r
 
 ---
 
-## 7. Recomendación
+## 7. Decisión y Alcance de Implementación
 
-**Implementar Wompi y Mercado Pago. Dejar Kushki como trabajo futuro. Documentar Rapyd como límite de diseño.**
+**Implementar Wompi y Mercado Pago. Excluir Kushki y Rapyd con `UNSUPPORTED_OPERATION`.**
 
-> **Prioridad:** Este módulo es un **valor agregado final**, no un entregable bloqueante. Se aborda únicamente después de que todos los issues mínimos del SDK, la API de Simulación y la documentación de la tesis estén cerrados. Si el tiempo no alcanza, este documento de investigación es el entregable en sí mismo.
-
-Implementar el SDK de navegador completo para las cuatro pasarelas está fuera del alcance razonable: la asimetría de Rapyd hace que la abstracción nunca pueda ofrecer la misma interfaz para las cuatro con la misma firma, y Kushki con Hosted Fields tiene una complejidad de iframes desproporcionada para el tiempo disponible. Ambas limitaciones se documentan como resultado de diseño, no se ocultan.
+> **Resolución formal (30 de septiembre de 2026, issues #126 y #127):** El SDK implementa el punto de entrada exportado `kit-pagos-colombia/browser` empaquetado como ESM independiente mediante `esbuild` (13 626 bytes sin minificar, 3 464 bytes con gzip, medido el 4 de octubre de 2026). Se incrementa la versión menor a `0.2.0` en `package.json` para reflejar la adición de la especificación de `exports`.
 
 El alcance concreto de implementación:
 
-1. **`WompiTokenizer.ts`** — REST directo contra `POST /v1/tokens/cards` con la clave pública. Sin librería propietaria. El caso más simple y el que se puede testear con un servidor Node.js de prueba sin necesitar un browser real.
+1. **`WompiTokenizer.ts` (Issue #126)** — REST directo contra `POST /v1/tokens/cards` con la clave pública Bearer. Sin librerías propietarias. Soporta ambientes `sandbox`, `production` y `simulator` (con endpoint mock en `simulator-api`).
 
-2. **`MercadoPagoTokenizer.ts`** — envuelve los Core Methods de `@mercadopago/sdk-js`. Mercado Pago es la segunda pasarela con mayor penetración en Colombia y su SDK JS está bien documentado y estable.
+2. **`MercadoPagoTokenizer.ts` (Issue #127)** — REST directo contra `POST /v1/card_tokens?public_key=...` con la clave pública en query param, usando `fetch` nativo sin librerías externas. Se descartó la alternativa de envolver los Core Methods de `@mercadopago/sdk-js` para mantener el bundle ligero y autónomo y evitar la carga de scripts de terceros en el DOM del comercio. Exige obligatoriamente el documento de identidad del titular (`docType` y `docNumber`), validado antes de la petición con `KitPagosError(INVALID_REQUEST)`. Un mismo formulario frontend (`CardData`) permite tokenizar de forma transparente en Wompi y Mercado Pago cambiando únicamente el valor de `gateway`.
 
-3. **`KitPagosBrowser.ts`** — fachada que expone `tokenizeCard()` con la misma semántica para las dos pasarelas implementadas, y que devuelve un valor de tipo `CardToken` directamente utilizable como `paymentMethod.cardToken` en el SDK de servidor.
+3. **`KitPagosBrowser.ts`** — Fachada unificada que expone `tokenizeCard()` con la misma semántica, devolviendo un `CardTokenResult` con `{ token, gateway, lastFour, brand }`, cuyo `.token` es consumible en el backend con `PaymentMethod.card(result.token)`.
 
-4. **`KushkiTokenizer.ts`** — declarado como stub (`throw new Error("aun no esta implementado")`). La estructura queda lista para implementarlo cuando se disponga de tiempo para gestionar el ciclo de vida de los Hosted Fields.
+4. **Kushki y Rapyd no se proveen** — A diferencia de lo propuesto originalmente, no se deja stub de `KushkiTokenizer`: `KitPagosBrowser` rechaza activamente `Gateway.KUSHKI` y `Gateway.RAPYD` lanzando `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones.
 
-5. **Documentar Rapyd** — en este mismo documento queda explicado por qué Rapyd no entra en el modelo de tokenización y qué alternativa existe (`REDIRECT_REQUIRED` vía el SDK de servidor).
+5. **Documentar Rapyd** — Queda evidenciado que Rapyd no provee tokenización inline para comercios sin certificación PCI Level 1; su modelo de integración es Hosted Checkout (`REDIRECT_REQUIRED`).
 
 ---
 

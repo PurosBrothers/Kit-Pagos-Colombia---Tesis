@@ -9,6 +9,7 @@ import { PaymentMethod } from "../../src/domain/value-objects/PaymentMethod";
 import { PseBankCode } from "../../src/domain/value-objects/PseBankCode";
 import { describeSandbox, uniqueReference } from "./sandbox-env";
 import { tokenizeMercadoPagoCard } from "./tokenize";
+import { KitPagosBrowser } from "../../src-browser/KitPagosBrowser";
 
 /** Contrato de Mercado Pago, medido contra `api.mercadopago.com`. */
 describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
@@ -76,6 +77,48 @@ describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
     // Kushki lo devuelven en pesos y el SDK preserva lo que vino (`"20000"`). Son el mismo
     // valor y `Amount` no impone una escala, así que afirmar la cadena exacta ataría la
     // prueba a un detalle de formato de cada pasarela en vez de al monto.
+    expect(Number(result.transaction.amount.getValue())).toBe(20000);
+    expect(["APPROVED", "PENDING", "DECLINED"]).toContain(
+      result.transaction.getStatus(),
+    );
+  });
+
+  /**
+   * Tokenización de tarjeta desde el navegador con KitPagosBrowser y cobro en servidor.
+   * Medido el 4 de octubre de 2026 contra sandbox de Mercado Pago (issue #127).
+   */
+  it("tokeniza una tarjeta con KitPagosBrowser y cobra a través del SDK de servidor", async () => {
+    const tokenResult = await KitPagosBrowser.tokenizeCard({
+      gateway: Gateway.MERCADOPAGO,
+      publicKey: credentials.publicKey,
+      environment: "sandbox",
+      card: {
+        number: "4013540682746260",
+        cvc: "123",
+        expMonth: "11",
+        expYear: "30",
+        cardHolder: "APRO",
+        docType: "CC",
+        docNumber: "19119119100",
+      },
+    });
+
+    expect(tokenResult.token).toBeTruthy();
+    expect(tokenResult.gateway).toBe(Gateway.MERCADOPAGO);
+
+    const result = await kitPagos.createPayment({
+      amount: new Amount("20000"),
+      currency: new Currency("COP"),
+      orderReference: new OrderReference(uniqueReference("SBX-MP-BROWSER-CARD")),
+      payer: new Payer({ email: "jaime.pavlich@example.com" }),
+      paymentMethod: PaymentMethod.card(tokenResult.token, { installments: 1 }),
+    });
+
+    if (result.outcome === "REDIRECT_REQUIRED") {
+      throw new Error("Mercado Pago devolvió una redirección para tarjeta");
+    }
+
+    expect(result.transaction.gatewayTransactionId.value).toBeTruthy();
     expect(Number(result.transaction.amount.getValue())).toBe(20000);
     expect(["APPROVED", "PENDING", "DECLINED"]).toContain(
       result.transaction.getStatus(),

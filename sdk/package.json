@@ -1,18 +1,30 @@
 {
   "name": "kit-pagos-colombia",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "default": "./dist/browser/index.js"
+    }
+  },
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
-    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "build:node": "tsc -p tsconfig.build.json",
+    "build:browser": "tsc -p tsconfig.browser.json && node scripts/build-browser.js",
+    "build": "npm run clean && npm run build:node && npm run build:browser",
     "prepublishOnly": "npm test && npm run build",
     "test": "jest",
     "test:sandbox": "jest --config jest.sandbox.config.js",
     "lint": "eslint .",
-    "metrics": "ts-node --project tsconfig.json scripts/ck-metrics.ts",
-    "check:readme": "ts-node --project tsconfig.json scripts/check-readme.ts",
-    "check:published": "ts-node --project tsconfig.json scripts/check-published-package.ts"
+    "metrics": "ts-node --project scripts/tsconfig.json scripts/ck-metrics.ts",
+    "check:readme": "ts-node --project scripts/tsconfig.json scripts/check-readme.ts",
+    "check:published": "ts-node --project scripts/tsconfig.json scripts/check-published-package.ts"
   },
   "keywords": [
     "pagos",
@@ -46,6 +58,7 @@
     "@types/big.js": "^7.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^26.1.2",
+    "esbuild": "^0.25.0",
     "eslint": "^10.8.0",
     "jest": "^30.4.2",
     "prettier": "^3.9.6",

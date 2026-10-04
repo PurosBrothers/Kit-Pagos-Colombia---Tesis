@@ -83,3 +83,34 @@ export interface WompiMerchantResponse {
     };
   };
 }
+
+/** Solicitud para tokenizar una tarjeta en Wompi (POST /v1/tokens/cards). */
+export interface WompiTokenizeCardRequestBody {
+  number: string;
+  cvc: string;
+  exp_month: string;
+  exp_year: string;
+  card_holder: string;
+}
+
+/** Objeto de tarjeta tokenizada retornado por Wompi dentro de `data`. */
+export interface WompiCardTokenData {
+  id: string;
+  created_at: string;
+  brand: string;
+  name: string;
+  last_four: string;
+  bin: string;
+  exp_year: string;
+  exp_month: string;
+  card_holder: string;
+  created_with_cvc: boolean;
+  expires_at: string;
+  validity_ends_at: null;
+}
+
+/** Respuesta de Wompi para tokenización de tarjeta. */
+export interface WompiTokenizeCardResponse {
+  status: "CREATED";
+  data: WompiCardTokenData;
+}

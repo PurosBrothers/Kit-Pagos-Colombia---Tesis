@@ -6,7 +6,11 @@ import {
   UnsupportedScenarioError,
 } from "../scenarios/ScenarioEngine";
 import { GatewayMockFactory } from "../gateways/wompi/GatewayMockFactory";
-import { WompiCreateTransactionRequestBody, WompiTransaction } from "../gateways/wompi/types";
+import {
+  WompiCreateTransactionRequestBody,
+  WompiTokenizeCardRequestBody,
+  WompiTransaction,
+} from "../gateways/wompi/types";
 import { transactionStore } from "../store/TransactionStore";
 
 /**
@@ -194,6 +198,127 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         ],
         meta: {},
       });
+    },
+  );
+
+  // ── POST /v1/sim/wompi/tokens/cards (issue #126) ─────────────────────────
+  app.post(
+    "/v1/sim/wompi/tokens/cards",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const authHeader = request.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return reply.code(401).send({
+          error: {
+            type: "UNAUTHORIZED",
+            code: "ACCESS_TOKEN_HEADER_NOT_PRESENT",
+            reason: "Header de autorización 'Authorization' no enviado.",
+          },
+        });
+      }
+
+      const publicKey = authHeader.slice(7).trim();
+      if (!publicKey) {
+        return reply.code(401).send({
+          error: {
+            type: "UNAUTHORIZED",
+            code: "ACCESS_TOKEN_HEADER_NOT_PRESENT",
+            reason: "Header de autorización 'Authorization' no enviado.",
+          },
+        });
+      }
+
+      /*
+       * Nivel de evidencia 1 para la forma medida contra sandbox.wompi.co el 3 y 4 de octubre de 2026:
+       * Ante una llave pública inexistente, Wompi responde 404 con code: "MERCHANT_NOT_FOUND".
+       */
+      if (
+        publicKey.includes("inexistente") ||
+        publicKey.includes("invalid") ||
+        publicKey.includes("not_found")
+      ) {
+        return reply.code(404).send({
+          error: {
+            type: "NOT_FOUND",
+            reason: `Comercio con llave ${publicKey} no encontrado`,
+            code: "MERCHANT_NOT_FOUND",
+          },
+        });
+      }
+
+      const scenario = getSimulatorScenario(request);
+      if (scenario === "TIMEOUT" || scenario === "GATEWAY_TIMEOUT") {
+        return reply.code(504).send(mockFactory.buildTimeoutResponse());
+      }
+      if (scenario === "NETWORK_ERROR" || scenario === "CONNECTION_ERROR") {
+        return ScenarioEngine.handleNetworkError(request, reply);
+      }
+      if (scenario === "RATE_LIMIT" || scenario === "TOO_MANY_REQUESTS" || scenario === "429") {
+        return reply.code(429).send(mockFactory.buildRateLimitResponse());
+      }
+      if (scenario === "SERVER_ERROR" || scenario === "INTERNAL_ERROR" || scenario === "500") {
+        return reply.code(500).send(mockFactory.buildServerErrorResponse(500));
+      }
+      if (scenario === "BAD_GATEWAY" || scenario === "502") {
+        return reply.code(502).send(mockFactory.buildServerErrorResponse(502));
+      }
+      if (scenario === "SERVICE_UNAVAILABLE" || scenario === "503") {
+        return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+      }
+
+      const body = request.body as WompiTokenizeCardRequestBody;
+      /*
+       * Nivel de evidencia 1 para la forma (medido contra sandbox.wompi.co el 3 y 4 de octubre de 2026):
+       * Los errores de validación de campos responden 422 con un mapa messages: { [campo]: string[] }
+       * y sin propiedad reason.
+       */
+      if (
+        !body ||
+        body.number === undefined ||
+        body.cvc === undefined ||
+        body.exp_month === undefined ||
+        body.exp_year === undefined ||
+        body.card_holder === undefined
+      ) {
+        const missingFields: Record<string, string[]> = {};
+        if (body?.number === undefined) missingFields.number = ["debe tener la propiedad requerida number."];
+        if (body?.cvc === undefined) missingFields.cvc = ["debe tener la propiedad requerida cvc."];
+        if (body?.exp_month === undefined) missingFields.exp_month = ["debe tener la propiedad requerida exp_month."];
+        if (body?.exp_year === undefined) missingFields.exp_year = ["debe tener la propiedad requerida exp_year."];
+        if (body?.card_holder === undefined) missingFields.card_holder = ["debe tener la propiedad requerida card_holder."];
+
+        return reply.code(422).send({
+          error: {
+            type: "INPUT_VALIDATION_ERROR",
+            messages: missingFields,
+          },
+        });
+      }
+
+      if (body.cvc === "" || !/^\d{3,4}$/.test(String(body.cvc))) {
+        return reply.code(422).send({
+          error: {
+            type: "INPUT_VALIDATION_ERROR",
+            messages: {
+              cvc: ['debe coincidir con el patron "^\\d{3,4}$"'],
+            },
+          },
+        });
+      }
+
+      const cleanNumber = String(body.number).replace(/\s+/g, "");
+      if (cleanNumber.length < 13 || !/^\d+$/.test(cleanNumber)) {
+        return reply.code(422).send({
+          error: {
+            type: "INPUT_VALIDATION_ERROR",
+            messages: {
+              number: ["debe coincidir con el patron …"],
+            },
+          },
+        });
+      }
+
+      const response = mockFactory.buildTokenCardResponse(body);
+      return reply.code(201).send(response);
     },
   );
 }
