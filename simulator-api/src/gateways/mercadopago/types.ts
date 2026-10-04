@@ -163,15 +163,15 @@ export interface MercadoPagoWebhookNotification {
 
 /** Cuerpo de la solicitud para tokenizar tarjeta (POST /v1/card_tokens). */
 export interface MercadoPagoTokenizeCardRequestBody {
-  card_number: string;
-  expiration_month: number;
-  expiration_year: number;
-  security_code: string;
-  cardholder: {
-    name: string;
-    identification: {
-      type: string;
-      number: string;
+  card_number?: string;
+  expiration_month?: number;
+  expiration_year?: number;
+  security_code?: string;
+  cardholder?: {
+    name?: string;
+    identification?: {
+      type?: string;
+      number?: string;
     };
   };
 }
@@ -182,6 +182,7 @@ export interface MercadoPagoCardTokenResponse {
   status: string;
   first_six_digits?: string;
   last_four_digits: string;
+  luhn_validation?: boolean;
   expiration_month: number;
   expiration_year: number;
   security_code_length: number;
@@ -191,8 +192,8 @@ export interface MercadoPagoCardTokenResponse {
   cardholder: {
     name: string;
     identification: {
-      type: string;
-      number: string;
+      type?: string;
+      number?: string;
     };
   };
 }

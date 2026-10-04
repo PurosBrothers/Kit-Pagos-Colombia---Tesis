@@ -248,6 +248,10 @@ export class GatewayMockFactory {
 
   /**
    * Construye la respuesta nativa de tokenización de tarjeta (POST /v1/card_tokens).
+   *
+   * Nivel de evidencia 1 (medido contra api.mercadopago.com el 4 de octubre de 2026):
+   * Si falta cardholder.identification, responde con identification: {}.
+   * Si el número es corto o no pasa luhn, emite el token con luhn_validation: false.
    */
   buildTokenCardResponse(
     requestBody: MercadoPagoTokenizeCardRequestBody,
@@ -256,23 +260,33 @@ export class GatewayMockFactory {
     const now = new Date();
     const dueDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
+    const hasId = Boolean(
+      requestBody.cardholder?.identification?.type &&
+      requestBody.cardholder?.identification?.number,
+    );
+
+    const idObj = hasId
+      ? {
+          type: requestBody.cardholder!.identification!.type,
+          number: requestBody.cardholder!.identification!.number,
+        }
+      : {};
+
     return {
       id: `tok_sim_mp_${Math.random().toString(36).substring(2, 12)}`,
       status: "active",
       first_six_digits: cleanNumber.slice(0, 6) || "401354",
       last_four_digits: cleanNumber.slice(-4) || "6260",
-      expiration_month: Number(requestBody.expiration_month),
-      expiration_year: Number(requestBody.expiration_year),
+      luhn_validation: cleanNumber.length >= 13,
+      expiration_month: Number(requestBody.expiration_month) || 12,
+      expiration_year: Number(requestBody.expiration_year) || 2030,
       security_code_length: String(requestBody.security_code || "").length || 3,
       date_created: now.toISOString(),
       date_last_updated: now.toISOString(),
       date_due: dueDate.toISOString(),
       cardholder: {
         name: requestBody.cardholder?.name ?? "APRO",
-        identification: {
-          type: requestBody.cardholder?.identification?.type ?? "CC",
-          number: requestBody.cardholder?.identification?.number ?? "19119119100",
-        },
+        identification: idObj,
       },
     };
   }

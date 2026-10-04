@@ -401,20 +401,67 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
     "/v1/sim/mercadopago/card_tokens",
     async (request: FastifyRequest, reply: FastifyReply) => {
       const query = request.query as { public_key?: string } | undefined;
-      let publicKey = query?.public_key;
+      const publicKey = query?.public_key;
+      const authHeader = request.headers.authorization;
 
-      if (!publicKey) {
-        const authHeader = request.headers.authorization;
-        if (authHeader && authHeader.startsWith("Bearer ")) {
-          publicKey = authHeader.slice(7).trim();
-        }
+      /*
+       * Nivel de evidencia 1 (medido contra api.mercadopago.com el 4 de octubre de 2026):
+       * Si se envía Authorization: Bearer en vez del parámetro en query, Mercado Pago rechaza
+       * con 400 unexpected_processing (causa G001).
+       */
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        return reply.code(400).send({
+          message: "unexpected_processing",
+          error: "bad_request",
+          status: 400,
+          cause: [
+            {
+              code: "G001",
+              description: "unexpected_processing",
+            },
+          ],
+        });
       }
 
+      /*
+       * Nivel de evidencia 1 (medido contra api.mercadopago.com el 4 de octubre de 2026):
+       * Sin public_key en la query, Mercado Pago responde 401 con error: "unauthorized"
+       * y causa "access_parameters is required" (E212).
+       */
       if (!publicKey || !publicKey.trim()) {
         return reply.code(401).send({
-          message: "Unauthorized",
-          status: 401,
-          error: "bad_request",
+          message: "access is unauthorized",
+          error: "unauthorized",
+          code: "unauthorized_access",
+          cause: [
+            {
+              code: "E212",
+              description: "access_parameters is required",
+            },
+          ],
+        });
+      }
+
+      /*
+       * Nivel de evidencia 1 (medido contra api.mercadopago.com el 4 de octubre de 2026):
+       * Con una clave pública inexistente, Mercado Pago responde 500 internal_error
+       * con causa E731 "POST tokenization unexpected status".
+       */
+      if (
+        publicKey.includes("inexistente") ||
+        publicKey.includes("invalid") ||
+        publicKey.includes("not_found")
+      ) {
+        return reply.code(500).send({
+          message: "internal_error",
+          error: "internal_server_error",
+          status: 500,
+          cause: [
+            {
+              code: "E731",
+              description: "POST tokenization unexpected status",
+            },
+          ],
         });
       }
 
@@ -439,50 +486,20 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const body = request.body as MercadoPagoTokenizeCardRequestBody;
-      if (
-        !body ||
-        !body.card_number ||
-        !body.security_code ||
-        body.expiration_month === undefined ||
-        body.expiration_year === undefined ||
-        !body.cardholder?.name
-      ) {
+      if (!body) {
         return reply.code(400).send({
-          message: "Invalid parameter: card details are missing",
+          message: "Invalid parameter: body is required",
           status: 400,
           error: "bad_request",
         });
       }
 
-      // En Mercado Pago, la identificación del titular (type y number) es OBLIGATORIA
-      if (
-        !body.cardholder.identification ||
-        !body.cardholder.identification.type ||
-        !body.cardholder.identification.number
-      ) {
-        return reply.code(400).send({
-          message: "Invalid parameter: cardholder.identification",
-          status: 400,
-          error: "bad_request",
-          cause: [
-            {
-              code: "324",
-              description: "Invalid parameter cardholder.identification",
-              data: null,
-            },
-          ],
-        });
-      }
-
-      const cleanNumber = String(body.card_number).replace(/\s+/g, "");
-      if (cleanNumber.length < 13 || !/^\d+$/.test(cleanNumber)) {
-        return reply.code(400).send({
-          message: "Invalid parameter: card_number",
-          status: 400,
-          error: "bad_request",
-        });
-      }
-
+      /*
+       * Nivel de evidencia 1 (medido contra api.mercadopago.com el 4 de octubre de 2026):
+       * Mercado Pago emite el token (201) incluso sin cardholder.identification (devolviendo
+       * identification: {}), con número corto ("1234", con luhn_validation: false) o sin
+       * security_code. El fallo por luhn ocurre recién al cobrar con el token (error 400, causa 2062).
+       */
       const response = mockFactory.buildTokenCardResponse(body);
       return reply.code(201).send(response);
     },
