@@ -180,7 +180,7 @@ El alcance concreto de implementación:
 
 2. **`MercadoPagoTokenizer.ts` (Issue #127)** — Tokenización de tarjeta con clave pública para Mercado Pago.
 
-3. **`KitPagosBrowser.ts`** — Fachada unificada que expone `tokenizeCard()` con la misma semántica, devolviendo un `CardTokenResult` con `{ token, gateway, lastFour, brand }`, consumible directamente en `PaymentMethod.card(token)`.
+3. **`KitPagosBrowser.ts`** — Fachada unificada que expone `tokenizeCard()` con la misma semántica, devolviendo un `CardTokenResult` con `{ token, gateway, lastFour, brand }`, cuyo `.token` es consumible en el backend con `PaymentMethod.card(result.token)`.
 
 4. **Kushki y Rapyd no se proveen** — A diferencia de lo propuesto originalmente, no se deja stub de `KushkiTokenizer`: `KitPagosBrowser` rechaza activamente `Gateway.KUSHKI` y `Gateway.RAPYD` lanzando `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones.
 
