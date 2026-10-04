@@ -48,17 +48,93 @@ describe("KitPagosBrowser", () => {
     expect(result.brand).toBe("VISA");
   });
 
-  it("lanza UNSUPPORTED_OPERATION para Gateway.MERCADOPAGO (pendiente de issue #127)", async () => {
-    await expect(
-      KitPagosBrowser.tokenizeCard({
-        gateway: Gateway.MERCADOPAGO,
-        publicKey: "TEST-pub-mp",
-        card: validCard,
-      }),
-    ).rejects.toMatchObject({
-      code: KitPagosErrorCode.UNSUPPORTED_OPERATION,
-      gateway: Gateway.MERCADOPAGO,
+  it("delega la tokenización a MercadoPagoTokenizer para Gateway.MERCADOPAGO", async () => {
+    globalThis.fetch = jest.fn(async () => {
+      return {
+        ok: true,
+        status: 201,
+        text: async () =>
+          JSON.stringify({
+            id: "tok_test_mp_success",
+            status: "active",
+            last_four_digits: "4242",
+            cardholder: {
+              name: "APRO",
+              identification: { type: "CC", number: "19119119100" },
+            },
+          }),
+      } as unknown as Response;
     });
+
+    const result = await KitPagosBrowser.tokenizeCard({
+      gateway: Gateway.MERCADOPAGO,
+      publicKey: "TEST-pub-mp",
+      card: {
+        ...validCard,
+        docType: "CC",
+        docNumber: "19119119100",
+      },
+      environment: "sandbox",
+    });
+
+    expect(result.token).toBe("tok_test_mp_success");
+    expect(result.gateway).toBe(Gateway.MERCADOPAGO);
+    expect(result.lastFour).toBe("4242");
+  });
+
+  it("permite que el mismo formulario del comercio tokenice en Wompi y en Mercado Pago cambiando solo la pasarela", async () => {
+    const unifiedFormCard: CardData = {
+      number: "4013540682746260",
+      cvc: "123",
+      expMonth: "11",
+      expYear: "2030",
+      cardHolder: "APRO",
+      docType: "CC",
+      docNumber: "19119119100",
+    };
+
+    globalThis.fetch = jest.fn(async (url: string | URL | Request) => {
+      const urlStr = String(url);
+      if (urlStr.includes("wompi.co")) {
+        return {
+          ok: true,
+          status: 201,
+          text: async () =>
+            JSON.stringify({
+              status: "CREATED",
+              data: { id: "tok_wompi_unified", last_four: "6260", brand: "VISA" },
+            }),
+        } as unknown as Response;
+      }
+      return {
+        ok: true,
+        status: 201,
+        text: async () =>
+          JSON.stringify({
+            id: "tok_mp_unified",
+            status: "active",
+            last_four_digits: "6260",
+          }),
+      } as unknown as Response;
+    });
+
+    // Tokenización contra Wompi con el formulario unificado
+    const wompiResult = await KitPagosBrowser.tokenizeCard({
+      gateway: "wompi",
+      publicKey: "pub_test_wompi",
+      card: unifiedFormCard,
+    });
+    expect(wompiResult.token).toBe("tok_wompi_unified");
+    expect(wompiResult.gateway).toBe(Gateway.WOMPI);
+
+    // Tokenización contra Mercado Pago con exactamente el mismo formulario
+    const mpResult = await KitPagosBrowser.tokenizeCard({
+      gateway: "mercadopago",
+      publicKey: "TEST-pub-mp",
+      card: unifiedFormCard,
+    });
+    expect(mpResult.token).toBe("tok_mp_unified");
+    expect(mpResult.gateway).toBe(Gateway.MERCADOPAGO);
   });
 
   it("rechaza Gateway.KUSHKI con UNSUPPORTED_OPERATION sin hacer llamadas de red", async () => {
