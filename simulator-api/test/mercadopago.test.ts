@@ -496,6 +496,81 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
+    // Comparar el conjunto entero de claves detecta tanto un campo que falte como uno
+    // inventado. Es el conjunto medido contra api.mercadopago.com el 4 de octubre de 2026
+    // a las 17:49 (−05:00) con 4013540682746260.
+    it("should return exactly the keys measured against the real API", async () => {
+      const app = buildApp();
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/card_tokens?public_key=TEST-pub-key",
+        payload: validCardPayload,
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(Object.keys(response.json()).sort()).toEqual(
+        [
+          "card_number_length",
+          "cardholder",
+          "date_created",
+          "date_due",
+          "date_last_updated",
+          "expiration_month",
+          "expiration_year",
+          "first_six_digits",
+          "id",
+          "last_four_digits",
+          "live_mode",
+          "luhn_validation",
+          "public_key",
+          "require_esc",
+          "security_code_length",
+          "status",
+          "trunc_card_number",
+        ].sort(),
+      );
+      await app.close();
+    });
+
+    // 4013540682746260 se midió a las 17:49 y 5254133674403564 hacia las 17:40, los dos
+    // el 4 de octubre de 2026. Dos números distintos impiden que pase un valor fijo.
+    it.each([
+      ["4013540682746260", "401354XXXXXX6260"],
+      ["5254133674403564", "525413XXXXXX3564"],
+    ])("should derive public_key, card_number_length and trunc_card_number from the request for %s", async (cardNumber, truncated) => {
+      const publicKey = "TEST-otra-llave-publica";
+      const app = buildApp();
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/sim/mercadopago/card_tokens?public_key=${encodeURIComponent(publicKey)}`,
+        payload: { ...validCardPayload, card_number: cardNumber },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.public_key).toBe(publicKey);
+      expect(body.card_number_length).toBe(16);
+      expect(body.trunc_card_number).toBe(truncated);
+      expect(body.live_mode).toBe(true);
+      expect(body.require_esc).toBe(false);
+      await app.close();
+    });
+
+    it("should set date_due eight days after date_created, as the real API does", async () => {
+      const app = buildApp();
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/card_tokens?public_key=TEST-pub-key",
+        payload: validCardPayload,
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      const elapsed = Date.parse(body.date_due) - Date.parse(body.date_created);
+      expect(elapsed).toBe(8 * 24 * 60 * 60 * 1000);
+      await app.close();
+    });
+
     it("responde 201 y emite un token de tarjeta con public_key en query param", async () => {
       const app = buildApp();
       const response = await app.inject({
