@@ -14,19 +14,19 @@ import { WompiTokenizer } from "./tokenizers/WompiTokenizer";
  *
  * Expone la tokenización de tarjeta unificada en el frontend del pagador.
  * Permite obtener un token seguro (`CardTokenResult.token`) que luego se envía
- * al servidor del comercio para cobrar con `PaymentMethod.card(token)` o
+ * al servidor del comercio para cobrar con `PaymentMethod.card(result.token)` o
  * mediante `POST /v1/api/payments`.
  *
- * PCI DSS: Esta clase y sus tokenizadores nunca transmiten datos de tarjeta
+ * PCI DSS: esta clase y sus tokenizadores nunca transmiten datos de tarjeta
  * (número, cvc, expiración) al backend del comercio ni a servidores intermediarios.
+ * No acepta URLs: el destino sale del catálogo cerrado de cada tokenizador según el
+ * `environment`, para que no exista forma de mandar la tarjeta a otro host.
  */
 export class KitPagosBrowser {
   private readonly defaultEnvironment: BrowserEnvironment;
-  private readonly defaultBaseUrl?: string;
 
   constructor(options?: KitPagosBrowserOptions) {
     this.defaultEnvironment = options?.environment ?? "sandbox";
-    this.defaultBaseUrl = options?.baseUrl;
   }
 
   /**
@@ -38,15 +38,12 @@ export class KitPagosBrowser {
    */
   async tokenizeCard(params: TokenizeCardParams): Promise<CardTokenResult> {
     const environment = params.environment ?? this.defaultEnvironment;
-    const baseUrl = params.baseUrl ?? this.defaultBaseUrl;
-    const rawGateway = (params.gateway ?? "").toString().toUpperCase();
+    // El tipo solo admite WOMPI y MERCADOPAGO, pero quien llama desde JavaScript
+    // puede mandar cualquier cadena, así que se normaliza y se valida en ejecución.
+    const rawGateway = String(params.gateway ?? "").toUpperCase();
 
     if (rawGateway === Gateway.WOMPI) {
-      return WompiTokenizer.tokenize({
-        ...params,
-        environment,
-        baseUrl,
-      });
+      return WompiTokenizer.tokenize({ ...params, environment });
     }
 
     if (rawGateway === Gateway.MERCADOPAGO) {
@@ -58,15 +55,13 @@ export class KitPagosBrowser {
       );
     }
 
-    const targetGateway = Object.values(Gateway).includes(rawGateway as Gateway)
-      ? (rawGateway as Gateway)
-      : Gateway.WOMPI;
-
+    // Se atribuye el error a la pasarela que se pidió, aunque no sea del enum, para
+    // que quien lee el error vea "STRIPE" y no una pasarela que nunca usó.
     throw new KitPagosError(
       KitPagosErrorCode.UNSUPPORTED_OPERATION,
-      targetGateway,
+      rawGateway as Gateway,
       null,
-      `La tokenización de tarjeta en el navegador solo está soportada para ${Gateway.WOMPI} y ${Gateway.MERCADOPAGO}. La pasarela '${params.gateway}' no admite tokenización en frontend.`,
+      `La tokenización de tarjeta en el navegador solo está soportada para ${Gateway.WOMPI} y ${Gateway.MERCADOPAGO}. La pasarela '${String(params.gateway)}' no admite tokenización en frontend.`,
     );
   }
 
@@ -74,10 +69,6 @@ export class KitPagosBrowser {
    * Método de conveniencia estático para tokenizar sin instanciar la clase.
    */
   static async tokenizeCard(params: TokenizeCardParams): Promise<CardTokenResult> {
-    const browser = new KitPagosBrowser({
-      environment: params.environment,
-      baseUrl: params.baseUrl,
-    });
-    return browser.tokenizeCard(params);
+    return new KitPagosBrowser({ environment: params.environment }).tokenizeCard(params);
   }
 }
