@@ -7,6 +7,7 @@ import {
   CardTokenResult,
   TokenizeCardParams,
 } from "../types";
+import { resolveCatalogUrl } from "./base-url-catalog";
 
 /**
  * Catálogo cerrado de URLs base de Wompi. Es el único lugar de donde sale el host al
@@ -75,7 +76,7 @@ function errorMessageFor(status: number, error: WompiErrorBody | undefined): str
 export class WompiTokenizer {
   /** Resuelve la URL base de Wompi desde el catálogo cerrado. */
   static resolveBaseUrl(environment: BrowserEnvironment = "sandbox"): string {
-    return WOMPI_BASE_URLS[environment] ?? WOMPI_BASE_URLS.sandbox;
+    return resolveCatalogUrl(WOMPI_BASE_URLS, environment, Gateway.WOMPI);
   }
 
   /**

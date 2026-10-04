@@ -110,6 +110,32 @@ describe("WompiTokenizer", () => {
     expect(capturedUrl).toBe("http://localhost:3000/v1/sim/wompi/tokens/cards");
   });
 
+  it.each(["prod", "constructor", "toString", "__proto__"])(
+    "rechaza el ambiente '%s' sin llamar a fetch: no cae en sandbox ni arma una URL relativa",
+    async (environment) => {
+      const mockFetch = jest.fn();
+
+      await expect(
+        WompiTokenizer.tokenize(
+          {
+            gateway: Gateway.WOMPI,
+            publicKey: "pub_prod_123456",
+            card: validCard,
+            // Simula a quien llama desde JavaScript con un valor fuera del tipo.
+            environment: environment as never,
+          },
+          mockFetch as unknown as typeof fetch,
+        ),
+      ).rejects.toThrow(
+        expect.objectContaining({
+          code: KitPagosErrorCode.INVALID_REQUEST,
+          gateway: Gateway.WOMPI,
+        }),
+      );
+      expect(mockFetch).not.toHaveBeenCalled();
+    },
+  );
+
   it("ignora una URL colada desde JavaScript: el host sale solo del catálogo", async () => {
     let capturedUrl = "";
     const mockFetch = jest.fn(async (url: string | URL | Request) => {

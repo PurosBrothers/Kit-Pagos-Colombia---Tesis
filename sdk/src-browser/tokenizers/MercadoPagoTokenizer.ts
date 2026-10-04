@@ -7,6 +7,7 @@ import {
   CardTokenResult,
   TokenizeCardParams,
 } from "../types";
+import { resolveCatalogUrl } from "./base-url-catalog";
 
 /**
  * Catálogo cerrado de URLs base de Mercado Pago. Es el único lugar de donde sale el host al
@@ -184,7 +185,7 @@ function processResponse(response: Response, text: string): CardTokenResult {
 export class MercadoPagoTokenizer {
   /** Resuelve la URL base de Mercado Pago desde el catálogo cerrado. */
   static resolveBaseUrl(environment: BrowserEnvironment = "sandbox"): string {
-    return MERCADOPAGO_BASE_URLS[environment] ?? MERCADOPAGO_BASE_URLS.sandbox;
+    return resolveCatalogUrl(MERCADOPAGO_BASE_URLS, environment, Gateway.MERCADOPAGO);
   }
 
   /**
