@@ -210,7 +210,8 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(401).send({
           error: {
             type: "UNAUTHORIZED",
-            reason: "Tu petición no contiene autorización válida",
+            code: "ACCESS_TOKEN_HEADER_NOT_PRESENT",
+            reason: "Header de autorización 'Authorization' no enviado.",
           },
         });
       }
@@ -220,13 +221,14 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(401).send({
           error: {
             type: "UNAUTHORIZED",
-            reason: "Tu petición no contiene autorización válida",
+            code: "ACCESS_TOKEN_HEADER_NOT_PRESENT",
+            reason: "Header de autorización 'Authorization' no enviado.",
           },
         });
       }
 
       /*
-       * Nivel de evidencia 1 (medido contra sandbox.wompi.co el 3 de octubre de 2026):
+       * Nivel de evidencia 1 para la forma medida contra sandbox.wompi.co el 3 y 4 de octubre de 2026:
        * Ante una llave pública inexistente, Wompi responde 404 con code: "MERCHANT_NOT_FOUND".
        */
       if (
@@ -265,29 +267,40 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
 
       const body = request.body as WompiTokenizeCardRequestBody;
       /*
-       * Nivel de evidencia 1 (medido contra sandbox.wompi.co el 3 de octubre de 2026):
+       * Nivel de evidencia 1 para la forma (medido contra sandbox.wompi.co el 3 y 4 de octubre de 2026):
        * Los errores de validación de campos responden 422 con un mapa messages: { [campo]: string[] }
        * y sin propiedad reason.
        */
       if (
         !body ||
-        !body.number ||
-        !body.cvc ||
-        !body.exp_month ||
-        !body.exp_year ||
-        !body.card_holder
+        body.number === undefined ||
+        body.cvc === undefined ||
+        body.exp_month === undefined ||
+        body.exp_year === undefined ||
+        body.card_holder === undefined
       ) {
         const missingFields: Record<string, string[]> = {};
-        if (!body?.number) missingFields.number = ["es requerido"];
-        if (!body?.cvc) missingFields.cvc = ["es requerido"];
-        if (!body?.exp_month) missingFields.exp_month = ["es requerido"];
-        if (!body?.exp_year) missingFields.exp_year = ["es requerido"];
-        if (!body?.card_holder) missingFields.card_holder = ["es requerido"];
+        if (body?.number === undefined) missingFields.number = ["debe tener la propiedad requerida number."];
+        if (body?.cvc === undefined) missingFields.cvc = ["debe tener la propiedad requerida cvc."];
+        if (body?.exp_month === undefined) missingFields.exp_month = ["debe tener la propiedad requerida exp_month."];
+        if (body?.exp_year === undefined) missingFields.exp_year = ["debe tener la propiedad requerida exp_year."];
+        if (body?.card_holder === undefined) missingFields.card_holder = ["debe tener la propiedad requerida card_holder."];
 
         return reply.code(422).send({
           error: {
             type: "INPUT_VALIDATION_ERROR",
             messages: missingFields,
+          },
+        });
+      }
+
+      if (body.cvc === "" || !/^\d{3,4}$/.test(String(body.cvc))) {
+        return reply.code(422).send({
+          error: {
+            type: "INPUT_VALIDATION_ERROR",
+            messages: {
+              cvc: ['debe coincidir con el patron "^\\d{3,4}$"'],
+            },
           },
         });
       }

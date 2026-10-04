@@ -389,6 +389,8 @@ describe("POST /v1/sim/wompi/tokens/cards", () => {
     expect(response.statusCode).toBe(401);
     const body = response.json();
     expect(body.error.type).toBe("UNAUTHORIZED");
+    expect(body.error.code).toBe("ACCESS_TOKEN_HEADER_NOT_PRESENT");
+    expect(body.error.reason).toBe("Header de autorización 'Authorization' no enviado.");
 
     await app.close();
   });
@@ -406,7 +408,10 @@ describe("POST /v1/sim/wompi/tokens/cards", () => {
     });
 
     expect(response.statusCode).toBe(401);
-    expect(response.json().error.type).toBe("UNAUTHORIZED");
+    const body = response.json();
+    expect(body.error.type).toBe("UNAUTHORIZED");
+    expect(body.error.code).toBe("ACCESS_TOKEN_HEADER_NOT_PRESENT");
+    expect(body.error.reason).toBe("Header de autorización 'Authorization' no enviado.");
 
     await app.close();
   });
@@ -433,7 +438,30 @@ describe("POST /v1/sim/wompi/tokens/cards", () => {
     const body = response.json();
     expect(body.error.type).toBe("INPUT_VALIDATION_ERROR");
     expect(body.error.messages).toBeDefined();
-    expect(body.error.messages.cvc).toEqual(["es requerido"]);
+    expect(body.error.messages.cvc).toEqual(["debe tener la propiedad requerida cvc."]);
+
+    await app.close();
+  });
+
+  it("rechaza la petición con 422 si el cvc llega vacío (patrón regex)", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer pub_test_12345",
+      },
+      payload: {
+        ...validCardBody,
+        cvc: "",
+      },
+    });
+
+    expect(response.statusCode).toBe(422);
+    const body = response.json();
+    expect(body.error.type).toBe("INPUT_VALIDATION_ERROR");
+    expect(body.error.messages.cvc).toEqual(['debe coincidir con el patron "^\\d{3,4}$"']);
 
     await app.close();
   });
