@@ -8,6 +8,21 @@ import {
   MercadoPagoTokenizeCardRequestBody,
 } from "./types";
 
+/** Algoritmo de Luhn (ISO/IEC 7812-1) sobre una cadena de solo dígitos. */
+function passesLuhn(digits: string): boolean {
+  if (!/^\d+$/.test(digits)) return false;
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let digit = Number(digits[digits.length - 1 - i]);
+    if (i % 2 === 1) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+  }
+  return sum % 10 === 0;
+}
+
 /**
  * Gateway Mock Factory — Mercado Pago (API de Simulación).
  *
@@ -251,7 +266,8 @@ export class GatewayMockFactory {
    *
    * Nivel de evidencia 1 (medido contra api.mercadopago.com el 4 de octubre de 2026):
    * Si falta cardholder.identification, responde con identification: {}.
-   * Si el número es corto o no pasa luhn, emite el token con luhn_validation: false.
+   * Si el número no pasa Luhn, emite el token igual con luhn_validation: false: medido con
+   * "1234" y con 4013540682746261, que tiene 16 dígitos pero falla el dígito verificador.
    */
   buildTokenCardResponse(
     requestBody: MercadoPagoTokenizeCardRequestBody,
@@ -277,7 +293,7 @@ export class GatewayMockFactory {
       status: "active",
       first_six_digits: cleanNumber.slice(0, 6) || "401354",
       last_four_digits: cleanNumber.slice(-4) || "6260",
-      luhn_validation: cleanNumber.length >= 13,
+      luhn_validation: passesLuhn(cleanNumber),
       expiration_month: Number(requestBody.expiration_month) || 12,
       expiration_year: Number(requestBody.expiration_year) || 2030,
       security_code_length: String(requestBody.security_code || "").length || 3,

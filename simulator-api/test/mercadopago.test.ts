@@ -480,6 +480,22 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
+    it.each([
+      ["4013540682746260", true],
+      ["4013540682746261", false],
+    ])("luhn_validation de %s es %s: aplica Luhn, no la longitud (medido contra API real)", async (cardNumber, expected) => {
+      const app = buildApp();
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/card_tokens?public_key=TEST-pub-key",
+        payload: { ...validCardPayload, card_number: cardNumber },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json().luhn_validation).toBe(expected);
+      await app.close();
+    });
+
     it("responde 201 y emite un token de tarjeta con public_key en query param", async () => {
       const app = buildApp();
       const response = await app.inject({
