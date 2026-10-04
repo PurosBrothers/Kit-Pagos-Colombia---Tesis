@@ -30,10 +30,10 @@
  *
  *     cd sdk && npm run check:readme
  */
-import { execFileSync } from "child_process";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
+import { execFileSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
 const sdkRoot = path.resolve(__dirname, "..");
 const readmePath = path.join(sdkRoot, "README.md");
@@ -104,11 +104,17 @@ function armarModulo(bloques: string[]): string {
     cuerpos.push(lineas.join("\n"));
   }
 
-  const simbolosBrowserFiltrados = [...simbolosBrowser].filter((s) => !simbolos.has(s));
+  // Si un símbolo se importó tanto del root como de /browser (ej. Gateway reexportado),
+  // se aliasa en el browser para no colisionar en el archivo único generado,
+  // validando que el módulo /browser efectivamente lo exporta.
+  const simbolosBrowserFormateados = [...simbolosBrowser].map((s) =>
+    simbolos.has(s) ? `${s} as _browser_${s}` : s,
+  );
+
   const importsRoot = simbolos.size > 0 ? `import { ${[...simbolos].join(", ")} } from "kit-pagos-colombia";` : "";
   const importsBrowser =
-    simbolosBrowserFiltrados.length > 0
-      ? `import { ${simbolosBrowserFiltrados.join(", ")} } from "kit-pagos-colombia/browser";`
+    simbolosBrowserFormateados.length > 0
+      ? `import { ${simbolosBrowserFormateados.join(", ")} } from "kit-pagos-colombia/browser";`
       : "";
 
   return [

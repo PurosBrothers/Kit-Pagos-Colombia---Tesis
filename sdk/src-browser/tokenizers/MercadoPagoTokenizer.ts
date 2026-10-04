@@ -57,7 +57,7 @@ function validateCardData(card: CardData): void {
     );
   }
 
-  // Mercado Pago exige obligatoriamente la identificación del titular
+  // La API emite el token sin identificación; exigirla es decisión del SDK (punto 78 del architecture-log.md).
   if (!card.docType || !card.docType.trim() || !card.docNumber || !card.docNumber.trim()) {
     throw new KitPagosError(
       KitPagosErrorCode.INVALID_REQUEST,
@@ -178,8 +178,8 @@ function processResponse(response: Response, text: string): CardTokenResult {
  * `access-control-allow-origin: *` y status 200 al preflight OPTIONS de `/v1/card_tokens`,
  * permitiendo tokenizar directamente desde el frontend sin necesidad de scripts de terceros.
  *
- * Exige el documento de identidad del titular (`docType` y `docNumber`), obligatorio en
- * Mercado Pago para asociar el token al pagador.
+ * Exige el documento de identidad del titular (`docType` y `docNumber`). Mercado Pago no lo
+ * exige para emitir el token; es una decisión del SDK (ver el punto 78 del architecture-log.md).
  */
 export class MercadoPagoTokenizer {
   /** Resuelve la URL base de Mercado Pago desde el catálogo cerrado. */

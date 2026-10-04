@@ -5,7 +5,8 @@ import { Gateway } from "../src/domain/value-objects/Gateway";
  *
  * La forma está pensada para las dos pasarelas soportadas, no solo para Wompi:
  * - Wompi requiere: number, cvc, expMonth, expYear, cardHolder.
- * - Mercado Pago (issue #127) además exige el documento del titular.
+ * - Mercado Pago (issue #127): el SDK exige además el documento del titular, aunque
+ *   la API emite el token sin él (punto 78 del log).
  *
  * `docType` y `docNumber` son opcionales en el tipo porque Wompi no los pide, y
  * exigirlos ahí obligaría a un comercio que solo cobra por Wompi a pedirle al
@@ -26,9 +27,9 @@ export interface CardData {
   expYear: string;
   /** Nombre del titular tal como figura en el plástico. */
   cardHolder: string;
-  /** Tipo de documento del titular (opcional en Wompi, requerido en Mercado Pago). */
+  /** Tipo de documento del titular (opcional en Wompi, el SDK lo exige en Mercado Pago). */
   docType?: string;
-  /** Número de documento del titular (opcional en Wompi, requerido en Mercado Pago). */
+  /** Número de documento del titular (opcional en Wompi, el SDK lo exige en Mercado Pago). */
   docNumber?: string;
 }
 

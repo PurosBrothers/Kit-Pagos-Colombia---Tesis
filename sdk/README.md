@@ -164,8 +164,8 @@ async function tokenizarTarjetaEnNavegador() {
     expMonth: "12",
     expYear: "2030",
     cardHolder: "Juan Pérez",
-    docType: "CC",            // Obligatorio en Mercado Pago, opcional en Wompi
-    docNumber: "19119119100",  // Obligatorio en Mercado Pago, opcional en Wompi
+    docType: "CC",            // El SDK lo exige en Mercado Pago; opcional en Wompi
+    docNumber: "19119119100",  // El SDK lo exige en Mercado Pago; opcional en Wompi
   };
 
   // 1. Tokenización contra Wompi:
