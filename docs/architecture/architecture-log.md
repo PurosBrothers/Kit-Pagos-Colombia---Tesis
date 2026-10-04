@@ -2613,31 +2613,51 @@ El `README.md` de la raíz también tenía un ejemplo de código roto —`new Am
 
 ### 77. Módulo de navegador (`kit-pagos-colombia/browser`) y tokenización de tarjeta con Wompi
 
-**Responsable:** Orduz (issue #126).
+**Responsable:** Prieto (issue #126, PR #128).
 
 **Contexto.**
-`PaymentMethod.card()` en el SDK de servidor recibe un `cardToken` opcional y trata la tarjeta como un token opaco. Para cumplir estrictamente con PCI DSS y mantener el servidor del comercio fuera del alcance, la captura de datos de tarjeta y su conversión a token debe ocurrir exclusivamente en el navegador del pagador hacia los servidores de la pasarela.
-`docs/03-sdk/6-tokenizacion-frontend.md` analizó si el SDK podía unificar este paso en el frontend. El 30 de septiembre de 2026 se resolvió la decisión de diseño y alcance:
+`PaymentMethod.card()` en el SDK de servidor recibe un `cardToken` opcional y trata la tarjeta como un token opaco. Para cumplir estrictamente con PCI DSS y mantener el servidor del comercio fuera del alcance de PAN (reduciendo la carga regulatoria a SAQ A-EP), la captura de datos de tarjeta y su conversión a token debe ocurrir exclusivamente en el navegador del pagador hacia los servidores de la pasarela.
+
+`docs/03-sdk/6-tokenizacion-frontend.md` analizó si el SDK debía unificar este paso en el frontend. El 30 de septiembre de 2026 se resolvió la decisión de diseño y alcance:
 - Se implementan Wompi (issue #126) y Mercado Pago (issue #127).
 - Kushki y Rapyd quedan excluidos: Kushki usa Hosted Fields en iframes (no generaliza en la misma firma limpia sin forzar complejidad asimétrica) y Rapyd no expone tokenización inline en navegador.
 - En lugar de dejar un stub ficticio `KushkiTokenizer`, `KitPagosBrowser` rechaza `Gateway.KUSHKI` y `Gateway.RAPYD` directamente con `KitPagosError(UNSUPPORTED_OPERATION)` sin llamadas de red.
+
+**Alternativas descartadas y por qué:**
+- **Inyectar el Widget de Wompi (`checkout.wompi.co/widget.js`):** Se descartó porque fuerza un modal propietario que toma el control visual del DOM, rompe la experiencia de checkout integrada del comercio y no es unificable con otras pasarelas.
+- **Depender de librerías JS externas de pasarela:** Se descartó porque exigiría cargar scripts de terceros vía `<script>` en runtime, agregando riesgo de seguridad en la cadena de suministro, pérdida de tipado TypeScript estricto y peso excesivo al bundle.
+- **Solución elegida:** Llamada REST directa nativa vía `fetch` contra el endpoint oficial de tokenización de Wompi con clave pública, encapsulada en un módulo ESM ultraligero (~7 KB) sin dependencias externas.
 
 **Decisiones.**
 1. **Punto de entrada exportado en `package.json` (`kit-pagos-colombia/browser`)**:
    - Para no forzar la inclusión de dependencias de Node.js (`crypto`, `fs`, etc.) en el frontend, se genera un bundle ESM ultraligero (~7 KB) con `esbuild` en `dist/browser/index.js` y declaraciones en `dist/browser/index.d.ts`.
    - Se incrementa la versión del paquete de `0.1.0` a `0.2.0` en `sdk/package.json` debido a la adición del mapa `exports` (`.` y `./browser`).
-2. **`WompiTokenizer` directo contra REST oficial**:
+2. **Catálogos cerrados de URLs sin `baseUrl` arbitrario**:
+   - El destino de los datos sensibles de la tarjeta sale exclusivamente de un catálogo estricto y cerrado (`sandbox`, `production`, `simulator`).
+   - Se eliminó el parámetro `baseUrl` de la API pública (`TokenizeCardParams` y `KitPagosBrowserOptions`) para evitar que un atacante o una mala configuración redirija el PAN y el CVC al servidor del comercio o a hosts no auditados.
+3. **Forma unificada de `CardData`**:
+   - Incluye `docType` y `docNumber` como opcionales. Wompi no los exige para tokenizar tarjeta, pero Mercado Pago (issue #127) sí los requiere (`identification.type` y `identification.number`). Definirlos desde ya como opcionales en el contrato común evita romper la API pública al añadir el segundo tokenizador.
+4. **`WompiTokenizer` directo contra REST oficial**:
    - Consume `POST /v1/tokens/cards` con `Authorization: Bearer <pub_key>`.
    - Normaliza automáticamente los campos de tarjeta (limpieza de espacios, meses a dos dígitos `01`-`12`, años a dos dígitos `30`).
-   - Mapea catálogos cerrados de URLs (`sandbox`, `production`, `simulator`, o URL personalizada).
-   - Traduce respuestas y errores nativos de Wompi a `CardTokenResult` y `KitPagosError`.
-3. **Endpoint réplica en `simulator-api`**:
-   - Se expone `POST /v1/sim/wompi/tokens/cards` en `simulator-api/src/routes/wompi.ts` para posibilitar el desarrollo local sin internet ni credenciales reales, soportando escenarios adversos de prueba (`TIMEOUT`, `SERVER_ERROR`, `RATE_LIMIT`).
-4. **Verificación automatizada**:
+   - Traduce respuestas y errores nativos de Wompi a `CardTokenResult` y `KitPagosError` siguiendo los status y códigos medidos: 404 `MERCHANT_NOT_FOUND` a `INVALID_CREDENTIALS`, 422 con `messages` a `INVALID_REQUEST` conservando el campo fallido, 429 a `RATE_LIMIT_EXCEEDED`, 5xx a `GATEWAY_SERVER_ERROR`, y 200 sin `data.id` a `MALFORMED_RESPONSE`.
+5. **Alcance de `npm run metrics`**:
+   - `ck-metrics.ts` mide exclusivamente las clases bajo `sdk/src` (31 clases del SDK de servidor). No mide `sdk/src-browser/` porque las clases frontend son utilidades delgadas y adaptadores de transporte sin jerarquías ni estados de dominio complejos; extender la medición alteraría la línea base histórica del estudio de la tesis sin aportar valor arquitectural.
+6. **Endpoint réplica y prueba E2E en `simulator-api`**:
+   - Se expone `POST /v1/sim/wompi/tokens/cards` en `simulator-api/src/routes/wompi.ts` replicando los códigos y cuerpos medidos de la API real.
+   - Se incluye prueba de punta a punta que obtiene el token de tarjeta en el mock del simulador y luego ejecuta el cobro correspondiente vía `POST /v1/api/payments`.
+7. **Verificación automatizada**:
    - Pruebas unitarias completas en `sdk/test/browser/WompiTokenizer.test.ts` y `KitPagosBrowser.test.ts`.
    - Prueba de integridad de empaquetado `sdk/test/browser/bundle.test.ts` que garantiza que el bundle de browser no importa módulos de Node.js.
    - Prueba de contrato en `sdk/test/sandbox/wompi.sandbox.test.ts` combinando `KitPagosBrowser.tokenizeCard()` con `KitPagos.createPayment()`.
    - `sdk/scripts/check-readme.ts` actualizado para compilar ejemplos de `kit-pagos-colombia/browser`.
+
+**Lo medido (3 y 4 de octubre de 2026).**
+- **Prueba de contrato real** contra `sandbox.wompi.co`: el 4 de octubre de 2026, la prueba `permite tokenizar con KitPagosBrowser y cobrar con KitPagos` pasó exitosamente en `sdk/test/sandbox/wompi.sandbox.test.ts` (8.68 s). El token emitido por el módulo de navegador (`tok_test_...`) cobró exitosamente $15 000 COP a través del SDK de servidor (`KitPagos.createPayment()`).
+- **Errores reales medidos contra `sandbox.wompi.co/v1/tokens/cards`**:
+  * Número inválido: HTTP 422 con `{"error":{"type":"INPUT_VALIDATION_ERROR","messages":{"number":["debe coincidir con el patron …"]}}}` y sin propiedad `reason`.
+  * Llave pública inexistente: HTTP 404 con `{"error":{"type":"NOT_FOUND","reason":"Comercio con llave … no encontrado","code":"MERCHANT_NOT_FOUND"}}`.
+  * Ambos comportamientos quedaron integrados en el mapeo de `WompiTokenizer` y en el mock de `simulator-api`.
 
 **Estado:** Resuelto en código y documentación (`sdk/src-browser/`, `simulator-api/src/routes/wompi.ts`, `docs/03-sdk/6-tokenizacion-frontend.md`).
 

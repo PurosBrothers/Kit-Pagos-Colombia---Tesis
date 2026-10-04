@@ -180,7 +180,7 @@ El alcance concreto de implementación:
 
 2. **`MercadoPagoTokenizer.ts` (Issue #127)** — REST directo contra `POST /v1/card_tokens?public_key=...` con la clave pública en query param, usando `fetch` nativo sin librerías externas. Se descartó la alternativa de envolver los Core Methods de `@mercadopago/sdk-js` para mantener el bundle ligero y autónomo (~7 KB) y evitar la carga de scripts de terceros en el DOM del comercio. Exige obligatoriamente el documento de identidad del titular (`docType` y `docNumber`), validado antes de la petición con `KitPagosError(INVALID_REQUEST)`. Un mismo formulario frontend (`CardData`) permite tokenizar de forma transparente en Wompi y Mercado Pago cambiando únicamente el valor de `gateway`.
 
-3. **`KitPagosBrowser.ts`** — Fachada unificada que expone `tokenizeCard()` con la misma semántica, devolviendo un `CardTokenResult` con `{ token, gateway, lastFour, brand }`, consumible directamente en `PaymentMethod.card(token)`.
+3. **`KitPagosBrowser.ts`** — Fachada unificada que expone `tokenizeCard()` con la misma semántica, devolviendo un `CardTokenResult` con `{ token, gateway, lastFour, brand }`, cuyo `.token` es consumible en el backend con `PaymentMethod.card(result.token)`.
 
 4. **Kushki y Rapyd no se proveen** — A diferencia de lo propuesto originalmente, no se deja stub de `KushkiTokenizer`: `KitPagosBrowser` rechaza activamente `Gateway.KUSHKI` y `Gateway.RAPYD` lanzando `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones.
 

@@ -154,8 +154,7 @@ Para cumplir con **PCI DSS**, los datos sensibles de la tarjeta (número PAN, CV
 El paquete exporta un punto de entrada independiente y ultraligero para el frontend (`kit-pagos-colombia/browser`, ~7 KB, sin módulos de Node.js):
 
 ```typescript
-import { KitPagosBrowser } from "kit-pagos-colombia/browser";
-import { Gateway } from "kit-pagos-colombia";
+import { KitPagosBrowser, Gateway } from "kit-pagos-colombia/browser";
 
 async function tokenizarTarjetaEnNavegador() {
   // Un mismo formulario captura los datos de la tarjeta y el documento de identidad:

@@ -1,7 +1,7 @@
 import { KitPagosBrowser } from "../../src-browser/KitPagosBrowser";
 import { Gateway } from "../../src/domain/value-objects/Gateway";
 import { KitPagosErrorCode } from "../../src/domain/value-objects/KitPagosErrorCode";
-import { CardData } from "../../src-browser/types";
+import { BrowserSupportedGateway, CardData } from "../../src-browser/types";
 
 describe("KitPagosBrowser", () => {
   const validCard: CardData = {
@@ -143,7 +143,7 @@ describe("KitPagosBrowser", () => {
 
     await expect(
       KitPagosBrowser.tokenizeCard({
-        gateway: Gateway.KUSHKI,
+        gateway: Gateway.KUSHKI as unknown as BrowserSupportedGateway,
         publicKey: "pub_kushki",
         card: validCard,
       }),
@@ -161,7 +161,7 @@ describe("KitPagosBrowser", () => {
 
     await expect(
       KitPagosBrowser.tokenizeCard({
-        gateway: Gateway.RAPYD,
+        gateway: Gateway.RAPYD as unknown as BrowserSupportedGateway,
         publicKey: "pub_rapyd",
         card: validCard,
       }),
@@ -176,12 +176,13 @@ describe("KitPagosBrowser", () => {
   it("rechaza pasarelas desconocidas con UNSUPPORTED_OPERATION", async () => {
     await expect(
       KitPagosBrowser.tokenizeCard({
-        gateway: "STRIPE" as unknown as Gateway,
+        gateway: "STRIPE" as unknown as BrowserSupportedGateway,
         publicKey: "pub_stripe",
         card: validCard,
       }),
     ).rejects.toMatchObject({
       code: KitPagosErrorCode.UNSUPPORTED_OPERATION,
+      gateway: "STRIPE",
     });
   });
 

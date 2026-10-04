@@ -110,24 +110,25 @@ describe("WompiTokenizer", () => {
     expect(capturedUrl).toBe("http://localhost:3000/v1/sim/wompi/tokens/cards");
   });
 
-  it("permite sobreescribir la URL base con customBaseUrl", async () => {
+  it("ignora una URL colada desde JavaScript: el host sale solo del catálogo", async () => {
     let capturedUrl = "";
     const mockFetch = jest.fn(async (url: string | URL | Request) => {
       capturedUrl = String(url);
       return mockSuccessResponse();
     });
 
+    // El tipo ya no tiene baseUrl; esto simula a quien lo pasa igual desde JS.
     await WompiTokenizer.tokenize(
       {
         gateway: Gateway.WOMPI,
         publicKey: "pub_test_123",
         card: validCard,
-        baseUrl: "http://custom-host:8080/v1",
-      },
+        baseUrl: "https://mi-backend.com",
+      } as unknown as Parameters<typeof WompiTokenizer.tokenize>[0],
       mockFetch as unknown as typeof fetch,
     );
 
-    expect(capturedUrl).toBe("http://custom-host:8080/v1/tokens/cards");
+    expect(capturedUrl).toBe("https://sandbox.wompi.co/v1/tokens/cards");
   });
 
   it("falla si faltan campos obligatorios en card", async () => {
@@ -186,14 +187,76 @@ describe("WompiTokenizer", () => {
     });
   });
 
-  it("lanza INVALID_CREDENTIALS cuando Wompi responde HTTP 401", async () => {
-    const mockFetch = jest.fn(async () => {
-      return {
-        ok: false,
-        status: 401,
-        text: async () => JSON.stringify({ error: { type: "UNAUTHORIZED", reason: "Invalid pub key" } }),
-      } as unknown as Response;
+  /** Respuesta de error con status y cuerpo dados. */
+  const errorResponse = (status: number, body: unknown) =>
+    jest.fn(async () => ({
+      ok: false,
+      status,
+      text: async () => (typeof body === "string" ? body : JSON.stringify(body)),
+    })) as unknown as typeof fetch;
+
+  it("lanza INVALID_CREDENTIALS ante la llave inexistente, que Wompi responde 404 MERCHANT_NOT_FOUND (medido 2026-10-03)", async () => {
+    const mockFetch = errorResponse(404, {
+      error: {
+        type: "NOT_FOUND",
+        reason: "Comercio con llave pub_test_inexistente no encontrado",
+        code: "MERCHANT_NOT_FOUND",
+      },
     });
+
+    await expect(
+      WompiTokenizer.tokenize(
+        { gateway: Gateway.WOMPI, publicKey: "pub_test_inexistente", card: validCard },
+        mockFetch,
+      ),
+    ).rejects.toMatchObject({
+      code: KitPagosErrorCode.INVALID_CREDENTIALS,
+      gateway: Gateway.WOMPI,
+    });
+  });
+
+  it("nombra el campo que falló ante el 422 de número inválido, que no trae reason (medido 2026-10-03)", async () => {
+    const mockFetch = errorResponse(422, {
+      error: {
+        type: "INPUT_VALIDATION_ERROR",
+        // El patrón exacto quedó truncado en la medición; se conserva solo el prefijo.
+        messages: { number: ["debe coincidir con el patron …"] },
+      },
+    });
+
+    const error = await WompiTokenizer.tokenize(
+      { gateway: Gateway.WOMPI, publicKey: "pub_test_123", card: validCard },
+      mockFetch,
+    ).catch((e: KitPagosError) => e);
+
+    expect(error).toMatchObject({ code: KitPagosErrorCode.INVALID_REQUEST, gateway: Gateway.WOMPI });
+    expect((error as KitPagosError).message).toContain("number");
+    expect((error as KitPagosError).message).toContain("debe coincidir con el patron");
+  });
+
+  it("lanza GATEWAY_SERVER_ERROR ante un 5xx, aunque el cuerpo no sea JSON", async () => {
+    await expect(
+      WompiTokenizer.tokenize(
+        { gateway: Gateway.WOMPI, publicKey: "pub_test_123", card: validCard },
+        errorResponse(502, "Bad Gateway Error from proxy"),
+      ),
+    ).rejects.toMatchObject({
+      code: KitPagosErrorCode.GATEWAY_SERVER_ERROR,
+      gateway: Gateway.WOMPI,
+    });
+  });
+
+  it("lanza RATE_LIMIT_EXCEEDED ante un 429", async () => {
+    await expect(
+      WompiTokenizer.tokenize(
+        { gateway: Gateway.WOMPI, publicKey: "pub_test_123", card: validCard },
+        errorResponse(429, { error: { type: "TOO_MANY_REQUESTS" } }),
+      ),
+    ).rejects.toMatchObject({ code: KitPagosErrorCode.RATE_LIMIT_EXCEEDED });
+  });
+
+  it("lanza INVALID_CREDENTIALS ante un 401 genérico", async () => {
+    const mockFetch = errorResponse(401, { error: { type: "UNAUTHORIZED" } });
 
     await expect(
       WompiTokenizer.tokenize(
@@ -210,63 +273,7 @@ describe("WompiTokenizer", () => {
     });
   });
 
-  it("lanza INVALID_REQUEST con el reason devuelto por Wompi ante un 422", async () => {
-    const mockFetch = jest.fn(async () => {
-      return {
-        ok: false,
-        status: 422,
-        text: async () =>
-          JSON.stringify({
-            error: {
-              type: "INPUT_VALIDATION_ERROR",
-              reason: "El número de tarjeta no es válido",
-            },
-          }),
-      } as unknown as Response;
-    });
-
-    await expect(
-      WompiTokenizer.tokenize(
-        {
-          gateway: Gateway.WOMPI,
-          publicKey: "pub_test_123",
-          card: validCard,
-        },
-        mockFetch as unknown as typeof fetch,
-      ),
-    ).rejects.toMatchObject({
-      code: KitPagosErrorCode.INVALID_REQUEST,
-      gateway: Gateway.WOMPI,
-      message: "El número de tarjeta no es válido",
-    });
-  });
-
-  it("maneja respuestas de error con formato no-JSON limpiamente", async () => {
-    const mockFetch = jest.fn(async () => {
-      return {
-        ok: false,
-        status: 502,
-        text: async () => "Bad Gateway Error from proxy",
-      } as unknown as Response;
-    });
-
-    await expect(
-      WompiTokenizer.tokenize(
-        {
-          gateway: Gateway.WOMPI,
-          publicKey: "pub_test_123",
-          card: validCard,
-        },
-        mockFetch as unknown as typeof fetch,
-      ),
-    ).rejects.toMatchObject({
-      code: KitPagosErrorCode.INVALID_REQUEST,
-      gateway: Gateway.WOMPI,
-      message: "Wompi rechazó la tokenización con estado HTTP 502.",
-    });
-  });
-
-  it("lanza INVALID_REQUEST si la respuesta fue ok pero no incluye data.id", async () => {
+  it("lanza MALFORMED_RESPONSE si la respuesta fue ok pero no incluye data.id", async () => {
     const mockFetch = jest.fn(async () => {
       return {
         ok: true,
@@ -285,7 +292,7 @@ describe("WompiTokenizer", () => {
         mockFetch as unknown as typeof fetch,
       ),
     ).rejects.toMatchObject({
-      code: KitPagosErrorCode.INVALID_REQUEST,
+      code: KitPagosErrorCode.MALFORMED_RESPONSE,
       gateway: Gateway.WOMPI,
     });
   });
