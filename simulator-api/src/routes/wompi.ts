@@ -225,6 +225,24 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      /*
+       * Nivel de evidencia 1 (medido contra sandbox.wompi.co el 3 de octubre de 2026):
+       * Ante una llave pública inexistente, Wompi responde 404 con code: "MERCHANT_NOT_FOUND".
+       */
+      if (
+        publicKey.includes("inexistente") ||
+        publicKey.includes("invalid") ||
+        publicKey.includes("not_found")
+      ) {
+        return reply.code(404).send({
+          error: {
+            type: "NOT_FOUND",
+            reason: `Comercio con llave ${publicKey} no encontrado`,
+            code: "MERCHANT_NOT_FOUND",
+          },
+        });
+      }
+
       const scenario = getSimulatorScenario(request);
       if (scenario === "TIMEOUT" || scenario === "GATEWAY_TIMEOUT") {
         return reply.code(504).send(mockFactory.buildTimeoutResponse());
@@ -246,6 +264,11 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const body = request.body as WompiTokenizeCardRequestBody;
+      /*
+       * Nivel de evidencia 1 (medido contra sandbox.wompi.co el 3 de octubre de 2026):
+       * Los errores de validación de campos responden 422 con un mapa messages: { [campo]: string[] }
+       * y sin propiedad reason.
+       */
       if (
         !body ||
         !body.number ||
@@ -254,10 +277,17 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         !body.exp_year ||
         !body.card_holder
       ) {
+        const missingFields: Record<string, string[]> = {};
+        if (!body?.number) missingFields.number = ["es requerido"];
+        if (!body?.cvc) missingFields.cvc = ["es requerido"];
+        if (!body?.exp_month) missingFields.exp_month = ["es requerido"];
+        if (!body?.exp_year) missingFields.exp_year = ["es requerido"];
+        if (!body?.card_holder) missingFields.card_holder = ["es requerido"];
+
         return reply.code(422).send({
           error: {
             type: "INPUT_VALIDATION_ERROR",
-            reason: "Faltan datos obligatorios para la tokenización de tarjeta (number, cvc, exp_month, exp_year, card_holder)",
+            messages: missingFields,
           },
         });
       }
@@ -267,7 +297,9 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(422).send({
           error: {
             type: "INPUT_VALIDATION_ERROR",
-            reason: "El número de tarjeta no es válido",
+            messages: {
+              number: ["debe coincidir con el patron …"],
+            },
           },
         });
       }

@@ -1,4 +1,6 @@
 import { buildApp } from "../src/app";
+import { CredentialResolver } from "../src/auth/CredentialResolver";
+import { KitPagosProvider } from "../src/services/KitPagosProvider";
 import { ScenarioEngine } from "../src/scenarios/ScenarioEngine";
 import { transactionStore } from "../src/store/TransactionStore";
 
@@ -430,6 +432,8 @@ describe("POST /v1/sim/wompi/tokens/cards", () => {
     expect(response.statusCode).toBe(422);
     const body = response.json();
     expect(body.error.type).toBe("INPUT_VALIDATION_ERROR");
+    expect(body.error.messages).toBeDefined();
+    expect(body.error.messages.cvc).toEqual(["es requerido"]);
 
     await app.close();
   });
@@ -450,7 +454,30 @@ describe("POST /v1/sim/wompi/tokens/cards", () => {
     });
 
     expect(response.statusCode).toBe(422);
-    expect(response.json().error.type).toBe("INPUT_VALIDATION_ERROR");
+    const body = response.json();
+    expect(body.error.type).toBe("INPUT_VALIDATION_ERROR");
+    expect(body.error.messages).toBeDefined();
+    expect(body.error.messages.number).toBeDefined();
+
+    await app.close();
+  });
+
+  it("rechaza la petición con 404 MERCHANT_NOT_FOUND ante llave pública inexistente (medido 2026-10-03)", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/tokens/cards",
+      headers: {
+        authorization: "Bearer pub_test_inexistente",
+      },
+      payload: validCardBody,
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = response.json();
+    expect(body.error.type).toBe("NOT_FOUND");
+    expect(body.error.code).toBe("MERCHANT_NOT_FOUND");
 
     await app.close();
   });
@@ -481,5 +508,57 @@ describe("POST /v1/sim/wompi/tokens/cards", () => {
     expect(timeoutRes.statusCode).toBe(504);
 
     await app.close();
+  });
+
+  it("completa un cobro con tarjeta de Wompi de punta a punta: mock de tokens y POST /v1/api/payments", async () => {
+    const testEnv: Record<string, string | undefined> = {
+      WOMPI_PUBLIC_KEY: "pub_test_wompi_key_123",
+      WOMPI_PRIVATE_KEY: "prv_test_wompi_key_456",
+      WOMPI_INTEGRITY_SECRET: "test_integrity_secret_789",
+    };
+    const credentialResolver = new CredentialResolver(testEnv);
+    const app = buildApp({
+      logger: false,
+      credentialResolver,
+      kitPagosProvider: new KitPagosProvider(credentialResolver, testEnv),
+    });
+    testEnv.SIMULATOR_SDK_BASE_URL = await app.listen({ port: 0, host: "127.0.0.1" });
+
+    try {
+      // 1. Obtener token de tarjeta en el mock del simulador
+      const tokenRes = await app.inject({
+        method: "POST",
+        url: "/v1/sim/wompi/tokens/cards",
+        headers: { authorization: "Bearer pub_test_wompi_key_123" },
+        payload: validCardBody,
+      });
+
+      expect(tokenRes.statusCode).toBe(201);
+      const tokenData = tokenRes.json().data;
+      expect(tokenData.id).toMatch(/^tok_sim_/);
+
+      // 2. Cobrar con ese token a través de POST /v1/api/payments
+      const paymentRes = await app.inject({
+        method: "POST",
+        url: "/v1/api/payments",
+        payload: {
+          gateway: "wompi",
+          amount: "50000.00",
+          currency: "COP",
+          orderReference: `ORDER-WOMPI-E2E-${Date.now()}`,
+          payer: { email: "usuario@example.com", fullName: "Carlos Gomez" },
+          paymentMethod: { type: "CARD", token: tokenData.id, installments: 1 },
+        },
+      });
+
+      expect(paymentRes.statusCode).toBe(201);
+      const paymentData = paymentRes.json();
+      expect(paymentData.outcome).toBe("TRANSACTION");
+      expect(paymentData.transaction.gatewayTransactionId).toBeDefined();
+      expect(paymentData.transaction.amount).toBe("50000.00");
+      expect(paymentData.transaction.currency).toBe("COP");
+    } finally {
+      await app.close();
+    }
   });
 });
