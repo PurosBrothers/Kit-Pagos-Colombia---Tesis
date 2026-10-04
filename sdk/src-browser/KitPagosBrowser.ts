@@ -8,6 +8,7 @@ import {
   TokenizeCardParams,
 } from "./types";
 import { WompiTokenizer } from "./tokenizers/WompiTokenizer";
+import { MercadoPagoTokenizer } from "./tokenizers/MercadoPagoTokenizer";
 
 /**
  * Fachada principal de Kit Pagos para el navegador.
@@ -50,12 +51,11 @@ export class KitPagosBrowser {
     }
 
     if (rawGateway === Gateway.MERCADOPAGO) {
-      throw new KitPagosError(
-        KitPagosErrorCode.UNSUPPORTED_OPERATION,
-        Gateway.MERCADOPAGO,
-        null,
-        "La tokenización de Mercado Pago en el navegador se implementará en el issue #127.",
-      );
+      return MercadoPagoTokenizer.tokenize({
+        ...params,
+        environment,
+        baseUrl,
+      });
     }
 
     const targetGateway = Object.values(Gateway).includes(rawGateway as Gateway)

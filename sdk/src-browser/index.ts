@@ -1,5 +1,6 @@
 export { KitPagosBrowser } from "./KitPagosBrowser";
 export { WompiTokenizer } from "./tokenizers/WompiTokenizer";
+export { MercadoPagoTokenizer } from "./tokenizers/MercadoPagoTokenizer";
 export {
   BrowserEnvironment,
   BrowserSupportedGateway,
