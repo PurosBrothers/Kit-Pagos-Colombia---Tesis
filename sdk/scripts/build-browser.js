@@ -4,7 +4,7 @@ const fs = require('fs');
 
 async function build() {
   const rootDir = path.join(__dirname, '..');
-  
+
   // 1. Bundle del módulo browser en formato ESM nativo
   await esbuild.build({
     entryPoints: [path.join(rootDir, 'src-browser', 'index.ts')],

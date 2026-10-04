@@ -84,7 +84,7 @@ describeSandbox(Gateway.WOMPI, (credentials, baseUrl) => {
     const tokenResult = await KitPagosBrowser.tokenizeCard({
       gateway: Gateway.WOMPI,
       publicKey: credentials.publicKey!,
-      baseUrl,
+      environment: "sandbox",
       card: {
         number: "4242424242424242",
         cvc: "123",
