@@ -2641,8 +2641,11 @@ El `README.md` de la raíz también tenía un ejemplo de código roto —`new Am
    - Consume `POST /v1/tokens/cards` con `Authorization: Bearer <pub_key>`.
    - Normaliza automáticamente los campos de tarjeta (limpieza de espacios, meses a dos dígitos `01`-`12`, años a dos dígitos `30`).
    - Traduce respuestas y errores nativos de Wompi a `CardTokenResult` y `KitPagosError` siguiendo los status y códigos medidos: 404 `MERCHANT_NOT_FOUND` a `INVALID_CREDENTIALS`, 422 con `messages` a `INVALID_REQUEST` conservando el campo fallido, 429 a `RATE_LIMIT_EXCEEDED`, 5xx a `GATEWAY_SERVER_ERROR`, y 200 sin `data.id` a `MALFORMED_RESPONSE`.
-5. **Alcance de `npm run metrics`**:
-   - `ck-metrics.ts` mide exclusivamente las clases bajo `sdk/src` (31 clases del SDK de servidor). No mide `sdk/src-browser/` porque las clases frontend son utilidades delgadas y adaptadores de transporte sin jerarquías ni estados de dominio complejos; extender la medición alteraría la línea base histórica del estudio de la tesis sin aportar valor arquitectural.
+5. **Alcance y medición de métricas CK en `src-browser/`**:
+   - `ck-metrics.ts` recorre por defecto `sdk/src` (31 clases del SDK de servidor). No incluye de forma continua `src-browser/` en `npm run metrics`, pero se ejecutó la medición sobre este módulo el 4 de octubre de 2026:
+     * `KitPagosBrowser`: WMC = 8, CBO = 3, RFC = 6, MaxCC = 5 (cumple).
+     * `WompiTokenizer`: WMC = 19, CBO = 4, RFC = 12, MaxCC = 7 (cumple, con WMC a un punto del umbral de 20).
+     Ambas clases cumplen con los umbrales de CK (WMC ≤ 20, CBO ≤ 5, RFC ≤ 20, MaxCC ≤ 10).
 6. **Endpoint réplica y prueba E2E en `simulator-api`**:
    - Se expone `POST /v1/sim/wompi/tokens/cards` en `simulator-api/src/routes/wompi.ts` replicando los códigos y cuerpos medidos de la API real.
    - Se incluye prueba de punta a punta que obtiene el token de tarjeta en el mock del simulador y luego ejecuta el cobro correspondiente vía `POST /v1/api/payments`.
@@ -2653,7 +2656,7 @@ El `README.md` de la raíz también tenía un ejemplo de código roto —`new Am
    - `sdk/scripts/check-readme.ts` actualizado para compilar ejemplos de `kit-pagos-colombia/browser`.
 
 **Lo medido (3 y 4 de octubre de 2026).**
-- **Prueba de contrato real** contra `sandbox.wompi.co`: el 4 de octubre de 2026, la prueba `permite tokenizar con KitPagosBrowser y cobrar con KitPagos` pasó exitosamente en `sdk/test/sandbox/wompi.sandbox.test.ts` (8.68 s). El token emitido por el módulo de navegador (`tok_test_...`) cobró exitosamente $15 000 COP a través del SDK de servidor (`KitPagos.createPayment()`).
+- **Prueba de contrato real** contra `sandbox.wompi.co`: el 4 de octubre de 2026, la prueba `permite tokenizar con KitPagosBrowser y cobrar con KitPagos` pasó exitosamente en `sdk/test/sandbox/wompi.sandbox.test.ts` (8.68 s). El token emitido por el módulo de navegador fue aceptado por `KitPagos.createPayment()`, que creó una transacción de $15 000 COP en estado `PENDING`.
 - **Errores reales medidos contra `sandbox.wompi.co/v1/tokens/cards`**:
   * Número inválido: HTTP 422 con `{"error":{"type":"INPUT_VALIDATION_ERROR","messages":{"number":["debe coincidir con el patron …"]}}}` y sin propiedad `reason`.
   * Llave pública inexistente: HTTP 404 con `{"error":{"type":"NOT_FOUND","reason":"Comercio con llave … no encontrado","code":"MERCHANT_NOT_FOUND"}}`.
