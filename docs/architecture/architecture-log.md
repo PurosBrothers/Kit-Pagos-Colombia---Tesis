@@ -2666,7 +2666,7 @@ El `README.md` de la raíz también tenía un ejemplo de código roto —`new Am
 
 ### 78. Tokenización de tarjeta de Mercado Pago en el módulo de navegador (`MercadoPagoTokenizer`)
 
-**Responsable:** Orduz (issue #127).
+**Responsable:** Prieto (issue #127, PR #128).
 
 **Contexto.**
 En el punto 77 se estableció la arquitectura de tokenización en el frontend mediante `kit-pagos-colombia/browser` y se implementó `WompiTokenizer`. Este punto aborda la segunda mitad de la decisión del 30 de septiembre de 2026: la tokenización de tarjeta con Mercado Pago.
@@ -2676,24 +2676,41 @@ El documento original asignaba nivel 3 de evidencia a Mercado Pago, indicando qu
 Sin embargo, se comprobó que el repositorio ya realizaba tokenización directa sin navegador en `sdk/test/sandbox/tokenize.ts` (líneas 80-108) mediante `POST /v1/card_tokens?public_key=<llave pública>`.
 Asimismo, se midió el comportamiento de CORS el 30 de septiembre de 2026: una solicitud preflight OPTIONS a `https://api.mercadopago.com/v1/card_tokens` con `Origin: http://localhost:5173` responde HTTP 200 y cabecera `access-control-allow-origin: *`. Por tanto, la llamada puede emitirse de forma directa y nativa desde el navegador del pagador.
 
-**Decisión entre alternativas arquitectónicas:**
+**Decisión entre alternativas arquitectónicas y cesiones asumidas:**
 1. *Opción elegida: REST directo a `POST /v1/card_tokens?public_key=...`.*
    - Ventajas: Mantiene coherencia estricta con la arquitectura de `WompiTokenizer`; sin dependencias externas pesadas ni carga dinámica de scripts de terceros en tiempo de ejecución; bundle ESM nativo ultraligero (~7 KB); testeable en Node.js mediante mocking de `fetch`; y simulable localmente en `simulator-api`.
-   - Requisitos de dominio: Requiere enviar el número de documento de identificación del titular (`docType` y `docNumber` en `cardholder.identification`), el cual es obligatorio en la API de Mercado Pago. Si este dato falta, `MercadoPagoTokenizer` falla antes de emitir cualquier petición con `KitPagosError(INVALID_REQUEST)` nombrando los campos faltantes.
+   - Requisitos de dominio del SDK: La API real emite el token incluso sin identificación (`identification: {}`, medido el 4 de octubre de 2026). Sin embargo, `MercadoPagoTokenizer` exige `docType` y `docNumber` antes del envío por decisión de diseño del SDK, pues los formularios estándar de Colombia y la creación del pago requieren asociar la identificación del pagador.
 2. *Alternativa descartada: Envolver Core Methods de `@mercadopago/sdk-js`.*
-   - Motivo de descarte: Obliga a cargar un script externo de terceros desde los servidores de Mercado Pago en el DOM del comercio, incrementando la fragilidad ante caídas de CDN, requiriendo mockeos complejos de objetos globales de navegador en pruebas automatizadas y aumentando el tamaño final y complejidad del módulo sin aportar ventajas frente a la API REST abierta.
+   - Motivo de descarte: Obliga a cargar un script externo de terceros desde los servidores de Mercado Pago en el DOM del comercio, incrementando la fragilidad ante caídas de CDN y requiriendo mockeos complejos de objetos globales de navegador en pruebas automatizadas.
+3. *Costos y cesiones explícitas de no usar el SDK JS (Core Methods):*
+   - **Alcance PCI DSS (SAQ A-EP vs. SAQ A)**: En Core Methods los campos de tarjeta se renderizan dentro de iframes alojados por Mercado Pago («the divs will contain the iframes with the inputs where the PCI data will be inserted»). Según los lineamientos del PCI SSC (SAQ Instructions and Guidelines v4.0.1 y FAQ 1588), una integración con iframes del procesador puede calificar para el cuestionario SAQ A. Una página del comercio que captura los datos en su propio formulario y los envía por JavaScript al procesador califica para SAQ A-EP. Con `MercadoPagoTokenizer` el comercio queda en SAQ A-EP, cediendo la posibilidad de aspirar a SAQ A.
+   - **Device ID para antifraude (`X-meli-session-id`)**: MercadoPago.js obtiene automáticamente el identificador de dispositivo para análisis de riesgo antifraude, optimizando las tasas de aprobación. Al prescindir del SDK JS, el comercio debe cargar `security.js` manualmente y enviar la cabecera `X-meli-session-id` al crear el pago en el backend; el SDK de servidor de Kit Pagos no tiene hoy soporte para dicha cabecera.
+   - **Vía documentada oficialmente**: `POST /v1/card_tokens` está documentado por Mercado Pago como vía de tokenización por backend «para vendedores que cumplen con las normativas PCI» (Recibir pagos siendo PCI Compliant). Para comercios sin certificación PCI, la vía documentada es MercadoPago.js. Que la ruta responda con CORS abierto permite su consumo técnico desde el navegador, pero se asume como una desviación frente al camino canónico documentado.
 
 **Implementación realizada:**
-1. `MercadoPagoTokenizer.ts`: Implementación de tokenización directa en `sdk/src-browser/tokenizers/MercadoPagoTokenizer.ts` utilizando `globalThis.fetch`. Conecta exclusivamente los catálogos cerrados de `sandbox`, `production` y `simulator`, sin permitir URLs arbitrarias (`baseUrl`).
+1. `MercadoPagoTokenizer.ts`: Implementación de tokenización directa en `sdk/src-browser/tokenizers/MercadoPagoTokenizer.ts` utilizando `globalThis.fetch`. Conecta exclusivamente los catálogos cerrados de `sandbox`, `production` y `simulator`, sin permitir URLs arbitrarias (`baseUrl`). Se extrajeron la validación, construcción de payload y mapeo de errores a funciones de módulo puras.
 2. Integración en `KitPagosBrowser.ts`: Soporta `Gateway.MERCADOPAGO` devolviendo `CardTokenResult`.
 3. Intercambiabilidad de formulario: El mismo formulario del comercio (`CardData` con campos de tarjeta y documento) tokeniza en Wompi y Mercado Pago alternando únicamente el parámetro `gateway`.
 4. Mapeo estricto de errores: Traduce 401/403 a `INVALID_CREDENTIALS`, 429 a `RATE_LIMIT_EXCEEDED`, 5xx a `GATEWAY_SERVER_ERROR` y respuestas sin token `id` a `MALFORMED_RESPONSE`, extrayendo la causa específica de `cause[0].description`.
-5. Endpoint de simulación y prueba E2E en `simulator-api`: Se implementó `POST /v1/sim/mercadopago/card_tokens` en `simulator-api/src/routes/mercadopago.ts` y `GatewayMockFactory.ts`, validando autenticación por query param o Bearer token, campos obligatorios, identificación del titular y soportando escenarios adversos (`TIMEOUT`, `RATE_LIMIT`, `SERVER_ERROR`), junto con una prueba de punta a punta que tokeniza en el mock y cobra por `POST /v1/api/payments`.
-6. Alcance de métricas: `npm run metrics` se mantiene enfocado en `sdk/src` (31 clases del núcleo de servidor), sin distorsionar la serie de métricas de arquitectura hexagonal de la tesis con las fachadas delgadas de navegador.
+5. Endpoint de simulación y prueba E2E en `simulator-api`: Se implementó `POST /v1/sim/mercadopago/card_tokens` en `simulator-api/src/routes/mercadopago.ts` y `GatewayMockFactory.ts`, replicando las respuestas medidas el 4 de octubre de 2026: 401 `unauthorized_access` (causa E212 `access_parameters is required`) ante llave ausente; 400 `unexpected_processing` (causa G001) si la llave se envía en `Authorization: Bearer` en vez de la query; 500 `internal_error` (causa E731) si la llave es inexistente; y emisión permisiva (201) de token aun sin identificación o con número corto. Se incluye prueba E2E que tokeniza en el simulador y cobra por `POST /v1/api/payments`.
+6. Alcance e inclusión de métricas en `npm run metrics`: `ck-metrics.ts` ahora recorre tanto `sdk/src` (31 clases) como `sdk/src-browser` (3 clases, total 34 clases). Las tres clases del módulo de navegador cumplen estrictamente los umbrales de CK (WMC ≤ 20, CBO ≤ 5, RFC ≤ 20, MaxCC ≤ 10):
+   * `KitPagosBrowser`: WMC = 8, CBO = 3, RFC = 6, MaxCC = 5.
+   * `WompiTokenizer`: WMC = 19, CBO = 4, RFC = 12, MaxCC = 7.
+   * `MercadoPagoTokenizer`: WMC = 6, CBO = 3, RFC = 5, MaxCC = 4.
 7. Pruebas de contrato y unitarias:
    - Unitarias en `sdk/test/browser/MercadoPagoTokenizer.test.ts` y `KitPagosBrowser.test.ts`.
    - Pruebas en `simulator-api/test/mercadopago.test.ts`.
-   - Prueba de contrato en `sdk/test/sandbox/mercadopago.sandbox.test.ts` que tokeniza con `KitPagosBrowser` y cobra mediante `KitPagos.createPayment()` en el sandbox real de Mercado Pago (4 de octubre de 2026).
+   - Prueba de contrato en `sdk/test/sandbox/mercadopago.sandbox.test.ts`.
+
+**Lo medido (4 de octubre de 2026).**
+- **Prueba de contrato real** contra `api.mercadopago.com`: El 4 de octubre de 2026 a las 14:03, la prueba `permite tokenizar con KitPagosBrowser y cobrar con KitPagos` pasó exitosamente en `sdk/test/sandbox/mercadopago.sandbox.test.ts`. El token emitido por el módulo de navegador fue aceptado por `KitPagos.createPayment()`, que creó una transacción en estado `DECLINED` (estado nativo `rejected`, `status_detail: "cc_rejected_high_risk"` debido a la ausencia de device ID de antifraude en el entorno de pruebas).
+- **Medición de respuestas reales de `api.mercadopago.com/v1/card_tokens`**:
+  * Sin `cardholder.identification`: HTTP 201, emite el token con `identification: {}`.
+  * Número `"1234"`: HTTP 201, emite el token con `luhn_validation: false`; falla al cobrar vía API de pagos (HTTP 400 causa 2062).
+  * Sin `security_code`: HTTP 201, emite el token.
+  * Sin `public_key`: HTTP 401 `{"message":"access is unauthorized","error":"unauthorized","code":"unauthorized_access","cause":[{"description":"access_parameters is required","code":"E212"}]}`.
+  * Llave en `Authorization: Bearer`: HTTP 400 `unexpected_processing` (causa G001).
+  * Clave pública inexistente: HTTP 500 `internal_error` (causa E731 `"POST tokenization unexpected status"`). Esta respuesta se mapea a `GATEWAY_SERVER_ERROR` en el SDK, registrándose como limitación conocida de la pasarela ante claves inválidas en este endpoint.
 
 **Estado:** Resuelto en código y documentación (`sdk/src-browser/`, `simulator-api/src/routes/mercadopago.ts`, `docs/03-sdk/6-tokenizacion-frontend.md`).
 
