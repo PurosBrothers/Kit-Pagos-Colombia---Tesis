@@ -2763,6 +2763,73 @@ Por decisión explícita de equipo, la elaboración de la colección versionada 
 
 **Estado:** Resuelto en infraestructura, empaquetado y código (`render.yaml`, `simulator-api/package.json`, `.github/workflows/ci.yml`, `docs/02-arquitectura/3-api-de-simulacion.md`).
 
+### 80. Declaración dinámica de ambiente y resolución de URLs mediante catálogo cerrado en el SDK (Issue #123)
+
+**Responsable:** Prieto / Equipo (secciones 9 y 15 del SAD, `sdk/src/domain/value-objects/Environment.ts`, `sdk/src/infrastructure/config/gateway-urls.ts`, `sdk/src/infrastructure/config/SDKConfigurator.ts`, `simulator-api/src/auth/targetEnvironment.ts`, `simulator-api/src/services/KitPagosProvider.ts`).
+
+**Contexto.**
+En la reunión del 29 de septiembre de 2026, el director de tesis solicitó que quien consume la API no tenga que conocer ni configurar las URLs de las pasarelas. Basta con que indique a qué ambiente desea apuntar (`simulator`, `sandbox` o `production`), y la API debe resolver de forma autónoma la URL de cada pasarela.
+
+Hasta el punto 79, la URL de cada pasarela quedaba fijada globalmente por quien desplegaba el servidor mediante variables de entorno (`<PASARELA>_BASE_URL` o `SIMULATOR_SDK_BASE_URL`). Esto presentaba dos limitaciones críticas:
+1. *Inflexibilidad de despliegue:* Un único despliegue (por ejemplo, el Web Service en Render) no podía atender peticiones dirigidas al simulador y al sandbox simultáneamente; cambiar de ambiente requería editar variables de entorno y reiniciar el servicio.
+2. *Deducción heurística de ambiente:* El ambiente se infería a partir de la URL configurada (`targetEnvironment.ts`), aplicando la regla de credenciales del punto 69 sobre una deducción en lugar de una intención explícitamente declarada.
+
+**Decisión 1: Dónde vive el catálogo de URLs.**
+Se evaluaron dos opciones para ubicar el catálogo de URLs:
+- *Opción A (adoptada): En el SDK, como opción `environment` en `SDKOptions`, con la API reenviando la cabecera.*
+  Se modeló el Value Object inmutable `Environment` (`"simulator" | "sandbox" | "production"`) en `sdk/src/domain/value-objects/Environment.ts`, y el catálogo cerrado `GATEWAY_URL_CATALOG` en `sdk/src/infrastructure/config/gateway-urls.ts`. La configuración en `SdkConfigurator` acepta `environment?: Environment` y resuelve la URL canónica correspondiente. Esto desacopla a cualquier consumidor del SDK (no solo a la API REST) de tener que memorizar URLs de pasarela, previene errores de tipeo y homogeneiza el comportamiento antes de construir los prototipos de la Fase 5.
+- *Opción B (descartada): Solo en la API.*
+  Aunque era más rápida de implementar sin tocar el SDK, obligaría a los usuarios directos del SDK a seguir buscando y escribiendo URLs manualmente en código, fragmentando las fuentes de verdad del proyecto.
+
+En ambas opciones, `baseUrl` continúa disponible en el SDK como anulación explícita para pruebas herméticas o mocks personalizados del desarrollador, pero nunca es suministrado por clientes de la API REST.
+
+**Decisión 2: Alternativa descartada — que el cliente envíe la URL (Vulnerabilidad SSRF).**
+Se descartó tajantemente aceptar URLs suministradas por el cliente HTTP (ya sea en cabeceras o cuerpo). Si un cliente malintencionado sin credenciales propias pudiera enviar una URL hacia un servidor bajo su control, la API le enviaría las credenciales de sandbox del servidor en las cabeceras de autenticación al procesar la petición con respaldo. Esto constituiría una vulnerabilidad crítica de Server-Side Request Forgery (SSRF) con fuga de secretos. El catálogo cerrado lo impide por diseño: la API solo establece conexiones salientes con los hosts autorizados en dicho catálogo.
+
+**Decisión 3: El cliente declara el ambiente con `x-kit-pagos-environment`.**
+- El cliente declara el ambiente por petición mediante la cabecera `x-kit-pagos-environment: simulator | sandbox | production`.
+- *Omisión segura:* Si la cabecera no se envía, el ambiente se fija por omisión en `"simulator"`, garantizando que ninguna llamada accidental toque la red externa.
+- *Validación estricta:* Cualquier valor desconocido o inválido (e.g. `staging`, o una URL arbitraria) responde de inmediato con HTTP 400 `INVALID_REQUEST` sin realizar peticiones de red.
+- Las variables `<PASARELA>_BASE_URL` (`WOMPI_BASE_URL`, `MERCADOPAGO_BASE_URL`, `RAPYD_BASE_URL`, `KUSHKI_BASE_URL`) fueron completamente eliminadas de `.env.example`, código y documentación. La URL del ambiente simulator se parametriza únicamente con `SIMULATOR_SDK_BASE_URL` (o `https://kit-pagos-colombia.onrender.com/v1/sim/<pasarela>` por defecto).
+
+**Decisión 4: Regla de credenciales (Punto 69) aplicada sobre el ambiente declarado.**
+La regla de seguridad del punto 69 se aplica ahora sobre el ambiente declarado por el cliente:
+- `simulator`: Credenciales del servidor permitidas sin advertencia.
+- `sandbox`: Credenciales del servidor permitidas como respaldo, retornando la advertencia `SERVER_SANDBOX_CREDENTIALS_USED` tanto en la cabecera HTTP `x-kit-pagos-warning` como en el campo `warnings` del cuerpo JSON.
+- `production`: Exige estrictamente credenciales del cliente (`x-gateway-public-key` y `x-gateway-private-key`). Si faltan, responde HTTP 401 `Unauthorized` (`ClientCredentialsRequiredError`) de forma inmediata, sin tocar la red externa.
+- `KitPagosProvider` mantiene instancias cacheadas por la clave compuesta `${gateway}:${target}` para optimizar el rendimiento sin mezclar contextos de ambiente.
+
+**Punto resuelto: Mercado Pago en Sandbox vs. Producción.**
+Mercado Pago no publica un dominio de sandbox independiente; utiliza `https://api.mercadopago.com/v1` tanto para pruebas como para producción, discriminando el comportamiento exclusivamente por el tipo de credenciales (llaves de prueba `TEST-` vs. llaves productivas `APP_USR-`). Se documenta formalmente:
+1. Cuando se declara `x-kit-pagos-environment: sandbox` sin credenciales del cliente, el servidor utiliza sus credenciales de prueba configuradas en `.env`, emitiendo la advertencia de sandbox.
+2. Si un cliente envía llaves productivas propias en `x-gateway-*` pero declara `x-kit-pagos-environment: sandbox`, Mercado Pago procesará el cobro con dinero real, ya que el procesador solo atiende a la validez de la credencial en su backend.
+
+**Punto resuelto: Nivel de evidencia de las URLs de producción.**
+Las URLs de producción del catálogo:
+- Wompi: `https://production.wompi.co/v1`
+- Mercado Pago: `https://api.mercadopago.com/v1`
+- Kushki: `https://api.kushkipagos.com`
+- Rapyd: `https://api.rapyd.net/v1`
+fueron tomadas de la documentación oficial de cada pasarela y quedan registradas con nivel de evidencia **«tomado de la documentación oficial, sin medir»**, dado que el proyecto no cuenta con credenciales productivas activas.
+
+**Fuera del alcance: Verificación de webhooks.**
+`POST /v1/api/webhooks/:gateway` continúa excluido de la cabecera `x-kit-pagos-environment`. El secreto de firma de cada pasarela depende de la cuenta configurada en el servidor. Permitir que el emisor de la notificación elija contra qué ambiente o secreto se verifica violaría el principio de seguridad del punto 66 (quien emite la notificación no puede elegir contra qué se verifica). La verificación de webhooks se mantiene usando exclusivamente el perfil del servidor.
+
+**Lo medido (5 de octubre de 2026):**
+1. *12 combinaciones de catálogo:* Se implementó `simulator-api/test/environment-catalog.test.ts`, espiando `globalThis.fetch` y verificando que en las 12 combinaciones (4 pasarelas × 3 ambientes) la URL llamada empiece exactamente por la ruta correspondiente del catálogo cerrado.
+2. *Protección anti-SSRF:* Pruebas automatizadas confirman que inyecciones de URLs externas (`https://evil.attacker.com`) o cabeceras inválidas son rechazadas con HTTP 400 y nunca disparan `fetch`.
+3. *Ejecución real contra sandboxes:* Se ejecutó `POST /v1/api/payments` con `x-kit-pagos-environment: sandbox` contra los cuatro sandboxes reales, registrando la evidencia con fecha `2026-10-05T18:48:23.170Z` en `docs/testing-data/medicion-sandbox-issue-123.md`:
+   - Wompi: HTTP 201 (`12066420-1791226107-72286`), con advertencia en cabecera y cuerpo.
+   - Kushki: HTTP 201 (`105752898821505149`), con advertencia en cabecera y cuerpo.
+   - Rapyd: HTTP 201 (`REDIRECT_REQUIRED`), con advertencia en cabecera y cuerpo.
+   - Mercado Pago: HTTP 400 (error nativo de pasarela), con advertencia preservada en cabecera y cuerpo.
+4. *Suites de prueba en verde:*
+   - `sdk`: 45 suites, 690 pruebas pasando; 34 clases dentro de los umbrales de métricas CK.
+   - `simulator-api`: 22 suites, 309 pruebas pasando.
+   - `examples`: `npm run typecheck` pasando sin errores.
+
+**Estado:** Resuelto en código y documentación (`sdk/`, `simulator-api/`, `.env.example`, `docs/00-entorno-de-desarrollo.md`, `docs/02-arquitectura/3-api-de-simulacion.md`, `docs/testing-data/medicion-sandbox-issue-123.md`).
+
 **Responsable:** No corresponde a ninguna sección del SAD; limpieza de repositorio, cualquiera puede resolverlo.
 
 **Encontrado:** `sdk/src/Hexagonal.png` está ubicado dentro del árbol de código fuente del SDK, no en `docs/architecture/`.

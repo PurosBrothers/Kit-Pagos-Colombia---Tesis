@@ -64,15 +64,15 @@ simulator-api/src/
 
 **Capa de autenticación y resolución de credenciales (`src/auth/`):**
 - `CredentialResolver`: Implementa la resolución híbrida. Primero inspecciona las cabeceras `x-gateway-public-key`, `x-gateway-private-key` (e `integrity-secret`). Si no están presentes, recurre al perfil de sandbox del `.env` del servidor. Por seguridad estricta, `webhookSecret` **nunca** se acepta desde el cliente HTTP para evitar invalidar la verificación criptográfica. Si faltan credenciales, lanza `MissingCredentialsError` (HTTP 401).
-- `targetEnvironment`: Clasifica la URL base de cada pasarela como simulador, sandbox o producción. El respaldo al perfil del servidor depende de esa clasificación:
+- `targetEnvironment`: Resuelve el ambiente destino a partir de la cabecera `x-kit-pagos-environment` (por defecto `simulator` si no se envía; valores desconocidos responden HTTP 400 `INVALID_REQUEST`). La API resuelve la URL de destino desde un **catálogo cerrado** embebido en el SDK por pasarela y ambiente (Issue #123, Punto 80). El cliente nunca suministra URLs de pasarela, previniendo vectores de SSRF con fuga de credenciales. La regla de credenciales se aplica sobre el ambiente declarado:
 
-  | Destino | Sin credenciales propias completas |
+  | Ambiente Declarado (`x-kit-pagos-environment`) | Sin credenciales propias completas |
   |---|---|
-  | Simulador (`/v1/sim/<pasarela>`, o sin URL) | Usa el perfil del servidor |
-  | Sandbox conocido (`sandbox.wompi.co`, `sandboxapi.rapyd.net`, `api-uat.kushkipagos.com`) | Usa el perfil del servidor y lo advierte en la cabecera `x-kit-pagos-warning` y en el campo `warnings` del cuerpo JSON, también en las respuestas de error |
-  | Cualquier otra URL, incluida `api.mercadopago.com` | `ClientCredentialsRequiredError` (HTTP 401), con las cabeceras que faltan |
+  | `simulator` (omisión segura) | Usa el perfil del servidor conectándose a `SIMULATOR_SDK_BASE_URL` (o `https://kit-pagos-colombia.onrender.com/v1/sim/<pasarela>`), sin advertencias |
+  | `sandbox` | Usa el perfil del servidor conectándose al sandbox oficial del catálogo cerrado y lo advierte en la cabecera `x-kit-pagos-warning` y en el campo `warnings` del cuerpo JSON (`SERVER_SANDBOX_CREDENTIALS_USED`), también en respuestas de error |
+  | `production` | Lanza `ClientCredentialsRequiredError` (HTTP 401) sin llamar a la red, detallando las cabeceras `x-gateway-*` requeridas |
 
-  Mercado Pago cae siempre en producción porque usa el mismo host para prueba y para producción, y sus llaves de prueba empiezan igual que las reales. La verificación de webhooks no pasa por esta regla, porque no llama a la pasarela (punto 69). Al arrancar, el log dice por pasarela a dónde apunta y qué regla aplica, y las credenciales del cliente nunca llevan el `webhookSecret` del servidor (punto 70).
+  Mercado Pago comparte host (`api.mercadopago.com/v1`) para prueba y producción, determinando el ambiente exclusivamente por las credenciales suministradas. La verificación de webhooks no pasa por esta regla, porque no llama a la pasarela (puntos 66 y 80). Al arrancar, el log registra la resolución dinámica por pasarela y la URL del simulador.
 - `authHook`: Hook `onRequest` que protege los endpoints REST mediante token Bearer (`API_AUTH_TOKEN`). Realiza comparaciones en tiempo constante (`crypto.timingSafeEqual`) para mitigar ataques de temporización. Si `API_AUTH_TOKEN` no está configurado, opera en modo desarrollo abierto con advertencia en logs. Rutas públicas como `/health` y los endpoints mock `/v1/sim/*` están exentos por prefijo. El preflight de CORS (`OPTIONS` con `Access-Control-Request-Method`) también pasa sin token, porque el navegador nunca le agrega `Authorization`.
 
 **El módulo REST propio (`src/kit-pagos-api/`):** se registra en `buildApp()` con el prefijo `/v1/api` y queda separado de `src/routes/` y `src/gateways/`, porque `/v1/sim` finge ser un tercero y `/v1/api` expone lo propio. No reimplementa reglas del SDK: traduce HTTP a llamadas de la fachada `KitPagos`.

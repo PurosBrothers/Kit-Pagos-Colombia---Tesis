@@ -46,7 +46,7 @@ import {
 } from "kit-pagos-colombia";
 
 /** Raíz de la API de Kushki en el simulador, no el endpoint de cobros. */
-const SIMULATOR_KUSHKI_URL = "http://localhost:3000/v1/sim/kushki";
+const SIMULATOR_KUSHKI_URL = "https://kit-pagos-colombia.onrender.com/v1/sim/kushki";
 
 const options: SDKOptions = {
   gateway: Gateway.KUSHKI,

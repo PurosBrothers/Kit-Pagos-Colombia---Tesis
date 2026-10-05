@@ -57,22 +57,22 @@ import {
 const GATEWAYS: readonly { gateway: Gateway; baseUrl: string; nota: string }[] = [
   {
     gateway: Gateway.WOMPI,
-    baseUrl: "http://localhost:3000/v1/sim/wompi",
+    baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim/wompi",
     nota: "endpoint dedicado; en sandbox los bancos son de prueba",
   },
   {
     gateway: Gateway.MERCADOPAGO,
-    baseUrl: "http://localhost:3000/v1/sim/mercadopago",
+    baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago",
     nota: "anidados en el catálogo de métodos de pago",
   },
   {
     gateway: Gateway.RAPYD,
-    baseUrl: "http://localhost:3000/v1/sim/rapyd",
+    baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim/rapyd",
     nota: "no hay lista: son métodos de pago separados, uno por banco",
   },
   {
     gateway: Gateway.KUSHKI,
-    baseUrl: "http://localhost:3000/v1/sim/kushki",
+    baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim/kushki",
     nota: "obligatorio en Colombia para Transfer In",
   },
 ];
@@ -152,7 +152,7 @@ async function main(): Promise<void> {
    */
   console.log("\nEl mismo banco sin conocer el código de Rapyd:\n");
   const kitPagosRapyd = new KitPagos(
-    buildOptions(Gateway.RAPYD, "http://localhost:3000/v1/sim/rapyd"),
+    buildOptions(Gateway.RAPYD, "https://kit-pagos-colombia.onrender.com/v1/sim/rapyd"),
   );
   const bancolombia = await kitPagosRapyd.createPayment(
     pseRequest(PaymentMethod.pse({ bankCode: PseBankCode.BANCOLOMBIA })),

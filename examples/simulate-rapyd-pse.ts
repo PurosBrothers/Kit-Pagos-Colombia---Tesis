@@ -40,7 +40,7 @@ import {
 } from "kit-pagos-colombia";
 
 /** Raíz de la API de Rapyd en el simulador, no el endpoint de pagos. */
-const SIMULATOR_RAPYD_URL = "http://localhost:3000/v1/sim/rapyd";
+const SIMULATOR_RAPYD_URL = "https://kit-pagos-colombia.onrender.com/v1/sim/rapyd";
 
 const options: SDKOptions = {
   gateway: Gateway.RAPYD,

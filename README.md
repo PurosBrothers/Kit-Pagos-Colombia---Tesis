@@ -9,7 +9,7 @@ Kit Pagos Colombia son **tres componentes**, no uno:
 | Componente | Qué es | Dónde vive |
 |---|---|---|
 | **SDK** | Un paquete de TypeScript con arquitectura hexagonal que unifica cuatro pasarelas colombianas en el servidor y expone `kit-pagos-colombia/browser` para tokenización de tarjeta en el navegador | [`sdk/`](sdk/) |
-| **API de Simulación** | Un servidor con dos caras: en `/v1/sim`, cuatro mocks de las pasarelas para probar los flujos que los sandboxes reales no permiten probar; en `/v1/api`, el SDK expuesto como API REST, para cobrar sin instalarlo | [`simulator-api/`](simulator-api/) |
+| **API de Simulación** | Un servidor con dos caras: en `/v1/sim`, cuatro mocks de las pasarelas para probar los flujos que los sandboxes reales no permiten probar; en `/v1/api`, el SDK expuesto como API REST, para cobrar sin instalarlo. Desplegado en vivo en Render: [https://kit-pagos-colombia.onrender.com](https://kit-pagos-colombia.onrender.com) | [`simulator-api/`](simulator-api/) |
 | **Documentación de datos** | Las tarjetas, bancos y credenciales de prueba de las cuatro pasarelas, con su nivel de evidencia | [`docs/testing-data/`](docs/testing-data/README.md) |
 
 Los tres juntos son el artefacto de un trabajo de grado. Métodos soportados: **tarjeta y PSE**.
@@ -33,21 +33,26 @@ Cuatro algoritmos de firma distintos y cuatro vocabularios de estado distintos �
 
 ## Empezar
 
-Las dos formas necesitan el SDK compilado, porque la API de Simulación y los ejemplos lo consumen desde `sdk/dist`. Después se levanta la API de Simulación y se deja corriendo:
+Las dos formas necesitan el SDK compilado, porque la API de Simulación y los ejemplos lo consumen desde `sdk/dist`. Después se levanta la API de Simulación y se deja corriendo (o se interactúa directamente con el despliegue en la nube en [Render](https://kit-pagos-colombia.onrender.com)):
 
 ```bash
 cd sdk && npm install && npm run build
 cd simulator-api && npm install && npm run dev
 ```
 
-**Por la API REST, sin escribir código.** Con la API corriendo, desde otra terminal:
+**Por la API REST, sin escribir código.** Con la API corriendo (localmente en `http://localhost:3000` o en la nube en `https://kit-pagos-colombia.onrender.com`), desde otra terminal:
 
 ```bash
-curl http://localhost:3000/v1/api/gateways
-curl -X POST http://localhost:3000/v1/api/payments -H "content-type: application/json" -H "x-gateway-public-key: demo" -H "x-gateway-private-key: demo" -d '{"gateway":"mercadopago","amount":"150000.00","currency":"COP","orderReference":"ORD-1","payer":{"email":"comprador@example.com"},"paymentMethod":{"type":"CARD","token":"tok_test","installments":1}}'
+curl https://kit-pagos-colombia.onrender.com/v1/api/gateways
+curl -X POST https://kit-pagos-colombia.onrender.com/v1/api/payments \
+  -H "content-type: application/json" \
+  -H "x-kit-pagos-environment: sandbox" \
+  -H "x-gateway-public-key: demo" \
+  -H "x-gateway-private-key: demo" \
+  -d '{"gateway":"mercadopago","amount":"150000.00","currency":"COP","orderReference":"ORD-1","payer":{"email":"comprador@example.com"},"paymentMethod":{"type":"CARD","token":"tok_test","installments":1}}'
 ```
 
-La primera lista las cuatro pasarelas. La segunda responde `201` con la transacción normalizada en `APPROVED`. Con el mismo cuerpo y otro valor de `gateway` responden también `201` las otras tres, cada una con el desenlace que el simulador reproduce para ella: Kushki `APPROVED`, Wompi `PENDING` (resuelve al consultar) y Rapyd `REDIRECT_REQUIRED` (su tarjeta pasa por un checkout alojado). Wompi exige además la cabecera `x-gateway-integrity-secret`. Contra el simulador, las cabeceras `x-gateway-*` aceptan cualquier valor, pero son obligatorias si el `.env` no trae credenciales: sin ellas la respuesta es `401`. Si el `.env` define `API_AUTH_TOKEN`, cada petición debe llevar además `Authorization: Bearer <token>`; sin definirlo, la API opera abierta, que es el modo de desarrollo local. Las rutas y sus reglas están en [`docs/02-arquitectura/3-api-de-simulacion.md`](docs/02-arquitectura/3-api-de-simulacion.md).
+La primera lista las cuatro pasarelas. La segunda responde `201` con la transacción normalizada. Con el mismo cuerpo y otro valor de `gateway` responden también las otras tres, cada una con el desenlace correspondiente. Mediante la cabecera `x-kit-pagos-environment` (`simulator`, `sandbox` o `production`), el cliente declara el ambiente y la API resuelve la URL desde un catálogo cerrado sin exponer credenciales a servidores externos (Issue #123). Las rutas y sus reglas están en [`docs/02-arquitectura/3-api-de-simulacion.md`](docs/02-arquitectura/3-api-de-simulacion.md).
 
 **Por el SDK, desde código.** Con la API corriendo:
 

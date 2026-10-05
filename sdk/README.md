@@ -99,7 +99,7 @@ const sdk = new KitPagos({
 });
 ```
 
-> **Entornos y Resolución Automática de URLs (`environment`).** Puedes especificar el entorno destino mediante la opción `environment: "simulator" | "sandbox" | "production"`. El SDK resuelve automáticamente la URL oficial de cada pasarela desde un catálogo cerrado integrado. Por defecto apunta al simulador local (`http://localhost:3000/v1/sim/{gateway}`) o puedes configurarlo contra el servicio en Render (`https://kit-pagos-colombia.onrender.com/v1/sim`). Si necesitas apuntar a una URL específica o mock propio, el parámetro `baseUrl` sigue disponible como anulación explícita.
+> **Entornos y Resolución Automática de URLs (`environment`).** Puedes especificar el entorno destino mediante la opción `environment: "simulator" | "sandbox" | "production"`. El SDK resuelve automáticamente la URL oficial de cada pasarela desde un catálogo cerrado integrado. Por defecto apunta al simulador oficial desplegado en Render (`https://kit-pagos-colombia.onrender.com/v1/sim/{gateway}`) o puedes configurarlo contra un mock local mediante `baseUrl` si necesitas desarrollo hermético fuera de línea. Si necesitas apuntar a una URL específica o mock propio, el parámetro `baseUrl` sigue disponible como anulación explícita.
 
 > **`webhookSecret` no es la llave de API.** En Wompi, Mercado Pago y Kushki el secreto que
 > firma los webhooks es un valor distinto, que se saca de otra parte del panel. Si lo omitís,
@@ -384,11 +384,11 @@ El SDK incluye un catálogo cerrado de URLs para los tres ambientes soportados, 
 | **Rapyd** | `https://sandboxapi.rapyd.net/v1` | `https://api.rapyd.net/v1` |
 
 **Simulador Integrado y en la Nube (`environment: "simulator"`):**
-Por defecto apunta a `http://localhost:3000/v1/sim/{gateway}` para desarrollo local hermético. Para evaluar contra el simulador público en la nube desplegado en Render, puedes pasar la URL en `baseUrl`:
+Por defecto apunta a la URL oficial desplegada en Render (`https://kit-pagos-colombia.onrender.com/v1/sim/{gateway}`). Si deseas correr contra una instancia local del simulador, puedes anularla con `baseUrl`:
 ```typescript
 const sdkSimulador = new KitPagos({
   gateway: Gateway.WOMPI,
-  baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim",
+  baseUrl: "http://localhost:3000/v1/sim/wompi",
   credentials: {
     [Gateway.WOMPI]: {
       publicKey: "pub_test_demo",

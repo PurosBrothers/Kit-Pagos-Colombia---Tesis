@@ -41,7 +41,7 @@ const options: SDKOptions = {
       integritySecret: "test_integrity_ejemplo_no_real",
     },
   },
-  baseUrl: "http://localhost:3000/v1/sim/wompi",
+  baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim/wompi",
 };
 ```
 

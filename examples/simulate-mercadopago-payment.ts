@@ -26,7 +26,7 @@ import {
  * Es la raíz y no el endpoint de pagos desde el issue #64: PSE se cobra por la
  * Orders API, así que el adaptador necesita colgar dos rutas de acá.
  */
-const SIMULATOR_MERCADOPAGO_URL = "http://localhost:3000/v1/sim/mercadopago";
+const SIMULATOR_MERCADOPAGO_URL = "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago";
 
 /**
  * Paso 1: Configurar el SDK para Mercado Pago.

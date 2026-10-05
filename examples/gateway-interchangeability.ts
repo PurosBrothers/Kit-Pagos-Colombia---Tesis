@@ -67,10 +67,10 @@ const GATEWAYS = [
  * raíz. Los otros ocho ejemplos ya la usaban.
  */
 const SIMULATOR_ENDPOINTS: Record<Gateway, string> = {
-  [Gateway.WOMPI]: "http://localhost:3000/v1/sim/wompi",
-  [Gateway.RAPYD]: "http://localhost:3000/v1/sim/rapyd",
-  [Gateway.MERCADOPAGO]: "http://localhost:3000/v1/sim/mercadopago",
-  [Gateway.KUSHKI]: "http://localhost:3000/v1/sim/kushki",
+  [Gateway.WOMPI]: "https://kit-pagos-colombia.onrender.com/v1/sim/wompi",
+  [Gateway.RAPYD]: "https://kit-pagos-colombia.onrender.com/v1/sim/rapyd",
+  [Gateway.MERCADOPAGO]: "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago",
+  [Gateway.KUSHKI]: "https://kit-pagos-colombia.onrender.com/v1/sim/kushki",
 };
 
 /**

@@ -34,7 +34,7 @@ import {
  * el valor equivalente sería `https://sandboxapi.rapyd.net/v1`. Esto, igual que las llaves,
  * debería vivir en un archivo de configuración externo como un .env.
  */
-const SIMULATOR_RAPYD_URL = "http://localhost:3000/v1/sim/rapyd";
+const SIMULATOR_RAPYD_URL = "https://kit-pagos-colombia.onrender.com/v1/sim/rapyd";
 
 /**
  * Paso 1: Configurar el SDK para Rapyd.
