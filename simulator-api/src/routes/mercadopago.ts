@@ -10,6 +10,13 @@ import {
   ScenarioEngine,
 } from "../scenarios/ScenarioEngine";
 import { transactionStore } from "../store/TransactionStore";
+import {
+  getMpOrderSchema,
+  getMpPaymentMethodsSchema,
+  getMpPaymentSchema,
+  postMpOrdersSchema,
+  postMpPaymentsSchema,
+} from "./schemas/mercadopago.schemas";
 
 const SCENARIO_HEADER = "x-simulate-scenario";
 export const DEFAULT_SCENARIO = "APPROVED";
@@ -88,6 +95,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   // 1. Creación de pago (POST /v1/sim/mercadopago/payments)
   app.post(
     "/v1/sim/mercadopago/payments",
+    { schema: postMpPaymentsSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       let scenario = getSimulatorScenario(request);
 
@@ -204,6 +212,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   // 2. Consulta de pago (GET /v1/sim/mercadopago/payments/:id)
   app.get(
     "/v1/sim/mercadopago/payments/:id",
+    { schema: getMpPaymentSchema },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply,
@@ -266,6 +275,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   // devuelve 424 pase lo que pase. Ver `mercadopago-pse.ts` en el SDK.
   app.post(
     "/v1/sim/mercadopago/orders",
+    { schema: postMpOrdersSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       if (rejectsWithoutIdempotencyKey(request, reply, "orders")) {
         return reply;
@@ -304,6 +314,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   // entre al banco.
   app.get(
     "/v1/sim/mercadopago/orders/:id",
+    { schema: getMpOrderSchema },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply,
@@ -369,6 +380,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/mercadopago/payment_methods",
+    { schema: getMpPaymentMethodsSchema },
     async (_request: FastifyRequest, reply: FastifyReply) => {
       return reply.code(200).send([
         {

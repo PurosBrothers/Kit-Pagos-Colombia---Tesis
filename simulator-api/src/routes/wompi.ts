@@ -12,6 +12,12 @@ import {
   WompiTransaction,
 } from "../gateways/wompi/types";
 import { transactionStore } from "../store/TransactionStore";
+import {
+  getWompiMerchantSchema,
+  getWompiPseInstitutionsSchema,
+  getWompiTransactionSchema,
+  postWompiTransactionsSchema,
+} from "./schemas/wompi.schemas";
 
 /**
  * Wompi HTTP router (issue #55).
@@ -44,6 +50,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   // ── POST /v1/sim/wompi/transactions ──────────────────────────────────────
   app.post(
     "/v1/sim/wompi/transactions",
+    { schema: postWompiTransactionsSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       // Fastify types headers as string | string[] | undefined, hence the
       // array check. In practice that branch is never reached over HTTP: the
@@ -134,6 +141,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   // ── GET /v1/sim/wompi/transactions/:id ───────────────────────────────────
   app.get(
     "/v1/sim/wompi/transactions/:id",
+    { schema: getWompiTransactionSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { id } = request.params as { id: string };
       const transaction = transactionStore.findById(id) as WompiTransaction | undefined;
@@ -171,6 +179,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   // tenga un solo camino de código y no una rama "modo simulador".
   app.get(
     "/v1/sim/wompi/merchants/:publicKey",
+    { schema: getWompiMerchantSchema },
     async (_request: FastifyRequest, reply: FastifyReply) => {
       return reply.code(200).send(mockFactory.buildMerchantResponse());
     },
@@ -189,6 +198,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/wompi/pse/financial_institutions",
+    { schema: getWompiPseInstitutionsSchema },
     async (_request: FastifyRequest, reply: FastifyReply) => {
       return reply.code(200).send({
         data: [
