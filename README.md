@@ -2,6 +2,8 @@
 
 Integre una vez. Cambie de pasarela cambiando un valor.
 
+Sitio web y demostración interactiva: [https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/](https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/)
+
 Kit Pagos Colombia son **tres componentes**, no uno:
 
 | Componente | Qué es | Dónde vive |
@@ -69,7 +71,7 @@ El ejemplo rápido de código, con la firma exacta de cada llamada, está en la 
 | [`docs/03-sdk/`](docs/03-sdk/) | El recorrido de una llamada, las 63 unidades de producción una por una (31 de ellas son clases), cada pasarela por dentro, y la guía de implementación |
 | [`docs/04-metricas-y-pruebas/`](docs/04-metricas-y-pruebas/) | Las métricas CK, las tres suites de pruebas, y cómo se van a medir los prototipos |
 | [`docs/05-ejemplos/`](docs/05-ejemplos/) | Los once ejemplos ejecutables y tres recorridos comentados |
-| [`docs/06-landing/`](docs/06-landing/) | El alcance de la página de presentación |
+| [`docs/06-landing/`](docs/06-landing/) | El alcance de la página de presentación ([sitio web en vivo](https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/)) |
 | [`docs/testing-data/`](docs/testing-data/README.md) | El tercer componente: los datos de prueba de las cuatro pasarelas |
 
 ### Referencia y contexto académico
