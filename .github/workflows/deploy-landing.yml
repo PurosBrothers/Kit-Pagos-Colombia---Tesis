@@ -2,7 +2,7 @@ name: Deploy Landing to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, devops]
   workflow_dispatch:
 
 permissions:
