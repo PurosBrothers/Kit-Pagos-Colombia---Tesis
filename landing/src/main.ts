@@ -220,7 +220,8 @@ function renderSandboxContent(gatewayKey: string): void {
     </div>
 
     <div class="sandbox-quirk-box">
-      <strong>Particularidad de Sandbox:</strong> ${data.quirk}
+      <span class="sandbox-quirk-label">Nota de integración</span>
+      <p class="sandbox-quirk-text">${data.quirk}</p>
     </div>
   `;
 
