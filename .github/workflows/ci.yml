@@ -89,14 +89,6 @@ jobs:
           cache: 'npm' 
           cache-dependency-path: simulator-api/package-lock.json
 
-      - name: Install SDK dependencies
-        working-directory: ./sdk
-        run: npm ci
-
-      - name: Build SDK
-        working-directory: ./sdk
-        run: npm run build
-
       - name: Install dependencies
         run: npm ci
 
