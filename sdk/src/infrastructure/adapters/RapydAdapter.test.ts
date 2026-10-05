@@ -325,7 +325,7 @@ describe("RapydAdapter", () => {
       await new RapydAdapter().createPayment(validRequest);
 
       const [url, init] = mockFetch.mock.calls[0];
-      expect(url).toBe("http://localhost:3000/v1/sim/rapyd/checkout");
+      expect(url).toBe("https://kit-pagos-colombia.onrender.com/v1/sim/rapyd/checkout");
       expect(init.method).toBe("POST");
       expect(JSON.parse(init.body)).toEqual({
         amount: "150000.00",
@@ -583,7 +583,7 @@ describe("RapydAdapter", () => {
       );
 
       expect(mockFetch.mock.calls[0][0]).toBe(
-        "http://localhost:3000/v1/sim/rapyd/checkout/checkout_422fb0a43ac1ad77ffd9969f454d3ad6",
+        "https://kit-pagos-colombia.onrender.com/v1/sim/rapyd/checkout/checkout_422fb0a43ac1ad77ffd9969f454d3ad6",
       );
       // Un checkout que nadie pagó es un cobro pendiente, no un error.
       expect(transaction.getStatus()).toBe("PENDING");
@@ -625,7 +625,7 @@ describe("RapydAdapter", () => {
       await new RapydAdapter().getStatus("payment_d31d3ca850419ab5e2f9f1a33f9c6eea");
 
       expect(mockFetch.mock.calls[0][0]).toBe(
-        "http://localhost:3000/v1/sim/rapyd/payments/payment_d31d3ca850419ab5e2f9f1a33f9c6eea",
+        "https://kit-pagos-colombia.onrender.com/v1/sim/rapyd/payments/payment_d31d3ca850419ab5e2f9f1a33f9c6eea",
       );
     });
   });
@@ -641,7 +641,7 @@ describe("RapydAdapter", () => {
 
       const [url, init] = mockFetch.mock.calls[0];
       expect(url).toBe(
-        "http://localhost:3000/v1/sim/rapyd/payments/payment_d31d3ca850419ab5e2f9f1a33f9c6eea"
+        "https://kit-pagos-colombia.onrender.com/v1/sim/rapyd/payments/payment_d31d3ca850419ab5e2f9f1a33f9c6eea"
       );
       expect(init.method).toBe("GET");
       expect(init.body).toBeUndefined();

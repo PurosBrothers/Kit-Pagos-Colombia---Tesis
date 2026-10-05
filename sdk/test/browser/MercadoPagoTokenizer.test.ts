@@ -119,7 +119,7 @@ describe("MercadoPagoTokenizer", () => {
   it("resuelve las URLs base según el catálogo cerrado", () => {
     expect(MercadoPagoTokenizer.resolveBaseUrl("sandbox")).toBe("https://api.mercadopago.com/v1");
     expect(MercadoPagoTokenizer.resolveBaseUrl("production")).toBe("https://api.mercadopago.com/v1");
-    expect(MercadoPagoTokenizer.resolveBaseUrl("simulator")).toBe("http://localhost:3000/v1/sim/mercadopago");
+    expect(MercadoPagoTokenizer.resolveBaseUrl("simulator")).toBe("https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago");
   });
 
   it.each(["prod", "constructor", "toString", "__proto__"])(

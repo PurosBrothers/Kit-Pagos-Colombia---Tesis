@@ -65,7 +65,7 @@ describe("KushkiAdapter", () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3000/v1/sim/kushki/card/v1/charges",
+        "https://kit-pagos-colombia.onrender.com/v1/sim/kushki/card/v1/charges",
         {
           method: "POST",
           headers: {
@@ -286,7 +286,7 @@ describe("KushkiAdapter", () => {
       await adapter.createPayment(validRequest);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3000/v1/sim/kushki/card/v1/charges",
+        "https://kit-pagos-colombia.onrender.com/v1/sim/kushki/card/v1/charges",
         expect.objectContaining({
           headers: {
             "Content-Type": "application/json",
@@ -436,17 +436,17 @@ describe("KushkiAdapter", () => {
 
       expect(mockFetch).toHaveBeenNthCalledWith(
         1,
-        "http://localhost:3000/v1/sim/kushki/transfer/v1/status/kushki-mock-tx-123",
+        "https://kit-pagos-colombia.onrender.com/v1/sim/kushki/transfer/v1/status/kushki-mock-tx-123",
         expect.objectContaining({ method: "GET" }),
       );
       expect(mockFetch).toHaveBeenNthCalledWith(
         2,
-        "http://localhost:3000/v1/sim/kushki/card-async/v1/status/kushki-mock-tx-123",
+        "https://kit-pagos-colombia.onrender.com/v1/sim/kushki/card-async/v1/status/kushki-mock-tx-123",
         expect.objectContaining({ method: "GET" }),
       );
       expect(mockFetch).toHaveBeenNthCalledWith(
         3,
-        "http://localhost:3000/v1/sim/kushki/charges/kushki-mock-tx-123",
+        "https://kit-pagos-colombia.onrender.com/v1/sim/kushki/charges/kushki-mock-tx-123",
         {
           method: "GET",
           headers: {

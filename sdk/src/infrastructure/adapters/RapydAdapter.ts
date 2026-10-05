@@ -46,7 +46,7 @@ import type { PseBank } from "../../domain/value-objects/PseBank";
  * es la raíz y cada método arma su ruta. Contra el sandbox real el valor
  * equivalente es `https://sandboxapi.rapyd.net/v1`.
  */
-const DEFAULT_RAPYD_URL = "http://localhost:3000/v1/sim/rapyd";
+const DEFAULT_RAPYD_URL = "https://kit-pagos-colombia.onrender.com/v1/sim/rapyd";
 
 /**
  * Adapter concreto de Rapyd Collect. Traduce las llamadas genéricas de

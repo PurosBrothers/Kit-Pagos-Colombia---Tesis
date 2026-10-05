@@ -107,7 +107,7 @@ describe("WompiTokenizer", () => {
       mockFetch as unknown as typeof fetch,
     );
 
-    expect(capturedUrl).toBe("http://localhost:3000/v1/sim/wompi/tokens/cards");
+    expect(capturedUrl).toBe("https://kit-pagos-colombia.onrender.com/v1/sim/wompi/tokens/cards");
   });
 
   it.each(["prod", "constructor", "toString", "__proto__"])(

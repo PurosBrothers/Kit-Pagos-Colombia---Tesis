@@ -40,7 +40,7 @@ import type { PseBank } from "../../domain/value-objects/PseBank";
  * a propósito: el paquete todavía no está publicado en npm (issue #88), así que
  * este es el único momento en que corregirlo no le cuesta nada a nadie.
  */
-const DEFAULT_WOMPI_BASE_URL = "http://localhost:3000/v1/sim/wompi";
+const DEFAULT_WOMPI_BASE_URL = "https://kit-pagos-colombia.onrender.com/v1/sim/wompi";
 
 /**
  * Concrete Wompi adapter. Translates generic PaymentGatewayPort calls into

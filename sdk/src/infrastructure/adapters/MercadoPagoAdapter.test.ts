@@ -59,7 +59,7 @@ describe("MercadoPagoAdapter", () => {
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3000/v1/sim/mercadopago/payments",
+        "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/payments",
         {
           method: "POST",
           headers: {
@@ -287,7 +287,7 @@ describe("MercadoPagoAdapter", () => {
       const transaction = await adapter.getStatus("1234567890");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3000/v1/sim/mercadopago/payments/1234567890",
+        "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/payments/1234567890",
         expect.objectContaining({ method: "GET" })
       );
       expect(transaction.isApproved()).toBe(true);
@@ -310,7 +310,7 @@ describe("MercadoPagoAdapter", () => {
       await adapter.getStatus("1234567890");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3000/v1/sim/mercadopago/payments/1234567890",
+        "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/payments/1234567890",
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: "Bearer APP_USR_priv_secret_456",
@@ -495,7 +495,7 @@ describe("MercadoPagoAdapter PSE", () => {
     await new MercadoPagoAdapter().createPayment(pseRequest);
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "http://localhost:3000/v1/sim/mercadopago/orders",
+      "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/orders",
       expect.objectContaining({ method: "POST" }),
     );
   });
@@ -557,7 +557,7 @@ describe("MercadoPagoAdapter PSE", () => {
       await new MercadoPagoAdapter().getStatus("ORD01M2V7ZQH9BAZ57V99VG1NY0K1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3000/v1/sim/mercadopago/orders/ORD01M2V7ZQH9BAZ57V99VG1NY0K1",
+        "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/orders/ORD01M2V7ZQH9BAZ57V99VG1NY0K1",
         expect.objectContaining({ method: "GET" }),
       );
     });
@@ -574,7 +574,7 @@ describe("MercadoPagoAdapter PSE", () => {
       await new MercadoPagoAdapter().getStatus("1234567890");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3000/v1/sim/mercadopago/payments/1234567890",
+        "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/payments/1234567890",
         expect.objectContaining({ method: "GET" }),
       );
     });

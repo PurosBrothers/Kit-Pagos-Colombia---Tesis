@@ -95,11 +95,11 @@ const sdk = new KitPagos({
   },
   maxRetries: 3,                 // Reintentos automáticos ante fallos transitorios
   webhookToleranceSeconds: 300,  // Tolerancia de 5 minutos contra ataques de replay
-  baseUrl: process.env.PAYMENT_GATEWAY_URL, // Opcional: URL productiva (ver tabla de URLs abajo)
+  environment: "sandbox",        // "simulator" (por defecto), "sandbox" o "production"
 });
 ```
 
-> **Entornos y URLs Base (`baseUrl`).** Por defecto, el SDK apunta al simulador integrado (`http://localhost:3000/v1/sim/{gateway}`) para permitir desarrollo, pruebas y evaluación sin costo ni credenciales reales. **Para conectar a producción y procesar pagos reales**, es indispensable configurar el parámetro `baseUrl` (como cadena global o como diccionario mapeando cada pasarela a su URL productiva).
+> **Entornos y Resolución Automática de URLs (`environment`).** Puedes especificar el entorno destino mediante la opción `environment: "simulator" | "sandbox" | "production"`. El SDK resuelve automáticamente la URL oficial de cada pasarela desde un catálogo cerrado integrado. Por defecto apunta al simulador local (`http://localhost:3000/v1/sim/{gateway}`) o puedes configurarlo contra el servicio en Render (`https://kit-pagos-colombia.onrender.com/v1/sim`). Si necesitas apuntar a una URL específica o mock propio, el parámetro `baseUrl` sigue disponible como anulación explícita.
 
 > **`webhookSecret` no es la llave de API.** En Wompi, Mercado Pago y Kushki el secreto que
 > firma los webhooks es un valor distinto, que se saca de otra parte del panel. Si lo omitís,
@@ -372,25 +372,40 @@ async function cobrarConDiagnostico(request: CreatePaymentRequest) {
 
 Si vas a utilizar este SDK en un entorno de producción para procesar pagos reales con dinero de verdad, ten en cuenta las siguientes consideraciones de arquitectura y normativa financiera:
 
-### 1. URLs Base: Producción vs. Simulador Integrado
-Por diseño de la arquitectura para soportar desarrollo ágil y evaluación académica (RF-09), el SDK incluye integración nativa con el componente `api-simulator`. Si omites `baseUrl`, el SDK apunta por defecto a `http://localhost:3000/v1/sim/{gateway}`, permitiendo probar todo el flujo de cobros y webhooks de forma determinista y sin costo.
+### 1. Resolución de Entornos y URLs Oficiales
 
-**Para procesar pagos reales en producción**, es indispensable configurar el parámetro `baseUrl` apuntando al endpoint oficial productivo de la pasarela activa:
+El SDK incluye un catálogo cerrado de URLs para los tres ambientes soportados, evitando tener que configurar manualmente las direcciones de cada proveedor:
 
-| Pasarela | Endpoint de Producción (Pagos Reales) |
-|---|---|
-| **Wompi** | `https://production.wompi.co/v1` |
-| **Mercado Pago** | `https://api.mercadopago.com/v1` |
-| **Kushki** | `https://api.kushkipagos.com` |
-| **Rapyd** | `https://api.rapyd.net/v1` |
+| Pasarela | Sandbox (`environment: "sandbox"`) | Producción (`environment: "production"`) |
+|---|---|---|
+| **Wompi** | `https://sandbox.wompi.co/v1` | `https://production.wompi.co/v1` |
+| **Mercado Pago** | `https://api.mercadopago.com/v1` | `https://api.mercadopago.com/v1` |
+| **Kushki** | `https://api-uat.kushkipagos.com` | `https://api.kushkipagos.com` |
+| **Rapyd** | `https://sandboxapi.rapyd.net/v1` | `https://api.rapyd.net/v1` |
 
-Puedes configurar `baseUrl` como una URL global (`string`) o como un diccionario para soportar múltiples pasarelas en el mismo servidor:
+**Simulador Integrado y en la Nube (`environment: "simulator"`):**
+Por defecto apunta a `http://localhost:3000/v1/sim/{gateway}` para desarrollo local hermético. Para evaluar contra el simulador público en la nube desplegado en Render, puedes pasar la URL en `baseUrl`:
+```typescript
+const sdkSimulador = new KitPagos({
+  gateway: Gateway.WOMPI,
+  baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim",
+  credentials: {
+    [Gateway.WOMPI]: {
+      publicKey: "pub_test_demo",
+      privateKey: "prv_test_demo",
+    },
+  },
+});
+```
+
+**Para procesar pagos reales en producción o pruebas en sandbox**, basta con configurar `environment`:
 
 ```typescript
 import { KitPagos, Gateway } from "kit-pagos-colombia";
 
 const sdkMultiPasarela = new KitPagos({
   gateway: Gateway.WOMPI,
+  environment: "production",
   credentials: {
     [Gateway.WOMPI]: {
       publicKey: process.env.WOMPI_PUBLIC_KEY!,
@@ -400,10 +415,6 @@ const sdkMultiPasarela = new KitPagos({
       publicKey: process.env.MP_PUBLIC_KEY!,
       privateKey: process.env.MP_ACCESS_TOKEN!,
     },
-  },
-  baseUrl: {
-    [Gateway.WOMPI]: "https://production.wompi.co/v1",
-    [Gateway.MERCADOPAGO]: "https://api.mercadopago.com/v1",
   },
 });
 ```
