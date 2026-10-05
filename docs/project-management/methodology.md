@@ -55,7 +55,7 @@ La Iteración 3 cierra el artefacto completo, no solo la API de Simulación. Son
 | 1 | **API de Simulación completa** | Los escenarios de rechazo, timeout y error, que hoy responden `501`; despliegue en Render; colección Postman versionada | Sin escenarios de fallo no se puede completar la lista de verificación funcional de los prototipos |
 | 2 | **Documentación de datos** | El tercer componente del Kit Pagos: `docs/testing-data/` presentado como artefacto, con su nivel de evidencia y sus huecos por pasarela | Es lo que hace reproducible el experimento por alguien que no sea el equipo |
 | 3 | **Página de presentación** | El sitio que muestra el artefacto sin necesidad de clonar el repositorio | Es cómo el jurado y un evaluador externo acceden al resultado |
-| 4 | **Proyectos prototípicos completos** | Los prototipos A (con SDK) y B (integración directa), ejecutables y medibles | **Son el objeto de medición del experimento**: sin ellos no hay Fase 5 |
+| 4 | **Proyectos prototípicos completos** | Los prototipos A (integración directa, control) y B (con SDK, tratamiento), ejecutables y medibles | **Son el objeto de medición del experimento**: sin ellos no hay Fase 5 |
 
 Dos cosas que hay que resolver **antes** de que el cuarto entregable sea medible, y que no son trabajo de los prototipos:
 
