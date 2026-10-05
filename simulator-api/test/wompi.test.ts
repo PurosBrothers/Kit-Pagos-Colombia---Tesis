@@ -329,11 +329,11 @@ describe("GET /v1/sim/wompi/transactions/:id", () => {
       url: `/v1/sim/wompi/transactions/${nonExistentId}`,
     });
 
+    // Medido contra el sandbox el 5 de octubre de 2026.
     expect(response.statusCode).toBe(404);
-    const body = response.json();
-    expect(body.error).toBeDefined();
-    expect(body.error.type).toBe("NOT_FOUND");
-    expect(body.error.reason).toContain(nonExistentId);
+    expect(response.json()).toEqual({
+      error: { type: "NOT_FOUND_ERROR", reason: "La entidad solicitada no existe" },
+    });
 
     await app.close();
   });

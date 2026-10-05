@@ -450,12 +450,17 @@ describe("Mercado Pago Simulation Routes", () => {
 
       const response = await app.inject({
         method: "GET",
-        url: "/v1/sim/mercadopago/payments/no-existe",
+        url: "/v1/sim/mercadopago/payments/99999999999",
         headers: { "x-simulate-scenario": "NOT_FOUND" },
       });
 
+      // Medido contra la API real el 5 de octubre de 2026.
       expect(response.statusCode).toBe(404);
-      expect(response.json().error).toBe("not_found");
+      const body = response.json();
+      expect(body).toMatchObject({ message: "Payment not found", error: "not_found", status: 404 });
+      expect(body.cause).toHaveLength(1);
+      expect(body.cause[0]).toMatchObject({ code: 2000, description: "Payment not found" });
+      expect(body.cause[0].data).toMatch(/^[^;]+;[0-9a-f-]{36}$/);
 
       await app.close();
     });

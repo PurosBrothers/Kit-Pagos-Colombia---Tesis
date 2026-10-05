@@ -3,6 +3,8 @@ import {
   MercadoPagoPaymentResponse,
 } from "../src/gateways/mercadopago/types";
 import { mpOrderMachine, mpPaymentMachine } from "../src/state/mercadopagoStateMachine";
+import { rememberScenarioTarget } from "../src/state/scenarioTarget";
+import { resetSimulatorState } from "../src/store/GatewayStores";
 
 /**
  * Pruebas de las tablas de Mercado Pago (issue #124, criterio 4).
@@ -68,57 +70,72 @@ const urlDeLaOrden = (o: MercadoPagoOrderResponse): string | undefined =>
   o.transactions.payments[0]?.payment_method.redirect_url;
 
 describe("Tabla de pagos de Mercado Pago", () => {
-  it.each([["approved"], ["rejected"], ["cancelled"]] as const)(
+  it.each([["approved"], ["rejected"], ["cancelled"], ["pending"], ["in_process"]] as const)(
     "un pago en %s no vuelve a moverse al consultarse",
     (estado) => {
-      // El criterio 1 del issue: un pago creado como declinado se consulta como declinado.
-      // Si estos tres tuvieran transición, la consulta los movería a aprobado y volvería
-      // el defecto que el issue reporta.
+      // El criterio 1 del issue: un pago creado declinado se consulta declinado y uno
+      // creado en revisión se consulta en revisión. `in_process` no es final, pero lo que lo
+      // saca de ahí es la revisión de Mercado Pago, que puede acreditarlo o no: la tabla
+      // no tiene fuente para elegir un desenlace.
       const final = pago(estado);
 
       expect(mpPaymentMachine.transition(final, "query")).toBe(final);
       expect(mpPaymentMachine.canTransition(final, "query")).toBe(false);
     },
   );
-
-  it.each([["pending"], ["in_process"]] as const)(
-    "un pago en %s se acredita al consultarlo",
-    (estado) => {
-      const consultado = mpPaymentMachine.transition(pago(estado), "query");
-
-      expect(consultado.status).toBe("approved");
-      expect(mpPaymentMachine.canTransition(pago(estado), "query")).toBe(true);
-    },
-  );
-
-  it("conserva el monto y la referencia al acreditarse", () => {
-    // El criterio 1 del issue en su forma más dura: la respuesta tiene que conservar lo que
-    // se creó, no solo el estado. Cambiar solo el estado perdería monto y referencia.
-    const acreditado = mpPaymentMachine.transition(pago("pending"), "query");
-
-    expect(acreditado.transaction_amount).toBe(35000);
-    expect(acreditado.external_reference).toBe("ORD-MP-4242");
-    expect(acreditado.payer.email).toBe("comprador@example.com");
-    expect(acreditado.id).toBe("9876543210");
-  });
-
-  it("no muta el pago que recibe", () => {
-    const original = pago("pending");
-    const copia = structuredClone(original);
-
-    mpPaymentMachine.transition(original, "query");
-
-    expect(original).toEqual(copia);
-    expect(original.status).toBe("pending");
-  });
 });
 
 describe("Tabla de órdenes de Mercado Pago", () => {
+  beforeEach(() => {
+    resetSimulatorState();
+  });
+
+  afterEach(() => {
+    resetSimulatorState();
+  });
+
   it("una orden action_required pasa a processed al consultarla", () => {
     // La orden nace esperando al pagador en el banco; la consulta dice que ya volvió.
     const consultada = mpOrderMachine.transition(orden("action_required"), "query");
 
     expect(consultada.status).toBe("processed");
+    // `processed | accredited`, el par de la tabla oficial de estados de la orden.
+    expect(consultada.status_detail).toBe("accredited");
+  });
+
+  it("una orden con expired registrado termina expired, no canceled", () => {
+    // La Orders API tiene `expired` y `canceled` como dos estados distintos.
+    rememberScenarioTarget("mercadopago", "order", "ORD01ABCDEF0123456789", "expired");
+
+    const consultada = mpOrderMachine.transition(orden("action_required"), "query");
+
+    expect(consultada.status).toBe("expired");
+    expect(consultada.status_detail).toBe("expired");
+    expect(urlDeLaOrden(consultada)).toBeUndefined();
+  });
+
+  it("una orden con action_required registrado se queda esperando, con su URL", () => {
+    // El pagador que nunca vuelve del banco. La misma referencia es lo que le dice a la
+    // ruta que no hay nada que guardar, y la URL sigue ahí para que pueda volver a ir.
+    rememberScenarioTarget("mercadopago", "order", "ORD01ABCDEF0123456789", "action_required");
+    const pendiente = orden("action_required");
+
+    for (const _ of [1, 2]) {
+      const consultada = mpOrderMachine.transition(pendiente, "query");
+
+      expect(consultada).toBe(pendiente);
+      expect(urlDeLaOrden(consultada)).toBeDefined();
+    }
+  });
+
+  it("falla si el destino registrado no está declarado en la tabla", () => {
+    // `canceled` es un estado real de la orden, pero no es un destino que la creación pueda
+    // pedir. Caer al destino por defecto lo convertiría en una orden cobrada.
+    rememberScenarioTarget("mercadopago", "order", "ORD01ABCDEF0123456789", "canceled");
+
+    expect(() => mpOrderMachine.transition(orden("action_required"), "query")).toThrow(
+      "'canceled' registrado para mercadopago/order no está declarado",
+    );
   });
 
   it("quita la URL de redirección cuando la orden se paga", () => {
@@ -142,7 +159,14 @@ describe("Tabla de órdenes de Mercado Pago", () => {
     expect(consultada.transactions.payments[0].id).toBe("PAY01ABCDEF0123456789");
   });
 
-  it.each([["processed"], ["canceled"], ["failed"], ["created"]] as const)(
+  it.each([
+    ["processed"],
+    ["expired"],
+    ["canceled"],
+    ["failed"],
+    ["created"],
+    ["processing"],
+  ] as const)(
     "una orden en %s no vuelve a moverse al consultarse",
     (estado) => {
       const final = orden(estado);

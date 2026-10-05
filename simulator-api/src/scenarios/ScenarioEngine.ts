@@ -20,6 +20,7 @@ export const DEFAULT_SCENARIO = "APPROVED";
 export enum SimulatorScenario {
   APPROVED = "APPROVED",
   APPROVAL = "APPROVAL",
+  PENDING = "PENDING",
   DECLINED = "DECLINED",
   REJECTED = "REJECTED",
   EXPIRED = "EXPIRED",
@@ -87,8 +88,11 @@ export class ScenarioEngine {
     const normalized = scenario.trim().toUpperCase();
 
     switch (normalized) {
+      // `PENDING` construye lo mismo que el aprobado porque en Wompi los dos nacen
+      // pendientes. La diferencia la pone el destino que registra la ruta, no la creación.
       case "APPROVED":
       case "APPROVAL":
+      case "PENDING":
         if (requestBody.payment_method?.type === "PSE") {
           return this.wompiMockFactory.buildPendingPseResponse(requestBody);
         }

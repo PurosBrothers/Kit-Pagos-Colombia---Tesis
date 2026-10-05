@@ -58,11 +58,13 @@ export interface Transition<TStatus extends string, TRecord = unknown> {
   readonly on: Trigger;
 
   /**
-   * Estado al que lleva. Puede ser igual al de origen: Wompi PSE lo hace.
+   * Estado al que lleva. Puede ser igual al de origen: Wompi PSE lo hace, y también
+   * toda transición cuyo destino registrado es el pendiente del que sale.
    *
-   * Puede ser una función cuando el destino lo decide un dato de la transacción, que
-   * es el caso de Wompi con PSE: el estado final sale del código de banco, y el
-   * sandbox expone tres —`1` aprueba, `2` declina, `3` da error—. Escribir
+   * Puede ser una función cuando el destino lo decide un dato de la transacción o el
+   * destino que registró la creación (`scenarioTargetFor()`). Wompi con PSE es el primer
+   * caso: el estado final sale del código de banco —`1` aprueba y `2` declina (punto 43
+   * del architecture-log), y `3` termina en `ERROR` (medido el 5 de octubre de 2026)—. Escribir
    * `to: "APPROVED"` y resolver `DECLINED` por otro lado sería una regla que miente
    * sobre sí misma.
    */
@@ -78,15 +80,19 @@ export interface Transition<TStatus extends string, TRecord = unknown> {
    * Cómo se construye el registro nuevo, cuando cambiar el estado no basta.
    *
    * Recibe el registro **con el estado destino ya aplicado**, más el destino por si
-   * hace falta. En la mayoría de las transiciones sobra —cambiar el estado es todo lo que
-   * hace falta— y se omite.
+   * hace falta. Cuando el destino es igual al origen recibe el registro original, y
+   * devolverlo tal cual es lo que le dice a la ruta que no hay nada que guardar. En la
+   * mayoría de las transiciones sobra —cambiar el estado es todo lo que hace falta— y
+   * se omite.
    *
-   * Existe para lo que el estado no describe, y hay tres casos en las cuatro tablas:
-   * publicar la URL del banco en el PSE de Wompi, asignar el identificador del pago que
-   * nace cuando se paga la página de Rapyd, y poner `paid: true` junto con `CLO` para que
-   * un pago cerrado no se confunda con uno cobrado. Los tres son cosas que el vocabulario
-   * de estados no puede expresar, y sin el hook habría que escribirlas dentro del router,
-   * que es donde no se pueden probar solas.
+   * Existe para lo que el estado no describe, y hay cuatro casos en las cuatro tablas:
+   * publicar la URL del banco en el PSE de Wompi; asignar el identificador y el desenlace
+   * del pago que nace cuando se paga la página de Rapyd; poner `paid: true` junto con
+   * `CLO` en un pago de Rapyd, para que un pago cerrado no se confunda con uno cobrado; y
+   * quitar la redirección y poner el `status_detail` de una orden de Mercado Pago que sale
+   * de `action_required`. Son cosas que el vocabulario de estados no puede expresar, y sin
+   * el hook habría que escribirlas dentro del router, que es donde no se pueden probar
+   * solas.
    */
   readonly apply?: (record: TRecord, to: TStatus) => TRecord;
 }
@@ -101,6 +107,11 @@ export interface Transition<TStatus extends string, TRecord = unknown> {
  * La primera que coincide gana. Por eso dos transiciones sin predicado no pueden
  * compartir el mismo par `(estado, petición)`: sería el orden de declaración decidiendo
  * el comportamiento. `assertUnambiguousTable()` lo impide.
+ *
+ * Con predicado, el orden sí decide. Si dos `when` del mismo par son verdaderos a la vez,
+ * gana la que se declaró primero y nada lo advierte. La tabla de Wompi tiene tres
+ * transiciones `(PENDING, query)` con predicado, y que no se solapen depende de cómo
+ * están escritos sus `when`, no de esta función.
  */
 export function findTransition<TStatus extends string, TRecord>(
   transitions: readonly Transition<TStatus, TRecord>[],
@@ -119,7 +130,7 @@ export function findTransition<TStatus extends string, TRecord>(
 /**
  * El estado al que lleva la transición, resolviendo `to` si es una función.
  *
- * Se resuelve acá y no en el motor porque `assertUnambiguousTable()` solo necesita
+ * Se resuelve aquí y no en el motor porque `assertUnambiguousTable()` solo necesita
  * mirar el par `(estado, petición)`, y el destino resuelto es lo que se escribe en el
  * registro.
  */
@@ -138,6 +149,11 @@ export function resolveTarget<TStatus extends string, TRecord>(
  * decidiría cuál se aplica. Es un error de la tabla, no del registro, y por eso se
  * detecta al construir la máquina en vez de aparecer como un comportamiento raro en una
  * prueba de integración.
+ *
+ * **Ignora las transiciones con `when`.** Saber si dos predicados se solapan exigiría
+ * evaluarlos sobre todos los registros posibles, y esta función no tiene registros. Una
+ * tabla con predicados que se solapan pasa la verificación y se resuelve por orden de
+ * declaración (ver `findTransition()`); las pruebas de cada tabla son las que lo cubren.
  *
  * @throws Error si dos transiciones sin predicado son indistinguibles.
  */

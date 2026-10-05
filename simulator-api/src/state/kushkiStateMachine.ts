@@ -17,14 +17,14 @@ import { Transition } from "./Transition";
  * una letra con las otras tres pasarelas es lo que hace que un `switch` copiado de Wompi
  * falle en silencio, así que la tabla la declara en el vocabulario nativo y no traducida.
  *
- * `INITIALIZED` es el único estado con salida. El issue lo pide explícitamente como
- * estado intermedio del ciclo de vida, análogo a `PENDING`, y por eso la tabla lo mueve a
- * `APPROVAL` al consultarlo.
+ * `INITIALIZED` es el estado intermedio que pide el issue, análogo a `PENDING`. Nace así
+ * con el escenario `PENDING` y **no tiene salida**: por el criterio 1 del issue, un cobro
+ * creado pendiente se consulta pendiente.
  *
  * **Nivel 3 — sin medir**: `types.ts` anota que `INITIALIZED` no está confirmado con
- * fuente pública para pagos con tarjeta (sí para transferencias). El simulador lo incluye
- * porque el issue lo pide, y la transición declara que desde ahí el cobro se acredita. Es
- * una decisión del simulador, y por eso queda anotada como tal.
+ * fuente pública para pagos con tarjeta (sí para transferencias). Una transición
+ * `INITIALIZED → APPROVAL` afirmaría además cómo termina, y eso tampoco tiene fuente.
+ * Por eso el estado está declarado en el tipo y la tabla queda vacía.
  *
  * ## El HTTP 200 no dice nada
  *
@@ -35,13 +35,18 @@ import { Transition } from "./Transition";
 export const KUSHKI_CHARGE_TRANSITIONS: readonly Transition<
   KushkiTransactionStatus,
   KushkiChargeResponse
->[] = [
-  {
-    /* El cobro quedó inicializado y esperando; al consultarlo, se acreditó. */
-    from: ["INITIALIZED"],
-    on: "query",
-    to: "APPROVAL",
-  },
+>[] = [];
+
+/**
+ * Los destinos que la creación puede registrar para una transferencia iniciada.
+ *
+ * `expiredTransaction` no está: «solo aplica a México» (`docs/testing-data/kushki.md`,
+ * línea 369), y la ruta rechaza `EXPIRED` con `501` antes de emitir el token.
+ */
+export const KUSHKI_TRANSFER_TARGETS: readonly KushkiTransferStatus[] = [
+  "approvedTransaction",
+  "declinedTransaction",
+  "initializedTransaction",
 ];
 
 /**
@@ -102,15 +107,14 @@ export const KUSHKI_TRANSFER_TRANSITIONS: readonly Transition<
      * escenario viaja en la petición que emite el token, y la consulta es otra llamada— así
      * que queda registrado y la tabla lo aplica.
      *
-     * Sin esto, `declinedTransaction` era un estado declarado que **ningún camino podía
-     * alcanzar**: el escenario se ignoraba en las tres rutas de transferencia.
+     * Sin esto, `declinedTransaction` no se alcanzaba desde la creación: el token y el
+     * `init` ignoraban el escenario, y solo se llegaba enviándolo en la consulta.
      */
     from: ["initializedTransaction"],
     on: "query",
     to: (transfer) =>
-      (scenarioTargetFor("kushki", "transfer", transfer.token) as
-        | KushkiTransferStatus
-        | undefined) ?? "approvedTransaction",
+      scenarioTargetFor(KUSHKI_TRANSFER_TARGETS, "kushki", "transfer", transfer.token) ??
+      "approvedTransaction",
   },
 ];
 
@@ -124,7 +128,7 @@ export const kushkiChargeMachine = new StateMachine<
    * `details.transactionStatus`, y en camelCase, mientras que el identificador del cobro
    * sí está en la raíz como `ticketNumber`. Por eso la máquina recibe un `adapter` con la
    * ruta del estado en vez de leer `record.status`: es el caso para el que existe, y
-   * escribir `record.status` acá no compilaría.
+   * escribir `record.status` aquí no compilaría.
    */
   statusOf: (charge) => charge.details.transactionStatus,
   withStatus: (charge, status) => ({

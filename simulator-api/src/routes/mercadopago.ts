@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { GatewayMockFactory } from "../gateways/mercadopago/GatewayMockFactory";
 import {
   MercadoPagoCreateOrderRequestBody,
   MercadoPagoCreatePaymentRequestBody,
+  MercadoPagoOrderStatus,
   MercadoPagoTokenizeCardRequestBody,
 } from "../gateways/mercadopago/types";
 import {
@@ -19,6 +21,16 @@ import {
 } from "../store/ScenarioMarks";
 
 export const DEFAULT_SCENARIO = "APPROVED";
+
+/** Los escenarios de negocio que una orden de PSE sabe producir al crearse. */
+const ORDER_SCENARIOS: ReadonlySet<string> = new Set([
+  "APPROVED",
+  "APPROVAL",
+  "REJECTED",
+  "DECLINED",
+  "EXPIRED",
+  "PENDING",
+]);
 
 /**
  * Router HTTP de Mercado Pago (API de Simulación).
@@ -85,6 +97,66 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
     return true;
   }
 
+  /**
+   * Contesta una falla técnica del escenario, si el escenario pide una.
+   *
+   * Devuelve `undefined` cuando el escenario no es una falla. La comparten la creación de
+   * pagos y la de órdenes: antes solo la de pagos tenía la cadena, y un `TIMEOUT` en
+   * `POST /orders` creaba y guardaba la orden con `201`. Ninguna rama guarda nada: una
+   * falla de transporte no crea ni muta estado.
+   */
+  function technicalFailure(
+    scenario: string,
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): FastifyReply | undefined {
+    if (scenario === "TIMEOUT" || scenario === "GATEWAY_TIMEOUT") {
+      return reply.code(504).send(mockFactory.buildTimeoutResponse());
+    }
+
+    if (scenario === "NETWORK_ERROR" || scenario === "CONNECTION_ERROR") {
+      return ScenarioEngine.handleNetworkError(request, reply);
+    }
+
+    if (scenario === "RATE_LIMIT" || scenario === "TOO_MANY_REQUESTS" || scenario === "429") {
+      return reply.code(429).send(mockFactory.buildRateLimitResponse());
+    }
+
+    if (scenario === "SERVER_ERROR" || scenario === "INTERNAL_ERROR" || scenario === "500") {
+      return reply.code(500).send(mockFactory.buildServerErrorResponse(500));
+    }
+
+    if (scenario === "BAD_GATEWAY" || scenario === "502") {
+      return reply.code(502).send(mockFactory.buildServerErrorResponse(502));
+    }
+
+    if (scenario === "SERVICE_UNAVAILABLE" || scenario === "503") {
+      return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Traduce un escenario de negocio al estado en que debe terminar una orden.
+   *
+   * Traducir es del router, igual que en Kushki: quien sabe que `EXPIRED` es `expired`
+   * en la Orders API es el que conoce la pasarela. Qué destinos existen lo decide la tabla
+   * (`MP_ORDER_TARGETS`). Devuelve `undefined` cuando el escenario no fija un desenlace,
+   * para que la tabla use su destino por defecto.
+   */
+  function orderTargetFor(scenario: string): MercadoPagoOrderStatus | undefined {
+    if (scenario === "EXPIRED") {
+      return "expired";
+    }
+
+    if (scenario === "PENDING") {
+      return "action_required";
+    }
+
+    return undefined;
+  }
+
   // 1. Creación de pago (POST /v1/sim/mercadopago/payments)
   app.post(
     "/v1/sim/mercadopago/payments",
@@ -126,29 +198,10 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      // ── Manejo de escenarios técnicos ──
-      if (scenario === "TIMEOUT" || scenario === "GATEWAY_TIMEOUT") {
-        return reply.code(504).send(mockFactory.buildTimeoutResponse());
-      }
+      const failure = technicalFailure(scenario, request, reply);
 
-      if (scenario === "NETWORK_ERROR" || scenario === "CONNECTION_ERROR") {
-        return ScenarioEngine.handleNetworkError(request, reply);
-      }
-
-      if (scenario === "RATE_LIMIT" || scenario === "TOO_MANY_REQUESTS" || scenario === "429") {
-        return reply.code(429).send(mockFactory.buildRateLimitResponse());
-      }
-
-      if (scenario === "SERVER_ERROR" || scenario === "INTERNAL_ERROR" || scenario === "500") {
-        return reply.code(500).send(mockFactory.buildServerErrorResponse(500));
-      }
-
-      if (scenario === "BAD_GATEWAY" || scenario === "502") {
-        return reply.code(502).send(mockFactory.buildServerErrorResponse(502));
-      }
-
-      if (scenario === "SERVICE_UNAVAILABLE" || scenario === "503") {
-        return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+      if (failure !== undefined) {
+        return failure;
       }
 
       if (scenario === "FLAPPING") {
@@ -209,6 +262,15 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(201).send(response);
       }
 
+      // El pendiente con tarjeta nace en revisión y la consulta lo devuelve igual: la tabla
+      // de pagos no tiene salida para `in_process` (ver `mercadopagoStateMachine.ts`).
+      if (scenario === "PENDING") {
+        const response = mockFactory.buildInProcessResponse(requestBody);
+        mercadopagoPayments.save(String(response.id), response);
+
+        return reply.code(201).send(response);
+      }
+
       return reply
         .code(501)
         .send({ error: `Escenario aún no soportado: ${scenario}` });
@@ -225,7 +287,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       const { id } = request.params;
 
       /*
-       * La consulta responde el pago que se creó, no uno armado acá.
+       * La consulta responde el pago que se creó, no uno armado aquí.
        *
        * Antes fabricaba la respuesta con `transaction_amount: 50000` y una descripción
        * inventada, y el estado salía de la cabecera de la petición: el mismo pago
@@ -233,26 +295,43 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
        * estado que depende de la pregunta no es un estado, y el monto de mentira rompía la
        * conciliación del comercio.
        *
-       * Un identificador que no existe responde 404, porque es lo que responde la API
-       * real y porque un 200 con datos de otro cobro esconde el error.
+       * Un identificador que no existe responde un error, porque un 200 con datos de otro
+       * cobro esconde el error.
        */
       const payment = mercadopagoPayments.findById(id);
 
+      /*
+       * Nivel 1 — medido contra `api.mercadopago.com` el 5 de octubre de 2026:
+       * `GET /v1/payments/1` y `/99999999999` responden este 404 con `cause`. El `data`
+       * de la causa es `<fecha>;<uuid>`; la medición no registró el formato de la fecha,
+       * así que el ISO 8601 de aquí es sintético.
+       *
+       * Limitación: un id no numérico (`/v1/payments/abc`) responde en Mercado Pago un
+       * 404 de su enrutador con otro cuerpo (`"error": "resource not found"`), y el
+       * simulador no lo imita: responde este mismo cuerpo.
+       */
       if (payment === undefined) {
         return reply.code(404).send({
           message: "Payment not found",
           error: "not_found",
           status: 404,
+          cause: [
+            {
+              code: 2000,
+              description: "Payment not found",
+              data: `${new Date().toISOString()};${randomUUID()}`,
+            },
+          ],
         });
       }
 
-      const movido = mpPaymentMachine.transition(payment, "query");
+      const moved = mpPaymentMachine.transition(payment, "query");
 
-      if (movido !== payment) {
-        mercadopagoPayments.save(id, movido);
+      if (moved !== payment) {
+        mercadopagoPayments.save(id, moved);
       }
 
-      return reply.code(200).send(movido);
+      return reply.code(200).send(moved);
     },
   );
 
@@ -268,13 +347,39 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         return reply;
       }
 
-      const scenario = getSimulatorScenario(request);
+      let scenario = getSimulatorScenario(request);
       const requestBody = request.body as MercadoPagoCreateOrderRequestBody;
 
-      if (
-        scenario.toUpperCase() === "REJECTED" ||
-        scenario.toUpperCase() === "DECLINED"
-      ) {
+      const failure = technicalFailure(scenario, request, reply);
+
+      if (failure !== undefined) {
+        return failure;
+      }
+
+      // Igual que en `POST /payments`: falla la primera petición y la siguiente con la misma
+      // referencia crea la orden. Es una falla de transporte, así que tampoco guarda nada.
+      if (scenario === "FLAPPING") {
+        const key = `mp_order_${requestBody?.external_reference ?? "flapping"}`;
+        if (nextFlappingAttempt(key)) {
+          return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+        }
+        scenario = DEFAULT_SCENARIO;
+      }
+
+      /*
+       * Un escenario que la orden no sabe producir responde `501` antes de crear nada,
+       * como en las demás rutas de creación. Antes `FLAPPING`, `DUPLICATE_PAYMENT` o un
+       * nombre inventado se aceptaban con `201` y la consulta respondía `processed`: un
+       * escenario aceptado e ignorado. `DUPLICATE_PAYMENT` no se imita en órdenes porque el
+       * `409` de pagos no está medido para la Orders API.
+       */
+      if (!ORDER_SCENARIOS.has(scenario)) {
+        return reply
+          .code(501)
+          .send({ error: `Escenario aún no soportado: ${scenario}` });
+      }
+
+      if (scenario === "REJECTED" || scenario === "DECLINED") {
         // La pasarela real no rechaza un PSE al crearlo: la orden se crea y el
         // pago muere después, con la orden entera en `failed`. Se reproduce con
         // 402 y no con 201 porque es el código que devolvió la API real.
@@ -292,20 +397,19 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       mercadopagoOrders.save(String(response.id), response);
 
       /*
-       * El escenario se registra acá y la consulta lo aplica.
+       * El escenario se registra aquí y la consulta lo aplica.
        *
-       * El rechazo no pasa por acá: contra la API real, un PSE que falla devuelve `402` con
+       * El rechazo no pasa por aquí: contra la API real, un PSE que falla devuelve `402` con
        * la orden entera en `failed` en el momento de crearla, y eso es lo que responde la
-       * rama de arriba. Lo que sí queda para después de la redirección es la expiración:
-       * Mercado Pago no tiene un estado `expired` para órdenes, y el que le corresponde es
-       * `canceled`. Sin registrarlo, `EXPIRED` se aceptaba con `201` y la consulta
-       * respondía `processed` —un cobro caducado reportado como cobrado.
-       *
-       * Es la traducción al vocabulario de la pasarela, y por eso vive en el router: quien
-       * sabe que `EXPIRED` es `canceled` y no `expired` es el que conoce la pasarela.
+       * rama de arriba. Lo que sí queda para después de la redirección es la expiración
+       * —`expired`, que la Orders API distingue de `canceled`— y el pagador que nunca
+       * vuelve del banco, que deja la orden en `action_required`. Sin registrarlos,
+       * `EXPIRED` y `PENDING` se aceptaban con `201` y la consulta respondía `processed`.
        */
-      if (scenario.toUpperCase() === "EXPIRED") {
-        rememberScenarioTarget("mercadopago", "order", String(response.id), "canceled");
+      const target = orderTargetFor(scenario);
+
+      if (target !== undefined) {
+        rememberScenarioTarget("mercadopago", "order", String(response.id), target);
       }
 
       return reply.code(201).send(response);
@@ -339,25 +443,32 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
        *
        * El escenario no interviene: el desenlace ya lo decidió la creación, y una
        * consulta que cambiara el estado haría que la misma orden fuera `processed` o
-       * `canceled` según quién preguntara.
+       * `expired` según quién preguntara.
        */
       const order = mercadopagoOrders.findById(id);
 
+      /*
+       * Nivel 1 — medido contra `api.mercadopago.com` el 5 de octubre de 2026, con el
+       * token `APP_USR-`: una orden inexistente con la forma del id real
+       * (`ORD01JZZZZZZZZZZZZZZZZZZZZZZZ`) responde este 404. La Orders API usa `errors`,
+       * no el sobre `message`/`error`/`status` de la Payments API.
+       *
+       * Limitación: un id con formato inválido (`ORDabc`) responde en Mercado Pago
+       * `400 invalid_path_param`, y el simulador no lo imita: responde este 404.
+       */
       if (order === undefined) {
         return reply.code(404).send({
-          message: "Order not found",
-          error: "not_found",
-          status: 404,
+          errors: [{ code: "order_not_found", message: "Order not found." }],
         });
       }
 
-      const movida = mpOrderMachine.transition(order, "query");
+      const moved = mpOrderMachine.transition(order, "query");
 
-      if (movida !== order) {
-        mercadopagoOrders.save(id, movida);
+      if (moved !== order) {
+        mercadopagoOrders.save(id, moved);
       }
 
-      return reply.code(200).send(movida);
+      return reply.code(200).send(moved);
     },
   );
 

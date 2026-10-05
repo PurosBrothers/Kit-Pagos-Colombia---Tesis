@@ -5,6 +5,7 @@ import {
   KushkiCreateChargeRequestBody,
   KushkiTransferInitRequestBody,
   KushkiTransferStatus,
+  KushkiTransferTokenRequestBody,
 } from "../gateways/kushki/types";
 import {
   getSimulatorScenario,
@@ -44,10 +45,33 @@ import {
  * ## Los estados están en tablas, no en esta ruta
  *
  * Ninguna ruta de Kushki decide un estado. Las que se mueven lo hacen con la tabla de
- * `src/state/kushkiStateMachine.ts`, y el caso de `INITIALIZED` es el que hace obvio por
- * qué: el simulador necesita ese estado intermedio para el ciclo de vida, pero el verbo
- * HTTP que lo produce no existe. La tabla lo declara como `PENDING` y lo explica.
+ * `src/state/kushkiStateMachine.ts`. El cobro con tarjeta `INITIALIZED` no se mueve: el
+ * simulador necesita ese estado intermedio para el ciclo de vida, pero no hay fuente de
+ * cómo termina, así que la tabla lo declara sin salida y lo explica.
  */
+
+/** Las dos respuestas de Transfer In ante un identificador que no sirve, medidas el 5 de octubre de 2026. */
+const INVALID_BODY = { code: "T001", message: "Cuerpo de la petición inválido." } as const;
+const TRANSFER_NOT_FOUND = { code: "T004", message: "No existe la transacción" } as const;
+
+/** Los escenarios de negocio que una transferencia sabe producir al emitir su token. */
+const TRANSFER_SCENARIOS: ReadonlySet<string> = new Set([
+  "APPROVED",
+  "APPROVAL",
+  "DECLINED",
+  "REJECTED",
+  "PENDING",
+  "INITIALIZED",
+]);
+
+/**
+ * Kushki solo busca la transferencia si el identificador tiene 32 caracteres; con
+ * cualquier otra longitud responde `T001` sin buscarla (medido el 5 de octubre de 2026).
+ */
+function hasTransferIdLength(id: string): boolean {
+  return id.length === 32;
+}
+
 export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
   const mockFactory = new GatewayMockFactory();
 
@@ -64,7 +88,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
    * Ninguna de estas ramas guarda nada: una falla de transporte no crea ni muta estado, y
    * un error no es un cobro en estado de error.
    */
-  function fallaTecnica(
+  function technicalFailure(
     scenario: string,
     request: FastifyRequest,
     reply: FastifyReply,
@@ -104,7 +128,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
    * router, no la tabla. Devuelve `undefined` cuando el escenario no fija un desenlace —el
    * por defecto, o uno técnico ya resuelto— para que la tabla use su destino por defecto.
    */
-  function destinoDeTransferencia(scenario: string): KushkiTransferStatus | undefined {
+  function transferTargetFor(scenario: string): KushkiTransferStatus | undefined {
     if (scenario === "DECLINED" || scenario === "REJECTED") {
       return "declinedTransaction";
     }
@@ -148,10 +172,10 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
           .send({ code: "K001", message: "Cuerpo de la petición inválido." });
       }
 
-      const falla = fallaTecnica(scenario, request, reply);
+      const failure = technicalFailure(scenario, request, reply);
 
-      if (falla !== undefined) {
-        return falla;
+      if (failure !== undefined) {
+        return failure;
       }
 
       if (scenario === "FLAPPING") {
@@ -175,7 +199,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       }
 
       /*
-       * El escenario de negocio se aplica acá, en la creación, y la respuesta sale del
+       * El escenario de negocio se aplica aquí, en la creación, y la respuesta sale del
        * estado que la fábrica construyó. Un cobro con tarjeta se resuelve entero en el
        * `POST`: la pasarela aprueba o rechaza antes de responder, así que no hay nada que
        * decidir después.
@@ -219,7 +243,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
 
       /*
        * Un token de transferencia consultado acá no existe, y hay que decirlo con
-       * un 404.
+       * un error.
        *
        * Importa para que el flujo de PSE se pueda probar de punta a punta: el
        * adaptador no sabe distinguir un token de transferencia de un ticket de
@@ -227,6 +251,12 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
        * la de tarjeta solo si la de transferencia dice que no conoce el identificador.
        * Si el mock contestara 200 a cualquier identificador, la consulta de una
        * transferencia devolvería datos de un cobro con tarjeta.
+       *
+       * Responde **403** y no 404 porque es lo que mide la API real: `GET /charges/{id}`
+       * en Kushki contesta `403 Forbidden` para cualquier identificador, igual que una
+       * ruta que no existe. El mock reproduce eso para que se vea que por esta ruta no
+       * se puede encadenar nada, que es la razón por la que la de transferencia va
+       * primero (punto 48 del architecture-log).
        *
        * La regla de los 32 caracteres hexadecimales vive acá y no en el SDK a
        * propósito: **el mock es el que emite los dos identificadores**, así que sabe
@@ -238,6 +268,12 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
 
       const charge = kushkiCharges.findById(ticketNumber);
 
+      /*
+       * Nivel 3 — decisión del simulador. Esta ruta no existe en Kushki (ver el
+       * encabezado), así que no hay respuesta real que imitar para un ticket que no se
+       * creó: `K404` es un código propio del simulador, no de la pasarela. Se queda en 404
+       * porque el SDK lo traduce a `RESOURCE_NOT_FOUND`, que es lo que pasó.
+       */
       if (charge === undefined) {
         return reply.code(404).send({
           code: "K404",
@@ -255,16 +291,16 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
        * estado.
        *
        * Tampoco hay falla técnica: el cobro ya existe, así que una falla al consultarlo no
-       * lo deshace, y simular un 504 acá devolvería un error donde la pasarela real
+       * lo deshace, y simular un 504 aquí devolvería un error donde la pasarela real
        * devolvería el cobro.
        */
-      const movido = kushkiChargeMachine.transition(charge, "query");
+      const moved = kushkiChargeMachine.transition(charge, "query");
 
-      if (movido !== charge) {
-        kushkiCharges.save(ticketNumber, movido);
+      if (moved !== charge) {
+        kushkiCharges.save(ticketNumber, moved);
       }
 
-      return reply.code(200).send(movido);
+      return reply.code(200).send(moved);
     },
   );
 
@@ -288,20 +324,20 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
    * los dos campos sin los que el paso no tendria sentido, para que una prueba note
    * si el adaptador dejara de mandarlos.
    *
-   * Esta es la creación de la transferencia, y por eso es acá donde el escenario queda
+   * Esta es la creación de la transferencia, y por eso es aquí donde el escenario queda
    * registrado: es la primera de las tres llamadas del ciclo, y las otras dos ya no
    * pueden decidir el desenlace.
    */
   app.post(
     "/v1/sim/kushki/transfer/v1/tokens",
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const scenario = getSimulatorScenario(request);
-      const body = request.body as { bankId?: string; callbackUrl?: string };
+      let scenario = getSimulatorScenario(request);
+      const body = request.body as KushkiTransferTokenRequestBody | undefined;
 
-      const falla = fallaTecnica(scenario, request, reply);
+      const failure = technicalFailure(scenario, request, reply);
 
-      if (falla !== undefined) {
-        return falla;
+      if (failure !== undefined) {
+        return failure;
       }
 
       if (!body?.bankId) {
@@ -311,33 +347,68 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ code: "T002", message: "callbackUrl es obligatorio" });
       }
 
+      /*
+       * Una transferencia vencida no tiene estado colombiano que la represente.
+       * `expiredTransaction` existe en la referencia de Kushki, pero «solo aplica a
+       * México» (`docs/testing-data/kushki.md`, línea 369). Antes `EXPIRED` no registraba
+       * destino y la transferencia terminaba `approvedTransaction`: un PSE vencido
+       * reportado como cobrado. Se rechaza antes de emitir el token, así que no queda
+       * nada guardado.
+       */
+      if (scenario === "EXPIRED") {
+        return reply.code(501).send({
+          error:
+            "Escenario aún no soportado: EXPIRED. Kushki no tiene un estado de transferencia vencida para Colombia.",
+        });
+      }
+
+      // Igual que en el cobro con tarjeta: falla la primera petición y la siguiente con la
+      // misma referencia emite el token. Es una falla de transporte, así que no guarda nada.
+      if (scenario === "FLAPPING") {
+        const key = `kushki_transfer_${body.paymentDescription ?? body.bankId}`;
+        if (nextFlappingAttempt(key)) {
+          return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+        }
+        scenario = "APPROVED";
+      }
+
+      /*
+       * Un escenario que la transferencia no sabe producir responde `501` antes de emitir
+       * el token, como en las demás rutas de creación. Antes `FLAPPING`, `DUPLICATE_PAYMENT`
+       * o un nombre inventado se aceptaban con `201` y la transferencia terminaba
+       * `approvedTransaction`. `DUPLICATE_PAYMENT` no se imita aquí porque el `409` del cobro
+       * con tarjeta es un código del simulador y no hay medición para Transfer In.
+       */
+      if (!TRANSFER_SCENARIOS.has(scenario)) {
+        return reply
+          .code(501)
+          .send({ error: `Escenario aún no soportado: ${scenario}` });
+      }
+
       const { token } = mockFactory.buildTransferToken();
 
       kushkiTransfers.save(
         token,
-        mockFactory.buildTransferSeed(token, {
-          bankId: body.bankId,
-          callbackUrl: body.callbackUrl,
-        }),
+        mockFactory.buildTransferSeed(token, body),
       );
 
       /*
-       * El escenario se registra acá, en la creación, y la consulta lo aplica. Es el
+       * El escenario se registra aquí, en la creación, y la consulta lo aplica. Es el
        * orden que exige el issue #124: la creación decide el desenlace y el resto del
        * flujo solo lo ejecuta.
        *
-       * Antes ninguna de las tres rutas de transferencia leía el escenario, así que un
-       * `DECLINED` pedía un PSE de Kushki y la consulta respondía
-       * `approvedTransaction`: el escenario se aceptaba con `201` y se ignoraba. Por eso
-       * `declinedTransaction` era un estado que ninguna prueba podía alcanzar.
+       * Antes las dos rutas que crean la transferencia (token e `init`) ignoraban el
+       * escenario, así que un `DECLINED` pedía un PSE de Kushki, recibía `201` y la
+       * consulta sin cabecera respondía `approvedTransaction`. Solo se llegaba a
+       * `declinedTransaction` enviando el escenario en la consulta.
        *
-       * Los escenarios técnicos se resuelven antes de llegar acá y no registran nada: una
+       * Los escenarios técnicos se resuelven antes de llegar aquí y no registran nada: una
        * falla técnica no crea ni muta estado, y esta transferencia no llegó a existir.
        */
-      const destino = destinoDeTransferencia(scenario);
+      const target = transferTargetFor(scenario);
 
-      if (destino !== undefined) {
-        rememberScenarioTarget("kushki", "transfer", token, destino);
+      if (target !== undefined) {
+        rememberScenarioTarget("kushki", "transfer", token, target);
       }
 
       return reply.code(201).send({ token });
@@ -351,14 +422,10 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       const scenario = getSimulatorScenario(request);
       const body = request.body as KushkiTransferInitRequestBody;
 
-      const falla = fallaTecnica(scenario, request, reply);
+      const failure = technicalFailure(scenario, request, reply);
 
-      if (falla !== undefined) {
-        return falla;
-      }
-
-      if (!body?.token) {
-        return reply.code(400).send({ code: "T001", message: "Cuerpo de la petición inválido." });
+      if (failure !== undefined) {
+        return failure;
       }
 
       /*
@@ -366,17 +433,24 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
        * tenga guardado. Medido: `{ token }` a secas responde 400 T001 y
        * `{ token, amount }` responde 201. El mock lo exige para que una prueba note si
        * el adaptador dejara de repetirlo.
+       *
+       * Nivel 1 — medido contra `api-uat.kushkipagos.com` el 5 de octubre de 2026: Kushki
+       * valida el cuerpo antes que la existencia. Un token que no tiene 32 caracteres
+       * (`"abc123"`) o un cuerpo sin `amount` responden `400 T001`, aunque el token no
+       * exista.
        */
-      if (!body?.amount) {
-        return reply.code(400).send({ code: "T001", message: "Cuerpo de la petición inválido." });
+      if (!body?.token || !body?.amount || !hasTransferIdLength(body.token)) {
+        return reply.code(400).send(INVALID_BODY);
       }
 
       const transfer = kushkiTransfers.findById(body.token);
 
+      /*
+       * Nivel 1 — medido el 5 de octubre de 2026: `{ token, amount }` con un token de 32
+       * caracteres que Kushki no emitió responde `400 T004 "No existe la transacción"`.
+       */
       if (transfer === undefined) {
-        return reply
-          .code(404)
-          .send({ code: "T004", message: "Transferencia no encontrada" });
+        return reply.code(400).send(TRANSFER_NOT_FOUND);
       }
 
       /*
@@ -387,15 +461,15 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
        * real tampoco tiene.
        *
        * El monto del `init` es el que se guarda: el que vino en el token era una
-       * estimación y el comercio lo repite acá, y la respuesta de estado tiene que
+       * estimación y el comercio lo repite aquí, y la respuesta de estado tiene que
        * reportar el que se cobró.
        */
-      const movida = kushkiTransferMachine.transition(
+      const moved = kushkiTransferMachine.transition(
         { ...transfer, amount: body.amount },
         "pay",
       );
 
-      kushkiTransfers.save(body.token, movida);
+      kushkiTransfers.save(body.token, moved);
 
       return reply.code(201).send(mockFactory.buildTransferInit(body.token));
     },
@@ -423,38 +497,42 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
        * transferencia, y hace falta por lo mismo: el adaptador prueba las dos rutas en
        * orden, y si esta contestara a cualquier identificador, un cobro con tarjeta se
        * reportaría con el vocabulario de transferencia —`approvedTransaction` en vez de
-       * `APPROVAL`— y el orden de las rutas nunca se ejercitaría. Se distinguen por su
-       * forma: el token de transferencia son 32 hex y el ticket de tarjeta son 18.
+       * `APPROVAL`— y el orden de las rutas nunca se ejercitaría.
+       *
+       * Nivel 1 — medido contra `api-uat.kushkipagos.com` el 5 de octubre de 2026: lo que
+       * decide la respuesta es la longitud. Un identificador de exactamente 32
+       * caracteres —hexadecimal o no, en mayúsculas o minúsculas— que no existe responde
+       * `400 T004 "No existe la transacción"`; uno de cualquier otra longitud (6, 18, 31,
+       * 33 y 36 medidos) responde `400 T001 "Cuerpo de la petición inválido."`. El ticket
+       * de tarjeta tiene 18 caracteres, así que cae en `T001`. El SDK traduce los dos a
+       * `INVALID_REQUEST`, y `isUnknownToRoute()` acepta ese código para pasar a la ruta
+       * de tarjeta.
        */
-      if (!/^[0-9a-f]{32}$/.test(token)) {
-        return reply
-          .code(404)
-          .send({ code: "T004", message: "Transferencia no encontrada" });
+      if (!hasTransferIdLength(token)) {
+        return reply.code(400).send(INVALID_BODY);
       }
 
       const transfer = kushkiTransfers.findById(token);
 
       if (transfer === undefined) {
-        return reply
-          .code(404)
-          .send({ code: "T004", message: "Transferencia no encontrada" });
+        return reply.code(400).send(TRANSFER_NOT_FOUND);
       }
 
       /*
        * La tabla mueve la transferencia y la ruta guarda lo que se movió.
        *
-       * Acá es donde el tiempo pasa: la primera consulta cierra la transferencia con el
+       * Aquí es donde el tiempo pasa: la primera consulta cierra la transferencia con el
        * desenlace que registró la creación, y la segunda se la devuelve igual, porque
        * `approvedTransaction` y `declinedTransaction` no tienen salida. Ese es el
        * criterio 1 del issue aplicado a Kushki.
        */
-      const movida = kushkiTransferMachine.transition(transfer, "query");
+      const moved = kushkiTransferMachine.transition(transfer, "query");
 
-      if (movida !== transfer) {
-        kushkiTransfers.save(token, movida);
+      if (moved !== transfer) {
+        kushkiTransfers.save(token, moved);
       }
 
-      return reply.code(200).send(movida);
+      return reply.code(200).send(moved);
     },
   );
 }

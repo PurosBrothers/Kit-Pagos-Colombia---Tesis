@@ -1,9 +1,24 @@
 import { WompiPaymentMethod, WompiTransaction } from "../gateways/wompi/types";
+import { scenarioTargetFor } from "./scenarioTarget";
 import { StateMachine } from "./StateMachine";
 import { Transition } from "./Transition";
 
 /** Los estados nativos de una transacción en Wompi (`types.ts`, línea 50). */
 export type WompiStatus = WompiTransaction["status"];
+
+/**
+ * Los destinos que la creación puede registrar para una transacción de Wompi.
+ *
+ * Solo `PENDING`: es el escenario que deja el cobro sin resolver, y el que el criterio 1
+ * del issue #124 pide poder consultar como pendiente. Los demás desenlaces no se registran
+ * porque nacen resueltos (`DECLINED`, `VOIDED`) o los decide el banco de prueba (PSE).
+ */
+export const WOMPI_DECLARED_TARGETS: readonly WompiStatus[] = ["PENDING"];
+
+/** El destino que registró la creación, si registró alguno. */
+function registeredTarget(transaction: WompiTransaction): WompiStatus | undefined {
+  return scenarioTargetFor(WOMPI_DECLARED_TARGETS, "wompi", "transaction", transaction.id);
+}
 
 /**
  * Si a esta transacción le falta la URL de redirección del banco.
@@ -13,25 +28,28 @@ export type WompiStatus = WompiTransaction["status"];
  * `PENDING` en las dos. La diferencia entre los dos pasos está en este campo, y por eso
  * es el predicado de las dos transiciones del PSE.
  */
-function faltaUrlDelBanco(transaction: WompiTransaction): boolean {
+function lacksBankUrl(transaction: WompiTransaction): boolean {
   return transaction.payment_method?.extra?.async_payment_url === undefined;
 }
 
 /** Si esta transacción se creó con tarjeta. */
-function esTarjeta(transaction: WompiTransaction): boolean {
+function isCard(transaction: WompiTransaction): boolean {
   return transaction.payment_method?.type !== "PSE";
 }
 
 /**
  * El estado final de un PSE, según el banco de prueba elegido.
  *
- * Son los mismos códigos que expone el sandbox de Wompi —`1` aprueba, `2` declina,
- * `3` da error— para que una prueba pueda elegir el desenlace sin depender del azar.
+ * Son los mismos códigos que expone el sandbox de Wompi —`1` «Banco que aprueba», `2`
+ * «Banco que declina», `3` «Banco que simula un error» (`docs/testing-data/wompi.md`,
+ * línea 122)— para que una prueba pueda elegir el desenlace sin depender del azar.
+ * Los tres desenlaces están medidos: `1` y `2` en el punto 43, y `3` el 5 de octubre de
+ * 2026, que termina `ERROR`.
  *
  * Está como función y no como valor fijo en la tabla porque el destino sale del código
  * de banco, no del estado actual. Ver la nota de `Transition.to`.
  */
-function desenlaceDelBanco(transaction: WompiTransaction): WompiStatus {
+function outcomeForBank(transaction: WompiTransaction): WompiStatus {
   const code = transaction.payment_method?.financial_institution_code;
 
   if (code === "2") return "DECLINED";
@@ -39,6 +57,13 @@ function desenlaceDelBanco(transaction: WompiTransaction): WompiStatus {
 
   return "APPROVED";
 }
+
+/**
+ * Nivel 1 — medido contra `sandbox.wompi.co` el 5 de octubre de 2026: el PSE del banco
+ * `3` termina `ERROR` con este `status_message`, y lo mantiene en las consultas
+ * siguientes (observado hasta los 41 865 ms).
+ */
+const ERROR_BANK_STATUS_MESSAGE = "Transacción con ERROR en Sandbox";
 
 /**
  * La tabla de transiciones de Wompi (issue #124).
@@ -56,21 +81,31 @@ function desenlaceDelBanco(transaction: WompiTransaction): WompiStatus {
  * asimetría: nace pendiente y resuelve en la primera consulta, sin que nadie la
  * dispare.
  *
- * **Nivel 2 — medido solo hasta la redirección**: el ciclo de PSE está comprobado hasta
- * que aparece la URL del banco, y de ahí en adelante no, porque resolver exige que una
- * persona autorice la transferencia. `docs/testing-data/README.md` §4 lo lista como
- * hueco conocido de Wompi.
+ * **Nivel 1 — medido contra el sandbox** el 18 de septiembre de 2026 (punto 43 del
+ * `architecture-log.md`): en PSE la URL del banco no viene en la creación y aparece en un
+ * `GET` posterior; el banco `1` resolvió `APPROVED` a los 1075 ms y el `2`, `DECLINED` a
+ * los 1650 ms, los dos sin que nadie visitara el banco. Lo que el sandbox no deja ver es
+ * el orden: la URL y el desenlace llegan en la misma consulta. Que el simulador los separe
+ * en dos consultas es una decisión que reproduce el orden de producción descrito en ese
+ * punto, no una medición.
  *
- * **Nivel 3 — sin confirmar**: el banco de prueba `"3"` simula un error, pero
- * `docs/testing-data/wompi.md` no registra cuál es el estado resultante. La tabla lo
- * mapea a `ERROR` porque es el estado que el vocabulario de Wompi tiene para eso, y
- * queda anotado aquí como decisión pendiente de medición.
+ * **Nivel 1 — medido contra el sandbox** el 5 de octubre de 2026: el banco `3` sigue
+ * `PENDING` sin URL a los 2 931 ms y a los 4 964 ms termina `ERROR`, con
+ * `status_message: "Transacción con ERROR en Sandbox"` y la URL presente. Igual que en
+ * los bancos `1` y `2`, la URL y el desenlace llegan en la misma consulta.
+ *
+ * **Nivel 3 — decisión del simulador**: un cobro creado con el escenario `PENDING` no
+ * resuelve. El sandbox no tiene un banco ni una tarjeta que dejen el cobro pendiente, y
+ * el criterio 1 del issue #124 pide poder consultarlo así.
  *
  * ## Por qué PSE necesita dos reglas y tarjeta necesita una
  *
  * Las tres salen de `PENDING` con un `query`, así que se distinguen todas por `when`.
  * Las de PSE también se diferencian entre sí porque el estado nativo es `PENDING` en
  * las dos consultas.
+ *
+ * Las dos que resuelven consultan primero el destino registrado. Si es `PENDING`, el
+ * destino es el estado de origen y el registro no cambia.
  */
 export const WOMPI_TRANSITIONS: readonly Transition<WompiStatus, WompiTransaction>[] =
   [
@@ -80,7 +115,7 @@ export const WOMPI_TRANSITIONS: readonly Transition<WompiStatus, WompiTransactio
       on: "query",
       to: "PENDING",
       when: (transaction) =>
-        transaction.payment_method?.type === "PSE" && faltaUrlDelBanco(transaction),
+        transaction.payment_method?.type === "PSE" && lacksBankUrl(transaction),
       apply: (transaction) => ({
         ...transaction,
         payment_method: {
@@ -97,16 +132,18 @@ export const WOMPI_TRANSITIONS: readonly Transition<WompiStatus, WompiTransactio
       /* PSE, 2ª consulta: resuelve, y el estado final lo decide el banco. */
       from: ["PENDING"],
       on: "query",
-      to: desenlaceDelBanco,
+      to: (transaction) => registeredTarget(transaction) ?? outcomeForBank(transaction),
       when: (transaction) =>
-        transaction.payment_method?.type === "PSE" && !faltaUrlDelBanco(transaction),
+        transaction.payment_method?.type === "PSE" && !lacksBankUrl(transaction),
+      apply: (transaction, to) =>
+        to === "ERROR" ? { ...transaction, status_message: ERROR_BANK_STATUS_MESSAGE } : transaction,
     },
     {
       /* Tarjeta: resuelve en la primera consulta, porque así se midió. */
       from: ["PENDING"],
       on: "query",
-      to: "APPROVED",
-      when: esTarjeta,
+      to: (transaction) => registeredTarget(transaction) ?? "APPROVED",
+      when: isCard,
     },
   ];
 

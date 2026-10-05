@@ -7,12 +7,24 @@ import {
   RapydCreatePaymentRequestBody,
   RapydCustomerResponse,
   RapydPayment,
-  RapydPaymentStatus,
   RapydPaymentMethodsResponse,
   RapydPaymentMethodType,
   RapydPaymentResponse,
   RapydResponseStatus,
 } from "./types";
+
+/**
+ * El rechazo de tarjeta que reproduce el simulador: fondos insuficientes.
+ *
+ * Nivel 3: es el código que la documentación de Rapyd asigna a la tarjeta de prueba
+ * `4111 1111 1111 1151`, válida para la API de pagos y para la página alojada
+ * (`docs/testing-data/rapyd.md`, sección 2). El prefijo `ERROR_PROCESSING_CARD` es lo que
+ * el normalizador del SDK lee para distinguir un rechazo de un error técnico.
+ */
+export const RAPYD_CARD_DECLINE = {
+  failure_code: "ERROR_PROCESSING_CARD - [51]",
+  failure_message: "Insufficient Funds",
+} as const;
 
 /**
  * Gateway Mock Factory — Rapyd (issue #52).
@@ -97,17 +109,16 @@ export class GatewayMockFactory {
       currency_code: requestBody.currency,
       merchant_reference_id: requestBody.merchant_reference_id,
       receipt_email: requestBody.receipt_email ?? "",
-      failure_code: "ERROR_PROCESSING_CARD - [51]",
-      failure_message: "Insufficient Funds",
+      ...RAPYD_CARD_DECLINE,
       created_at: Math.floor(Date.now() / 1000),
     };
 
     return {
       status: {
-        error_code: "ERROR_PROCESSING_CARD - [51]",
+        error_code: RAPYD_CARD_DECLINE.failure_code,
         status: "ERROR",
-        message: "Insufficient Funds",
-        response_code: "ERROR_PROCESSING_CARD - [51]",
+        message: RAPYD_CARD_DECLINE.failure_message,
+        response_code: RAPYD_CARD_DECLINE.failure_code,
         operation_id: randomBytes(16).toString("hex"),
       },
       data: payment,
@@ -248,9 +259,13 @@ export class GatewayMockFactory {
    *
    * Rapyd separa checkout y pago en recursos distintos, y el adaptador elige la ruta de
    * consulta por el prefijo del identificador. El pago embebido en el checkout es un
-   * resumen —no trae `failure_code`, `failure_message` ni `created_at`— así que al
-   * guardarlo hay que completar esos tres campos, que es lo que lo convierte en un pago
-   * consultable por `GET /payments/{id}`.
+   * resumen —trae `failure_code` y `failure_message` solo si se declinó, y nunca
+   * `created_at`— así que al guardarlo hay que completar esos campos, que es lo que lo
+   * convierte en un pago consultable por `GET /payments/{id}`.
+   *
+   * El fallo se copia del checkout y no se inventa aquí: la consulta del checkout y la del
+   * pago tienen que normalizarse igual, o el comercio vería un rechazo en una y un error
+   * técnico en la otra.
    *
    * Devuelve `undefined` mientras el checkout esté en `NEW`, porque en ese punto no hay
    * pago todavía: nadie entró a la página.
@@ -258,20 +273,20 @@ export class GatewayMockFactory {
   buildPaymentFromCheckout(checkout: RapydCheckout): RapydPayment | undefined {
     const { payment } = checkout;
 
-    if (payment.id === null) {
+    if (payment.id === null || payment.status === null) {
       return undefined;
     }
 
     return {
       id: payment.id,
-      status: (payment.status ?? "CLO") as RapydPaymentStatus,
+      status: payment.status,
       paid: payment.paid ?? false,
       amount: payment.amount,
       currency_code: payment.currency_code,
       merchant_reference_id: payment.merchant_reference_id ?? "",
       receipt_email: payment.receipt_email ?? "",
-      failure_code: "",
-      failure_message: "",
+      failure_code: payment.failure_code ?? "",
+      failure_message: payment.failure_message ?? "",
       created_at: Math.floor(Date.now() / 1000),
     };
   }

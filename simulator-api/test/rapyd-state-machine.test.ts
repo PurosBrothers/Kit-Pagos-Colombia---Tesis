@@ -1,8 +1,11 @@
+import { RAPYD_CARD_DECLINE } from "../src/gateways/rapyd/GatewayMockFactory";
 import { RapydCheckout, RapydPayment } from "../src/gateways/rapyd/types";
 import {
   rapydCheckoutMachine,
   rapydPaymentMachine,
 } from "../src/state/rapydStateMachine";
+import { rememberScenarioTarget } from "../src/state/scenarioTarget";
+import { resetSimulatorState } from "../src/store/GatewayStores";
 
 /**
  * Pruebas de las tablas de Rapyd (issue #124, criterio 4).
@@ -11,7 +14,7 @@ import {
  * `DON`, y el pago, que nace `ACT` y se cierra— y por eso tiene dos tablas. Probarlas
  * separadas permite que la suite falle señalando cuál de las dos se rompió.
  *
- * Igual que en Wompi, no hay HTTP ni store acá: la tabla se llama con un registro.
+ * Igual que en Wompi, no hay HTTP ni store aquí: la tabla se llama con un registro.
  */
 
 function checkout(id = "checkout_01ABCDEF0123456789AB"): RapydCheckout {
@@ -108,6 +111,47 @@ describe("Tabla de transiciones del checkout de Rapyd", () => {
     expect(original).toEqual(copia);
     expect(original.payment.id).toBeNull();
   });
+
+  describe("con un desenlace registrado", () => {
+    beforeEach(() => {
+      resetSimulatorState();
+    });
+
+    afterEach(() => {
+      resetSimulatorState();
+    });
+
+    it("con ERR registrado, la visita termina el checkout con el pago declinado", () => {
+      // El checkout termina igual (`DON`: la página se usó); lo que cambia es el pago que
+      // nace. Lleva el `failure_code` de un rechazo de tarjeta para que el SDK lo
+      // normalice DECLINED y no ERROR.
+      rememberScenarioTarget("rapyd", "checkout", "checkout_01ABCDEF0123456789AB", "ERR");
+
+      const visitado = rapydCheckoutMachine.transition(checkout(), "pay");
+
+      expect(visitado.status).toBe("DON");
+      expect(visitado.payment.id).toMatch(/^payment_[0-9a-f]{32}$/);
+      expect(visitado.payment.status).toBe("ERR");
+      expect(visitado.payment.paid).toBe(false);
+      expect(visitado.payment.failure_code).toBe(RAPYD_CARD_DECLINE.failure_code);
+      expect(visitado.payment.failure_message).toBe(RAPYD_CARD_DECLINE.failure_message);
+    });
+
+    it("sin desenlace registrado, el pago que nace no trae failure_code", () => {
+      const pagado = rapydCheckoutMachine.transition(checkout(), "pay");
+
+      expect(pagado.payment.failure_code).toBeUndefined();
+    });
+
+    it("falla si el destino registrado no está declarado en la tabla", () => {
+      // `ACT` es un estado de pago de Rapyd, pero no un desenlace de la visita.
+      rememberScenarioTarget("rapyd", "checkout", "checkout_01ABCDEF0123456789AB", "ACT");
+
+      expect(() => rapydCheckoutMachine.transition(checkout(), "pay")).toThrow(
+        "'ACT' registrado para rapyd/checkout no está declarado",
+      );
+    });
+  });
 });
 
 describe("Tabla de transiciones del pago de Rapyd", () => {
@@ -170,5 +214,38 @@ describe("Tabla de transiciones del pago de Rapyd", () => {
     expect(original).toEqual(copia);
     expect(original.status).toBe("ACT");
     expect(original.paid).toBe(false);
+  });
+
+  describe("con un desenlace registrado", () => {
+    beforeEach(() => {
+      resetSimulatorState();
+    });
+
+    afterEach(() => {
+      resetSimulatorState();
+    });
+
+    it("con ACT registrado, el PSE pendiente se queda pendiente aunque se consulte dos veces", () => {
+      const pendiente = pago("ACT");
+      rememberScenarioTarget("rapyd", "payment", pendiente.id, "ACT");
+
+      for (const _ of [1, 2]) {
+        const consultado = rapydPaymentMachine.transition(pendiente, "query");
+
+        expect(consultado).toBe(pendiente);
+        expect(consultado.paid).toBe(false);
+      }
+    });
+
+    it("falla si el destino registrado no está declarado en la tabla", () => {
+      // `ERR` y `EXP` son estados de Rapyd, pero sin una medición de cómo llega un PSE a
+      // ellos la tabla no los declara como destino de la consulta.
+      const pendiente = pago("ACT");
+      rememberScenarioTarget("rapyd", "payment", pendiente.id, "EXP");
+
+      expect(() => rapydPaymentMachine.transition(pendiente, "query")).toThrow(
+        "'EXP' registrado para rapyd/payment no está declarado",
+      );
+    });
   });
 });

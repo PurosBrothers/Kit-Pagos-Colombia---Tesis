@@ -154,9 +154,36 @@ describe("PSE en el simulador de Mercado Pago", () => {
     expect(response.statusCode).toBe(200);
     expect(order.id).toBe(created.id);
     expect(order.status).toBe("processed");
+    // `processed | accredited`: el detalle cambia con el estado. Antes la orden pagada
+    // seguía diciendo `waiting_transfer`.
+    expect(order.status_detail).toBe("accredited");
     expect(
       order.transactions.payments[0].payment_method.redirect_url,
     ).toBeUndefined();
+  });
+
+  /**
+   * El pagador que nunca vuelve del banco. Antes de esta ronda, `PENDING` se aceptaba con
+   * `201` y la primera consulta respondía `processed`: el escenario se ignoraba, que es
+   * el mismo defecto que el issue reporta.
+   */
+  it("con PENDING la orden sigue esperando al pagador en cada consulta, con su URL", async () => {
+    const app = buildApp();
+
+    const created = (await createOrder(app, "PENDING")).json();
+
+    for (const _ of [1, 2]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/sim/mercadopago/orders/${created.id}`,
+      });
+      const order = response.json();
+
+      expect(response.statusCode).toBe(200);
+      expect(order.status).toBe("action_required");
+      expect(order.status_detail).toBe("waiting_transfer");
+      expect(order.transactions.payments[0].payment_method.redirect_url).toBeDefined();
+    }
   });
 
   it("crea la orden esperando al pagador, con la URL de redirección", async () => {
@@ -224,11 +251,14 @@ describe("PSE en el simulador de Mercado Pago", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/v1/sim/mercadopago/orders/ORD01NOEXISTE",
+      url: "/v1/sim/mercadopago/orders/ORD01JZZZZZZZZZZZZZZZZZZZZZZZ",
     });
 
+    // Medido contra la API real el 5 de octubre de 2026, con el token `APP_USR-`.
     expect(response.statusCode).toBe(404);
-    expect(response.json().error).toBe("not_found");
+    expect(response.json()).toEqual({
+      errors: [{ code: "order_not_found", message: "Order not found." }],
+    });
   });
 
   /**

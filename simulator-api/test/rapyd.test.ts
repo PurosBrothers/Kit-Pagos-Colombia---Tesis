@@ -337,7 +337,7 @@ describe("mock de Rapyd", () => {
       await app.close();
     });
 
-    it("devuelve 404 con el sobre de Rapyd si el pago no existe", async () => {
+    it("devuelve 400 ERROR_GET_PAYMENT con el sobre de Rapyd si el pago no existe", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -345,7 +345,9 @@ describe("mock de Rapyd", () => {
         url: "/v1/sim/rapyd/payments/payment_inexistente",
       });
 
-      expect(response.statusCode).toBe(404);
+      // 400 y no 404: es el código que midió el sandbox ante un identificador que no es
+      // de un pago, y el que documenta Rapyd para un pago que no existe.
+      expect(response.statusCode).toBe(400);
       expect(response.json().status.error_code).toBe("ERROR_GET_PAYMENT");
 
       await app.close();

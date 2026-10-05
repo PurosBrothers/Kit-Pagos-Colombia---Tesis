@@ -10,7 +10,7 @@
  * verificar, y un cobro y un contador de reintentos compartían un tipo que no describe
  * ninguno de los dos. Un almacén por pasarela con su tipo propio elimina esa conversión.
  *
- * Lo que vive acá **no es estado de máquina**: no es un cobro, no lo consulta el SDK y no
+ * Lo que vive aquí **no es estado de máquina**: no es un cobro, no lo consulta el SDK y no
  * aparece en ninguna respuesta. Es contabilidad interna del simulador sobre cuántas
  * veces se pidió un comportamiento, y por eso se separa del registro que las máquinas de
  * estados van a leer y escribir.
@@ -41,7 +41,7 @@ export function clearDuplicateMarks(): void {
  * `FLAPPING` es una falla que se autorecobra: las primeras peticiones fallan y a partir
  * de la enésima la pasarela contesta bien, que es lo que hace que el `RetryHandler` del
  * SDK termine teniendo éxito. Por eso el estado que importa es un contador, y por eso
- * vive acá y no en el almacén de transacciones.
+ * vive aquí y no en el almacén de transacciones.
  *
  * @param key               Identificador de la petición que está fallando.
  * @param requiredAttempts  Cuántos intentos deben fallar antes de dejar pasar.

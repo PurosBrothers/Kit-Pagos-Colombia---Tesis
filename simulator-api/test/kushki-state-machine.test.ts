@@ -71,12 +71,13 @@ function transferencia(
 }
 
 describe("Tabla de cobros con tarjeta de Kushki", () => {
-  it.each([["APPROVAL"], ["DECLINED"]] as const)(
+  it.each([["APPROVAL"], ["DECLINED"], ["INITIALIZED"]] as const)(
     "un cargo en %s no vuelve a moverse al consultarse",
     (estado) => {
-      // El criterio 1 del issue. Además `DECLINED` tiene que quedarse en `DECLINED`: si
-      // tuviera transición, la consulta lo movería a `APPROVAL` y un cobro rechazado se
-      // reportaría como cobrado.
+      // El criterio 1 del issue. `DECLINED` tiene que quedarse en `DECLINED`: si tuviera
+      // transición, la consulta lo movería a `APPROVAL` y un cobro rechazado se reportaría
+      // como cobrado. `INITIALIZED` tampoco se mueve: un cobro creado pendiente se consulta
+      // pendiente, y no hay fuente de cómo termina.
       const final = cargo(estado);
 
       expect(kushkiChargeMachine.transition(final, "query")).toBe(final);
@@ -84,31 +85,12 @@ describe("Tabla de cobros con tarjeta de Kushki", () => {
     },
   );
 
-  it("un cargo INITIALIZED se acredita al consultarlo", () => {
-    const consultado = kushkiChargeMachine.transition(cargo("INITIALIZED"), "query");
-
-    expect(consultado.details.transactionStatus).toBe("APPROVAL");
-    expect(kushkiChargeMachine.canTransition(cargo("INITIALIZED"), "query")).toBe(true);
-  });
-
-  it("escribe el estado en details y no en la raíz", () => {
+  it("lee y escribe el estado en details y no en la raíz", () => {
     // La forma medida contra la API UAT: el estado vive en `details.transactionStatus`, en
-    // camelCase, mientras que el `ticketNumber` sí está en la raíz. Si la máquina escribiera
-    // en `transaction_status` en la raíz, el normalizador del SDK no encontraría el estado
+    // camelCase, mientras que el `ticketNumber` sí está en la raíz. Si la máquina leyera
+    // `transaction_status` en la raíz, el normalizador del SDK no encontraría el estado
     // y el cobro se reportaría sin resolver.
-    const consultado = kushkiChargeMachine.transition(cargo("INITIALIZED"), "query");
-
-    expect(consultado.details.transactionStatus).toBe("APPROVAL");
-    expect(consultado.ticketNumber).toBe("a263b3997a5b446985");
-  });
-
-  it("no pierde los otros campos de details al cambiar el estado", () => {
-    const consultado = kushkiChargeMachine.transition(cargo("INITIALIZED"), "query");
-
-    expect(consultado.details.subtotalIva0).toBe(35000);
-    expect(consultado.details.currencyCode).toBe("COP");
-    expect(consultado.details.trackingCode).toBe("ORD-KUSHKI-77");
-    expect(consultado.details.contactDetails?.email).toBe("comprador@example.com");
+    expect(kushkiChargeMachine.statusOf(cargo("INITIALIZED"))).toBe("INITIALIZED");
   });
 
   it("no muta el cargo que recibe", () => {
@@ -226,6 +208,27 @@ describe("el desenlace registrado por el escenario", () => {
     );
 
     expect(cerrada.status).toBe("approvedTransaction");
+  });
+
+  it("con el pendiente registrado devuelve la misma transferencia", () => {
+    // El escenario PENDING registra el estado de origen como destino. La misma referencia
+    // es lo que le dice a la ruta que no hay nada que guardar.
+    const token = "16ea5d8beeed4d98948efb09b4d41d9f";
+    rememberScenarioTarget("kushki", "transfer", token, "initializedTransaction");
+    const iniciada = transferencia("initializedTransaction");
+
+    expect(kushkiTransferMachine.transition(iniciada, "query")).toBe(iniciada);
+  });
+
+  it("falla si el destino registrado no está declarado en la tabla", () => {
+    // `expiredTransaction` es un estado real de Kushki, pero solo de México: la tabla no
+    // lo declara. Caer al destino por defecto lo convertiría en una transferencia aprobada.
+    const token = "16ea5d8beeed4d98948efb09b4d41d9f";
+    rememberScenarioTarget("kushki", "transfer", token, "expiredTransaction");
+
+    expect(() =>
+      kushkiTransferMachine.transition(transferencia("initializedTransaction"), "query"),
+    ).toThrow("'expiredTransaction' registrado para kushki/transfer no está declarado");
   });
 
   it("el desenlace de una transferencia no aplica a otra", () => {

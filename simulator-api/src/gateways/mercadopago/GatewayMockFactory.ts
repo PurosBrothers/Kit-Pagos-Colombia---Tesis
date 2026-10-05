@@ -90,6 +90,35 @@ export class GatewayMockFactory {
   }
 
   /**
+   * Construye la respuesta de un pago que quedó en revisión: el pendiente con tarjeta.
+   *
+   * Nivel 1 para el `status_detail`: la cuenta de prueba respondió `pending_review_manual`
+   * con HTTP `201` el 19 de septiembre de 2026 (`docs/testing-data/mercado-pago.md`,
+   * línea 70). Nivel 3 para el `status`: la tabla oficial de resultados de pago lo empareja
+   * con `in_process` (https://www.mercadopago.com.co/developers/en/docs/checkout-api-payments/response-handling/collection-results,
+   * consultada el 5 de octubre de 2026), y la medición no registró el campo `status`.
+   */
+  buildInProcessResponse(
+    requestBody: MercadoPagoCreatePaymentRequestBody,
+    customId?: number | string,
+  ): MercadoPagoPaymentResponse {
+    const now = new Date().toISOString();
+
+    return {
+      id: customId ?? this.generateId(),
+      status: "in_process",
+      status_detail: "pending_review_manual",
+      transaction_amount: requestBody.transaction_amount,
+      currency_id: "COP",
+      description: requestBody.description,
+      external_reference: requestBody.external_reference ?? requestBody.description,
+      payer: requestBody.payer,
+      date_created: now,
+      date_approved: null,
+    };
+  }
+
+  /**
    * Construye la respuesta de un pago expirado.
    */
   buildExpiredResponse(

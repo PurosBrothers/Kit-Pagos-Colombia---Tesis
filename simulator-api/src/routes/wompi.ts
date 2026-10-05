@@ -10,6 +10,7 @@ import {
   WompiCreateTransactionRequestBody,
   WompiTokenizeCardRequestBody,
 } from "../gateways/wompi/types";
+import { rememberScenarioTarget } from "../state/scenarioTarget";
 import { wompiStateMachine } from "../state/wompiStateMachine";
 import { wompiTransactions } from "../store/GatewayStores";
 import {
@@ -138,11 +139,17 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
          * 404. Además la ruta no guardaba nada, así que un cobro creado con un escenario
          * que no pasara por la factoría no se podía consultar después.
          *
-         * Acá queda explícito: se guarda exactamente lo que se va a responder, con el
+         * Aquí queda explícito: se guarda exactamente lo que se va a responder, con el
          * estado que la creación decidió. Que nazca `PENDING` y se resuelva al consultar
          * es correcto —así se midió— y por eso la tabla tiene una transición de tarjeta.
          */
         wompiTransactions.save(response.data.id, response.data);
+
+        // `PENDING` nace igual que el aprobado; lo que lo distingue es que la consulta no lo
+        // resuelve. Es una decisión del simulador (nivel 3), ver `wompiStateMachine.ts`.
+        if (scenario === "PENDING") {
+          rememberScenarioTarget("wompi", "transaction", response.data.id, "PENDING");
+        }
 
         return reply.code(201).send(response);
       } catch (error) {
@@ -162,13 +169,14 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
       const transaction = wompiTransactions.findById(id);
 
       if (!transaction) {
-        // Respond with Wompi's native error shape so the SDK can map it to
-        // KitPagosError(RESOURCE_NOT_FOUND) through ErrorHandler, exactly as
-        // the real API would for an unknown id.
+        // Nivel 1 — medido contra `sandbox.wompi.co` el 5 de octubre de 2026: un id
+        // inexistente (uuid o con la forma del id nativo, con o sin `Authorization`)
+        // responde este 404, sin el id en el mensaje. El SDK lo traduce a
+        // RESOURCE_NOT_FOUND con `ErrorHandler`.
         return reply.code(404).send({
           error: {
-            type: "NOT_FOUND",
-            reason: `Transaction with id '${id}' does not exist`,
+            type: "NOT_FOUND_ERROR",
+            reason: "La entidad solicitada no existe",
           },
         });
       }

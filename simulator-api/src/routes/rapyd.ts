@@ -13,6 +13,7 @@ import {
   rapydCheckoutMachine,
   rapydPaymentMachine,
 } from "../state/rapydStateMachine";
+import { rememberScenarioTarget } from "../state/scenarioTarget";
 import { rapydCheckouts, rapydPayments } from "../store/GatewayStores";
 import {
   hasDuplicateMark,
@@ -21,6 +22,19 @@ import {
 } from "../store/ScenarioMarks";
 
 const DEFAULT_SCENARIO = "APPROVED";
+
+/** El cuerpo de Rapyd ante una página de pago que no existe; la fuente está en `GET /v1/checkout/:id`. */
+const HOSTED_PAGE_NOT_FOUND = {
+  status: {
+    error_code: "ERROR_GET_HOSTED_PAGE_PAYMENT",
+    status: "ERROR",
+    message:
+      "The request tried to retrieve a hosted page, but the page was not found. " +
+      "The request was rejected. Corrective action: Use the ID of a valid hosted page.",
+    response_code: "ERROR_GET_HOSTED_PAGE_PAYMENT",
+    operation_id: "",
+  },
+} as const;
 
 /**
  * Router HTTP de Rapyd (issue #52).
@@ -61,6 +75,46 @@ const DEFAULT_SCENARIO = "APPROVED";
 export async function rapydRoutes(app: FastifyInstance): Promise<void> {
   const mockFactory = new GatewayMockFactory();
 
+  /**
+   * Contesta una falla técnica del escenario, si el escenario pide una.
+   *
+   * Devuelve `undefined` cuando el escenario no es una falla. La comparten las dos rutas
+   * de creación —el pago y el checkout— porque antes la del checkout no tenía ninguna y
+   * un `TIMEOUT` creaba la página con `200`. Ninguna rama guarda nada: una falla de
+   * transporte no crea ni muta estado.
+   */
+  function technicalFailure(
+    scenario: string,
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): FastifyReply | undefined {
+    if (scenario === "TIMEOUT" || scenario === "GATEWAY_TIMEOUT") {
+      return reply.code(504).send(mockFactory.buildTimeoutResponse());
+    }
+
+    if (scenario === "NETWORK_ERROR" || scenario === "CONNECTION_ERROR") {
+      return ScenarioEngine.handleNetworkError(request, reply);
+    }
+
+    if (scenario === "RATE_LIMIT" || scenario === "TOO_MANY_REQUESTS" || scenario === "429") {
+      return reply.code(429).send(mockFactory.buildRateLimitResponse());
+    }
+
+    if (scenario === "SERVER_ERROR" || scenario === "INTERNAL_ERROR" || scenario === "500") {
+      return reply.code(500).send(mockFactory.buildServerErrorResponse(500));
+    }
+
+    if (scenario === "BAD_GATEWAY" || scenario === "502") {
+      return reply.code(502).send(mockFactory.buildServerErrorResponse(502));
+    }
+
+    if (scenario === "SERVICE_UNAVAILABLE" || scenario === "503") {
+      return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+    }
+
+    return undefined;
+  }
+
   app.post(
     "/v1/sim/rapyd/payments",
     async (request: FastifyRequest, reply: FastifyReply) => {
@@ -70,29 +124,10 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
       let scenario = getSimulatorScenario(request);
       const requestBody = request.body as RapydCreatePaymentRequestBody;
 
-      // ── Manejo de escenarios técnicos ──
-      if (scenario === "TIMEOUT" || scenario === "GATEWAY_TIMEOUT") {
-        return reply.code(504).send(mockFactory.buildTimeoutResponse());
-      }
+      const failure = technicalFailure(scenario, request, reply);
 
-      if (scenario === "NETWORK_ERROR" || scenario === "CONNECTION_ERROR") {
-        return ScenarioEngine.handleNetworkError(request, reply);
-      }
-
-      if (scenario === "RATE_LIMIT" || scenario === "TOO_MANY_REQUESTS" || scenario === "429") {
-        return reply.code(429).send(mockFactory.buildRateLimitResponse());
-      }
-
-      if (scenario === "SERVER_ERROR" || scenario === "INTERNAL_ERROR" || scenario === "500") {
-        return reply.code(500).send(mockFactory.buildServerErrorResponse(500));
-      }
-
-      if (scenario === "BAD_GATEWAY" || scenario === "502") {
-        return reply.code(502).send(mockFactory.buildServerErrorResponse(502));
-      }
-
-      if (scenario === "SERVICE_UNAVAILABLE" || scenario === "503") {
-        return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+      if (failure !== undefined) {
+        return failure;
       }
 
       if (scenario === "FLAPPING") {
@@ -135,22 +170,29 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(201).send(expired);
       }
 
+      // PSE se reconoce por el prefijo del metodo de pago, que en Rapyd son 47
+      // tipos `co_pse_{banco}_bank` en vez de un metodo con un campo de banco.
+      const methodType = (requestBody.payment_method as { type?: unknown })?.type;
+      const esPse =
+        typeof methodType === "string" && methodType.startsWith("co_pse_");
+
+      /*
+       * `PENDING` solo existe para PSE, que es el único pago de esta ruta que nace sin
+       * resolver. Con tarjeta el pago nace cerrado, y un pendiente sería un estado que nadie
+       * midió en ese camino.
+       */
+      const wantsPending = scenario === "PENDING" && esPse;
+
       if (
         scenario !== DEFAULT_SCENARIO &&
         scenario !== "APPROVED" &&
-        scenario !== "APPROVAL"
+        scenario !== "APPROVAL" &&
+        !wantsPending
       ) {
         return reply
           .code(501)
           .send({ error: `Escenario aun no soportado: ${scenario}` });
       }
-
-      // PSE se reconoce por el prefijo del metodo de pago, que en Rapyd son 47
-      // tipos `co_pse_{banco}_bank` en vez de un metodo con un campo de banco.
-      // PSE se reconoce por el prefijo del metodo de pago
-      const methodType = (requestBody.payment_method as { type?: unknown })?.type;
-      const esPse =
-        typeof methodType === "string" && methodType.startsWith("co_pse_");
 
       if (esPse) {
         // Rapyd rechaza el pago sin cliente previo, medido como
@@ -179,10 +221,15 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
          *
          * Guardar el estado `ACT` y no el final es lo correcto: el pago todavía no se
          * cobró, y `next_action: "pending_confirmation"` dice exactamente eso. Lo mueve la
-         * tabla cuando el comercio consulta.
+         * tabla cuando el comercio consulta, salvo que la creación haya pedido que siga
+         * pendiente.
          */
         const pse = mockFactory.buildPseCreatedResponse(requestBody);
         rapydPayments.save(pse.data.id, pse.data);
+
+        if (wantsPending) {
+          rememberScenarioTarget("rapyd", "payment", pse.data.id, "ACT");
+        }
 
         return reply.code(201).send(pse);
       }
@@ -205,6 +252,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/v1/sim/rapyd/checkout",
     async (request: FastifyRequest, reply: FastifyReply) => {
+      const scenario = getSimulatorScenario(request);
       const requestBody = request.body as RapydCreateCheckoutRequestBody;
 
       // Rapyd no crea una página sin monto, divisa y país; el mock tampoco, para que una
@@ -221,10 +269,45 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      const failure = technicalFailure(scenario, request, reply);
+
+      if (failure !== undefined) {
+        return failure;
+      }
+
+      const wantsDecline = scenario === "DECLINED" || scenario === "REJECTED";
+
+      /*
+       * Solo el aprobado y el rechazo tienen un desenlace en este camino.
+       *
+       * Un checkout pendiente no necesita escenario: es el que nadie visitó, y se queda en
+       * `NEW` (medido). Para `EXPIRED` no hay medición de cómo termina una página vencida, y
+       * aceptarlo sin aplicarlo dejaría pagar la página igual. Responder 501 hace ruido en
+       * vez de cobrar lo que se pidió que fallara.
+       */
+      if (
+        scenario !== DEFAULT_SCENARIO &&
+        scenario !== "APPROVAL" &&
+        !wantsDecline
+      ) {
+        return reply
+          .code(501)
+          .send({ error: `Escenario aun no soportado: ${scenario}` });
+      }
+
       // 200 y no 201: se midió que Rapyd responde 200 al crear una página de pago, a
       // diferencia de `POST /v1/payments`, que responde 201. La misma API usa los dos.
       const created = mockFactory.buildCheckoutCreatedResponse(requestBody);
       rapydCheckouts.save(created.data.id, created.data);
+
+      /*
+       * El rechazo se registra aquí y lo aplica la visita a la página, que es donde nace el
+       * pago. La página se crea igual, porque en Rapyd la tarjeta se escribe en ella: el
+       * rechazo solo puede ocurrir después.
+       */
+      if (wantsDecline) {
+        rememberScenarioTarget("rapyd", "checkout", created.data.id, "ERR");
+      }
 
       return reply.code(200).send(created);
     },
@@ -242,16 +325,17 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
       const { checkoutId } = request.params as { checkoutId: string };
       const checkout = rapydCheckouts.findById(checkoutId);
 
+      /*
+       * Nivel 1 — medido contra `sandboxapi.rapyd.net` el 5 de octubre de 2026:
+       * `GET /v1/checkout/checkout_<32 hex>` inexistente responde `400` con
+       * `ERROR_GET_HOSTED_PAGE_PAYMENT`. El código que tenía el simulador,
+       * `ERROR_GET_CHECKOUT_PAGE`, no era el de Rapyd. La medición registró el comienzo del
+       * mensaje; el texto completo es el del ejemplo de la documentación oficial
+       * (https://docs.rapyd.net/en/retrieve-checkout-page.html, consultada el 5 de octubre
+       * de 2026), que empieza igual.
+       */
       if (!checkout) {
-        return reply.code(400).send({
-          status: {
-            error_code: "ERROR_GET_CHECKOUT_PAGE",
-            status: "ERROR",
-            message: "",
-            response_code: "ERROR_GET_CHECKOUT_PAGE",
-            operation_id: "",
-          },
-        });
+        return reply.code(400).send(HOSTED_PAGE_NOT_FOUND);
       }
 
       // Lectura pura: la página se paga cuando alguien la visita, no cuando el comercio
@@ -283,16 +367,11 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
       const { checkoutId } = request.params as { checkoutId: string };
       const checkout = rapydCheckouts.findById(checkoutId);
 
+      // Esta página es del simulador y no de la API de Rapyd: el 404 es una decisión del
+      // simulador (nivel 3). El cuerpo es el que Rapyd responde por una página
+      // inexistente, para no tener dos códigos para el mismo caso.
       if (!checkout) {
-        return reply.code(404).send({
-          status: {
-            error_code: "ERROR_GET_CHECKOUT_PAGE",
-            status: "ERROR",
-            message: "",
-            response_code: "ERROR_GET_CHECKOUT_PAGE",
-            operation_id: "",
-          },
-        });
+        return reply.code(404).send(HOSTED_PAGE_NOT_FOUND);
       }
 
       /*
@@ -302,7 +381,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
        * El método `payCheckout` de la fábrica hacía exactamente eso, y por eso se borró: dos
        * copias de la misma regla —una en la tabla y otra en la fábrica— son dos lugares que
        * pueden discrepar, y ya discrepaban. La diferencia real con Wompi sigue en pie y es
-       * intencionada: acá el simulador representa la visita a la página; en Wompi avanza por
+       * intencionada: aquí el simulador representa la visita a la página; en Wompi avanza por
        * consultas porque la URL del banco es un destino externo que no puede servir.
        */
       const pagado = rapydCheckoutMachine.transition(checkout, "pay");
@@ -325,14 +404,16 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
          * dentro del checkout, y no el que se crea con `POST /payments`, es lo que hace que
          * el flujo de tarjeta de Rapyd tenga la misma forma de ciclo de vida que el de PSE.
          */
-        const pago = mockFactory.buildPaymentFromCheckout(pagado);
+        const checkoutPayment = mockFactory.buildPaymentFromCheckout(pagado);
 
-        if (pago !== undefined) {
-          rapydPayments.save(pago.id, pago);
+        if (checkoutPayment !== undefined) {
+          rapydPayments.save(checkoutPayment.id, checkoutPayment);
         }
       }
 
-      return reply.code(200).send({ paid: true, payment_id: pagado.payment.id });
+      return reply
+        .code(200)
+        .send({ paid: pagado.payment.paid === true, payment_id: pagado.payment.id });
     },
   );
 
@@ -342,36 +423,48 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
       const { paymentId } = request.params as { paymentId: string };
 
       /*
-       * La consulta responde el pago que existe, no uno armado acá.
+       * La consulta responde el pago que existe, no uno armado aquí.
        *
        * Antes `buildStatusResponse` devolvía siempre `CLO`, `paid: true`, `amount: "0"` y
        * la referencia vacía, para cualquier identificador. Eso hacía pasar por aprobado un
        * pago que no existía y, cuando sí existía, escondía su monto y su referencia: el
-       * comercio no podía conciliar contra nada. Un pago que seDeclinó además se reportaba
+       * comercio no podía conciliar contra nada. Un pago que se declinó además se reportaba
        * cobrado, porque el método no miraba el estado guardado.
        *
-       * La tabla mueve `ACT` a `CLO` y un pago ya final se devuelve como está. Que el
-       * escenario no intervenga es el criterio 1 del issue: el desenlace lo fijó la
-       * creación.
+       * La tabla mueve `ACT` a `CLO`, salvo que la creación haya pedido que siga pendiente,
+       * y un pago ya final se devuelve como está. Que el escenario de la consulta no
+       * intervenga es el criterio 1 del issue: el desenlace lo fijó la creación.
        */
       const payment = rapydPayments.findById(paymentId);
 
+      /*
+       * Un pago que no existe responde `400`, no `404`.
+       *
+       * Nivel 1 — medido contra el sandbox el 5 de octubre de 2026: `GET
+       * /v1/payments/payment_<32 hex>` inexistente responde `400 ERROR_GET_PAYMENT` con
+       * este mensaje, el mismo del ejemplo «Payment Not Found» de la documentación oficial
+       * (https://docs.rapyd.net/en/retrieve-payment.html). El SDK lo traduce a
+       * INVALID_REQUEST y no a RESOURCE_NOT_FOUND, que es lo mismo que va a recibir contra
+       * Rapyd real.
+       */
       if (!payment) {
-        return reply.code(404).send({
+        return reply.code(400).send({
           status: {
             error_code: "ERROR_GET_PAYMENT",
             status: "ERROR",
-            message: "",
+            message:
+              "The request tried to retrieve a payment, but the payment was not found. " +
+              "The request was rejected. Corrective action: Use a valid payment ID.",
             response_code: "ERROR_GET_PAYMENT",
             operation_id: "",
           },
         });
       }
 
-      const movido = rapydPaymentMachine.transition(payment, "query");
+      const moved = rapydPaymentMachine.transition(payment, "query");
 
-      if (movido !== payment) {
-        rapydPayments.save(paymentId, movido);
+      if (moved !== payment) {
+        rapydPayments.save(paymentId, moved);
       }
 
       return reply.code(200).send({
@@ -382,7 +475,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
           response_code: "",
           operation_id: "",
         },
-        data: movido,
+        data: moved,
       });
     },
   );

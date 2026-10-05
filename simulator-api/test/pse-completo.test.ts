@@ -338,12 +338,22 @@ describe("PSE en las cuatro pasarelas", () => {
     });
 
     it("no inicia una transferencia que no fue creada", async () => {
-      // Antes el `init` respondía `201` para cualquier token. Ahora responde `404 T004`,
-      // que es lo que hace notar que se pierde un paso del ciclo.
+      // Antes el `init` respondía `201` para cualquier token. `400 T004` es lo que
+      // respondió Kushki UAT el 5 de octubre de 2026 a un token de 32 caracteres que no
+      // emitió.
       const response = await iniciar("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4");
 
-      expect(response.statusCode).toBe(404);
-      expect(response.json().code).toBe("T004");
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ code: "T004", message: "No existe la transacción" });
+    });
+
+    it("valida el cuerpo del inicio antes que la existencia del token", async () => {
+      // Medido el 5 de octubre de 2026: `{ token: "abc123", amount }` responde `T001`, no
+      // `T004`, aunque el token tampoco exista.
+      const response = await iniciar("abc123");
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().code).toBe("T001");
     });
 
     /**
@@ -385,29 +395,42 @@ describe("PSE en las cuatro pasarelas", () => {
      * Importa porque el adaptador prueba las dos rutas de consulta en orden: si esta
      * respondiera a cualquier identificador, un cobro con tarjeta se reportaría con el
      * vocabulario de transferencia (`approvedTransaction` en vez de `APPROVAL`) y el orden
-     * de las rutas no se ejercitaría nunca. Se distinguen por su forma: 32 caracteres hex
-     * el token de transferencia, 18 el ticket de tarjeta.
+     * de las rutas no se ejercitaría nunca. Lo que decide la respuesta de Kushki es la
+     * longitud (medido el 5 de octubre de 2026): 32 caracteres el token de transferencia,
+     * 18 el ticket de tarjeta.
      */
     it("no contesta por un ticket de tarjeta, que es de otro método", async () => {
+      // `400 T001` es lo que respondió Kushki UAT por esta ruta ante un identificador de
+      // 18 caracteres (`docs/testing-data/kushki.md`).
       const response = await app.inject({
         method: "GET",
         url: "/v1/sim/kushki/transfer/v1/status/a263b3997a5b446985",
       });
 
-      expect(response.statusCode).toBe(404);
-      expect(response.json().code).toBe("T004");
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ code: "T001", message: "Cuerpo de la petición inválido." });
     });
 
-    it("devuelve 404 si el token no corresponde a una transferencia emitida", async () => {
-      // El token tiene la forma correcta —32 hex— pero nunca se emitió. Antes la ruta
-      // respondía `200 approvedTransaction` a cualquier cosa.
+    it("devuelve 400 T004 si el token tiene 32 caracteres y no se emitió", async () => {
+      // Antes la ruta respondía `200 approvedTransaction` a cualquier cosa.
       const response = await app.inject({
         method: "GET",
         url: "/v1/sim/kushki/transfer/v1/status/a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
       });
 
-      expect(response.statusCode).toBe(404);
-      expect(response.json().code).toBe("T004");
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ code: "T004", message: "No existe la transacción" });
+    });
+
+    it("decide por la longitud y no por el alfabeto del identificador", async () => {
+      // Medido el 5 de octubre de 2026: 32 caracteres no hexadecimales y en mayúsculas
+      // también dan `T004`; 31 y 33 dan `T001`.
+      const consultar = (id: string) =>
+        app.inject({ method: "GET", url: `/v1/sim/kushki/transfer/v1/status/${id}` });
+
+      expect((await consultar("ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ")).json().code).toBe("T004");
+      expect((await consultar("a".repeat(31))).json().code).toBe("T001");
+      expect((await consultar("a".repeat(33))).json().code).toBe("T001");
     });
 
     /*
@@ -429,9 +452,9 @@ describe("PSE en las cuatro pasarelas", () => {
     });
 
     it("devuelve declinedTransaction para el escenario declinado", async () => {
-      // `declinedTransaction` era un estado al que ninguna prueba podía llegar, porque
-      // ninguna de las tres rutas leía el escenario. Con el escenario registrado en el
-      // paso del token, el rechazo se puede observar por la API.
+      // Antes `declinedTransaction` solo se alcanzaba enviando el escenario en la consulta:
+      // el token y el `init` lo ignoraban. Con el escenario registrado en el paso del token,
+      // el rechazo lo decide la creación.
       const token = await emitirToken("DECLINED");
       await iniciar(token);
 
@@ -479,7 +502,8 @@ describe("PSE en las cuatro pasarelas", () => {
     it("responde 404 a un ticket de tarjeta que no se creo, no 200 con datos de otro cobro", async () => {
       // Antes esta ruta armaba un cargo de 50.000 para cualquier identificador de 18
       // caracteres, así que un ticket inexistente pasaba por cobrado. Con el cargo guardado
-      // al crearlo, la respuesta es un 404 nativo.
+      // al crearlo, la respuesta es un 404. `K404` es un código del simulador: esta ruta no
+      // existe en Kushki, así que no hay respuesta real que imitar.
       const response = await app.inject({
         method: "GET",
         url: "/v1/sim/kushki/charges/123456789012345678",

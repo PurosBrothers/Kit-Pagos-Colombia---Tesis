@@ -165,11 +165,15 @@ describe("página de pago de Rapyd", () => {
 
       const response = await app.inject({
         method: "GET",
-        url: "/v1/sim/rapyd/checkout/checkout_noexiste",
+        url: "/v1/sim/rapyd/checkout/checkout_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
       });
 
+      // Medido contra el sandbox el 5 de octubre de 2026.
       expect(response.statusCode).toBe(400);
-      expect(response.json().status.error_code).toBe("ERROR_GET_CHECKOUT_PAGE");
+      expect(response.json().status.error_code).toBe("ERROR_GET_HOSTED_PAGE_PAYMENT");
+      expect(response.json().status.message).toMatch(
+        /^The request tried to retrieve a hosted page, but the page was not found\./,
+      );
 
       await app.close();
     });

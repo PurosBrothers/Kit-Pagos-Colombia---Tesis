@@ -365,10 +365,10 @@ describe("mock de Kushki", () => {
       await app.close();
     });
 
-    it("responde 404 con el error nativo si el ticket no existe", async () => {
+    it("responde 404 si el ticket no existe", async () => {
       // Antes respondía 200 con un cargo inventado. Un 200 sobre un identificador
       // desconocido esconde el error: el comercio cree que consultó un cobro y recibió
-      // datos de otro.
+      // datos de otro. `K404` es un código del simulador: esta ruta no existe en Kushki.
       const app = buildApp();
 
       const response = await app.inject({

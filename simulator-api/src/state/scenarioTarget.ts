@@ -5,15 +5,16 @@
  *
  * Porque hay dos clases de cobro y solo una puede resolver su desenlace en la creación.
  *
- * Un pago **sincrónico** —una tarjeta— nace ya resuelto: la pasarela lo aprueba o lo
- * rechaza antes de responder, así que el escenario se aplica en la propia respuesta y no
- * hace falta recordar nada. `POST /payments` con `DECLINED` devuelve `ERR` y el cobro ya
- * está en su estado final.
+ * Un pago **sincrónico** nace ya resuelto: la pasarela lo aprueba o lo rechaza antes de
+ * responder, así que el escenario se aplica en la propia respuesta y no hace falta
+ * recordar nada. Es la tarjeta de Mercado Pago y de Kushki: `POST /payments` con
+ * `DECLINED` devuelve `rejected` y el cobro ya está en su estado final.
  *
- * Un cobro **asíncrono** —un PSE— nace pendiente: la respuesta dice "ve a pagar al banco",
- * y el desenlace ocurre después, cuando el pagador vuelve. Para PSE no hay forma de que la
- * creación sepa si el banco aprobará. El escenario es lo único que puede decidirlo, así que
- * **la creación lo registra y la transición lo aplica**.
+ * Un cobro **asíncrono** nace pendiente y el desenlace ocurre después: cuando el pagador
+ * vuelve del banco (los PSE), cuando llena la página de pago (la tarjeta de Rapyd) o cuando
+ * la pasarela termina de procesar (la tarjeta de Wompi, que nace `PENDING`). La creación
+ * no puede responder el desenlace, así que **la creación lo registra y la transición lo
+ * aplica**.
  *
  * ## Por qué no va dentro del registro
  *
@@ -38,28 +39,29 @@
 const targets = new Map<string, string>();
 
 /** La clave con la que se guarda y se busca el desenlace de un cobro. */
-function clave(pasarela: string, recurso: string, id: string): string {
-  return `${pasarela}:${recurso}:${id}`;
+function keyFor(gateway: string, resource: string, id: string): string {
+  return `${gateway}:${resource}:${id}`;
 }
 
 /**
  * Registra el estado en el que un cobro asíncrono debe terminar.
  *
- * Lo llama la ruta de creación, con el estado ya traducido al vocabulario de la pasarela:
- * quien decide el texto es la tabla, no la ruta.
+ * Lo llama la ruta de creación, con el escenario ya traducido al vocabulario de la
+ * pasarela. La ruta decide qué se pidió; la tabla decide qué destinos existen, y por eso
+ * `scenarioTargetFor` solo devuelve un estado que la tabla haya declarado.
  *
- * @param pasarela `wompi`, `rapyd`, `mercadopago` o `kushki`.
- * @param recurso  Qué clase de cobro es, para no mezclar vocabularios.
+ * @param gateway  `wompi`, `rapyd`, `mercadopago` o `kushki`.
+ * @param resource Qué clase de cobro es, para no mezclar vocabularios.
  * @param id       Identificador nativo del cobro.
- * @param estado   Estado final, en el vocabulario de esa pasarela.
+ * @param status   Estado final, en el vocabulario de esa pasarela.
  */
 export function rememberScenarioTarget(
-  pasarela: string,
-  recurso: string,
+  gateway: string,
+  resource: string,
   id: string,
-  estado: string,
+  status: string,
 ): void {
-  targets.set(clave(pasarela, recurso, id), estado);
+  targets.set(keyFor(gateway, resource, id), status);
 }
 
 /**
@@ -67,14 +69,38 @@ export function rememberScenarioTarget(
  *
  * Lo consultan las tablas desde su `to` dinámico. `undefined` significa "usa el destino
  * por defecto", que es el caso normal: sin cabecera de escenario el simulador se comporta
- * como la pasarela measuring sin intervención.
+ * como la pasarela medida, sin intervención.
+ *
+ * Recibe la lista de destinos que declara la tabla, y el tipo del resultado sale de esa
+ * lista. Antes cada tabla convertía la cadena con `as`, que el compilador no revisa: un
+ * estado mal escrito en la ruta se volvía estado del cobro.
+ *
+ * @throws Error si el destino registrado no está en la lista. No se cae al destino por
+ *   defecto porque el defecto suele ser el aprobado, y un escenario mal traducido que
+ *   termina en un cobro aprobado es el error que este módulo existe para evitar.
  */
-export function scenarioTargetFor(
-  pasarela: string,
-  recurso: string,
+export function scenarioTargetFor<TStatus extends string>(
+  declaredTargets: readonly TStatus[],
+  gateway: string,
+  resource: string,
   id: string,
-): string | undefined {
-  return targets.get(clave(pasarela, recurso, id));
+): TStatus | undefined {
+  const registered = targets.get(keyFor(gateway, resource, id));
+
+  if (registered === undefined) {
+    return undefined;
+  }
+
+  const declared = declaredTargets.find((target) => target === registered);
+
+  if (declared === undefined) {
+    throw new Error(
+      `El destino '${registered}' registrado para ${gateway}/${resource} no está ` +
+        `declarado en la tabla. Destinos declarados: ${declaredTargets.join(", ")}.`,
+    );
+  }
+
+  return declared;
 }
 
 /**

@@ -206,12 +206,15 @@ export interface RapydCheckout {
   redirect_url: string;
   payment: {
     id: string | null;
-    status: string | null;
+    status: RapydPaymentStatus | null;
     paid?: boolean;
     amount: string;
     currency_code: string;
     merchant_reference_id?: string;
     receipt_email?: string;
+    /** Solo cuando el pago se declinó; el SDK lee el prefijo para distinguir el rechazo. */
+    failure_code?: string;
+    failure_message?: string;
   };
 }
 

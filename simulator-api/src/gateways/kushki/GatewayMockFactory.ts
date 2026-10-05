@@ -7,6 +7,7 @@ import {
   KushkiTransferInitResponse,
   KushkiTransferStatus,
   KushkiTransferStatusResponse,
+  KushkiTransferTokenRequestBody,
 } from "./types";
 
 /**
@@ -188,24 +189,34 @@ export class GatewayMockFactory {
    *   por referencia no tenía contra qué compararse.
    * - El monto era fijo, y un cobro de 20.000 pesos se reportaba como de 150.000.
    *
-   * La transferencia nace acá, cuando se emite el token, y de ahí en adelante la
+   * La transferencia nace aquí, cuando se emite el token, y de ahí en adelante la
    * consulta responde el registro guardado en vez de fabricar uno. Es el mismo cambio
    * que en las otras tres pasarelas: **lo que se guardó es lo que se devuelve.**
    *
-   * `bankId` y `callbackUrl` son los que envió el comercio, y no constantes, porque son
-   * los dos únicos campos de esta respuesta que el requestor controla. El resto se
-   * completa con lo que devuelve una transferencia real de Kushki.
+   * Los campos que envió el comercio al pedir el token vuelven tal cual en la consulta.
+   * Nivel 1 para la referencia: la consulta medida contra Kushki UAT devuelve
+   * `paymentDescription` con la referencia del comercio intacta
+   * (`docs/testing-data/kushki.md`, sección del Transfer In, «La consulta de estado
+   * devuelve otra forma»). `email`, `amount`, `bankId`, `documentType`, `documentNumber`
+   * y `callbackUrl` aparecen en esa misma respuesta, pero el registro no dice si repiten
+   * la petición: que vuelvan tal cual es una decisión del simulador, de nivel 3. Antes la
+   * semilla fijaba `ORDER-SIM-PSE` y un correo de relleno, así que el SDK devolvía siempre
+   * la misma referencia y la conciliación no tenía contra qué compararse.
+   *
+   * Los valores fijos son solo el relleno de un campo que la petición no trajo; el resto
+   * (`country`, `merchantName`, `transactionReference`) lo genera Kushki y no lo controla
+   * el comercio.
    */
   buildTransferSeed(
     token: string,
-    attributes: { bankId?: string; callbackUrl?: string },
+    request: KushkiTransferTokenRequestBody,
   ): KushkiTransferStatusResponse {
     return {
       status: "requestedToken",
       token,
-      paymentDescription: "ORDER-SIM-PSE",
-      email: "comprador@example.com",
-      amount: {
+      paymentDescription: request.paymentDescription ?? "ORDER-SIM-PSE",
+      email: request.email ?? "comprador@example.com",
+      amount: request.amount ?? {
         subtotalIva0: 150000,
         subtotalIva: 0,
         iva: 0,
@@ -213,14 +224,14 @@ export class GatewayMockFactory {
         currency: "COP",
       },
       transactionReference: randomUUID(),
-      bankId: attributes.bankId ?? "001",
-      documentType: "CC",
-      documentNumber: "1999888777",
-      currency: "COP",
+      bankId: request.bankId ?? "001",
+      documentType: request.documentType ?? "CC",
+      documentNumber: request.documentNumber ?? "1999888777",
+      currency: request.currency ?? "COP",
       country: "Colombia",
       created: Date.now(),
       merchantName: "KIT PAGOS COLOMBIA",
-      callbackUrl: attributes.callbackUrl ?? "https://comercio.example.com/retorno",
+      callbackUrl: request.callbackUrl ?? "https://comercio.example.com/retorno",
     };
   }
 

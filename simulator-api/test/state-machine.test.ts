@@ -8,7 +8,7 @@ import {
  * Pruebas de la base de las máquinas de estados (issue #124).
  *
  * El vocabulario es inventado a propósito. La tabla de cada pasarela se prueba en su
- * propio archivo —`wompi.test.ts`, `rapyd.test.ts`— y lo que se verifica acá es que la
+ * propio archivo —`wompi.test.ts`, `rapyd.test.ts`— y lo que se verifica aquí es que la
  * base cumple lo que las cuatro necesitan, no que alguna pasarela particular se
  * comporte bien.
  */
@@ -203,7 +203,7 @@ describe("StateMachine — la base que usan las cuatro pasarelas", () => {
       expect(resultado.extra).toBe("dato");
     });
 
-    it("pasa a `apply` el estado destino, para el caso dinámic", () => {
+    it("pasa a `apply` el estado destino, para el caso dinámico", () => {
       const destinos: Status[] = [];
       const tablaDinamica: Transition<Status, FakeRecord>[] = [
         {
