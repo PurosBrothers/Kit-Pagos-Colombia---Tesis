@@ -6,7 +6,7 @@ import {
   ResolvedCredentials,
   loadServerEnv,
 } from "../auth/CredentialResolver";
-import { classifyTarget, TargetEnvironment } from "../auth/targetEnvironment";
+import { resolveTargetEnvironment, TargetEnvironment } from "../auth/targetEnvironment";
 
 /** Cabecera de respuesta con la advertencia del respaldo en sandbox. */
 export const CREDENTIAL_WARNING_HEADER = "x-kit-pagos-warning";
@@ -33,16 +33,17 @@ function sandboxFallbackWarning(missing: readonly string[]): string {
 /**
  * Proveedor de instancias de KitPagos para la capa REST del Simulador API.
  *
- * Mantiene una instancia única por pasarela para el perfil del servidor (reutilización)
+ * Mantiene instancias cacheadas por pasarela y por ambiente para el perfil del servidor,
  * y construye una instancia nueva bajo demanda cuando la petición trae cabeceras
  * con credenciales del cliente (costo despreciable: el constructor no abre sockets).
  *
- * Permite configurar baseUrl por variable de entorno (<PASARELA>_BASE_URL o SIMULATOR_SDK_BASE_URL),
- * cayendo por defecto a http://localhost:3000/v1/sim/<pasarela>. La URL decide además qué
- * credenciales se pueden usar: ver `resolveClient()`.
+ * Resuelve la URL desde un catálogo cerrado por ambiente (issue #123):
+ * - simulator: se conecta a SIMULATOR_SDK_BASE_URL (o https://kit-pagos-colombia.onrender.com por omisión).
+ * - sandbox: se conecta al sandbox oficial de cada pasarela (catálogo medido).
+ * - production: se conecta al endpoint productivo oficial de cada pasarela (catálogo sin medir).
  */
 export class KitPagosProvider {
-  private readonly serverInstances: Map<Gateway, KitPagos> = new Map();
+  private readonly serverInstances: Map<string, KitPagos> = new Map();
   private readonly credentialResolver: CredentialResolver;
   private readonly env: Record<string, string | undefined>;
 
@@ -57,25 +58,29 @@ export class KitPagosProvider {
   /**
    * Instancia para una operación que llama a la pasarela: cobro, consulta o bancos.
    *
-   * Qué credenciales usa depende de a dónde apunta la API (punto 69):
+   * El cliente declara el ambiente en la cabecera `x-kit-pagos-environment` (issue #123).
+   * La regla de credenciales se aplica sobre el ambiente declarado (punto 69):
    *
-   * - **Simulador:** las del cliente si vienen completas y, si no, las del servidor.
-   * - **Sandbox real:** igual, pero cuando usa las del servidor devuelve una
-   *   advertencia para la respuesta, porque el cliente está probando con la cuenta
-   *   del equipo y no con la suya.
-   * - **Producción:** solo las del cliente. Sin ellas lanza
-   *   `ClientCredentialsRequiredError`, aunque el servidor tenga llaves, porque
-   *   usarlas cobraría con la cuenta de quien desplegó la API.
+   * - **simulator:** credenciales del servidor permitidas (sin advertencia).
+   * - **sandbox:** credenciales del servidor permitidas, devolviendo la advertencia
+   *   `SERVER_SANDBOX_CREDENTIALS_USED` para señalar que se usó la cuenta del equipo.
+   * - **production:** solo credenciales del cliente. Sin ellas lanza
+   *   `ClientCredentialsRequiredError` (HTTP 401) sin tocar la red.
    */
   public resolveClient(gateway: Gateway, headers?: RequestHeaders): GatewayClient {
+    const target = resolveTargetEnvironment(headers, gateway);
     const missing = this.credentialResolver.missingClientHeaders(headers);
-    const target = classifyTarget(gateway, this.resolveBaseUrl(gateway));
 
     if (missing.length > 0 && target === "production") {
       throw new ClientCredentialsRequiredError(gateway, missing);
     }
 
-    const kitPagos = this.instanceFor(gateway, this.credentialResolver.resolve(gateway, headers));
+    const kitPagos = this.instanceFor(
+      gateway,
+      target,
+      this.credentialResolver.resolve(gateway, headers),
+    );
+
     if (missing.length > 0 && target === "sandbox") {
       return { kitPagos, target, warning: sandboxFallbackWarning(missing) };
     }
@@ -90,52 +95,62 @@ export class KitPagosProvider {
    * emite la notificación no puede elegir contra qué se verifica (punto 66).
    */
   public getWebhookVerifier(gateway: Gateway): KitPagos {
-    return this.instanceFor(gateway, this.credentialResolver.resolve(gateway));
+    return this.instanceFor(gateway, "simulator", this.credentialResolver.resolve(gateway));
   }
 
-  private instanceFor(gateway: Gateway, resolved: ResolvedCredentials): KitPagos {
+  private instanceFor(
+    gateway: Gateway,
+    target: TargetEnvironment,
+    resolved: ResolvedCredentials,
+  ): KitPagos {
     if (resolved.source === "client") {
       // Instancia creada al vuelo para credenciales suministradas por el cliente
-      return this.createInstance(gateway, resolved.credentials);
+      return this.createInstance(gateway, target, resolved.credentials);
     }
 
-    let instance = this.serverInstances.get(gateway);
+    const cacheKey = `${gateway}:${target}`;
+    let instance = this.serverInstances.get(cacheKey);
     if (!instance) {
-      instance = this.createInstance(gateway, resolved.credentials);
-      this.serverInstances.set(gateway, instance);
+      instance = this.createInstance(gateway, target, resolved.credentials);
+      this.serverInstances.set(cacheKey, instance);
     }
     return instance;
   }
 
   /**
-   * Resuelve la URL base configurada para la pasarela.
+   * Resuelve la URL base de simulación local o desplegada en Render.
    */
-  public resolveBaseUrl(gateway: Gateway): string | undefined {
-    // 1. Variable específica por pasarela (ej: WOMPI_BASE_URL)
-    const specificVar = `${gateway.toUpperCase()}_BASE_URL`;
-    const specificVal = this.env[specificVar]?.trim();
-    if (specificVal) {
-      return specificVal;
-    }
-
-    // 2. Variable global para el SDK dentro del simulador
+  public resolveSimulatorBaseUrl(gateway: Gateway): string {
     const globalVal = this.env.SIMULATOR_SDK_BASE_URL?.trim();
     if (globalVal) {
       const cleanBase = globalVal.replace(/\/$/, "");
       return `${cleanBase}/v1/sim/${gateway.toLowerCase()}`;
     }
-
-    return undefined;
+    return `https://kit-pagos-colombia.onrender.com/v1/sim/${gateway.toLowerCase()}`;
   }
 
-  private createInstance(gateway: Gateway, credentials: Credentials): KitPagos {
-    const baseUrl = this.resolveBaseUrl(gateway);
+  private createInstance(
+    gateway: Gateway,
+    target: TargetEnvironment,
+    credentials: Credentials,
+  ): KitPagos {
+    if (target === "simulator") {
+      const baseUrl = this.resolveSimulatorBaseUrl(gateway);
+      return new KitPagos({
+        gateway,
+        credentials: {
+          [gateway]: credentials,
+        },
+        baseUrl,
+      });
+    }
+
     return new KitPagos({
       gateway,
       credentials: {
         [gateway]: credentials,
       },
-      ...(baseUrl ? { baseUrl } : {}),
+      environment: target,
     });
   }
 }

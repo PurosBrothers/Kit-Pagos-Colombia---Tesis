@@ -229,7 +229,7 @@ export class GatewayMockFactory {
           type: "PSE",
           extra: {
             ...extra,
-            async_payment_url: `http://localhost:3000/v1/sim/wompi/pse/redirect?ticket_id=${transaction.id}`,
+            async_payment_url: `https://kit-pagos-colombia.onrender.com/v1/sim/wompi/pse/redirect?ticket_id=${transaction.id}`,
           },
         },
       };
@@ -257,7 +257,7 @@ export class GatewayMockFactory {
       data: {
         presigned_acceptance: {
           acceptance_token: `sim_acceptance_${randomUUID()}`,
-          permalink: "http://localhost:3000/v1/sim/wompi/terms",
+          permalink: "https://kit-pagos-colombia.onrender.com/v1/sim/wompi/terms",
         },
       },
     };

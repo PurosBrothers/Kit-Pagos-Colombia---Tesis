@@ -213,7 +213,7 @@ export class GatewayMockFactory {
     const checkout: RapydCheckout = {
       id,
       status: "NEW",
-      redirect_url: `http://localhost:3000/v1/sim/rapyd/checkout/${id}/pagar`,
+      redirect_url: `https://kit-pagos-colombia.onrender.com/v1/sim/rapyd/checkout/${id}/pagar`,
       payment: {
         id: null,
         status: null,

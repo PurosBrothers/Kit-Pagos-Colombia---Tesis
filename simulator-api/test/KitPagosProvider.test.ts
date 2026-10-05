@@ -1,6 +1,7 @@
 import { Gateway } from "kit-pagos-colombia";
 import { ClientCredentialsRequiredError } from "../src/auth/CredentialResolver";
 import { KitPagosProvider } from "../src/services/KitPagosProvider";
+import { ENVIRONMENT_HEADER } from "../src/auth/targetEnvironment";
 
 describe("KitPagosProvider", () => {
   const mockServerEnv = {
@@ -15,7 +16,7 @@ describe("KitPagosProvider", () => {
     "x-gateway-private-key": "prv_custom",
   };
 
-  it("reutiliza la misma instancia para el perfil del servidor", () => {
+  it("reutiliza la misma instancia para el perfil del servidor en el mismo ambiente", () => {
     const provider = new KitPagosProvider(undefined, mockServerEnv);
 
     const instance1 = provider.resolveClient(Gateway.WOMPI).kitPagos;
@@ -24,13 +25,21 @@ describe("KitPagosProvider", () => {
     expect(instance1).toBe(instance2);
   });
 
-  it("mantiene instancias separadas por pasarela", () => {
+  it("mantiene instancias separadas por pasarela y por ambiente", () => {
     const provider = new KitPagosProvider(undefined, mockServerEnv);
 
-    const wompiInstance = provider.resolveClient(Gateway.WOMPI).kitPagos;
-    const mpInstance = provider.resolveClient(Gateway.MERCADOPAGO).kitPagos;
+    const wompiSim = provider.resolveClient(Gateway.WOMPI, {
+      [ENVIRONMENT_HEADER]: "simulator",
+    }).kitPagos;
+    const wompiSandbox = provider.resolveClient(Gateway.WOMPI, {
+      [ENVIRONMENT_HEADER]: "sandbox",
+    }).kitPagos;
+    const mpSim = provider.resolveClient(Gateway.MERCADOPAGO, {
+      [ENVIRONMENT_HEADER]: "simulator",
+    }).kitPagos;
 
-    expect(wompiInstance).not.toBe(mpInstance);
+    expect(wompiSim).not.toBe(wompiSandbox);
+    expect(wompiSim).not.toBe(mpSim);
   });
 
   it("crea una instancia nueva bajo demanda cuando se envían cabeceras de cliente", () => {
@@ -45,56 +54,49 @@ describe("KitPagosProvider", () => {
     expect(clientInstance1).not.toBe(clientInstance2);
   });
 
-  it("resuelve baseUrl específica por pasarela si la variable está definida", () => {
+  it("resuelve baseUrl de simulación con SIMULATOR_SDK_BASE_URL agregando el path de la pasarela", () => {
     const customEnv = {
       ...mockServerEnv,
-      WOMPI_BASE_URL: "https://sandbox.wompi.co/v1",
+      SIMULATOR_SDK_BASE_URL: "https://kit-pagos-colombia.onrender.com",
     };
     const provider = new KitPagosProvider(undefined, customEnv);
 
-    expect(provider.resolveBaseUrl(Gateway.WOMPI)).toBe("https://sandbox.wompi.co/v1");
-    // Mercado Pago no tiene variable específica configurada
-    expect(provider.resolveBaseUrl(Gateway.MERCADOPAGO)).toBeUndefined();
-  });
-
-  it("resuelve baseUrl global con SIMULATOR_SDK_BASE_URL agregando el path de la pasarela", () => {
-    const customEnv = {
-      ...mockServerEnv,
-      SIMULATOR_SDK_BASE_URL: "https://simulator.myapi.com",
-    };
-    const provider = new KitPagosProvider(undefined, customEnv);
-
-    expect(provider.resolveBaseUrl(Gateway.WOMPI)).toBe(
-      "https://simulator.myapi.com/v1/sim/wompi",
+    expect(provider.resolveSimulatorBaseUrl(Gateway.WOMPI)).toBe(
+      "https://kit-pagos-colombia.onrender.com/v1/sim/wompi",
     );
-    expect(provider.resolveBaseUrl(Gateway.MERCADOPAGO)).toBe(
-      "https://simulator.myapi.com/v1/sim/mercadopago",
+    expect(provider.resolveSimulatorBaseUrl(Gateway.MERCADOPAGO)).toBe(
+      "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago",
     );
   });
 
-  /** Las credenciales que la API usa dependen de a dónde apunta (punto 69). */
-  describe("resolveClient() according to the target environment", () => {
-    const productionEnv = { ...mockServerEnv, WOMPI_BASE_URL: "https://production.wompi.co/v1" };
-    const sandboxEnv = { ...mockServerEnv, WOMPI_BASE_URL: "https://sandbox.wompi.co/v1" };
+  it("resuelve baseUrl de simulación por defecto hacia Render", () => {
+    const provider = new KitPagosProvider(undefined, mockServerEnv);
+    expect(provider.resolveSimulatorBaseUrl(Gateway.WOMPI)).toBe(
+      "https://kit-pagos-colombia.onrender.com/v1/sim/wompi",
+    );
+  });
 
-    it("should refuse the server credentials against production, even when the server has them", () => {
-      const provider = new KitPagosProvider(undefined, productionEnv);
+  /** Las credenciales que la API usa dependen del ambiente declarado (punto 69). */
+  describe("resolveClient() according to declared environment", () => {
+    it("should refuse server credentials against production, even when the server has them", () => {
+      const provider = new KitPagosProvider(undefined, mockServerEnv);
 
-      expect(() => provider.resolveClient(Gateway.WOMPI)).toThrow(ClientCredentialsRequiredError);
-      expect(() => provider.resolveClient(Gateway.WOMPI)).toThrow(
-        /x-gateway-public-key, x-gateway-private-key/,
-      );
+      expect(() =>
+        provider.resolveClient(Gateway.WOMPI, { [ENVIRONMENT_HEADER]: "production" }),
+      ).toThrow(ClientCredentialsRequiredError);
+      expect(() =>
+        provider.resolveClient(Gateway.WOMPI, { [ENVIRONMENT_HEADER]: "production" }),
+      ).toThrow(/x-gateway-public-key, x-gateway-private-key/);
     });
 
-    /**
-     * Es el caso que hoy es más peligroso que no mandar nada: el desarrollador cree que
-     * usa su cuenta y, por una cabecera mal escrita, cobra con la del operador.
-     */
     it("should name the missing header when production credentials come incomplete", () => {
-      const provider = new KitPagosProvider(undefined, productionEnv);
+      const provider = new KitPagosProvider(undefined, mockServerEnv);
 
       try {
-        provider.resolveClient(Gateway.WOMPI, { "x-gateway-public-key": "pub_prod_cliente" });
+        provider.resolveClient(Gateway.WOMPI, {
+          [ENVIRONMENT_HEADER]: "production",
+          "x-gateway-public-key": "pub_prod_cliente",
+        });
         throw new Error("debió lanzar");
       } catch (error) {
         expect(error).toBeInstanceOf(ClientCredentialsRequiredError);
@@ -105,30 +107,23 @@ describe("KitPagosProvider", () => {
     });
 
     it("should use complete client credentials against production, without a warning", () => {
-      const provider = new KitPagosProvider(undefined, productionEnv);
+      const provider = new KitPagosProvider(undefined, mockServerEnv);
 
-      const client = provider.resolveClient(Gateway.WOMPI, clientHeaders);
+      const client = provider.resolveClient(Gateway.WOMPI, {
+        [ENVIRONMENT_HEADER]: "production",
+        ...clientHeaders,
+      });
 
       expect(client.target).toBe("production");
       expect(client.warning).toBeUndefined();
     });
 
-    /** Mercado Pago comparte host entre prueba y producción, así que no hay sandbox que reconocer. */
-    it("should treat the real Mercado Pago host as production", () => {
-      const provider = new KitPagosProvider(undefined, {
-        ...mockServerEnv,
-        MERCADOPAGO_BASE_URL: "https://api.mercadopago.com/v1",
+    it("should fall back to server credentials against sandbox, with the recommendation", () => {
+      const provider = new KitPagosProvider(undefined, mockServerEnv);
+
+      const client = provider.resolveClient(Gateway.WOMPI, {
+        [ENVIRONMENT_HEADER]: "sandbox",
       });
-
-      expect(() => provider.resolveClient(Gateway.MERCADOPAGO)).toThrow(
-        ClientCredentialsRequiredError,
-      );
-    });
-
-    it("should fall back to the server credentials against a sandbox, with the recommendation", () => {
-      const provider = new KitPagosProvider(undefined, sandboxEnv);
-
-      const client = provider.resolveClient(Gateway.WOMPI);
 
       expect(client.target).toBe("sandbox");
       expect(client.warning).toContain(
@@ -138,22 +133,28 @@ describe("KitPagosProvider", () => {
     });
 
     it("should say which header is missing when sandbox credentials come incomplete", () => {
-      const provider = new KitPagosProvider(undefined, sandboxEnv);
+      const provider = new KitPagosProvider(undefined, mockServerEnv);
 
       const client = provider.resolveClient(Gateway.WOMPI, {
+        [ENVIRONMENT_HEADER]: "sandbox",
         "x-gateway-private-key": "prv_test_cliente",
       });
 
       expect(client.warning).toMatch(/falta: x-gateway-public-key\.$/);
     });
 
-    it("should not warn when the client brings its own sandbox credentials", () => {
-      const provider = new KitPagosProvider(undefined, sandboxEnv);
+    it("should not warn when client brings its own sandbox credentials", () => {
+      const provider = new KitPagosProvider(undefined, mockServerEnv);
 
-      expect(provider.resolveClient(Gateway.WOMPI, clientHeaders).warning).toBeUndefined();
+      expect(
+        provider.resolveClient(Gateway.WOMPI, {
+          [ENVIRONMENT_HEADER]: "sandbox",
+          ...clientHeaders,
+        }).warning,
+      ).toBeUndefined();
     });
 
-    it("should keep the local simulator free of restrictions and warnings", () => {
+    it("should default to simulator without restrictions and warnings when header is omitted", () => {
       const provider = new KitPagosProvider(undefined, mockServerEnv);
 
       const client = provider.resolveClient(Gateway.WOMPI);
@@ -162,12 +163,8 @@ describe("KitPagosProvider", () => {
       expect(client.warning).toBeUndefined();
     });
 
-    /**
-     * Verificar no llama a la pasarela y el secreto sale solo del servidor (punto 66), así
-     * que apuntar a producción no puede dejar a la API sin poder verificar webhooks.
-     */
-    it("should keep verifying webhooks with the server profile when pointed at production", () => {
-      const provider = new KitPagosProvider(undefined, productionEnv);
+    it("should keep verifying webhooks with the server profile", () => {
+      const provider = new KitPagosProvider(undefined, mockServerEnv);
 
       expect(() => provider.getWebhookVerifier(Gateway.WOMPI)).not.toThrow();
     });

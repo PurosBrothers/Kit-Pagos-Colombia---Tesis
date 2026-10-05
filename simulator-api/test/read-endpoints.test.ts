@@ -271,8 +271,6 @@ describe("GET /v1/api/payments/:id (issue #103)", () => {
    * exactamente la mutación que se hizo en la revisión de #118.
    */
   describe("when the gateway points at a real API", () => {
-    const readAgainst = (baseUrl: string) =>
-      appWith({ ...SERVER_CREDENTIALS, WOMPI_BASE_URL: baseUrl });
     let fetchSpy: jest.SpyInstance;
 
     beforeEach(() => {
@@ -286,25 +284,27 @@ describe("GET /v1/api/payments/:id (issue #103)", () => {
     });
 
     it("should refuse the server credentials on GET /payments/:id against production without calling the gateway", async () => {
-      const production = readAgainst("https://production.wompi.co/v1");
+      const production = appWith(SERVER_CREDENTIALS);
 
       const response = await production.inject({
         method: "GET",
         url: "/v1/api/payments/tx-cualquiera?gateway=wompi",
+        headers: { "x-kit-pagos-environment": "production" },
       });
 
       expect(response.statusCode).toBe(401);
-      expect(response.json().message).toContain("la trata como producción");
+      expect(response.json().message).toContain("producción");
       expect(fetchSpy).not.toHaveBeenCalled();
       await production.close();
     });
 
     it("should warn in the header and the body of GET /payments/:id when it falls back to the server credentials in a sandbox", async () => {
-      const sandbox = readAgainst("https://sandbox.wompi.co/v1");
+      const sandbox = appWith(SERVER_CREDENTIALS);
 
       const response = await sandbox.inject({
         method: "GET",
         url: "/v1/api/payments/tx-cualquiera?gateway=wompi",
+        headers: { "x-kit-pagos-environment": "sandbox" },
       });
 
       expect(fetchSpy).toHaveBeenCalled();
@@ -316,25 +316,27 @@ describe("GET /v1/api/payments/:id (issue #103)", () => {
     });
 
     it("should refuse the server credentials on GET /pse-banks against production without calling the gateway", async () => {
-      const production = readAgainst("https://production.wompi.co/v1");
+      const production = appWith(SERVER_CREDENTIALS);
 
       const response = await production.inject({
         method: "GET",
         url: "/v1/api/pse-banks?gateway=wompi",
+        headers: { "x-kit-pagos-environment": "production" },
       });
 
       expect(response.statusCode).toBe(401);
-      expect(response.json().message).toContain("la trata como producción");
+      expect(response.json().message).toContain("producción");
       expect(fetchSpy).not.toHaveBeenCalled();
       await production.close();
     });
 
     it("should warn in the header and the body of GET /pse-banks when it falls back to the server credentials in a sandbox", async () => {
-      const sandbox = readAgainst("https://sandbox.wompi.co/v1");
+      const sandbox = appWith(SERVER_CREDENTIALS);
 
       const response = await sandbox.inject({
         method: "GET",
         url: "/v1/api/pse-banks?gateway=wompi",
+        headers: { "x-kit-pagos-environment": "sandbox" },
       });
 
       expect(fetchSpy).toHaveBeenCalled();

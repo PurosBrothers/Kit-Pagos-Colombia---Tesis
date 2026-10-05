@@ -1,60 +1,47 @@
-import { Gateway } from "kit-pagos-colombia";
+import { Gateway, KitPagosError, KitPagosErrorCode } from "kit-pagos-colombia";
+
+/** Cabecera HTTP donde el cliente declara el ambiente al que desea dirigir la petición. */
+export const ENVIRONMENT_HEADER = "x-kit-pagos-environment";
 
 /**
- * A dónde van las llamadas del SDK que arma la API, según su URL base.
- *
- * - `simulator`: los mocks de `/v1/sim/<pasarela>`, locales o desplegados.
- * - `sandbox`: el ambiente de pruebas real de la pasarela.
- * - `production`: todo lo demás, porque no se puede descartar que cobre dinero real.
+ * A dónde van las llamadas del SDK que arma la API:
+ * - `simulator`: los mocks de `/v1/sim/<pasarela>`, locales o desplegados en Render.
+ * - `sandbox`: el ambiente de pruebas oficial de cada pasarela (catálogo cerrado medido).
+ * - `production`: los endpoints de producción oficiales de cada pasarela (catálogo cerrado sin medir).
  */
 export type TargetEnvironment = "simulator" | "sandbox" | "production";
 
 /**
- * Hosts de sandbox que publica cada pasarela.
+ * Resuelve el ambiente destino a partir de las cabeceras HTTP de la petición (issue #123).
  *
- * Mercado Pago no tiene ninguno: usa `api.mercadopago.com` para prueba y para
- * producción, y sus llaves de prueba empiezan con `APP_USR-`, igual que las de
- * producción (medido en el `.env` del proyecto). Como no hay forma de distinguirlos,
- * una URL real de Mercado Pago se trata como producción (punto 69).
+ * - Sin cabecera (o vacía): devuelve `simulator`, que es el valor seguro por defecto.
+ * - Con valor válido (`simulator`, `sandbox` o `production`): devuelve ese ambiente.
+ * - Con valor desconocido o inválido: lanza `KitPagosError` con código `INVALID_REQUEST` (HTTP 400).
  */
-const SANDBOX_HOSTS: Readonly<Record<Gateway, readonly string[]>> = {
-  [Gateway.WOMPI]: ["sandbox.wompi.co"],
-  [Gateway.RAPYD]: ["sandboxapi.rapyd.net"],
-  [Gateway.KUSHKI]: ["api-uat.kushkipagos.com"],
-  [Gateway.MERCADOPAGO]: [],
-};
-
-/**
- * Clasifica la URL base con que se instancia el SDK para una pasarela.
- *
- * Sin URL es el simulador, porque ese es el valor por omisión de los cuatro
- * adaptadores (`http://localhost:3000/v1/sim/<pasarela>`). Una URL que no se puede
- * leer, o un host que no es un sandbox conocido, se trata como producción: ante la
- * duda, la API no presta las credenciales del servidor.
- */
-export function classifyTarget(
-  gateway: Gateway,
-  baseUrl: string | undefined,
+export function resolveTargetEnvironment(
+  headers?: Record<string, string | string[] | undefined>,
+  gateway: Gateway = Gateway.WOMPI,
 ): TargetEnvironment {
-  if (baseUrl === undefined) {
+  if (!headers) {
     return "simulator";
   }
 
-  let url: URL;
-  try {
-    url = new URL(baseUrl);
-  } catch {
-    return "production";
-  }
+  const rawValue = headers[ENVIRONMENT_HEADER] ?? headers[ENVIRONMENT_HEADER.toLowerCase()];
+  const envValue = Array.isArray(rawValue) ? rawValue[0] : rawValue;
 
-  const simulatorPath = `/v1/sim/${gateway.toLowerCase()}`;
-  if (url.pathname.replace(/\/+$/, "").endsWith(simulatorPath)) {
+  if (!envValue || envValue.trim() === "") {
     return "simulator";
   }
 
-  if (url.protocol === "https:" && SANDBOX_HOSTS[gateway].includes(url.hostname)) {
-    return "sandbox";
+  const normalized = envValue.trim().toLowerCase();
+  if (normalized === "simulator" || normalized === "sandbox" || normalized === "production") {
+    return normalized as TargetEnvironment;
   }
 
-  return "production";
+  throw new KitPagosError(
+    KitPagosErrorCode.INVALID_REQUEST,
+    gateway,
+    null,
+    `Ambiente '${envValue}' no válido: use simulator, sandbox o production.`,
+  );
 }
