@@ -7,6 +7,7 @@ import {
   RapydCreatePaymentRequestBody,
   RapydCustomerResponse,
   RapydPayment,
+  RapydPaymentStatus,
   RapydPaymentMethodsResponse,
   RapydPaymentMethodType,
   RapydPaymentResponse,
@@ -239,6 +240,39 @@ export class GatewayMockFactory {
         phone_number: requestBody.phone_number ?? "",
         created_at: Math.floor(Date.now() / 1000),
       },
+    };
+  }
+
+  /**
+   * El pago que nació dentro de un checkout, como registro de su propia ruta.
+   *
+   * Rapyd separa checkout y pago en recursos distintos, y el adaptador elige la ruta de
+   * consulta por el prefijo del identificador. El pago embebido en el checkout es un
+   * resumen —no trae `failure_code`, `failure_message` ni `created_at`— así que al
+   * guardarlo hay que completar esos tres campos, que es lo que lo convierte en un pago
+   * consultable por `GET /payments/{id}`.
+   *
+   * Devuelve `undefined` mientras el checkout esté en `NEW`, porque en ese punto no hay
+   * pago todavía: nadie entró a la página.
+   */
+  buildPaymentFromCheckout(checkout: RapydCheckout): RapydPayment | undefined {
+    const { payment } = checkout;
+
+    if (payment.id === null) {
+      return undefined;
+    }
+
+    return {
+      id: payment.id,
+      status: (payment.status ?? "CLO") as RapydPaymentStatus,
+      paid: payment.paid ?? false,
+      amount: payment.amount,
+      currency_code: payment.currency_code,
+      merchant_reference_id: payment.merchant_reference_id ?? "",
+      receipt_email: payment.receipt_email ?? "",
+      failure_code: "",
+      failure_message: "",
+      created_at: Math.floor(Date.now() / 1000),
     };
   }
 

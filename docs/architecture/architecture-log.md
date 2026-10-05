@@ -2719,6 +2719,33 @@ Asimismo, se midió el comportamiento de CORS el 30 de septiembre de 2026: una s
 
 **Estado:** Resuelto en código y documentación (`sdk/src-browser/`, `simulator-api/src/routes/mercadopago.ts`, `simulator-api/src/gateways/mercadopago/GatewayMockFactory.ts`, `docs/03-sdk/6-tokenizacion-frontend.md`).
 
+### 79. El estado de un cobro en el simulador estaba repartido entre las factorías y los routers
+
+**Responsable:** issue [#124](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/issues/124).
+
+**Contexto.**
+El simulador guardaba los cobros para que la consulta de estado pudiera responderlos, y esa parte funcionaba. Lo que no funcionaba era el resto: qué estado nasce un cobro y cómo se mueve dependía de tres sitios distintos según la pasarela, y ninguno de los tres era el lugar donde se lee.
+
+**Hallazgos empíricos (5 de octubre de 2026).**
+Son cuatro defectos de comportamiento, y ninguno lo detectaba una prueba porque las pruebas afirmaban el comportamiento.
+
+1. **La consulta fabricaba el cobro que respondía.** Las cuatro rutas de consulta armaban la respuesta desde cero, con el monto y la referencia de mentira: la de Mercado Pago usaba `transaction_amount: 50000` y una descripción inventada, la de Rapyd `amount: "0"` y la referencia vacía, la de Kushki un cargo de 50.000. Un identificador que nunca se había creado respondía `200` con datos de otro cobro.
+2. **La consulta decidía el desenlace.** El escenario se leía en la consulta, así que el mismo cobro era aprobado y declinado según quién preguntara, y la conciliación dependía de cuántas veces se consultó.
+3. **`declinedTransaction` de Kushki era inalcanzable.** Ninguna de sus tres rutas de transferencia leía la cabecera: un `DECLINED` pedía un PSE, recibía `201` y la consulta respondía `approvedTransaction`. El estado estaba declarado en el tipo y en la documentación, y ninguna prueba podía llegar a él.
+4. **`EXPIRED` de Mercado Pago se aceptaba y se ignoraba.** Se creaba la orden con `201` y la consulta respondía `processed`: un cobro caducado reportado como cobrado.
+
+**Decisión entre alternativas y cesiones asumidas.**
+Se implementaron tablas de transición declarativas en `simulator-api/src/state/`, una por pasarela y recurso, con un motor puro que no persiste ni lee cabeceras. La alternativa descartada fue centralizar las reglas en el router: ya era una de las tres implementaciones concurrentes, y fue justamente el lugar donde las dos reglas que importan —el PSE de Wompi avanzando en dos consultas y el checkout de Rapyd avanzando con la visita del pagador— se deducían de `payment_method.type` y de la presencia de un campo.
+
+La cesión asumida es que la tabla declara estados que el simulador no produce: `pending` e `in_process` de Mercado Pago, y `processing` de sus órdenes. Son estados reales de la pasarela y quedan disponibles para el normalizador y para las pruebas de contrato, pero ninguna factoría los construye. Declararlos era preferible a omitirlos, porque un estado que aparece por primera vez en una falla de integración es peor que uno que ya está en la tabla.
+
+La segunda cesión es de MP: `EXPIRED` se traduce a `canceled` porque Mercado Pago no tiene estado `expired` para órdenes. La traducción la hace el router y no la tabla, porque saber que `EXPIRED` es `canceled` y no `expired` es conocimiento de la pasarela, no de su máquina de estados.
+
+**Lo medido.**
+El caso del pago de Rapyd no estaba en el alcance del issue y lo encontró el ejemplo de intercambiabilidad, no una prueba. El pago que nacía dentro de un checkout al pagar la página no quedaba registrado como pago, así que la reconsulta pedía `/payments/payment_...` y recibía `404`: el checkout y el pago son recursos distintos y el adaptador elige la ruta por el prefijo del identificador. Antes no se notaba porque `buildStatusResponse` respondía cualquier identificador con un pago inventado. La corrección es que el pago que nace en el checkout se guarde también como pago, lo que hace que el flujo de tarjeta de Rapyd tenga la misma forma de ciclo de vida que el de PSE.
+
+**Estado:** Resuelto en código y documentación (`simulator-api/src/state/`, `simulator-api/src/store/`, las cuatro rutas, `examples/gateway-interchangeability.ts`, `docs/02-arquitectura/3-api-de-simulacion.md`). Verificado con `tsc` sin errores, `eslint` limpio y 410 pruebas en 27 suites.
+
 ### 9. Archivo de imagen suelto dentro del código fuente
 
 **Responsable:** No corresponde a ninguna sección del SAD; limpieza de repositorio, cualquiera puede resolverlo.

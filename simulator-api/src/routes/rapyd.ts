@@ -309,6 +309,27 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
 
       if (pagado !== checkout) {
         rapydCheckouts.save(checkoutId, pagado);
+
+        /*
+         * El pago que acaba de nacer también es un registro consultable.
+         *
+         * Rapyd guarda el checkout y el pago en recursos distintos, y esa separación es real:
+         * el adaptador elige la ruta de consulta por el prefijo del identificador, y un id
+         * de checkout en `/payments/{id}` responde `400 ERROR_GET_PAYMENT` contra la API
+         * real. Guardar el pago solo dentro del checkout hacía que, una vez consultado el
+         * checkout y devuelto el pago como identificador de la transacción, la segunda
+         * consulta pidiera `/payments/payment_...` y no encontrara nada.
+         *
+         * Antes no se notaba porque `buildStatusResponse` respondía cualquier identificador
+         * con un pago inventado. El detalle de que el pago consultable sea el que nació
+         * dentro del checkout, y no el que se crea con `POST /payments`, es lo que hace que
+         * el flujo de tarjeta de Rapyd tenga la misma forma de ciclo de vida que el de PSE.
+         */
+        const pago = mockFactory.buildPaymentFromCheckout(pagado);
+
+        if (pago !== undefined) {
+          rapydPayments.save(pago.id, pago);
+        }
       }
 
       return reply.code(200).send({ paid: true, payment_id: pagado.payment.id });

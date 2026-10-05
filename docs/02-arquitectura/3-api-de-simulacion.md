@@ -104,7 +104,13 @@ simulator-api/src/
 
 **Una factoría de mocks por pasarela**, con sus tipos al lado. Cada una construye las respuestas con la forma nativa de su pasarela: Wompi envuelve todo en `data` y usa `amount_in_cents`; Mercado Pago pone el pago en la raíz y el monto en pesos; y así.
 
-**El `TransactionStore` guarda en memoria, y eso es deliberado.** Reiniciar el servidor limpia el estado, que es exactamente lo que se quiere de un simulador: cada corrida arranca desde cero, sin arrastrar transacciones de una prueba anterior. Es una sola instancia compartida en todo el proceso.
+**Los almacenes guardan en memoria, y eso es deliberado.** Reiniciar el servidor limpia el estado, que es exactamente lo que se quiere de un simulador: cada corrida arranca desde cero, sin arrastrar transacciones de una prueba anterior.
+
+Son **un almacén por pasarela y por recurso**, en `src/store/GatewayStores.ts`, y cada uno declara el tipo que guarda. Con el almacén único el tipo era `unknown`, así que cada lectura terminaba en algo como `findById(id) as WompiTransaction | undefined`: una conversión que el compilador no verificaba, y por eso un cobro de Rapyd consultado por la ruta de Wompi pasaba la prueba de tipos. Rapyd tiene dos porque el checkout y el pago son recursos distintos con identificadores distintos —el checkout nace con el pago en `null`— y el SDK también los distingue por prefijo para elegir la ruta de consulta.
+
+`resetSimulatorState()` los limpia todos, junto con las marcas de escenario y los destinos registrados. Es lo que usan las pruebas para no depender del orden en que corren.
+
+**Las factorías solo construyen.** No guardan, no mueven estados y no leen cabeceras. Que una respuesta exista en el almacén es responsabilidad de la ruta, y que un cobro pase de un estado a otro es responsabilidad de la tabla de transiciones. Antes cada factoría recibía el almacén por el constructor y decidía además cómo avanzaba un cobro al consultarlo, de modo que las reglas del flujo de Wompi estaban en tres sitios —la tabla, un método de la factoría y una función del router— y dos de ellos ya discrepaban.
 
 ---
 
@@ -126,11 +132,15 @@ La asimetría en el número de rutas no es descuido: es el reflejo directo de qu
 
 ---
 
-## 4. El header de escenario
+## 4. Los headers de escenario
 
-Todas las rutas de creación leen el header **`x-simulate-scenario`**, que por defecto vale `APPROVED`. La idea es que la misma petición produzca desenlaces distintos según lo que la prueba necesite.
+Las rutas de creación leen dos cabeceras equivalentes, **`x-simulator-scenario`** y **`x-simulate-scenario`**, y por defecto el escenario es `APPROVED`. La idea es que la misma petición produzca desenlaces distintos según lo que la prueba necesite.
 
-Y acá está el hueco más grande del componente, dicho sin adornos:
+Las dos cabeceras existen porque la primera se eligió tarde. La que usaba el SDK al principio era `x-simulate-scenario`, y el simulador solo aceptaba esa; cuando el proyecto normalizó el nombre en el resto de componentes, el simulador quedó con la otra y nada lo senescence hasta que las pruebas lo_notaron. Ninguna de las dos está deprecada: reconocer ambas evita que un cliente que use la otra reciba un `APPROVED` silencioso, que es el peor resultado posible para una prueba.
+
+### El motor solo sabe aprobar, y solo para Wompi
+
+Este es el hueco más grande del componente, dicho sin adornos:
 
 ```36:56:simulator-api/src/scenarios/ScenarioEngine.ts
 export class ScenarioEngine {
@@ -150,11 +160,162 @@ export class ScenarioEngine {
 }
 ```
 
-**El motor solo sabe aprobar, y solo para Wompi.** Cualquier otro escenario lanza `UnsupportedScenarioError`, que el router traduce a un HTTP **501 Not Implemented**.
+**Cualquier otro escenario lanza `UnsupportedScenarioError`, que el router traduce a un HTTP 501 Not Implemented.**
 
-Ese 501 es una decisión, no una omisión: **es mucho mejor que un `APPROVED` falso.** Si el motor respondiera "aprobado" a una petición que pidió `RECHAZADO`, una prueba de manejo de rechazos pasaría sin haber probado nada, y el defecto aparecería en producción. Un 501 hace ruido de inmediato.
+Ese 501 es una decisión, no una omisión: **es mucho mejor que un `APPROVED` falso.** Si el motor respondiera "aprobado" a una petición que pidió `REJECTED`, una prueba de manejo de rechazos pasaría sin haber probado nada, y el defecto aparecería en producción. Un 501 hace ruido de inmediato.
 
 PSE tiene un caso aparte y correcto: no depende del escenario pedido sino del método de pago, porque un pago de PSE queda `PENDING` esperando al pagador incluso en el camino feliz.
+
+### El escenario se fija al crear, y las consultas no lo aceptan
+
+Esta es la regla que gobierna el comportamiento del componente (issue #124), y conviene decirla con sus dos mitades porque las dos importan:
+
+1. **El escenario de negocio se aplica en la creación.** El cobro nace con el estado que pidió la prueba.
+2. **Las consultas no leen el escenario.** Responden el estado que ya tiene el registro.
+
+Si una consulta aceptara el escenario, el mismo cobro sería aprobado y declinado según quién preguntara, y no habría forma de conciliar. El caso extremo que motivó el issue era Kushki: sus tres rutas de transferencia ignoraban la cabecera, así que un `DECLINED` pedía un PSE y la consulta respondía `approvedTransaction` — el escenario se aceptaba con `201` y se descartaba. Por eso `declinedTransaction` era un estado declarado al que ninguna prueba podía llegar.
+
+Cuando el desenlace solo se conoce después de una redirección —que es el caso de PSE en las cuatro pasarelas—, la creación registra el destino y la consulta lo aplica. Esa información vive en `src/state/scenarioTarget.ts`, **fuera del registro**, para que el payload que devuelve el simulador siga siendo exactamente el nativo: agregar un campo propio sería mentir sobre la respuesta de la pasarela. Los destinos también se borran con `resetSimulatorState()`.
+
+### Las fallas técnicas no crean ni mutan estado
+
+Un `TIMEOUT`, un `NETWORK_ERROR` o un `SERVER_ERROR` se resuelven **antes** de construir nada, y devuelven el error nativo de la pasarela sin tocar ningún almacén. Un error de transporte no es un cobro en estado de error: si el solicitante reintenta después de un `504`, tiene que poder hacerlo y no chocar con un registro fantasma.
+
+Y al revés: una consulta de cobro **no** puede fallar por escenario técnico. El cobro ya existe, así que una falla al consultarlo no lo deshace, y simular un `504` ahí devolvería un error donde la pasarela real devolvería el cobro.
+
+---
+
+## 4.1 Los cuatro flujos como máquinas de estados
+
+Cada pasarela tiene sus estados en una tabla declarativa, en `src/state/`. Ninguna ruta decide un estado: la tabla dice qué transición existe, cuándo aplica y a dónde lleva, y la ruta guarda lo que se movió. Los estados son los **nativos** de cada pasarela, no un vocabulario común inventado, y cada diagrama nombra solo los que la tabla declara.
+
+Los diagramas están para leer el flujo de un vistazo; el detalle de por qué existe cada transición, y qué está medido y qué no, está en el encabezado de cada tabla.
+
+### Wompi: tarjeta y PSE
+
+Wompi es asíncrono en los dos métodos, y de maneras distintas: la tarjeta nace `PENDING` y resuelve sola en unos 600 ms; el PSE publica la URL del banco en una consulta y resuelve en la siguiente. El banco de prueba elegido decide el desenlace del PSE, con los mismos códigos que expone su sandbox (`1` aprueba, `2` declina, `3` error).
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> PENDING : POST con tarjeta<br/>o PSE
+    PENDING --> APPROVED : query (tarjeta)
+    PENDING --> PENDING : 1ª query PSE<br/>publica async_payment_url
+    PENDING --> APPROVED : 2ª query PSE<br/>banco 1
+    PENDING --> DECLINED : 2ª query PSE<br/>banco 2
+    PENDING --> ERROR : 2ª query PSE<br/>banco 3
+    [*] --> DECLINED : POST con escenario de rechazo
+    [*] --> VOIDED : POST con escenario EXPIRED
+    APPROVED --> [*]
+    DECLINED --> [*]
+    ERROR --> [*]
+    VOIDED --> [*]
+```
+
+El PSE necesita dos consultas y tarjeta solo una, y no es arbitrario: la URL del banco aparece únicamente en una consulta posterior, así que mientras no exista el cobro está legítimamente `PENDING`. Esa es también la diferencia con Rapyd, donde la página de pago sí es del simulador y por eso su visita puede representarse (siguiente diagrama).
+
+### Rapyd: el checkout
+
+El checkout es un recurso de un solo paso: nace cuando el comercio pide una página de pago y pasa a `DON` cuando alguien la visita y la llena. El sandbox real nunca lo hace solo —se midió que un checkout creado y no visitado se queda en `NEW` indefinidamente—, así que en el simulador lo dispara la visita a la URL de redirección, que es el equivalente de que el pagador llene el formulario.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> NEW : POST /checkout<br/>(pago en null)
+    NEW --> DON : pay<br/>(visita a la página)<br/>y nace el pago
+    NEW --> NEW : query (no mueve nada)
+    DON --> [*]
+```
+
+Que el movimiento lo disponga `pay` y no `query` es lo que evita el defecto que el issue reporta en las otras tres pasarelas: un comercio que consultara dos veces vería aparecer un pago que nadie hizo.
+
+### Rapyd: el pago
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> ACT : POST /payments con PSE<br/>(next_action pending_confirmation)
+    [*] --> CLO : POST /payments con tarjeta
+    ACT --> CLO : query (pagador completó)
+    ACT --> ERR : query, con destino registrado
+    ACT --> EXP : query, con destino registrado
+    CLO --> [*]
+    ERR --> [*]
+    EXP --> [*]
+```
+
+Los tres estados finales del pago —`CLO`, `ERR` y `EXP`— no tienen transición de entrada: un pago creado como declinado se consulta como declinado, con su monto y su referencia.
+
+### Mercado Pago: el pago con tarjeta
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> approved : POST /payments
+    [*] --> rejected : POST /payments con rechazo
+    approved --> approved : query
+    rejected --> rejected : query
+    approved --> [*]
+    rejected --> [*]
+```
+
+### Mercado Pago: la orden de PSE
+
+PSE no se cobra por la Payments API sino por esta: contra la API real, el mismo pago con el banco en `transaction_details.financial_institution` devuelve `424` pase lo que pase.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> action_required : POST /orders
+    [*] --> failed : POST /orders que falla (402)
+    action_required --> processed : query
+    action_required --> canceled : query, destino registrado
+    action_required --> canceled : query, escenario EXPIRED
+    processed --> [*]
+    canceled --> [*]
+    failed --> [*]
+```
+
+`canceled` es la traducción de `EXPIRED` para órdenes, y la hace el router porque es quien conoce el vocabulario de la pasarela: Mercado Pago no tiene un estado `expired` para órdenes. Sin esa traducción, `EXPIRED` se aceptaba con `201` y la consulta respondía `processed` — un cobro caducado reportado como cobrado.
+
+La tabla declara además `pending` e `in_process` para el pago, y `processing` para la orden, porque son estados reales de la pasarela. **El simulador no los produce**: las factorías solo construyen `approved`, `rejected` y `cancelled` en el pago, y `action_required`, `processed` y `failed` en la orden. Están declarados para que el normalizador del SDK y las pruebas de contrato tengan un destino si la pasarela real los devuelve, no para que el simulador los alcance por una vía que no existe.
+
+### Kushki: el cobro con tarjeta
+
+Kushki responde `200` —o `201` al crear— incluso cuando el cobro está declinado: la decisión vive en el cuerpo, en `details.transactionStatus`. Un adaptador que decidiera mirando `response.ok` reportaría todos los rechazos como aprobados, y ese es justo el comportamiento que el simulador tiene que reproducir.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> APPROVAL : POST /card/v1/charges
+    [*] --> DECLINED : POST /card/v1/charges con rechazo
+    [*] --> EXPIRED : POST /card/v1/charges con EXPIRED
+    [*] --> INITIALIZED : POST /card/v1/charges con INITIALIZED
+    INITIALIZED --> APPROVAL : query
+    APPROVAL --> [*]
+    DECLINED --> [*]
+    EXPIRED --> [*]
+```
+
+### Kushki: el Transfer In
+
+Transfer In son tres llamadas reales —`bankList`, el token y `init`— y una consulta, y el simulador respeta ese orden, que es lo que permite ejercitar el flujo de punta a punta.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> requestedToken : POST /transfer/v1/tokens
+    requestedToken --> initializedTransaction : pay (POST /transfer/v1/init)
+    initializedTransaction --> approvedTransaction : query
+    initializedTransaction --> declinedTransaction : query, destino registrado
+    initializedTransaction --> initializedTransaction : query, escenario pendiente
+    approvedTransaction --> [*]
+    declinedTransaction --> [*]
+```
+
+El Transfer In son tres llamadas reales y el simulador respeta ese orden, que es lo que permite ejercitar el flujo de punta a punta. `initializedTransaction` es el estado real entre el `init` y la primera consulta: la respuesta medida del `init` no trae campo de estado, así que ese estado no se ve por la API y queda anotado en la tabla en vez de inventarse una segunda consulta que la pasarela real tampoco tiene.
+
+`declinedTransaction` sí se ve, y antes no: ninguna de las tres rutas leía el escenario, así que el destino registrado en el paso del token es lo que lo hace alcanzable.
 
 ---
 
@@ -211,7 +372,7 @@ cd simulator-api && npm install && npm run dev
 curl http://localhost:3000/health
 ```
 
-Las suites de prueba (20 suites con 259 pruebas en total) corren con `npm test` y no necesitan que el servidor esté levantado, porque usan `app.inject()`.
+Las suites de prueba (27 suites con 410 pruebas en total) corren con `npm test` y no necesitan que el servidor esté levantado, porque usan `app.inject()`.
 
 ---
 

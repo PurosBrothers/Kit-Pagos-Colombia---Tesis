@@ -80,18 +80,22 @@ esconderse.
 ## La salida
 
 ```text
-Pasarela      Estado normalizado  Estado nativo  Monto          ID en la pasarela
-──────────────────────────────────────────────────────────────────────────────────────
-WOMPI         APPROVED            APPROVED       150000.00 COP  b256c180-68fa-4c81-...
-RAPYD         APPROVED            CLO            150000.00 COP  payment_542f1324c58e...
-MERCADOPAGO   APPROVED            approved       150000.00 COP  8808182579
-KUSHKI        APPROVED            APPROVAL       150000.00 COP  5f5473fc9cfd48edb2
+Pasarela      Estado normalizado  Estado nativo  Monto          ID en la pasarela                      Reconsulta
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+WOMPI         APPROVED            APPROVED       150000.00 COP  3a82bd8b-af43-4eaf-af0c-a2bf4d7962c4   APPROVED
+RAPYD         APPROVED            CLO            150000.00 COP  payment_baf68ee326978d06e813b705c8891e00 APPROVED
+MERCADOPAGO   APPROVED            approved       150000.00 COP  5894090463                             APPROVED
+KUSHKI        APPROVED            APPROVAL       150000.00 COP  b748a8a65ed942e4b4                     APPROVED
 ```
 
 La columna que importa es la del estado nativo, porque es la que cambia: `APPROVED`, `CLO`,
 `approved` y `APPROVAL` son la misma cosa dicha de cuatro formas, y una de ellas (`CLO`) no
 significa "pagado" sino "cerrado". La columna del estado normalizado es la que el comercio
 programa contra, y es una sola.
+
+La de **Reconsulta** es la que verifica el issue #124, y se agregó después: es el mismo cobro
+consultado por segunda vez. Las cuatro devuelven el mismo estado, y eso es una propiedad, no
+una casualidad — el ejemplo falla con código 1 si no se cumple.
 
 ## La verificación no es visual
 
@@ -108,6 +112,18 @@ sale con código distinto de cero si alguna no coincide:
    conciliar: una pasarela que devuelve otra referencia rompe la conciliación aunque el estado y
    el monto coincidan. Es exactamente el defecto que tenía Kushki, documentado en el punto 41 del
    `architecture-log.md`, y por eso queda fijado también acá y no solo en una prueba unitaria.
+4. **Estabilidad de la reconsulta** (issue #124). La segunda consulta del mismo cobro tiene que
+   devolver el mismo estado normalizado, el mismo estado nativo, el mismo monto, la misma referencia
+   y el mismo identificador de pasarela. Es lo que permite reintentar una consulta por timeout sin
+   que el resultado cambie, y antes no había nada que lo verificara: el simulador armaba la
+   respuesta de la consulta desde cero, así que podía devolver los datos de otro cobro y el ejemplo
+   no lo notaba porque no consultaba dos veces.
+
+   La verificación comparó las cuatro y encontró un defecto real en el camino: el pago que nacía
+   dentro de un checkout de Rapyd no quedaba registrado como pago, así que la reconsulta pedía
+   `/payments/payment_...` y recibía `404`. El checkout y el pago son recursos distintos en Rapyd y
+   el adaptador elige la ruta por el prefijo del identificador, así que el pago que nace al pagar
+   la página tiene que ser consultable por su propia ruta.
 
 Comprobado rompiendo a mano el mapeo de `APPROVAL` en `KushkiResponseNormalizer` para que
 devolviera `PENDING`: el ejemplo salió con código 1 e imprimió
@@ -134,10 +150,12 @@ Son del simulador, no del SDK, y conviene tenerlos presentes al leer la salida.
 - **Las credenciales se declaran una sola vez.** `SDKOptions.credentials` es un mapa por
   pasarela, así que el comercio registra las cuatro y el SDK usa las de la activa. No hace falta
   reconfigurar credenciales al cambiar de pasarela.
-- **El ejemplo consulta el estado solo cuando hace falta**, no siempre. Consultar de más traería
-  una limitación del mock a una comparación que quiere hablar del SDK. Las consultas que sí hace
-  —Wompi y Rapyd— devuelven la referencia y el monto del pago creado, así que entran en la
-  comparación sin distorsionarla.
+- **El ejemplo consulta el estado cuando hace falta, y una vez más a propósito.** La segunda
+  consulta no es "consultar de más": es la que verifica la estabilidad que exige el issue #124. La
+  razón por la que antes se evitaba consultar de más era no meter una limitación del mock en una
+  comparación que quiere hablar del SDK, y esa restricción sigue valiendo para las consultas
+  adicionales; la reconsulta es la excepción deliberada, porque su resultado no se compara entre
+  pasarelas sino consigo mismo.
 
 ## Lo que este ejemplo no demuestra, y dónde se demuestra
 
