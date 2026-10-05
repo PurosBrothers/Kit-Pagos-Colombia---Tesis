@@ -111,14 +111,14 @@ Kit-Pagos-Colombia---Tesis/
 │   ├── gateways/                               <-- Una GatewayMockFactory + types.ts por pasarela
 │   │   ├── wompi/  mercadopago/  rapyd/  kushki/
 │   ├── scenarios/
-│   │   └── ScenarioEngine.ts                   <-- Scenario Execution Engine (hoy solo APPROVED; RF-10 pendiente)
+│   │   └── ScenarioEngine.ts                   <-- Escenarios de creación de Wompi (APPROVED, PENDING, DECLINED, EXPIRED; el resto, 501)
 │   ├── state/                                  <-- Máquinas de estado por pasarela (issue #124)
 │   │   ├── StateMachine.ts                     <-- Motor puro: NO persiste, NO lee cabeceras
 │   │   ├── Transition.ts                       <-- Tipo de transición: from/on/to/when/apply
-│   │   ├── wompiStateMachine.ts                <-- PENDING → APPROVED | DECLINED | ERROR | VOIDED
-│   │   ├── rapydStateMachine.ts                <-- Checkout NEW→DON y pago ACT→CLO|ERR|EXP
-│   │   ├── mercadopagoStateMachine.ts          <-- Payments approved|rejected y orders action_required→processed|canceled
-│   │   ├── kushkiStateMachine.ts               <-- Charge INITIALIZED→APPROVAL y transfer requestedToken→initializedTransaction→approved|declined
+│   │   ├── wompiStateMachine.ts                <-- PENDING → APPROVED | DECLINED | ERROR, o sigue PENDING si se registró
+│   │   ├── rapydStateMachine.ts                <-- Checkout NEW→DON (pago CLO|ERR) y pago ACT→CLO, o sigue ACT si se registró
+│   │   ├── mercadopagoStateMachine.ts          <-- Payments sin transiciones y orders action_required→processed|expired, o sigue
+│   │   ├── kushkiStateMachine.ts               <-- Charge sin transiciones y transfer requestedToken→initializedTransaction→approved|declined, o sigue
 │   │   └── scenarioTarget.ts                   <-- Destinos de escenarios asíncronos, fuera del payload nativo
 │   └── store/                                  <-- Estado en memoria, efímero a propósito
 │       ├── TransactionStore.ts                 <-- Almacén genérico tipado por el registro que guarda
