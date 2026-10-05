@@ -62,6 +62,11 @@ export interface WompiTransaction {
   payment_method?: WompiPaymentMethod;
   /** URL de retorno del comercio, que Wompi refleja tal como se la enviaron. */
   redirect_url?: string;
+  /**
+   * Explicación del desenlace. El simulador solo la emite donde está medida: el PSE del
+   * banco de prueba `3` (5 de octubre de 2026). Para los demás desenlaces no hay medición.
+   */
+  status_message?: string;
 }
 
 /** Envoltorio de respuesta real de Wompi: el objeto de negocio siempre viaja dentro de `data`. */
