@@ -348,44 +348,104 @@ describe("Mercado Pago Simulation Routes", () => {
     });
   });
 
+  /*
+   * Las tres pruebas crean el pago antes de consultarlo. Antes estas rutas fabricaban la
+   * respuesta con `transaction_amount: 50000` y una descripción inventada, y el estado
+   * salía de la cabecera de la consulta: el mismo identificador devolvía `approved` y
+   * `rejected` según quién preguntara, y un pago que nunca existió respondía `200`. Eso
+   * era el defecto que reporta el issue #124, y las pruebas lo cubrían como si fuera el
+   * comportamiento correcto.
+   */
   describe("GET /v1/sim/mercadopago/payments/:id", () => {
-    it("consulta un pago existente y responde 200 reflejando el id en la URL", async () => {
+    it("consulta un pago creado y devuelve el mismo id, estado y monto", async () => {
       const app = buildApp();
+
+      const creado = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        headers: { "x-idempotency-key": "consulta-aprobado" },
+        payload: validRequestBody,
+      });
+
+      const { id } = creado.json();
 
       const response = await app.inject({
         method: "GET",
-        url: "/v1/sim/mercadopago/payments/9876543210",
+        url: `/v1/sim/mercadopago/payments/${id}`,
       });
 
       expect(response.statusCode).toBe(200);
 
       const body = response.json();
-      expect(body.id).toBe("9876543210");
+      expect(body.id).toBe(id);
       expect(body.status).toBe("approved");
       expect(body.status_detail).toBe("accredited");
       expect(body.currency_id).toBe("COP");
+      // El monto y la descripción son los que mandó el comercio, no constantes de la ruta.
+      expect(body.transaction_amount).toBe(50000);
+      expect(body.description).toBe("orden-mp-123");
 
       await app.close();
     });
 
-    it("responde 200 con estado rejected cuando el header es REJECTED", async () => {
+    it("devuelve rejected para un pago creado como rechazado", async () => {
       const app = buildApp();
+
+      const creado = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        headers: {
+          "x-idempotency-key": "consulta-rechazado",
+          "x-simulate-scenario": "REJECTED",
+        },
+        payload: validRequestBody,
+      });
+
+      const { id } = creado.json();
 
       const response = await app.inject({
         method: "GET",
-        url: "/v1/sim/mercadopago/payments/9876543210",
-        headers: { "x-simulate-scenario": "REJECTED" },
+        url: `/v1/sim/mercadopago/payments/${id}`,
       });
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body.id).toBe("9876543210");
+      expect(body.id).toBe(id);
       expect(body.status).toBe("rejected");
 
       await app.close();
     });
 
-    it("responde 404 cuando el escenario solicitado es NOT_FOUND", async () => {
+    it("no cambia el estado aunque la consulta pida lo contrario", async () => {
+      // Criterio 1 del issue: el desenlace lo fija la creación. Una cabecera en la consulta
+      // podría reportar como cobrado un pago que el comercio pidió declinado, y el mismo
+      // cobro sería aprobado y declinado según quién preguntara.
+      const app = buildApp();
+
+      const creado = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/payments",
+        headers: {
+          "x-idempotency-key": "consulta-inmutable",
+          "x-simulate-scenario": "REJECTED",
+        },
+        payload: validRequestBody,
+      });
+
+      const { id } = creado.json();
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/sim/mercadopago/payments/${id}`,
+        headers: { "x-simulate-scenario": "APPROVED" },
+      });
+
+      expect(response.json().status).toBe("rejected");
+
+      await app.close();
+    });
+
+    it("responde 404 si el pago no existe, sin importar la cabecera", async () => {
       const app = buildApp();
 
       const response = await app.inject({

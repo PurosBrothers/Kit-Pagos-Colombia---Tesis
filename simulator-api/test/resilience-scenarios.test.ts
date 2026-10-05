@@ -1,5 +1,5 @@
 import { buildApp } from "../src/app";
-import { transactionStore } from "../src/store/TransactionStore";
+import { resetSimulatorState } from "../src/store/GatewayStores";
 
 /**
  * Pruebas de integración de resiliencia y escenarios del simulador (Issue #65).
@@ -14,11 +14,11 @@ import { transactionStore } from "../src/store/TransactionStore";
  */
 describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => {
   beforeEach(() => {
-    transactionStore.clear();
+    resetSimulatorState();
   });
 
   afterEach(() => {
-    transactionStore.clear();
+    resetSimulatorState();
   });
 
   describe("1. Matriz de Escenarios Mandatorios por Pasarela", () => {

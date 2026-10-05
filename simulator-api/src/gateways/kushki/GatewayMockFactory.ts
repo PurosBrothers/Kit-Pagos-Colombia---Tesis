@@ -177,6 +177,54 @@ export class GatewayMockFactory {
   }
 
   /**
+   * El registro de la transferencia en el momento en que se emite el token (issue #124).
+   *
+   * Antes la transferencia no existía hasta que alguien la consultaba, y esa consulta
+   * armaba la respuesta de cero con un `bankId` y un `callbackUrl` de mentira. Tres
+   * cosas se rompían a la vez:
+   *
+   * - El comercio que mandaba `bankId: "007"` recibía un `001` al consultar.
+   * - El `callbackUrl` que él había registrado nunca volvía, así que la conciliación
+   *   por referencia no tenía contra qué compararse.
+   * - El monto era fijo, y un cobro de 20.000 pesos se reportaba como de 150.000.
+   *
+   * La transferencia nace acá, cuando se emite el token, y de ahí en adelante la
+   * consulta responde el registro guardado en vez de fabricar uno. Es el mismo cambio
+   * que en las otras tres pasarelas: **lo que se guardó es lo que se devuelve.**
+   *
+   * `bankId` y `callbackUrl` son los que envió el comercio, y no constantes, porque son
+   * los dos únicos campos de esta respuesta que el requestor controla. El resto se
+   * completa con lo que devuelve una transferencia real de Kushki.
+   */
+  buildTransferSeed(
+    token: string,
+    attributes: { bankId?: string; callbackUrl?: string },
+  ): KushkiTransferStatusResponse {
+    return {
+      status: "requestedToken",
+      token,
+      paymentDescription: "ORDER-SIM-PSE",
+      email: "comprador@example.com",
+      amount: {
+        subtotalIva0: 150000,
+        subtotalIva: 0,
+        iva: 0,
+        ice: 0,
+        currency: "COP",
+      },
+      transactionReference: randomUUID(),
+      bankId: attributes.bankId ?? "001",
+      documentType: "CC",
+      documentNumber: "1999888777",
+      currency: "COP",
+      country: "Colombia",
+      created: Date.now(),
+      merchantName: "KIT PAGOS COLOMBIA",
+      callbackUrl: attributes.callbackUrl ?? "https://comercio.example.com/retorno",
+    };
+  }
+
+  /**
    * Respuesta de `GET /transfer/v1/status/{token}`, con la forma medida.
    *
    * Antes reusaba la forma de un cobro con tarjeta, con el token metido en
@@ -185,6 +233,12 @@ export class GatewayMockFactory {
    * `transaction_status` ni `contactDetails`, trae `token`, `status` y `email` en la
    * raiz. El mock que se acomoda al codigo confirma el codigo en vez de verificarlo,
    * y eso es justo lo que escondio el defecto (punto 48).
+   *
+   * La ruta ya no la usa para construir la respuesta de una consulta: la transferencia
+   * se guardó al emitir el token (`buildTransferSeed`) y la consulta devuelve el registro
+   * con su estado movido por la máquina. Queda porque es la forma del registro y porque
+   * una respuesta de estado tiene que poder construirse sin pasar por el almacén, como en
+   * las pruebas de tabla.
    */
   buildTransferStatus(
     token: string,

@@ -9,16 +9,16 @@ import {
   getSimulatorScenario,
   ScenarioEngine,
 } from "../scenarios/ScenarioEngine";
-import { transactionStore } from "../store/TransactionStore";
+import { mpOrderMachine, mpPaymentMachine } from "../state/mercadopagoStateMachine";
+import { rememberScenarioTarget } from "../state/scenarioTarget";
+import { mercadopagoOrders, mercadopagoPayments } from "../store/GatewayStores";
+import {
+  hasDuplicateMark,
+  markDuplicate,
+  nextFlappingAttempt,
+} from "../store/ScenarioMarks";
 
-const SCENARIO_HEADER = "x-simulate-scenario";
 export const DEFAULT_SCENARIO = "APPROVED";
-
-/** Escenario pedido por cabecera, que Fastify puede entregar como lista. */
-function readScenario(request: FastifyRequest): string {
-  const header = request.headers[SCENARIO_HEADER];
-  return Array.isArray(header) ? header[0] : (header ?? DEFAULT_SCENARIO);
-}
 
 /**
  * Router HTTP de Mercado Pago (API de Simulación).
@@ -153,7 +153,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
 
       if (scenario === "FLAPPING") {
         const key = requestBody.external_reference ?? requestBody.description ?? "mp_flapping";
-        const isFailing = ScenarioEngine.handleFlapping(key);
+        const isFailing = nextFlappingAttempt(key);
         if (isFailing) {
           return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
         }
@@ -162,23 +162,33 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
 
       if (scenario === "DUPLICATE_PAYMENT") {
         const dupKey = `dup_mp_${requestBody.external_reference ?? requestBody.description}`;
-        if (transactionStore.findById(dupKey)) {
+        if (hasDuplicateMark(dupKey)) {
           return reply.code(409).send({
             message: "Payment with this external_reference already exists",
             error: "conflict",
             status: 409,
           });
         }
-        transactionStore.save(dupKey, true);
+        markDuplicate(dupKey);
         scenario = DEFAULT_SCENARIO;
       }
 
+      /*
+       * Cada desenlace guarda el pago que construyó, con el estado que le corresponde.
+       *
+       * Guardar en las cuatro ramas y no en un punto común es lo que permite que cada
+       * escenario nazca con su estado real: un pago declinado se crea `rejected` y se
+       * consulta `rejected`, no aprobado por accidente. Con un guardado único al final
+       * habría que decidir el estado aparte de construirlo, que es duplicar la decisión.
+       */
       if (
         scenario === DEFAULT_SCENARIO ||
         scenario.toUpperCase() === "APPROVED" ||
         scenario === "APPROVAL"
       ) {
         const response = mockFactory.buildApprovedResponse(requestBody);
+        mercadopagoPayments.save(String(response.id), response);
+
         return reply.code(201).send(response);
       }
 
@@ -187,11 +197,15 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         scenario.toUpperCase() === "DECLINED"
       ) {
         const response = mockFactory.buildRejectedResponse(requestBody);
+        mercadopagoPayments.save(String(response.id), response);
+
         return reply.code(201).send(response);
       }
 
       if (scenario === "EXPIRED") {
         const response = mockFactory.buildExpiredResponse(requestBody);
+        mercadopagoPayments.save(String(response.id), response);
+
         return reply.code(201).send(response);
       }
 
@@ -209,12 +223,22 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       reply: FastifyReply,
     ) => {
       const { id } = request.params;
-      const scenarioHeader = request.headers[SCENARIO_HEADER];
-      const scenario = Array.isArray(scenarioHeader)
-        ? scenarioHeader[0]
-        : (scenarioHeader ?? DEFAULT_SCENARIO);
 
-      if (scenario.toUpperCase() === "NOT_FOUND") {
+      /*
+       * La consulta responde el pago que se creó, no uno armado acá.
+       *
+       * Antes fabricaba la respuesta con `transaction_amount: 50000` y una descripción
+       * inventada, y el estado salía de la cabecera de la petición: el mismo pago
+       * consultado dos veces con cabeceras distintas devolvía `approved` y `rejected`. Un
+       * estado que depende de la pregunta no es un estado, y el monto de mentira rompía la
+       * conciliación del comercio.
+       *
+       * Un identificador que no existe responde 404, porque es lo que responde la API
+       * real y porque un 200 con datos de otro cobro esconde el error.
+       */
+      const payment = mercadopagoPayments.findById(id);
+
+      if (payment === undefined) {
         return reply.code(404).send({
           message: "Payment not found",
           error: "not_found",
@@ -222,40 +246,13 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (scenario === "REJECTED" || scenario === "DECLINED") {
-        const response = mockFactory.buildRejectedResponse(
-          {
-            transaction_amount: 50000,
-            description: `Consulta de pago ${id}`,
-            payer: { email: "customer@example.com" },
-          },
-          id,
-        );
-        return reply.code(200).send(response);
+      const movido = mpPaymentMachine.transition(payment, "query");
+
+      if (movido !== payment) {
+        mercadopagoPayments.save(id, movido);
       }
 
-      if (scenario === "EXPIRED") {
-        const response = mockFactory.buildExpiredResponse(
-          {
-            transaction_amount: 50000,
-            description: `Consulta de pago ${id}`,
-            payer: { email: "customer@example.com" },
-          },
-          id,
-        );
-        return reply.code(200).send(response);
-      }
-
-      // Por defecto retorna aprobado reflejando el id consultado
-      const response = mockFactory.buildApprovedResponse(
-        {
-          transaction_amount: 50000,
-          description: `Consulta de pago ${id}`,
-          payer: { email: "customer@example.com" },
-        },
-        id,
-      );
-      return reply.code(200).send(response);
+      return reply.code(200).send(movido);
     },
   );
 
@@ -271,7 +268,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         return reply;
       }
 
-      const scenario = readScenario(request);
+      const scenario = getSimulatorScenario(request);
       const requestBody = request.body as MercadoPagoCreateOrderRequestBody;
 
       if (
@@ -292,6 +289,25 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const response = mockFactory.buildPendingOrderResponse(requestBody);
+      mercadopagoOrders.save(String(response.id), response);
+
+      /*
+       * El escenario se registra acá y la consulta lo aplica.
+       *
+       * El rechazo no pasa por acá: contra la API real, un PSE que falla devuelve `402` con
+       * la orden entera en `failed` en el momento de crearla, y eso es lo que responde la
+       * rama de arriba. Lo que sí queda para después de la redirección es la expiración:
+       * Mercado Pago no tiene un estado `expired` para órdenes, y el que le corresponde es
+       * `canceled`. Sin registrarlo, `EXPIRED` se aceptaba con `201` y la consulta
+       * respondía `processed` —un cobro caducado reportado como cobrado.
+       *
+       * Es la traducción al vocabulario de la pasarela, y por eso vive en el router: quien
+       * sabe que `EXPIRED` es `canceled` y no `expired` es el que conoce la pasarela.
+       */
+      if (scenario.toUpperCase() === "EXPIRED") {
+        rememberScenarioTarget("mercadopago", "order", String(response.id), "canceled");
+      }
+
       return reply.code(201).send(response);
     },
   );
@@ -309,9 +325,25 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       reply: FastifyReply,
     ) => {
       const { id } = request.params;
-      const scenario = readScenario(request);
 
-      if (scenario === "NOT_FOUND") {
+      /*
+       * La orden se guardó al crearla, así que la consulta responde la que existe, con el
+       * monto y la referencia que mandó el comercio.
+       *
+       * Antes no había nada guardado: esta ruta armaba una orden de cero con
+       * `total_amount: "150000"` y un correo de ejemplo, y sin `external_reference` a
+       * propósito porque "el simulador no guarda estado entre el POST y el GET". Inventar
+       * una referencia era peor que omitirla, porque el normalizador caía entonces en el
+       * identificador de la orden. Con el registro guardado, la referencia del comercio
+       * vuelve intacta y la conciliación tiene contra qué compararse.
+       *
+       * El escenario no interviene: el desenlace ya lo decidió la creación, y una
+       * consulta que cambiara el estado haría que la misma orden fuera `processed` o
+       * `canceled` según quién preguntara.
+       */
+      const order = mercadopagoOrders.findById(id);
+
+      if (order === undefined) {
         return reply.code(404).send({
           message: "Order not found",
           error: "not_found",
@@ -319,38 +351,13 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const requestBody: MercadoPagoCreateOrderRequestBody = {
-        total_amount: "150000",
-        // Sin `external_reference` a propósito: el simulador no guarda estado
-        // entre el POST y el GET, así que no conoce la referencia con la que el
-        // comercio creó la orden. Inventar una sería peor que omitirla, porque el
-        // normalizador cae entonces en el identificador de la orden, que sí es un
-        // dato real. Es la limitación conocida del simulador, registrada en
-        // `docs/05-ejemplos/intercambiabilidad.md`.
-        payer: { email: "customer@example.com", entity_type: "individual" },
-        transactions: {
-          payments: [
-            {
-              amount: "150000",
-              payment_method: {
-                id: "pse",
-                type: "bank_transfer",
-                financial_institution: "1051",
-              },
-            },
-          ],
-        },
-      };
+      const movida = mpOrderMachine.transition(order, "query");
 
-      // Con el escenario PENDING la orden sigue esperando al pagador, para que se
-      // pueda ejercitar también el caso en que el comercio consulta antes de que
-      // la transferencia se acredite.
-      const response =
-        scenario.toUpperCase() === "PENDING"
-          ? mockFactory.buildPendingOrderResponse(requestBody, id)
-          : mockFactory.buildProcessedOrderResponse(requestBody, id);
+      if (movida !== order) {
+        mercadopagoOrders.save(id, movida);
+      }
 
-      return reply.code(200).send(response);
+      return reply.code(200).send(movida);
     },
   );
 

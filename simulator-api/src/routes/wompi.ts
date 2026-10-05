@@ -9,9 +9,14 @@ import { GatewayMockFactory } from "../gateways/wompi/GatewayMockFactory";
 import {
   WompiCreateTransactionRequestBody,
   WompiTokenizeCardRequestBody,
-  WompiTransaction,
 } from "../gateways/wompi/types";
-import { transactionStore } from "../store/TransactionStore";
+import { wompiStateMachine } from "../state/wompiStateMachine";
+import { wompiTransactions } from "../store/GatewayStores";
+import {
+  hasDuplicateMark,
+  markDuplicate,
+  nextFlappingAttempt,
+} from "../store/ScenarioMarks";
 
 /**
  * Wompi HTTP router (issue #55).
@@ -32,10 +37,11 @@ import { transactionStore } from "../store/TransactionStore";
  *     Returns 404 in Wompi's native error shape if the id does not exist,
  *     because that case must also be testable from the SDK.
  *
- * Contains no scenario decision logic or payload construction logic:
- * it extracts the control header and body, and delegates all work to the
- * ScenarioEngine for POST. The GET reads directly from the TransactionStore
- * because there is no business logic involved — it is a pure read.
+ * Contains no payload construction logic: it extracts the control header and
+ * body, delegates the scenario to the ScenarioEngine, saves what was built and
+ * answers. The GET reads the record it saved and lets `wompiStateMachine` decide
+ * whether it moves — a query has no business scenario, because the creation
+ * already fixed the outcome.
  */
 export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   const scenarioEngine = new ScenarioEngine();
@@ -98,7 +104,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
 
       if (scenario === "FLAPPING") {
         const key = requestBody.reference ?? "default_wompi_flapping";
-        const isFailing = ScenarioEngine.handleFlapping(key);
+        const isFailing = nextFlappingAttempt(key);
         if (isFailing) {
           return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
         }
@@ -107,7 +113,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
 
       if (scenario === "DUPLICATE_PAYMENT") {
         const dupKey = `dup_wompi_${requestBody.reference}`;
-        if (transactionStore.findById(dupKey)) {
+        if (hasDuplicateMark(dupKey)) {
           return reply.code(409).send({
             error: {
               type: "DUPLICATE_TRANSACTION",
@@ -115,12 +121,29 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
             },
           });
         }
-        transactionStore.save(dupKey, true);
+        markDuplicate(dupKey);
         scenario = DEFAULT_SCENARIO;
       }
 
       try {
         const response = scenarioEngine.execute(scenario, requestBody);
+
+        /*
+         * La fábrica solo construye; guardar es de la ruta.
+         *
+         * Antes lo escribía `GatewayMockFactory`, que recibía el store por el constructor
+         * y guardaba cada transacción que armaba. Con eso, el estado de un cobro vivía
+         * repartido entre tres lugares: la tabla de transiciones para las consultas, un
+         * método de la fábrica para la tarjeta y otro para el PSE, y este `if` para el
+         * 404. Además la ruta no guardaba nada, así que un cobro creado con un escenario
+         * que no pasara por la factoría no se podía consultar después.
+         *
+         * Acá queda explícito: se guarda exactamente lo que se va a responder, con el
+         * estado que la creación decidió. Que nazca `PENDING` y se resuelva al consultar
+         * es correcto —así se midió— y por eso la tabla tiene una transición de tarjeta.
+         */
+        wompiTransactions.save(response.data.id, response.data);
+
         return reply.code(201).send(response);
       } catch (error) {
         if (error instanceof UnsupportedScenarioError) {
@@ -136,7 +159,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
     "/v1/sim/wompi/transactions/:id",
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { id } = request.params as { id: string };
-      const transaction = transactionStore.findById(id) as WompiTransaction | undefined;
+      const transaction = wompiTransactions.findById(id);
 
       if (!transaction) {
         // Respond with Wompi's native error shape so the SDK can map it to
@@ -150,12 +173,28 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      // Un PSE pendiente avanza un paso en cada consulta: primero publica la URL
-      // de redirección sin salir de PENDING, y después resuelve. Un cobro con tarjeta
-      // pendiente resuelve en la primera consulta, porque así se midió Wompi: nace
-      // PENDING y pasa a APPROVED solo, en unos 600 ms. La decisión de cómo avanza cada
-      // método es de la fábrica, no del router.
-      const resolved = resolvePendingTransaction(transaction, mockFactory);
+      /*
+       * La tabla mueve la transacción y la ruta guarda lo que se movió.
+       *
+       * Un PSE pendiente avanza un paso en cada consulta: primero publica la URL de
+       * redirección sin salir de PENDING, y después resuelve. Un cobro con tarjeta
+       * pendiente resuelve en la primera consulta, porque así se midió Wompi: nace PENDING
+       * y pasa a APPROVED solo, en unos 600 ms.
+       *
+       * Esa diferencia entre métodos está en la tabla y no en el router, que es donde
+       * estaba antes. La razón concreta: la regla del PSE necesita saber si la URL del
+       * banco ya se publicó, y para decirlo tiene que mirar el registro. En el router eso
+       * era un `if` sobre `payment_method.type` con una segunda condición sobre
+       * `extra.async_payment_url` que nadie encontraba al leerlo.
+       *
+       * Guardar solo si cambió es lo que hace que consultar dos veces no escriba nada: la
+       * segunda consulta devuelve el mismo objeto y la ruta no lo vuelve a guardar.
+       */
+      const resolved = wompiStateMachine.transition(transaction, "query");
+
+      if (resolved !== transaction) {
+        wompiTransactions.save(id, resolved);
+      }
 
       // Wompi wraps the transaction in { data: ... } for both creation and
       // status queries. The same shape is preserved here so ResponseNormalizer
@@ -323,23 +362,4 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   );
 }
 
-/**
- * Avanza una transacción pendiente según su método de pago.
- *
- * Los dos métodos de Wompi son asíncronos y lo son de maneras distintas: PSE publica la
- * URL del banco en una consulta y resuelve en la siguiente, y la tarjeta resuelve en la
- * primera. Tener la decisión en una función con nombre evita que el router acumule la
- * diferencia entre métodos, que es conocimiento de la pasarela y no del transporte.
- */
-function resolvePendingTransaction(
-  transaction: WompiTransaction,
-  mockFactory: GatewayMockFactory,
-): WompiTransaction {
-  if (transaction.status !== "PENDING") {
-    return transaction;
-  }
 
-  return transaction.payment_method?.type === "PSE"
-    ? mockFactory.advancePseTransaction(transaction)
-    : mockFactory.advanceCardTransaction(transaction);
-}

@@ -2,7 +2,7 @@ import { buildApp } from "../src/app";
 import { CredentialResolver } from "../src/auth/CredentialResolver";
 import { KitPagosProvider } from "../src/services/KitPagosProvider";
 import { ScenarioEngine } from "../src/scenarios/ScenarioEngine";
-import { transactionStore } from "../src/store/TransactionStore";
+import { resetSimulatorState } from "../src/store/GatewayStores";
 
 describe("POST /v1/sim/wompi/transactions", () => {
   const validRequestBody = {
@@ -283,11 +283,11 @@ describe("GET /v1/sim/wompi/transactions/:id", () => {
   };
 
   beforeEach(() => {
-    transactionStore.clear();
+    resetSimulatorState();
   });
 
   afterEach(() => {
-    transactionStore.clear();
+    resetSimulatorState();
   });
 
   it("devuelve 200 con { data: transaction } cuando la transacción fue creada previamente", async () => {

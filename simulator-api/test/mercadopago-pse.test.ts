@@ -159,20 +159,76 @@ describe("PSE en el simulador de Mercado Pago", () => {
     ).toBeUndefined();
   });
 
-  it("permite consultar una orden que sigue esperando al pagador", async () => {
+  it("crea la orden esperando al pagador, con la URL de redirección", async () => {
+    // El estado que espera al pagador se observa **al crear**, no consultando. Antes esta
+    // prueba pedía una orden que no existía con `PENDING` y la ruta respondía
+    // `action_required`: la consulta fabricaba el estado y además lo decidía con la
+    // cabecera. Ahora la creación deja la orden en `action_required` con su URL, y la
+    // consulta la cierra, que es el orden real del flujo.
     const app = buildApp();
 
-    const response = await app.inject({
-      method: "GET",
-      url: "/v1/sim/mercadopago/orders/ORD01TESTPENDING",
-      headers: { "x-simulate-scenario": "PENDING" },
-    });
+    const response = await createOrder(app);
     const order = response.json();
 
+    expect(response.statusCode).toBe(201);
     expect(order.status).toBe("action_required");
     expect(
       order.transactions.payments[0].payment_method.redirect_url,
     ).toBeDefined();
+  });
+
+  it("no cambia una orden ya consultada aunque se consulte otra vez", async () => {
+    // La tabla mueve `action_required` a `processed` una sola vez. Consultar de nuevo
+    // devuelve lo mismo, que es el criterio 1 del issue aplicado a las órdenes: el
+    // resultado de una consulta no puede depender de cuántas veces se hizo.
+    const app = buildApp();
+
+    const created = (await createOrder(app)).json();
+
+    const primera = await app.inject({
+      method: "GET",
+      url: `/v1/sim/mercadopago/orders/${created.id}`,
+    });
+    const segunda = await app.inject({
+      method: "GET",
+      url: `/v1/sim/mercadopago/orders/${created.id}`,
+    });
+
+    expect(primera.statusCode).toBe(200);
+    expect(primera.json().status).toBe("processed");
+    expect(segunda.statusCode).toBe(200);
+    expect(segunda.json().status).toBe("processed");
+    expect(segunda.json()).toEqual(primera.json());
+  });
+
+  it("devuelve la referencia externa del comercio, que antes se perdia", async () => {
+    // Antes la ruta de consulta armaba la orden de cero y no incluía
+    // `external_reference`, a propósito porque "el simulador no guarda estado entre el POST
+    // y el GET". Con la orden guardada, la referencia que mandó el comercio vuelve intacta,
+    // y es contra ella que se concilia del lado del comercio.
+    const app = buildApp();
+
+    const created = (await createOrder(app)).json();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/sim/mercadopago/orders/${created.id}`,
+    });
+
+    expect(response.json().external_reference).toBe("orden-mp-pse-123");
+    expect(response.json().total_amount).toBe("150000");
+  });
+
+  it("devuelve 404 si la orden no existe", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/sim/mercadopago/orders/ORD01NOEXISTE",
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error).toBe("not_found");
   });
 
   /**

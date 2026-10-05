@@ -270,18 +270,38 @@ describe("mock de Kushki", () => {
   });
 
   describe("GET /v1/sim/kushki/charges/:ticketNumber", () => {
-    it("consulta un cargo aprobado conservando el ticketNumber solicitado", async () => {
+    /*
+     * Estas tres pruebas crean el cobro antes de consultarlo, y ese es el cambio de fondo.
+     *
+     * Antes la ruta armaba la respuesta de cero: cualquier identificador devolvía `200`
+     * con un cargo `APPROVAL` de 50.000, y con la cabecera `REJECTED` el mismo
+     * identificador devolvía `DECLINED`. Las pruebas cubrían ese comportamiento creyendo
+     * que probaban el ciclo de vida de un cobro, y lo que protegían era el defecto que
+     * reporta el issue #124: una consulta que inventa el cobro y que además decide su
+     * desenlace.
+     */
+
+    it("responde el cargo creado, con su ticketNumber y su monto", async () => {
       const app = buildApp();
+
+      const creado = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        payload: validRequestBody,
+      });
+
+      const { ticketNumber } = creado.json();
 
       const response = await app.inject({
         method: "GET",
-        url: "/v1/sim/kushki/charges/kushki-ticket-123",
+        url: `/v1/sim/kushki/charges/${ticketNumber}`,
       });
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body.ticketNumber).toBe("kushki-ticket-123");
+      expect(body.ticketNumber).toBe(ticketNumber);
       expect(body.details.transactionStatus).toBe("APPROVAL");
+      // El monto es el que se mandó al crear, no una constante de la ruta.
       expect(body.details.subtotalIva0).toBe(50000);
       expect(body.details.currencyCode).toBe("COP");
 
@@ -291,14 +311,73 @@ describe("mock de Kushki", () => {
     it("consulta un cargo rechazado sin convertirlo en error HTTP", async () => {
       const app = buildApp();
 
-      const response = await app.inject({
-        method: "GET",
-        url: "/v1/sim/kushki/charges/kushki-declined-123",
+      const creado = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
         headers: { "x-simulate-scenario": "REJECTED" },
+        payload: validRequestBody,
       });
 
+      const { ticketNumber } = creado.json();
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/sim/kushki/charges/${ticketNumber}`,
+      });
+
+      // 201 al crear y 200 al consultar: el rechazo viaja en el estado del cuerpo, igual
+      // que contra Kushki.
       expect(response.statusCode).toBe(200);
       expect(response.json().details.transactionStatus).toBe("DECLINED");
+
+      await app.close();
+    });
+
+    it("devuelve el mismo estado aunque la consulta pida el contrario", async () => {
+      // Criterio 1 del issue: el escenario se fija en la creación. Si la cabecera de la
+      // consulta cambiara el resultado, el mismo cobro sería declinado y aprobado según
+      // quién preguntara, y no habría forma de conciliar.
+      const app = buildApp();
+
+      const creado = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        headers: { "x-simulate-scenario": "DECLINED" },
+        payload: validRequestBody,
+      });
+
+      const { ticketNumber } = creado.json();
+
+      const conAprobado = await app.inject({
+        method: "GET",
+        url: `/v1/sim/kushki/charges/${ticketNumber}`,
+        headers: { "x-simulate-scenario": "APPROVED" },
+      });
+
+      const sinCabecera = await app.inject({
+        method: "GET",
+        url: `/v1/sim/kushki/charges/${ticketNumber}`,
+      });
+
+      expect(conAprobado.json().details.transactionStatus).toBe("DECLINED");
+      expect(sinCabecera.json().details.transactionStatus).toBe("DECLINED");
+
+      await app.close();
+    });
+
+    it("responde 404 con el error nativo si el ticket no existe", async () => {
+      // Antes respondía 200 con un cargo inventado. Un 200 sobre un identificador
+      // desconocido esconde el error: el comercio cree que consultó un cobro y recibió
+      // datos de otro.
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/sim/kushki/charges/kushki-ticket-inexistente",
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().code).toBe("K404");
 
       await app.close();
     });

@@ -12,10 +12,6 @@ import {
   RapydPaymentResponse,
   RapydResponseStatus,
 } from "./types";
-import {
-  TransactionStore,
-  transactionStore,
-} from "../../store/TransactionStore";
 
 /**
  * Gateway Mock Factory — Rapyd (issue #52).
@@ -37,8 +33,6 @@ export class GatewayMockFactory {
    * recurso de Rapyd que necesita estado entre peticiones: sin guardarla, la segunda
    * consulta no podría saber que la primera ya ocurrió.
    */
-  constructor(private readonly store: TransactionStore = transactionStore) {}
-
   /**
    * Rapyd identifica sus pagos con el prefijo `payment_` seguido de 32
    * caracteres hexadecimales. Se replica esa forma en vez de usar `randomUUID()`
@@ -84,7 +78,6 @@ export class GatewayMockFactory {
       created_at: Math.floor(Date.now() / 1000),
     };
 
-    this.store.save(paymentId, payment);
     return GatewayMockFactory.wrap(payment);
   }
 
@@ -108,7 +101,6 @@ export class GatewayMockFactory {
       created_at: Math.floor(Date.now() / 1000),
     };
 
-    this.store.save(paymentId, payment);
     return {
       status: {
         error_code: "ERROR_PROCESSING_CARD - [51]",
@@ -141,7 +133,6 @@ export class GatewayMockFactory {
       created_at: Math.floor(Date.now() / 1000),
     };
 
-    this.store.save(paymentId, payment);
     return {
       status: {
         error_code: "",
@@ -224,68 +215,10 @@ export class GatewayMockFactory {
       },
     };
 
-    this.store.save(id, checkout);
     return { status: GatewayMockFactory.buildStatus(), data: checkout };
   }
 
-  /**
-   * Paga una página de pago, como si el pagador hubiera llenado el formulario.
-   *
-   * Contra el sandbox real la página **nunca se paga sola**: se midió que un checkout
-   * creado y no visitado se queda en `NEW` indefinidamente, así que el estado posterior al
-   * pago no se puede observar sin que una persona lo llene. Acá lo dispara la visita a la
-   * URL de redirección, y la consulta de estado queda siendo una lectura pura.
-   *
-   * Es a propósito distinto del PSE de Wompi, que avanza por número de consultas: ahí la
-   * URL del banco es un destino externo que el mock no puede servir, mientras que acá la
-   * página es del mismo proveedor y el simulador sí puede representar la visita. Con esto
-   * el orden del flujo —redirigir, pagar, consultar— se ejercita en el orden real.
-   *
-   * No hace falta un contador ni un campo extra: que el pago tenga `id` **es** el estado.
-   */
-  payCheckout(checkout: RapydCheckout): RapydCheckout {
-    if (checkout.payment.id) {
-      return checkout;
-    }
 
-    const advanced: RapydCheckout = {
-      ...checkout,
-      status: "DON",
-      payment: {
-        ...checkout.payment,
-        id: GatewayMockFactory.buildPaymentId(),
-        status: "CLO",
-        paid: true,
-      },
-    };
-
-    this.store.save(advanced.id, advanced);
-    return advanced;
-  }
-
-  /**
-   * Respuesta de la consulta de estado de un pago existente.
-   *
-   * El mock no guarda estado entre peticiones, asi que reconstruye un pago
-   * aprobado con el identificador consultado. Alcanza para que el
-   * `RapydAdapter` ejercite su ruta de consulta de punta a punta, que es lo que
-   * pide este issue. La persistencia en memoria real, que permitiria que la
-   * consulta devuelva el pago tal como se creo, es el issue #55.
-   */
-  buildStatusResponse(paymentId: string): RapydPaymentResponse {
-    return GatewayMockFactory.wrap({
-      id: paymentId,
-      status: "CLO",
-      paid: true,
-      amount: "0",
-      currency_code: "COP",
-      merchant_reference_id: "",
-      receipt_email: "",
-      failure_code: "",
-      failure_message: "",
-      created_at: Math.floor(Date.now() / 1000),
-    });
-  }
 
   /**
    * Respuesta de `POST /v1/customers`, la primera de las dos llamadas de PSE.

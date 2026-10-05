@@ -295,21 +295,58 @@ describe("mock de Rapyd", () => {
     });
   });
 
+  /*
+   * El pago se crea antes de consultarse. Antes `buildStatusResponse` devolvía `CLO`,
+   * `paid: true`, `amount: "0"` y la referencia vacía para cualquier identificador: un pago
+   * inexistente pasaba por cobrado, y uno declinado se reportaba aprobado porque el método
+   * no miraba el estado guardado.
+   */
   describe("GET /v1/sim/rapyd/payments/:paymentId", () => {
-    it("devuelve el pago consultado con el mismo identificador y el sobre de Rapyd", async () => {
+    it("devuelve el pago creado con su identificador, sobre y monto reales", async () => {
       const app = buildApp();
+
+      const creado = await app.inject({
+        method: "POST",
+        url: "/v1/sim/rapyd/payments",
+        payload: {
+          amount: "50000",
+          currency: "COP",
+          payment_method: { type: "co_visa_card" },
+          merchant_reference_id: "orden-rapyd-456",
+        },
+      });
+
+      const { data } = creado.json();
 
       const response = await app.inject({
         method: "GET",
-        url: "/v1/sim/rapyd/payments/payment_abc123",
+        url: `/v1/sim/rapyd/payments/${data.id}`,
       });
 
       expect(response.statusCode).toBe(200);
 
       const body = response.json();
       expect(body.status.status).toBe("SUCCESS");
-      expect(body.data.id).toBe("payment_abc123");
+      expect(body.data.id).toBe(data.id);
       expect(body.data.status).toBe("CLO");
+      expect(body.data.paid).toBe(true);
+      // El monto y la referencia son los que se mandaron, no `"0"` y cadena vacía.
+      expect(body.data.amount).toBe("50000");
+      expect(body.data.merchant_reference_id).toBe("orden-rapyd-456");
+
+      await app.close();
+    });
+
+    it("devuelve 404 con el sobre de Rapyd si el pago no existe", async () => {
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/sim/rapyd/payments/payment_inexistente",
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().status.error_code).toBe("ERROR_GET_PAYMENT");
 
       await app.close();
     });

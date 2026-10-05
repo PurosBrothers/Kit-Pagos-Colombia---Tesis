@@ -1,7 +1,6 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { GatewayMockFactory } from "../gateways/rapyd/GatewayMockFactory";
 import {
-  RapydCheckout,
   RapydCreateCheckoutRequestBody,
   RapydCreateCustomerRequestBody,
   RapydCreatePaymentRequestBody,
@@ -10,7 +9,16 @@ import {
   getSimulatorScenario,
   ScenarioEngine,
 } from "../scenarios/ScenarioEngine";
-import { transactionStore } from "../store/TransactionStore";
+import {
+  rapydCheckoutMachine,
+  rapydPaymentMachine,
+} from "../state/rapydStateMachine";
+import { rapydCheckouts, rapydPayments } from "../store/GatewayStores";
+import {
+  hasDuplicateMark,
+  markDuplicate,
+  nextFlappingAttempt,
+} from "../store/ScenarioMarks";
 
 const DEFAULT_SCENARIO = "APPROVED";
 
@@ -89,7 +97,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
 
       if (scenario === "FLAPPING") {
         const key = requestBody.merchant_reference_id ?? "rapyd_flapping";
-        const isFailing = ScenarioEngine.handleFlapping(key);
+        const isFailing = nextFlappingAttempt(key);
         if (isFailing) {
           return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
         }
@@ -98,7 +106,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
 
       if (scenario === "DUPLICATE_PAYMENT") {
         const dupKey = `dup_rapyd_${requestBody.merchant_reference_id}`;
-        if (transactionStore.findById(dupKey)) {
+        if (hasDuplicateMark(dupKey)) {
           return reply.code(409).send({
             status: {
               error_code: "DUPLICATE_MERCHANT_REFERENCE_ID",
@@ -109,16 +117,22 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
             },
           });
         }
-        transactionStore.save(dupKey, true);
+        markDuplicate(dupKey);
         scenario = DEFAULT_SCENARIO;
       }
 
       if (scenario === "DECLINED" || scenario === "REJECTED") {
-        return reply.code(201).send(mockFactory.buildDeclinedResponse(requestBody));
+        const declined = mockFactory.buildDeclinedResponse(requestBody);
+        rapydPayments.save(declined.data.id, declined.data);
+
+        return reply.code(201).send(declined);
       }
 
       if (scenario === "EXPIRED") {
-        return reply.code(201).send(mockFactory.buildExpiredResponse(requestBody));
+        const expired = mockFactory.buildExpiredResponse(requestBody);
+        rapydPayments.save(expired.data.id, expired.data);
+
+        return reply.code(201).send(expired);
       }
 
       if (
@@ -155,10 +169,28 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
           });
         }
 
-        return reply.code(201).send(mockFactory.buildPseCreatedResponse(requestBody));
+        /*
+         * El pago de PSE nace activo y sin cobrar, y se guarda así.
+         *
+         * `buildPseCreatedResponse` ya no persiste —la fábrica solo construye—, así que
+         * sin esta línea el pago de PSE no se podría consultar y el flujo de Rapyd con
+         * PSE quedaría sin poder ejercitar de punta a punta, que es justo para lo que
+         * existe la ruta de consulta.
+         *
+         * Guardar el estado `ACT` y no el final es lo correcto: el pago todavía no se
+         * cobró, y `next_action: "pending_confirmation"` dice exactamente eso. Lo mueve la
+         * tabla cuando el comercio consulta.
+         */
+        const pse = mockFactory.buildPseCreatedResponse(requestBody);
+        rapydPayments.save(pse.data.id, pse.data);
+
+        return reply.code(201).send(pse);
       }
 
-      return reply.code(201).send(mockFactory.buildApprovedResponse(requestBody));
+      const approved = mockFactory.buildApprovedResponse(requestBody);
+      rapydPayments.save(approved.data.id, approved.data);
+
+      return reply.code(201).send(approved);
     },
   );
 
@@ -191,9 +223,10 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
 
       // 200 y no 201: se midió que Rapyd responde 200 al crear una página de pago, a
       // diferencia de `POST /v1/payments`, que responde 201. La misma API usa los dos.
-      return reply
-        .code(200)
-        .send(mockFactory.buildCheckoutCreatedResponse(requestBody));
+      const created = mockFactory.buildCheckoutCreatedResponse(requestBody);
+      rapydCheckouts.save(created.data.id, created.data);
+
+      return reply.code(200).send(created);
     },
   );
 
@@ -207,9 +240,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
     "/v1/sim/rapyd/checkout/:checkoutId",
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { checkoutId } = request.params as { checkoutId: string };
-      const checkout = transactionStore.findById(checkoutId) as
-        | RapydCheckout
-        | undefined;
+      const checkout = rapydCheckouts.findById(checkoutId);
 
       if (!checkout) {
         return reply.code(400).send({
@@ -250,9 +281,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
     "/v1/sim/rapyd/checkout/:checkoutId/pagar",
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { checkoutId } = request.params as { checkoutId: string };
-      const checkout = transactionStore.findById(checkoutId) as
-        | RapydCheckout
-        | undefined;
+      const checkout = rapydCheckouts.findById(checkoutId);
 
       if (!checkout) {
         return reply.code(404).send({
@@ -266,7 +295,22 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const pagado = mockFactory.payCheckout(checkout);
+      /*
+       * `pay` y no `query`: esta es la visita del pagador, no una lectura.
+       *
+       * La tabla decide que un checkout en `NEW` pasa a `DON` y que de paso nazca el pago.
+       * El método `payCheckout` de la fábrica hacía exactamente eso, y por eso se borró: dos
+       * copias de la misma regla —una en la tabla y otra en la fábrica— son dos lugares que
+       * pueden discrepar, y ya discrepaban. La diferencia real con Wompi sigue en pie y es
+       * intencionada: acá el simulador representa la visita a la página; en Wompi avanza por
+       * consultas porque la URL del banco es un destino externo que no puede servir.
+       */
+      const pagado = rapydCheckoutMachine.transition(checkout, "pay");
+
+      if (pagado !== checkout) {
+        rapydCheckouts.save(checkoutId, pagado);
+      }
+
       return reply.code(200).send({ paid: true, payment_id: pagado.payment.id });
     },
   );
@@ -276,7 +320,49 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { paymentId } = request.params as { paymentId: string };
 
-      return reply.code(200).send(mockFactory.buildStatusResponse(paymentId));
+      /*
+       * La consulta responde el pago que existe, no uno armado acá.
+       *
+       * Antes `buildStatusResponse` devolvía siempre `CLO`, `paid: true`, `amount: "0"` y
+       * la referencia vacía, para cualquier identificador. Eso hacía pasar por aprobado un
+       * pago que no existía y, cuando sí existía, escondía su monto y su referencia: el
+       * comercio no podía conciliar contra nada. Un pago que seDeclinó además se reportaba
+       * cobrado, porque el método no miraba el estado guardado.
+       *
+       * La tabla mueve `ACT` a `CLO` y un pago ya final se devuelve como está. Que el
+       * escenario no intervenga es el criterio 1 del issue: el desenlace lo fijó la
+       * creación.
+       */
+      const payment = rapydPayments.findById(paymentId);
+
+      if (!payment) {
+        return reply.code(404).send({
+          status: {
+            error_code: "ERROR_GET_PAYMENT",
+            status: "ERROR",
+            message: "",
+            response_code: "ERROR_GET_PAYMENT",
+            operation_id: "",
+          },
+        });
+      }
+
+      const movido = rapydPaymentMachine.transition(payment, "query");
+
+      if (movido !== payment) {
+        rapydPayments.save(paymentId, movido);
+      }
+
+      return reply.code(200).send({
+        status: {
+          status: "SUCCESS",
+          error_code: "",
+          message: "",
+          response_code: "",
+          operation_id: "",
+        },
+        data: movido,
+      });
     },
   );
 

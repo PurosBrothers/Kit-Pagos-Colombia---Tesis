@@ -220,7 +220,47 @@ describe("PSE en las cuatro pasarelas", () => {
     });
   });
 
+  /*
+   * Los tres pasos se ejecutan de verdad: se pide un token, se inicia con el que se
+   * emissions y se consulta ese mismo token.
+   *
+   * Antes estas pruebas usaban el literal `a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4` en el `init`
+   * y en la consulta, sin haberlo emitido nunca. El mock respondía `200` y
+   * `approvedTransaction` a cualquier identificador, así que el ciclo completo no estaba
+   * probado en ninguna parte: lo que se probaba era que un identificador inventado
+   * devolviera un estado inventado. Ese es el defecto que reporta el issue #124, y la
+   * forma de cubrirlo es el ciclo entero.
+   */
   describe("Kushki: los tres pasos de Transfer In", () => {
+    /** Emite un token real y lo devuelve, para que el resto del ciclo lo use. */
+    async function emitirToken(scenario?: string) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/transfer/v1/tokens",
+        headers: scenario ? { "x-simulate-scenario": scenario } : {},
+        payload: {
+          bankId: "007",
+          callbackUrl: "https://comercio.example.com/retorno",
+          documentType: "CC",
+          documentNumber: "1099888777",
+        },
+      });
+
+      return response.json().token as string;
+    }
+
+    /** Inicia la transferencia de un token y devuelve la respuesta. */
+    function iniciar(token: string, amount = 150000) {
+      return app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/transfer/v1/init",
+        payload: {
+          token,
+          amount: { subtotalIva0: amount, subtotalIva: 0, iva: 0, ice: 0, currency: "COP" },
+        },
+      });
+    }
+
     it("emite un token de 32 caracteres", async () => {
       const response = await app.inject({
         method: "POST",
@@ -237,7 +277,7 @@ describe("PSE en las cuatro pasarelas", () => {
       expect(response.json().token).toMatch(/^[0-9a-f]{32}$/);
     });
 
-    /**
+    /*
      * Los dos campos sin los que el paso del token no tendria sentido: el banco que
      * el pagador eligio y la URL a la que volver. Si el adaptador dejara de mandar
      * cualquiera de los dos, el mock lo dice.
@@ -255,23 +295,18 @@ describe("PSE en las cuatro pasarelas", () => {
       expect(response.statusCode).toBe(400);
     });
 
-    /**
+    /*
      * Responde 201 y sin campo de estado, que es la forma medida contra la API UAT:
      * `bankId`, `bankName`, `redirectUrl`, `transactionReference` y `trazabilityCode`.
      */
     it("inicia la transferencia y devuelve la URL de redireccion", async () => {
-      const response = await app.inject({
-        method: "POST",
-        url: "/v1/sim/kushki/transfer/v1/init",
-        payload: {
-          token: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
-          amount: { subtotalIva0: 150000, subtotalIva: 0, iva: 0, ice: 0, currency: "COP" },
-        },
-      });
+      const token = await emitirToken();
+      const response = await iniciar(token);
 
       expect(response.statusCode).toBe(201);
-      expect(response.json().redirectUrl).toContain("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4");
+      expect(response.json().redirectUrl).toContain(token);
       expect(response.json().trazabilityCode).toBeDefined();
+      // La respuesta medida del `init` no trae estado: el cobro se decide en la consulta.
       expect(response.json().status).toBeUndefined();
     });
 
@@ -290,14 +325,25 @@ describe("PSE en las cuatro pasarelas", () => {
      * token solo responde `400 T001`, y con el monto responde `201`.
      */
     it("rechaza el inicio sin el monto, porque la API real lo exige dos veces", async () => {
+      const token = await emitirToken();
+
       const response = await app.inject({
         method: "POST",
         url: "/v1/sim/kushki/transfer/v1/init",
-        payload: { token: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4" },
+        payload: { token },
       });
 
       expect(response.statusCode).toBe(400);
       expect(response.json().code).toBe("T001");
+    });
+
+    it("no inicia una transferencia que no fue creada", async () => {
+      // Antes el `init` respondía `201` para cualquier token. Ahora responde `404 T004`,
+      // que es lo que hace notar que se pierde un paso del ciclo.
+      const response = await iniciar("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4");
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().code).toBe("T004");
     });
 
     /**
@@ -305,15 +351,32 @@ describe("PSE en las cuatro pasarelas", () => {
      * `transaction_status`, que son del vocabulario de tarjeta.
      */
     it("consulta el estado de la transferencia por token", async () => {
+      const token = await emitirToken();
+      await iniciar(token);
+
       const response = await app.inject({
         method: "GET",
-        url: "/v1/sim/kushki/transfer/v1/status/a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+        url: `/v1/sim/kushki/transfer/v1/status/${token}`,
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().token).toBe("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4");
+      expect(response.json().token).toBe(token);
       expect(response.json().status).toBe("approvedTransaction");
       expect(response.json().ticketNumber).toBeUndefined();
+    });
+
+    it("reporta el monto que se cobro en el inicio, no el estimado del token", async () => {
+      const token = await emitirToken();
+      await iniciar(token, 240000);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/sim/kushki/transfer/v1/status/${token}`,
+      });
+
+      // El monto de Kushki es el desglose, no un número suelto.
+      expect(response.json().amount.subtotalIva0).toBe(240000);
+      expect(response.json().amount.currency).toBe("COP");
     });
 
     /**
@@ -335,15 +398,67 @@ describe("PSE en las cuatro pasarelas", () => {
       expect(response.json().code).toBe("T004");
     });
 
-    /** El estado no final tiene que ser el nativo de transferencia, no el de tarjeta. */
-    it("reporta initializedTransaction en el escenario pendiente", async () => {
+    it("devuelve 404 si el token no corresponde a una transferencia emitida", async () => {
+      // El token tiene la forma correcta —32 hex— pero nunca se emitió. Antes la ruta
+      // respondía `200 approvedTransaction` a cualquier cosa.
       const response = await app.inject({
         method: "GET",
         url: "/v1/sim/kushki/transfer/v1/status/a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
-        headers: { "x-simulate-scenario": "PENDING" },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().code).toBe("T004");
+    });
+
+    /*
+     * El estado que no es final, el que el ciclo necesita para poder ejercitarse, se
+     * observa con un escenario pedido en la creación del token. Antes se pedía en la
+     * consulta, con lo que el mismo token podía reportarse `initializedTransaction` o
+     * `approvedTransaction` según la cabecera de quien preguntara.
+     */
+    it("reporta initializedTransaction en el escenario pendiente", async () => {
+      const token = await emitirToken("PENDING");
+      await iniciar(token);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/sim/kushki/transfer/v1/status/${token}`,
       });
 
       expect(response.json().status).toBe("initializedTransaction");
+    });
+
+    it("devuelve declinedTransaction para el escenario declinado", async () => {
+      // `declinedTransaction` era un estado al que ninguna prueba podía llegar, porque
+      // ninguna de las tres rutas leía el escenario. Con el escenario registrado en el
+      // paso del token, el rechazo se puede observar por la API.
+      const token = await emitirToken("DECLINED");
+      await iniciar(token);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/sim/kushki/transfer/v1/status/${token}`,
+      });
+
+      expect(response.json().status).toBe("declinedTransaction");
+    });
+
+    it("no cambia el desenlace si la consulta pide el contrario", async () => {
+      const token = await emitirToken("DECLINED");
+      await iniciar(token);
+
+      const conAprobado = await app.inject({
+        method: "GET",
+        url: `/v1/sim/kushki/transfer/v1/status/${token}`,
+        headers: { "x-simulate-scenario": "APPROVED" },
+      });
+      const sinCabecera = await app.inject({
+        method: "GET",
+        url: `/v1/sim/kushki/transfer/v1/status/${token}`,
+      });
+
+      expect(conAprobado.json().status).toBe("declinedTransaction");
+      expect(sinCabecera.json().status).toBe("declinedTransaction");
     });
 
     /**
@@ -361,14 +476,41 @@ describe("PSE en las cuatro pasarelas", () => {
       expect(response.statusCode).toBe(403);
     });
 
-    it("sigue respondiendo 200 a un ticket de tarjeta", async () => {
+    it("responde 404 a un ticket de tarjeta que no se creo, no 200 con datos de otro cobro", async () => {
+      // Antes esta ruta armaba un cargo de 50.000 para cualquier identificador de 18
+      // caracteres, así que un ticket inexistente pasaba por cobrado. Con el cargo guardado
+      // al crearlo, la respuesta es un 404 nativo.
       const response = await app.inject({
         method: "GET",
         url: "/v1/sim/kushki/charges/123456789012345678",
       });
 
+      expect(response.statusCode).toBe(404);
+      expect(response.json().code).toBe("K404");
+    });
+
+    it("responde 200 al ticket de tarjeta que si se creo, con su estado real", async () => {
+      const creado = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        headers: { "x-simulate-scenario": "DECLINED" },
+        payload: {
+          token: "tok_kushki_pse_completo",
+          amount: { subtotalIva0: 150000, subtotalIva: 0, iva: 0, ice: 0, currency: "COP" },
+          contactDetails: { email: "cliente@example.com" },
+        },
+      });
+
+      const { ticketNumber } = creado.json();
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/sim/kushki/charges/${ticketNumber}`,
+      });
+
       expect(response.statusCode).toBe(200);
-      expect(response.json().ticketNumber).toBe("123456789012345678");
+      expect(response.json().ticketNumber).toBe(ticketNumber);
+      expect(response.json().details.transactionStatus).toBe("DECLINED");
     });
   });
 });
