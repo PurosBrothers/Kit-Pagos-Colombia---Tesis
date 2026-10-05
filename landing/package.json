@@ -1,0 +1,21 @@
+{
+  "name": "kit-pagos-colombia-landing",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "check:snippets": "tsx scripts/check-snippets.ts"
+  },
+  "dependencies": {
+    "kit-pagos-colombia": "file:../sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "tsx": "^4.20.6",
+    "typescript": "^6.0.3",
+    "vite": "^5.4.14"
+  }
+}
