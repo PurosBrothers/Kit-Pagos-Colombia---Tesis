@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: kit-pagos-colombia
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: simulator-api
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20.x
+      - key: PORT
+        value: 10000
+      - key: SIMULATOR_SDK_BASE_URL
+        value: https://kit-pagos-colombia.onrender.com
+      - key: API_AUTH_TOKEN
+        sync: false
+      - key: WOMPI_PUBLIC_KEY
+        sync: false
+      - key: WOMPI_PRIVATE_KEY
+        sync: false
+      - key: WOMPI_INTEGRITY_SECRET
+        sync: false
+      - key: WOMPI_WEBHOOK_SECRET
+        sync: false
+      - key: RAPYD_ACCESS_KEY
+        sync: false
+      - key: RAPYD_SECRET_KEY
+        sync: false
+      - key: RAPYD_WEBHOOK_SECRET
+        sync: false
+      - key: RAPYD_WEBHOOK_URL
+        sync: false
+      - key: MERCADOPAGO_ACCESS_TOKEN
+        sync: false
+      - key: MERCADOPAGO_PUBLIC_KEY
+        sync: false
+      - key: MERCADOPAGO_WEBHOOK_SECRET
+        sync: false
+      - key: KUSHKI_PUBLIC_MERCHANT_ID
+        sync: false
+      - key: KUSHKI_PRIVATE_MERCHANT_ID
+        sync: false
+      - key: KUSHKI_WEBHOOK_SECRET
+        sync: false

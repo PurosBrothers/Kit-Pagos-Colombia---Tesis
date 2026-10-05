@@ -370,14 +370,14 @@ Estos cuatro casos tienen una lección común, y es probablemente la más import
 
 ---
 
-## 6. Qué falta para que el componente esté completo
+## 6. Estado de los requisitos del componente
 
-Es el primer entregable de la Iteración 3, y son cuatro cosas:
+El primer entregable de la Iteración 3 asigna cuatro partes a la API de Simulación:
 
-1. **Los escenarios de fallo:** rechazo, fondos insuficientes, timeout y error de red, para las cuatro pasarelas y no solo para Wompi. Es el requisito RF-10.
+1. **Los escenarios de fallo:** rechazo, fondos insuficientes, timeout y error de red, para las cuatro pasarelas y no solo para Wompi (requisito RF-10, en curso vía issue #122).
 2. **Que el motor reciba la pasarela como parámetro** en vez de asumir Wompi.
-3. **El despliegue**, en Render, que ya está en uso para este proyecto.
-4. **La colección Postman versionada**, como entregable de la iteración.
+3. **El despliegue en la nube (completado):** desplegado oficialmente en Render como Web Service en [`https://kit-pagos-colombia.onrender.com`](https://kit-pagos-colombia.onrender.com). La infraestructura está codificada en `render.yaml` (Blueprint / IaC) en la raíz del repositorio, configurada para compilar e iniciar Fastify sobre Node 20 en el puerto dinámico de Render (`10000`), con healthcheck nativo en `/health` y hook de despliegue automatizado (`RENDER_DEPLOY_HOOK_URL`). El servicio consume el paquete oficial publicado en npm (`kit-pagos-colombia@^0.2.0`), asegurando que la simulación opere como un consumidor real desacoplado del árbol local del monorepo (punto 79 del `architecture-log.md`).
+4. **La colección Postman versionada:** pospuesta de mutuo acuerdo para consolidarse una vez se cierren los endpoints y escenarios de fallo restantes de la Iteración 3, evitando mantener especificaciones desfasadas mientras la superficie REST evoluciona.
 
 **El punto 1 bloquea a los prototipos**, y por eso el orden dentro de la iteración no es libre. Una de las seis variables que mide el experimento de la Fase 5 es si el prototipo distingue un rechazo de negocio de un fallo técnico y reintenta solo el segundo. Contra un simulador que solo sabe aprobar, eso no se puede implementar ni medir. La secuencia forzada es **escenarios → prototipos → métricas**.
 
@@ -401,13 +401,35 @@ Eso reformula la pregunta: no es "¿cómo hacemos el simulador más real?" sino 
 
 ## 8. Cómo se levanta
 
+### Entorno local
+
 ```bash
 cd simulator-api && npm install && npm run dev
 # Escucha en http://localhost:3000
 curl http://localhost:3000/health
 ```
 
-Las suites de prueba (27 suites con 456 pruebas en total, contadas el 5 de octubre de 2026) corren con `npm test` y no necesitan que el servidor esté levantado, porque usan `app.inject()`.
+Las suites de prueba (27 suites con 462 pruebas en total, contadas el 5 de octubre de 2026) corren con `npm test` y no necesitan que el servidor esté levantado, porque usan `app.inject()`.
+
+### Entorno desplegado en Render
+
+El servicio productivo en la nube está disponible en:
+`https://kit-pagos-colombia.onrender.com`
+
+- **Healthcheck público:**
+  ```bash
+  curl -i https://kit-pagos-colombia.onrender.com/health
+  # HTTP/1.1 200 OK -> {"status":"ok"}
+  ```
+- **Prueba de vida de la capa REST (`/v1/api/gateways`):**
+  ```bash
+  curl -i https://kit-pagos-colombia.onrender.com/v1/api/gateways
+  # Devuelve el catálogo de pasarelas del SDK: ["WOMPI","RAPYD","MERCADOPAGO","KUSHKI"]
+  ```
+- **Rutas de simulación:** expuestas bajo `https://kit-pagos-colombia.onrender.com/v1/sim/<pasarela>/...` replicando los contratos nativos. Para usar el simulador remoto en una aplicación o prototipo, configure en el SDK:
+  ```typescript
+  baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim"
+  ```
 
 ---
 

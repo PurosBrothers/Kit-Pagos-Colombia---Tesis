@@ -2719,6 +2719,50 @@ Asimismo, se midió el comportamiento de CORS el 30 de septiembre de 2026: una s
 
 **Estado:** Resuelto en código y documentación (`sdk/src-browser/`, `simulator-api/src/routes/mercadopago.ts`, `simulator-api/src/gateways/mercadopago/GatewayMockFactory.ts`, `docs/03-sdk/6-tokenizacion-frontend.md`).
 
+### 79. Despliegue en la nube de la API de Simulación en Render, Infrastructure as Code y desacoplamiento de dependencias
+
+**Responsable:** Prieto / Equipo (secciones 8 y 11 del SAD, `simulator-api/`, `render.yaml`, `docs/02-arquitectura/3-api-de-simulacion.md`).
+
+**Contexto.**
+Como parte del primer entregable de la Iteración 3 (metodología §2.1 y `docs/02-arquitectura/3-api-de-simulacion.md` §6), la API de Simulación requería un despliegue oficial en la nube para permitir que evaluadores, jurados y prototipos de integración consuman tanto los contratos de simulación como la capa REST unificada (`/v1/api/*`) sin necesidad de levantar infraestructura local.
+
+**Decisiones de infraestructura y despliegue (Render Blueprint):**
+1. *Infraestructura como Código (`render.yaml`):*
+   Se formalizó la especificación del servicio mediante un Blueprint declarativo en la raíz del repositorio (`render.yaml`). El servicio se define como `web`, runtime `node`, plan gratuito en la región Oregon, con directorio raíz configurado en `simulator-api`.
+2. *Comandos de ciclo de vida y puerto dinámico:*
+   - `buildCommand: npm ci && npm run build`
+   - `startCommand: npm start`
+   - Fastify enlaza en `HOST: 0.0.0.0` y resuelve el puerto dinámico de Render (`PORT=10000`) mediante `process.env.PORT ?? 3000`.
+   - Healthcheck nativo configurado en `healthCheckPath: /health` para monitoreo y reinicios automáticos sin caída de servicio.
+3. *Resolución de URLs internas del SDK (`SIMULATOR_SDK_BASE_URL`):*
+   Se configuró la variable de entorno `SIMULATOR_SDK_BASE_URL=https://kit-pagos-colombia.onrender.com`. Esto garantiza que cuando el módulo REST propio (`src/kit-pagos-api/`) instancie clientes del SDK mediante `KitPagosProvider`, las llamadas mock internas apunten al dominio público de Render en lugar de retroceder al valor por omisión local (`http://localhost:3000`).
+4. *Seguridad estricta de credenciales en la nube:*
+   En `render.yaml` todas las credenciales de pasarela y tokens se declaran con `sync: false`, impidiendo que secretos se registren en el repositorio. Asimismo, se hace valer la guarda estricta del punto 69: cuando el SDK resuelve un destino clasificado como producción, `KitPagosProvider` lanza `ClientCredentialsRequiredError`, garantizando que las credenciales de servidor configuradas en Render nunca se utilicen inadvertidamente contra pasarelas reales.
+5. *Hook de despliegue automatizado:*
+   Se documentó la integración del deploy hook de Render (`RENDER_DEPLOY_HOOK_URL`) en `.env.example` y en la arquitectura de la API, permitiendo aprovisionar despliegues automatizados desde ramas autorizadas.
+
+**Desacoplamiento monorepo: `simulator-api` consume npm (`^0.2.0`) vs. `examples/` consume `file:../sdk`:**
+Surgió el debate arquitectónico sobre si los subproyectos del repositorio deben consumir el paquete publicado en npm o la referencia local `file:../sdk`. Se adoptó un criterio diferenciado según el propósito de cada componente:
+- **`simulator-api` consume npm (`kit-pagos-colombia@^0.2.0`):**
+  Al desplegar en Render con `rootDir: simulator-api`, depender de `file:../sdk` generaba fallas de empaquetado porque `sdk/dist` no se versiona en Git y Render aísla el contexto de compilación al directorio raíz del servicio. Transicionar a la dependencia publicada en npm (`^0.2.0`) resuelve el despliegue con un simple `npm ci`, asegura que la API de simulación opere como un consumidor real del paquete público y desacopla el job de CI `Simulator API (Lint, Tests and Coverage)`, el cual ya no requiere compilar previamente el SDK local.
+- **`examples/` conserva deliberadamente `file:../sdk`:**
+  En concordancia con los puntos 60 y 62, la carpeta de ejemplos opera como una red de seguridad de integración continua en el mismo Pull Request (`Examples (Compile against SDK build)`). Si `examples/` consumiera npm, compilaría contra la versión previa publicada, dejando pasar en verde cualquier ruptura de contrato introducida en un PR hasta que ocurra un nuevo release. La referencia local garantiza detección inmediata de roturas de interfaz pública antes de fusionar.
+
+**Publicación de versión oficial `0.2.0` del SDK:**
+Alineado con el punto 53 sobre versionado semántico en fase pre-estabilización (`0.x.y`), se publicó formalmente `kit-pagos-colombia@0.2.0` en npm (`npm publish --access public`). Esta versión incorpora el soporte completo para tokenización en navegador (`kit-pagos-colombia/browser`), la resolución extendida de PSE y bancos, y los esquemas REST consolidados.
+
+**Diferimiento de la colección Postman:**
+Por decisión explícita de equipo, la elaboración de la colección versionada de Postman (contemplada en el entregable de la Iteración 3) se pospone para consolidarse una vez se implementen los escenarios de fallo restantes (issue #122) y se estabilice el catálogo total de endpoints, evitando la duplicación de esfuerzo y el riesgo de mantener colecciones desfasadas mientras la superficie de rutas continúa evolucionando.
+
+**Lo medido (5 de octubre de 2026):**
+- Servicio en producción respondiendo en `https://kit-pagos-colombia.onrender.com`.
+- Endpoint de salud: `curl -i https://kit-pagos-colombia.onrender.com/health` responde HTTP 200 `{"status":"ok"}`.
+- Catálogo de pasarelas REST: `curl -i https://kit-pagos-colombia.onrender.com/v1/api/gateways` responde con las 4 pasarelas soportadas.
+- Cobertura de pruebas en `simulator-api`: 21 suites y 299 pruebas ejecutadas satisfactoriamente (cobertura de líneas: 96.65%, stmts: 95.95%), cumpliendo holgadamente el umbral del 80% exigido por la Definition of Done.
+- Publicación en npm confirmada: `kit-pagos-colombia@0.2.0` verificado en `registry.npmjs.org`.
+
+**Estado:** Resuelto en infraestructura, empaquetado y código (`render.yaml`, `simulator-api/package.json`, `.github/workflows/ci.yml`, `docs/02-arquitectura/3-api-de-simulacion.md`).
+
 ### 80. El estado de un cobro en el simulador estaba repartido entre las factorías y los routers
 
 **Responsable:** Henao (issue #124, PR #139).
