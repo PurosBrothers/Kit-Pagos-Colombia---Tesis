@@ -55,19 +55,19 @@ describe("Environment closed catalog and dynamic resolution (issue #123)", () =>
       expectedPrefix: string;
     }> = [
       // Wompi
-      { gateway: Gateway.WOMPI, environment: "simulator", expectedPrefix: "https://kit-pagos-colombia.onrender.com/v1/sim/wompi" },
+      { gateway: Gateway.WOMPI, environment: "simulator", expectedPrefix: "http://localhost:3000/v1/sim/wompi" },
       { gateway: Gateway.WOMPI, environment: "sandbox", expectedPrefix: "https://sandbox.wompi.co/v1" },
       { gateway: Gateway.WOMPI, environment: "production", expectedPrefix: "https://production.wompi.co/v1" },
       // Mercado Pago
-      { gateway: Gateway.MERCADOPAGO, environment: "simulator", expectedPrefix: "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago" },
+      { gateway: Gateway.MERCADOPAGO, environment: "simulator", expectedPrefix: "http://localhost:3000/v1/sim/mercadopago" },
       { gateway: Gateway.MERCADOPAGO, environment: "sandbox", expectedPrefix: "https://api.mercadopago.com/v1" },
       { gateway: Gateway.MERCADOPAGO, environment: "production", expectedPrefix: "https://api.mercadopago.com/v1" },
       // Rapyd
-      { gateway: Gateway.RAPYD, environment: "simulator", expectedPrefix: "https://kit-pagos-colombia.onrender.com/v1/sim/rapyd" },
+      { gateway: Gateway.RAPYD, environment: "simulator", expectedPrefix: "http://localhost:3000/v1/sim/rapyd" },
       { gateway: Gateway.RAPYD, environment: "sandbox", expectedPrefix: "https://sandboxapi.rapyd.net/v1" },
       { gateway: Gateway.RAPYD, environment: "production", expectedPrefix: "https://api.rapyd.net/v1" },
       // Kushki
-      { gateway: Gateway.KUSHKI, environment: "simulator", expectedPrefix: "https://kit-pagos-colombia.onrender.com/v1/sim/kushki" },
+      { gateway: Gateway.KUSHKI, environment: "simulator", expectedPrefix: "http://localhost:3000/v1/sim/kushki" },
       { gateway: Gateway.KUSHKI, environment: "sandbox", expectedPrefix: "https://api-uat.kushkipagos.com" },
       { gateway: Gateway.KUSHKI, environment: "production", expectedPrefix: "https://api.kushkipagos.com" },
     ];
@@ -155,7 +155,7 @@ describe("Environment closed catalog and dynamic resolution (issue #123)", () =>
 
       expect(fetchSpy).toHaveBeenCalled();
       const calledUrl = String(fetchSpy.mock.calls[0][0]);
-      expect(calledUrl).toContain("https://kit-pagos-colombia.onrender.com/v1/sim/wompi");
+      expect(calledUrl).toContain("http://localhost:3000/v1/sim/wompi");
     });
 
     it("should answer 401 without calling the network when production has no client credentials", async () => {

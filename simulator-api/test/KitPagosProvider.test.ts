@@ -69,10 +69,17 @@ describe("KitPagosProvider", () => {
     );
   });
 
-  it("resuelve baseUrl de simulación por defecto hacia Render", () => {
+  it("resuelve baseUrl de simulación hacia el propio proceso cuando no hay SIMULATOR_SDK_BASE_URL", () => {
     const provider = new KitPagosProvider(undefined, mockServerEnv);
     expect(provider.resolveSimulatorBaseUrl(Gateway.WOMPI)).toBe(
-      "https://kit-pagos-colombia.onrender.com/v1/sim/wompi",
+      "http://localhost:3000/v1/sim/wompi",
+    );
+  });
+
+  it("usa el PORT del proceso cuando no hay SIMULATOR_SDK_BASE_URL", () => {
+    const provider = new KitPagosProvider(undefined, { ...mockServerEnv, PORT: "10000" });
+    expect(provider.resolveSimulatorBaseUrl(Gateway.KUSHKI)).toBe(
+      "http://localhost:10000/v1/sim/kushki",
     );
   });
 

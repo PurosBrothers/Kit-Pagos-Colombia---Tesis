@@ -38,7 +38,8 @@ function sandboxFallbackWarning(missing: readonly string[]): string {
  * con credenciales del cliente (costo despreciable: el constructor no abre sockets).
  *
  * Resuelve la URL desde un catálogo cerrado por ambiente (issue #123):
- * - simulator: se conecta a SIMULATOR_SDK_BASE_URL (o https://kit-pagos-colombia.onrender.com por omisión).
+ * - simulator: se conecta a SIMULATOR_SDK_BASE_URL o, si no está definida, al propio proceso
+ *   (`http://localhost:${PORT}`). En Render la define `render.yaml`.
  * - sandbox: se conecta al sandbox oficial de cada pasarela (catálogo medido).
  * - production: se conecta al endpoint productivo oficial de cada pasarela (catálogo sin medir).
  */
@@ -118,15 +119,16 @@ export class KitPagosProvider {
   }
 
   /**
-   * Resuelve la URL base de simulación local o desplegada en Render.
+   * URL de los mocks de `/v1/sim` para el ambiente `simulator`.
+   *
+   * Sin `SIMULATOR_SDK_BASE_URL` es el propio proceso y no otro despliegue: una API levantada
+   * en local que apuntara a Render mandaría sus cobros y las credenciales de su `.env` a otro
+   * servidor, y lo que se probara por `/v1/api` sería el commit desplegado y no el local.
    */
   public resolveSimulatorBaseUrl(gateway: Gateway): string {
-    const globalVal = this.env.SIMULATOR_SDK_BASE_URL?.trim();
-    if (globalVal) {
-      const cleanBase = globalVal.replace(/\/$/, "");
-      return `${cleanBase}/v1/sim/${gateway.toLowerCase()}`;
-    }
-    return `https://kit-pagos-colombia.onrender.com/v1/sim/${gateway.toLowerCase()}`;
+    const configured = this.env.SIMULATOR_SDK_BASE_URL?.trim().replace(/\/$/, "");
+    const base = configured || `http://localhost:${this.env.PORT?.trim() || "3000"}`;
+    return `${base}/v1/sim/${gateway.toLowerCase()}`;
   }
 
   private createInstance(
