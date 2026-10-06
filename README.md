@@ -43,13 +43,8 @@ cd simulator-api && npm install && npm run dev
 **Por la API REST, sin escribir código.** Con la API corriendo (localmente en `http://localhost:3000` o en la nube en `https://kit-pagos-colombia.onrender.com`), desde otra terminal:
 
 ```bash
-curl https://kit-pagos-colombia.onrender.com/v1/api/gateways
-curl -X POST https://kit-pagos-colombia.onrender.com/v1/api/payments \
-  -H "content-type: application/json" \
-  -H "x-kit-pagos-environment: sandbox" \
-  -H "x-gateway-public-key: demo" \
-  -H "x-gateway-private-key: demo" \
-  -d '{"gateway":"mercadopago","amount":"150000.00","currency":"COP","orderReference":"ORD-1","payer":{"email":"comprador@example.com"},"paymentMethod":{"type":"CARD","token":"tok_test","installments":1}}'
+curl http://localhost:3000/v1/api/gateways
+curl -X POST http://localhost:3000/v1/api/payments -H "content-type: application/json" -H "x-gateway-public-key: demo" -H "x-gateway-private-key: demo" -d '{"gateway":"mercadopago","amount":"150000.00","currency":"COP","orderReference":"ORD-1","payer":{"email":"comprador@example.com"},"paymentMethod":{"type":"CARD","token":"tok_test","installments":1}}'
 ```
 
 La primera lista las cuatro pasarelas. La segunda responde `201` con la transacción normalizada. Con el mismo cuerpo y otro valor de `gateway` responden también las otras tres, cada una con el desenlace correspondiente. Mediante la cabecera `x-kit-pagos-environment` (`simulator`, `sandbox` o `production`), el cliente declara el ambiente y la API resuelve la URL desde un catálogo cerrado sin exponer credenciales a servidores externos (Issue #123). Las rutas y sus reglas están en [`docs/02-arquitectura/3-api-de-simulacion.md`](docs/02-arquitectura/3-api-de-simulacion.md).
