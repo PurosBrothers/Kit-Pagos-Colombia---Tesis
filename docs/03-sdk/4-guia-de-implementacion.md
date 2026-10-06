@@ -77,7 +77,7 @@ El mapa completo de credenciales y opciones está en el [README del paquete](../
 - **`gateway` define la activa**, y es el único valor que hay que cambiar para conmutar.
 - **`maxRetries`** ajusta la política de reintentos de las operaciones idempotentes.
 - **`webhookToleranceSeconds`** ajusta la ventana anti-replay, 300 s por defecto.
-- **`baseUrl`** admite una cadena o un mapa por pasarela. Si se omite, el SDK apunta al simulador en `https://kit-pagos-colombia.onrender.com/v1/sim/{pasarela}` (o al ambiente configurado mediante `environment`).
+- **`baseUrl`** admite una cadena o un mapa por pasarela. Si se omite, el SDK usa la URL del ambiente configurado en `environment`; sin `environment`, apunta al simulador local en `http://localhost:3000/v1/sim/{pasarela}`. Para usar el simulador desplegado, pase `baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim/{pasarela}"`.
 
 ---
 

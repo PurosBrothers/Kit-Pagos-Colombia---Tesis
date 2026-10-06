@@ -2849,9 +2849,17 @@ Se descartó tajantemente aceptar URLs suministradas por el cliente HTTP (ya sea
 
 **Decisión 3: El cliente declara el ambiente con `x-kit-pagos-environment`.**
 - El cliente declara el ambiente por petición mediante la cabecera `x-kit-pagos-environment: simulator | sandbox | production`.
-- *Omisión segura:* Si la cabecera no se envía, el ambiente se fija por omisión en `"simulator"`, garantizando que ninguna llamada accidental toque la red externa.
+- *Omisión segura:* Si la cabecera no se envía, el ambiente se fija por omisión en `"simulator"`. Sin `SIMULATOR_SDK_BASE_URL`, ese ambiente es el propio proceso (`http://localhost:<PORT>`), así que una llamada sin cabecera no sale de la máquina.
 - *Validación estricta:* Cualquier valor desconocido o inválido (e.g. `staging`, o una URL arbitraria) responde de inmediato con HTTP 400 `INVALID_REQUEST` sin realizar peticiones de red.
-- Las variables `<PASARELA>_BASE_URL` (`WOMPI_BASE_URL`, `MERCADOPAGO_BASE_URL`, `RAPYD_BASE_URL`, `KUSHKI_BASE_URL`) fueron completamente eliminadas de `.env.example`, código y documentación. La URL del ambiente simulator se parametriza únicamente con `SIMULATOR_SDK_BASE_URL` (o `https://kit-pagos-colombia.onrender.com/v1/sim/<pasarela>` por defecto).
+- Las variables `<PASARELA>_BASE_URL` (`WOMPI_BASE_URL`, `MERCADOPAGO_BASE_URL`, `RAPYD_BASE_URL`, `KUSHKI_BASE_URL`) fueron completamente eliminadas de `.env.example`, código y documentación. La URL del ambiente simulator se parametriza únicamente con `SIMULATOR_SDK_BASE_URL`; sin ella es `http://localhost:<PORT>/v1/sim/<pasarela>`. En Render la define `render.yaml` (punto 79).
+
+**Decisión 5: El simulador por defecto es el local, no el despliegue en Render.**
+La primera versión del PR #141 cambió el valor por defecto del ambiente `simulator` a `https://kit-pagos-colombia.onrender.com` en el SDK, los tokenizadores de navegador, los ejemplos, los mocks y `KitPagosProvider`. Se revirtió en la revisión por tres razones:
+- *La API local llamaba a otro servidor.* Sin `SIMULATOR_SDK_BASE_URL`, una API levantada en local que recibía `POST /v1/api/payments` sin cabecera mandaba el cobro, con las credenciales de su `.env`, al despliegue de Render. Lo que se probaba era el commit desplegado y no el local.
+- *El issue #123 lo pide así.* La URL del ambiente `simulator` «sale del propio despliegue, con `SIMULATOR_SDK_BASE_URL`».
+- *Los ejemplos y las pruebas dejaban de ser herméticos.* Un ejemplo sin simulador encendido terminaba en un servicio externo que se duerme y cambia con cada despliegue.
+
+Quien quiera el simulador desplegado lo pide con `baseUrl` en el SDK, o con `SIMULATOR_SDK_BASE_URL` en la API, como hace `render.yaml`.
 
 **Decisión 4: Regla de credenciales (Punto 69) aplicada sobre el ambiente declarado.**
 La regla de seguridad del punto 69 se aplica ahora sobre el ambiente declarado por el cliente:
@@ -2861,9 +2869,9 @@ La regla de seguridad del punto 69 se aplica ahora sobre el ambiente declarado p
 - `KitPagosProvider` mantiene instancias cacheadas por la clave compuesta `${gateway}:${target}` para optimizar el rendimiento sin mezclar contextos de ambiente.
 
 **Punto resuelto: Mercado Pago en Sandbox vs. Producción.**
-Mercado Pago no publica un dominio de sandbox independiente; utiliza `https://api.mercadopago.com/v1` tanto para pruebas como para producción, discriminando el comportamiento exclusivamente por el tipo de credenciales (llaves de prueba `TEST-` vs. llaves productivas `APP_USR-`). Se documenta formalmente:
+Mercado Pago no publica un dominio de sandbox independiente; utiliza `https://api.mercadopago.com/v1` tanto para pruebas como para producción. Lo que separa una prueba de un cobro real es la cuenta a la que pertenece la credencial, y no su prefijo: las credenciales de prueba que funcionan también empiezan por `APP_USR-` y son las de un usuario de prueba, porque el token `TEST-` responde `401 invalid_credentials` en `POST /v1/orders` (`docs/testing-data/mercado-pago.md`, nota de la sección de PSE, y punto 45). Se documenta formalmente:
 1. Cuando se declara `x-kit-pagos-environment: sandbox` sin credenciales del cliente, el servidor utiliza sus credenciales de prueba configuradas en `.env`, emitiendo la advertencia de sandbox.
-2. Si un cliente envía llaves productivas propias en `x-gateway-*` pero declara `x-kit-pagos-environment: sandbox`, Mercado Pago procesará el cobro con dinero real, ya que el procesador solo atiende a la validez de la credencial en su backend.
+2. Si un cliente envía en `x-gateway-*` llaves de una cuenta real pero declara `x-kit-pagos-environment: sandbox`, la API llama a la misma URL que en producción. No se midió, porque el proyecto no tiene credenciales productivas, pero como el ambiente lo decide la credencial y no la URL, lo esperable es que Mercado Pago lo procese como un cobro real.
 
 **Punto resuelto: Nivel de evidencia de las URLs de producción.**
 Las URLs de producción del catálogo:
@@ -2884,10 +2892,11 @@ fueron tomadas de la documentación oficial de cada pasarela y quedan registrada
    - Kushki: HTTP 201 (`105752898821505149`), con advertencia en cabecera y cuerpo.
    - Rapyd: HTTP 201 (`REDIRECT_REQUIRED`), con advertencia en cabecera y cuerpo.
    - Mercado Pago: HTTP 400 (error nativo de pasarela), con advertencia preservada en cabecera y cuerpo.
-4. *Suites de prueba en verde:*
+4. *Suites de prueba en verde,* sobre la rama integrada con `devops` (Node 22):
    - `sdk`: 45 suites, 690 pruebas pasando; 34 clases dentro de los umbrales de métricas CK.
-   - `simulator-api`: 22 suites, 309 pruebas pasando.
+   - `simulator-api`: 28 suites, 473 pruebas pasando, con el SDK de esta rama enlazado en `node_modules`. Con el `kit-pagos-colombia@0.2.0` del registro, que es lo que instala el lock, no compila (`TS2353`: `environment` no existe en `SDKOptions`) hasta que se publique la versión con `Environment`.
    - `examples`: `npm run typecheck` pasando sin errores.
+   - Mutación: con `https://kit-pagos-colombia.onrender.com` de nuevo como valor por defecto de `resolveSimulatorBaseUrl()`, fallan 7 pruebas.
 
 **Estado:** Resuelto en código y documentación (`sdk/`, `simulator-api/`, `.env.example`, `docs/00-entorno-de-desarrollo.md`, `docs/02-arquitectura/3-api-de-simulacion.md`, `docs/testing-data/medicion-sandbox-issue-123.md`).
 

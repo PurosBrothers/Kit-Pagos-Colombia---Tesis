@@ -68,7 +68,7 @@ simulator-api/src/
 
   | Ambiente Declarado (`x-kit-pagos-environment`) | Sin credenciales propias completas |
   |---|---|
-  | `simulator` (omisión segura) | Usa el perfil del servidor conectándose a `SIMULATOR_SDK_BASE_URL` (o `https://kit-pagos-colombia.onrender.com/v1/sim/<pasarela>`), sin advertencias |
+  | `simulator` (omisión segura) | Usa el perfil del servidor conectándose a `SIMULATOR_SDK_BASE_URL` o, si no está definida, al propio proceso (`http://localhost:<PORT>/v1/sim/<pasarela>`), sin advertencias |
   | `sandbox` | Usa el perfil del servidor conectándose al sandbox oficial del catálogo cerrado y lo advierte en la cabecera `x-kit-pagos-warning` y en el campo `warnings` del cuerpo JSON (`SERVER_SANDBOX_CREDENTIALS_USED`), también en respuestas de error |
   | `production` | Lanza `ClientCredentialsRequiredError` (HTTP 401) sin llamar a la red, detallando las cabeceras `x-gateway-*` requeridas |
 
