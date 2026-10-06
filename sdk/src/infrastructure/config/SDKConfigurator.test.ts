@@ -149,43 +149,82 @@ describe("SDKConfigurator", () => {
     });
   });
 
-  describe("getBaseUrl()", () => {
-    it("should return undefined when baseUrl is not configured", () => {
+  describe("getBaseUrl() and environment resolution", () => {
+    it("should default to simulator environment resolving from closed catalog", () => {
       configurator.configure({
         gateway: Gateway.WOMPI,
         credentials: { [Gateway.WOMPI]: wompiCredentials },
       });
-      expect(configurator.getBaseUrl()).toBeUndefined();
-      expect(configurator.getBaseUrl(Gateway.WOMPI)).toBeUndefined();
+      expect(configurator.getEnvironment()).toBe("simulator");
+      expect(configurator.getBaseUrl()).toBe("http://localhost:3000/v1/sim/wompi");
+      expect(configurator.getBaseUrl(Gateway.WOMPI)).toBe("http://localhost:3000/v1/sim/wompi");
+      expect(configurator.getBaseUrl(Gateway.RAPYD)).toBe("http://localhost:3000/v1/sim/rapyd");
     });
 
-    it("should return the global string URL when baseUrl is configured as string", () => {
+    it("should resolve sandbox URLs when environment is set to sandbox", () => {
       configurator.configure({
         gateway: Gateway.WOMPI,
         credentials: { [Gateway.WOMPI]: wompiCredentials },
-        baseUrl: "https://production.wompi.co/v1",
+        environment: "sandbox",
       });
-      expect(configurator.getBaseUrl()).toBe("https://production.wompi.co/v1");
+      expect(configurator.getEnvironment()).toBe("sandbox");
+      expect(configurator.getBaseUrl(Gateway.WOMPI)).toBe("https://sandbox.wompi.co/v1");
+      expect(configurator.getBaseUrl(Gateway.RAPYD)).toBe("https://sandboxapi.rapyd.net/v1");
+      expect(configurator.getBaseUrl(Gateway.KUSHKI)).toBe("https://api-uat.kushkipagos.com");
+      expect(configurator.getBaseUrl(Gateway.MERCADOPAGO)).toBe("https://api.mercadopago.com/v1");
+    });
+
+    it("should resolve production URLs when environment is set to production", () => {
+      configurator.configure({
+        gateway: Gateway.WOMPI,
+        credentials: { [Gateway.WOMPI]: wompiCredentials },
+        environment: "production",
+      });
+      expect(configurator.getEnvironment()).toBe("production");
       expect(configurator.getBaseUrl(Gateway.WOMPI)).toBe("https://production.wompi.co/v1");
-      expect(configurator.getBaseUrl(Gateway.RAPYD)).toBe("https://production.wompi.co/v1");
+      expect(configurator.getBaseUrl(Gateway.RAPYD)).toBe("https://api.rapyd.net/v1");
+      expect(configurator.getBaseUrl(Gateway.KUSHKI)).toBe("https://api.kushkipagos.com");
+      expect(configurator.getBaseUrl(Gateway.MERCADOPAGO)).toBe("https://api.mercadopago.com/v1");
     });
 
-    it("should return gateway-specific URL when baseUrl is configured as a map", () => {
+    it("should throw KitPagosError (INVALID_REQUEST) for invalid environment value", () => {
+      expect(() => {
+        configurator.configure({
+          gateway: Gateway.WOMPI,
+          credentials: { [Gateway.WOMPI]: wompiCredentials },
+          // @ts-expect-error testing invalid environment
+          environment: "invalid_env",
+        });
+      }).toThrow(KitPagosError);
+    });
+
+    it("should prioritize global baseUrl string over environment", () => {
+      configurator.configure({
+        gateway: Gateway.WOMPI,
+        credentials: { [Gateway.WOMPI]: wompiCredentials },
+        environment: "sandbox",
+        baseUrl: "https://custom.endpoint.com",
+      });
+      expect(configurator.getBaseUrl()).toBe("https://custom.endpoint.com");
+      expect(configurator.getBaseUrl(Gateway.WOMPI)).toBe("https://custom.endpoint.com");
+      expect(configurator.getBaseUrl(Gateway.RAPYD)).toBe("https://custom.endpoint.com");
+    });
+
+    it("should prioritize gateway-specific baseUrl over environment catalog", () => {
       configurator.configure({
         gateway: Gateway.WOMPI,
         credentials: {
           [Gateway.WOMPI]: wompiCredentials,
           [Gateway.RAPYD]: rapydCredentials,
         },
+        environment: "sandbox",
         baseUrl: {
-          [Gateway.WOMPI]: "https://production.wompi.co/v1",
-          [Gateway.RAPYD]: "https://api.rapyd.net/v1",
+          [Gateway.WOMPI]: "https://custom.wompi.endpoint",
         },
       });
-      expect(configurator.getBaseUrl()).toBe("https://production.wompi.co/v1");
-      expect(configurator.getBaseUrl(Gateway.WOMPI)).toBe("https://production.wompi.co/v1");
-      expect(configurator.getBaseUrl(Gateway.RAPYD)).toBe("https://api.rapyd.net/v1");
-      expect(configurator.getBaseUrl(Gateway.MERCADOPAGO)).toBeUndefined();
+      expect(configurator.getBaseUrl(Gateway.WOMPI)).toBe("https://custom.wompi.endpoint");
+      // Rapyd is not in baseUrl map, so it resolves from sandbox catalog:
+      expect(configurator.getBaseUrl(Gateway.RAPYD)).toBe("https://sandboxapi.rapyd.net/v1");
     });
   });
 });

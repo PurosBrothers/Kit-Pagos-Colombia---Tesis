@@ -18,6 +18,7 @@ Diseñado bajo los principios de **Arquitectura Hexagonal (Ports & Adapters)** y
 - **Verificación criptográfica de Webhooks:** Validación de firmas nativas (HMAC-SHA256, SHA-256) con comparación en tiempo constante (`crypto.timingSafeEqual`) y **protección contra ataques de repetición (*anti-replay attacks*)** con ventana de tolerancia temporal configurable.
 - **Gestión de fallos y resiliencia:** Política de reintentos automáticos con retroceso exponencial (*exponential backoff*) y fluctuación (*jitter*) ante fallos de red transitorios, aislando errores permanentes de negocio.
 - **Seguridad y privacidad por diseño (RF-08):** Sanitización automática de llaves privadas, tokens `Bearer` y secretos en mensajes de error y registros para evitar filtraciones en logs de producción.
+- **Tokenización segura en navegador (`kit-pagos-colombia/browser`):** Módulo frontend liviano (unos 13 KB sin minificar, 3,5 KB con gzip) sin dependencias de Node.js para tokenizar tarjetas directamente contra la pasarela respetando PCI DSS.
 
 ---
 
@@ -94,11 +95,11 @@ const sdk = new KitPagos({
   },
   maxRetries: 3,                 // Reintentos automáticos ante fallos transitorios
   webhookToleranceSeconds: 300,  // Tolerancia de 5 minutos contra ataques de replay
-  baseUrl: process.env.PAYMENT_GATEWAY_URL, // Opcional: URL productiva (ver tabla de URLs abajo)
+  environment: "sandbox",        // "simulator" (por defecto), "sandbox" o "production"
 });
 ```
 
-> **Entornos y URLs Base (`baseUrl`).** Por defecto, el SDK apunta al simulador integrado (`http://localhost:3000/v1/sim/{gateway}`) para permitir desarrollo, pruebas y evaluación sin costo ni credenciales reales. **Para conectar a producción y procesar pagos reales**, es indispensable configurar el parámetro `baseUrl` (como cadena global o como diccionario mapeando cada pasarela a su URL productiva).
+> **Entornos y Resolución Automática de URLs (`environment`).** Puedes especificar el entorno destino mediante la opción `environment: "simulator" | "sandbox" | "production"`. El SDK resuelve automáticamente la URL oficial de cada pasarela desde un catálogo cerrado integrado. Por defecto apunta al simulador oficial desplegado en Render (`https://kit-pagos-colombia.onrender.com/v1/sim/{gateway}`) o puedes configurarlo contra un mock local mediante `baseUrl` si necesitas desarrollo hermético fuera de línea. Si necesitas apuntar a una URL específica o mock propio, el parámetro `baseUrl` sigue disponible como anulación explícita.
 
 > **`webhookSecret` no es la llave de API.** En Wompi, Mercado Pago y Kushki el secreto que
 > firma los webhooks es un valor distinto, que se saca de otra parte del panel. Si lo omitís,
@@ -145,6 +146,51 @@ async function cobrarConTarjeta() {
 
 > Con tarjeta también podés recibir `REDIRECT_REQUIRED`: Rapyd cobra en su página alojada, y
 > cualquiera de las cuatro puede pedir autenticación 3DS. Tratá las dos ramas siempre.
+
+#### 2.1 Tokenización en el Navegador (`kit-pagos-colombia/browser`)
+
+Para cumplir con **PCI DSS**, los datos sensibles de la tarjeta (número PAN, CVC, fecha de expiración) **nunca deben entrar al backend del comercio ni al SDK de servidor**.
+
+El paquete exporta un punto de entrada independiente y liviano para el frontend (`kit-pagos-colombia/browser`, unos 13 KB sin minificar y 3,5 KB con gzip, sin módulos de Node.js):
+
+```typescript
+import { KitPagosBrowser, Gateway } from "kit-pagos-colombia/browser";
+
+async function tokenizarTarjetaEnNavegador() {
+  // Un mismo formulario captura los datos de la tarjeta y el documento de identidad:
+  const datosFormulario = {
+    number: "4242424242424242",
+    cvc: "123",
+    expMonth: "12",
+    expYear: "2030",
+    cardHolder: "Juan Pérez",
+    docType: "CC",            // El SDK lo exige en Mercado Pago; opcional en Wompi
+    docNumber: "19119119100",  // El SDK lo exige en Mercado Pago; opcional en Wompi
+  };
+
+  // 1. Tokenización contra Wompi:
+  const wompiResult = await KitPagosBrowser.tokenizeCard({
+    gateway: Gateway.WOMPI,
+    publicKey: "pub_prod_1234567890", // O pub_test_... para sandbox
+    environment: "sandbox",          // "sandbox" | "production" | "simulator"
+    card: datosFormulario,
+  });
+
+  // 2. Tokenización contra Mercado Pago (exactamente con los mismos datos de entrada):
+  const mpResult = await KitPagosBrowser.tokenizeCard({
+    gateway: Gateway.MERCADOPAGO,
+    publicKey: "APP_USR-public-key",
+    environment: "sandbox",
+    card: datosFormulario,
+  });
+
+  // El token resultante se envía a TU backend para llamar a PaymentMethod.card()
+  console.log(`Token Wompi: ${wompiResult.token}`);
+  console.log(`Token Mercado Pago: ${mpResult.token}`);
+}
+```
+
+> **PCI DSS:** Al usar `KitPagosBrowser`, el número de tarjeta viaja exclusivamente entre el navegador del pagador y los servidores de la pasarela. Tu backend solo recibe y almacena el token opaco `tok_...`. El SDK rechaza activamente pasarelas que no soportan tokenización inline en frontend (como Kushki y Rapyd) con `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones.
 
 ---
 
@@ -326,25 +372,40 @@ async function cobrarConDiagnostico(request: CreatePaymentRequest) {
 
 Si vas a utilizar este SDK en un entorno de producción para procesar pagos reales con dinero de verdad, ten en cuenta las siguientes consideraciones de arquitectura y normativa financiera:
 
-### 1. URLs Base: Producción vs. Simulador Integrado
-Por diseño de la arquitectura para soportar desarrollo ágil y evaluación académica (RF-09), el SDK incluye integración nativa con el componente `api-simulator`. Si omites `baseUrl`, el SDK apunta por defecto a `http://localhost:3000/v1/sim/{gateway}`, permitiendo probar todo el flujo de cobros y webhooks de forma determinista y sin costo.
+### 1. Resolución de Entornos y URLs Oficiales
 
-**Para procesar pagos reales en producción**, es indispensable configurar el parámetro `baseUrl` apuntando al endpoint oficial productivo de la pasarela activa:
+El SDK incluye un catálogo cerrado de URLs para los tres ambientes soportados, evitando tener que configurar manualmente las direcciones de cada proveedor:
 
-| Pasarela | Endpoint de Producción (Pagos Reales) |
-|---|---|
-| **Wompi** | `https://production.wompi.co/v1` |
-| **Mercado Pago** | `https://api.mercadopago.com/v1` |
-| **Kushki** | `https://api.kushkipagos.com` |
-| **Rapyd** | `https://api.rapyd.net/v1` |
+| Pasarela | Sandbox (`environment: "sandbox"`) | Producción (`environment: "production"`) |
+|---|---|---|
+| **Wompi** | `https://sandbox.wompi.co/v1` | `https://production.wompi.co/v1` |
+| **Mercado Pago** | `https://api.mercadopago.com/v1` | `https://api.mercadopago.com/v1` |
+| **Kushki** | `https://api-uat.kushkipagos.com` | `https://api.kushkipagos.com` |
+| **Rapyd** | `https://sandboxapi.rapyd.net/v1` | `https://api.rapyd.net/v1` |
 
-Puedes configurar `baseUrl` como una URL global (`string`) o como un diccionario para soportar múltiples pasarelas en el mismo servidor:
+**Simulador Integrado y en la Nube (`environment: "simulator"`):**
+Por defecto apunta al simulador local (`http://localhost:3000/v1/sim/{gateway}`), para que ninguna petición salga de la máquina sin pedirlo. Para usar el simulador desplegado en Render, se indica con `baseUrl`:
+```typescript
+const sdkSimulador = new KitPagos({
+  gateway: Gateway.WOMPI,
+  baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim/wompi",
+  credentials: {
+    [Gateway.WOMPI]: {
+      publicKey: "pub_test_demo",
+      privateKey: "prv_test_demo",
+    },
+  },
+});
+```
+
+**Para procesar pagos reales en producción o pruebas en sandbox**, basta con configurar `environment`:
 
 ```typescript
 import { KitPagos, Gateway } from "kit-pagos-colombia";
 
 const sdkMultiPasarela = new KitPagos({
   gateway: Gateway.WOMPI,
+  environment: "production",
   credentials: {
     [Gateway.WOMPI]: {
       publicKey: process.env.WOMPI_PUBLIC_KEY!,
@@ -354,10 +415,6 @@ const sdkMultiPasarela = new KitPagos({
       publicKey: process.env.MP_PUBLIC_KEY!,
       privateKey: process.env.MP_ACCESS_TOKEN!,
     },
-  },
-  baseUrl: {
-    [Gateway.WOMPI]: "https://production.wompi.co/v1",
-    [Gateway.MERCADOPAGO]: "https://api.mercadopago.com/v1",
   },
 });
 ```

@@ -2,33 +2,34 @@ import { randomUUID } from "node:crypto";
 import {
   WompiCreateTransactionRequestBody,
   WompiMerchantResponse,
+  WompiTokenizeCardRequestBody,
+  WompiTokenizeCardResponse,
   WompiTransaction,
   WompiTransactionResponse,
 } from "./types";
-import { TransactionStore, transactionStore } from "../../store/TransactionStore";
 
 /**
  * Gateway Mock Factory — Wompi (issue #55).
  *
  * Single responsibility: build the response payload that replicates the
- * native Wompi structure for a given scenario, and persist it in the
- * TransactionStore so the status query endpoint can retrieve it later.
+ * native Wompi structure for a given scenario.
  *
  * Does not know about headers, does not decide which scenario to execute
- * (that is the ScenarioEngine's responsibility), and does not validate the
- * request body (that is the router's responsibility).
+ * (that is the ScenarioEngine's responsibility), does not validate the
+ * request body, **does not persist** —that is the router's responsibility— and
+ * above all does not move a transaction between states, which is what
+ * `state/wompiStateMachine.ts` is for.
  *
- * The TransactionStore is received in the constructor to allow substitution
- * in tests without altering the shared singleton, defaulting to the shared
- * singleton instance.
- *
- * Iteration 3 will extend this file with the remaining scenarios
- * (DECLINED, INSUFFICIENT_FUNDS) and with factories for the other
- * gateways, as described in layers-and-components.md.
+ * That last part is the change of issue #124. The factory used to receive the
+ * `TransactionStore` in its constructor and to write every record it built, and
+ * it also carried `advanceCardTransaction` and `advancePseTransaction`, which
+ * decided how a payment moved when it was queried. Three places then knew the
+ * rules of the Wompi flow, and the two that mattered —the ones that ran on a
+ * query— were a método duplicating the table and a function in the router
+ * reading the bank code. Now every builder is a pure function of the request
+ * body and the scenario, and the router owns persistence and movement.
  */
 export class GatewayMockFactory {
-  constructor(private readonly store: TransactionStore = transactionStore) {}
-
   /**
    * Crea un cobro con tarjeta como lo crea Wompi: **`PENDING`, no `APPROVED`**.
    *
@@ -55,10 +56,6 @@ export class GatewayMockFactory {
       payment_method: requestBody.payment_method,
     };
 
-    // Persist in the shared store before responding, so that
-    // getPaymentStatus() in the SDK can query the state afterwards.
-    this.store.save(transaction.id, transaction);
-
     return { data: transaction };
   }
 
@@ -79,7 +76,6 @@ export class GatewayMockFactory {
       redirect_url: requestBody.redirect_url,
     };
 
-    this.store.save(transaction.id, transaction);
     return { data: transaction };
   }
 
@@ -100,7 +96,6 @@ export class GatewayMockFactory {
       redirect_url: requestBody.redirect_url,
     };
 
-    this.store.save(transaction.id, transaction);
     return { data: transaction };
   }
 
@@ -167,80 +162,7 @@ export class GatewayMockFactory {
       redirect_url: requestBody.redirect_url,
     };
 
-    this.store.save(transaction.id, transaction);
-
     return { data: transaction };
-  }
-
-  /**
-   * Avanza un PSE un paso cada vez que se lo consulta.
-   *
-   * ## Por qué el simulador tiene que hacer esto
-   *
-   * El sandbox de Wompi publica la URL de redirección **en el mismo instante**
-   * en que resuelve el pago: con el banco que aprueba, a los 1075 ms junto con
-   * `APPROVED`; con el que declina, a los 1650 ms junto con `DECLINED`. Es decir
-   * que resuelve el pago solo, sin que nadie visite el banco, y cuando la URL
-   * existe ya no sirve para nada. Contra ese sandbox **es imposible verificar el
-   * orden del flujo de redirección**.
-   *
-   * Acá el orden se reproduce en dos pasos, y esa es la razón de fondo por la
-   * que la API de Simulación existe:
-   *
-   *   1ª consulta → sigue PENDING, pero ya con `async_payment_url`. Es la
-   *      ventana que el sandbox real nunca expone y en la que un pagador de
-   *      verdad sería redirigido.
-   *   2ª consulta → estado final, como si el pagador ya hubiera pagado.
-   *
-   * No hace falta un contador: la presencia de la URL **es** el estado.
-   *
-   * El estado final lo decide el banco, con los mismos códigos del sandbox
-   * (`1` aprueba, `2` declina, `3` da error), para que una prueba pueda elegir
-   * el desenlace sin depender del azar.
-   */
-  /**
-   * Resuelve un cobro con tarjeta cuando se lo consulta.
-   *
-   * Medido: Wompi lo resuelve solo en unos 600 ms sin que nadie haga nada, así que para
-   * cuando el comercio consulta ya está resuelto. El mock hace lo mismo en la primera
-   * consulta, y así el ejemplo muestra el ciclo completo —crear pendiente, consultar,
-   * ver el estado final— que es el que el comercio tiene que programar de verdad.
-   */
-  advanceCardTransaction(transaction: WompiTransaction): WompiTransaction {
-    if (transaction.status !== "PENDING") {
-      return transaction;
-    }
-
-    const advanced: WompiTransaction = { ...transaction, status: "APPROVED" };
-    this.store.save(advanced.id, advanced);
-    return advanced;
-  }
-
-  advancePseTransaction(transaction: WompiTransaction): WompiTransaction {
-    const extra = transaction.payment_method?.extra ?? {};
-
-    if (!extra.async_payment_url) {
-      const advanced: WompiTransaction = {
-        ...transaction,
-        payment_method: {
-          ...transaction.payment_method,
-          type: "PSE",
-          extra: {
-            ...extra,
-            async_payment_url: `http://localhost:3000/v1/sim/wompi/pse/redirect?ticket_id=${transaction.id}`,
-          },
-        },
-      };
-      this.store.save(advanced.id, advanced);
-      return advanced;
-    }
-
-    const advanced: WompiTransaction = {
-      ...transaction,
-      status: resolvePseOutcome(transaction.payment_method?.financial_institution_code),
-    };
-    this.store.save(advanced.id, advanced);
-    return advanced;
   }
 
   /**
@@ -260,13 +182,42 @@ export class GatewayMockFactory {
       },
     };
   }
-}
 
-/** Mismos códigos de banco de prueba que expone el sandbox de Wompi. */
-function resolvePseOutcome(
-  financialInstitutionCode: string | undefined,
-): WompiTransaction["status"] {
-  if (financialInstitutionCode === "2") return "DECLINED";
-  if (financialInstitutionCode === "3") return "ERROR";
-  return "APPROVED";
+  /**
+   * Construye una respuesta de tokenización de tarjeta (issue #126).
+   * Reproduce la estructura exacta devuelta por Wompi en POST /v1/tokens/cards.
+   */
+  buildTokenCardResponse(
+    requestBody: WompiTokenizeCardRequestBody,
+  ): WompiTokenizeCardResponse {
+    const cleanNumber = requestBody.number.replace(/\s+/g, "");
+    const lastFour = cleanNumber.slice(-4);
+    const bin = cleanNumber.slice(0, 6);
+    const tokenId = `tok_sim_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+
+    let brand = "VISA";
+    if (cleanNumber.startsWith("5")) {
+      brand = "MASTERCARD";
+    } else if (cleanNumber.startsWith("3")) {
+      brand = "AMEX";
+    }
+
+    return {
+      status: "CREATED",
+      data: {
+        id: tokenId,
+        created_at: new Date().toISOString(),
+        brand,
+        name: requestBody.card_holder,
+        last_four: lastFour,
+        bin,
+        exp_year: requestBody.exp_year,
+        exp_month: requestBody.exp_month,
+        card_holder: requestBody.card_holder,
+        created_with_cvc: Boolean(requestBody.cvc),
+        expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+        validity_ends_at: null,
+      },
+    };
+  }
 }

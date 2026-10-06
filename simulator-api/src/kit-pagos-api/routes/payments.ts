@@ -377,4 +377,36 @@ export async function paymentsRoute(app: FastifyInstance): Promise<void> {
       });
     },
   );
+
+  /**
+   * GET /v1/api/payments/:id?gateway=: consulta el estado de una transaccion.
+   *
+   * El param `gateway` es obligatorio y viaja en el query, no en la ruta: el SDK
+   * usa una pasarela por instancia, asi que el id de una transaccion solo se puede
+   * consultar contra la pasarela que la creo. Deducirla del TransactionStore
+   * acoplaria a la REST al simulador y no funcionaria contra pasarelas reales.
+   *
+   * La respuesta incluye el estado normalizado (`status`) y el nativo (`rawStatus`),
+   * igual que la respuesta del POST. No se agregan reintentos aqui: `getPaymentStatus()`
+   * ya va envuelto en `RetryHandler` dentro del SDK.
+   */
+  app.get<{ Params: { id: string }; Querystring: { gateway?: string } }>(
+    "/payments/:id",
+    async (request: FastifyRequest<{ Params: { id: string }; Querystring: { gateway?: string } }>, reply: FastifyReply) => {
+      const gateway = parseGateway(request.query.gateway);
+      if (!gateway) {
+        return reply.status(400).send(unsupportedGatewayBody());
+      }
+
+      // `getPaymentStatus(id)` del SDK: los errores (404 del recurso, 400 por
+      // operacion no soportada) viajan solos al error handler global.
+      const kitPagos = gatewayClientFor(app, request, reply, gateway);
+      const transaction = await kitPagos.getPaymentStatus(request.params.id);
+
+      return reply.status(200).send({
+        gateway: gateway.toLowerCase(),
+        transaction: serializeTransaction(transaction),
+      });
+    },
+  );
 }

@@ -12,6 +12,7 @@ export default tseslint.config(
       'coverage/**',
       'jest.config.js',
       'jest.sandbox.config.js',
+      'scripts/build-browser.js',
     ],
   },
   {

@@ -54,6 +54,19 @@ Detalles de la página que importan al integrar:
 - **No se paga sola.** Una página creada y no visitada se queda en `NEW`, así que el desenlace
   no se puede observar sin que una persona llene el formulario.
 
+**Identificadores que no existen.** Medido contra el sandbox el 5 de octubre de 2026, entre las
+11:58 y las 12:11 (UTC−5):
+
+| Consulta | Respuesta |
+| --- | --- |
+| `GET /v1/payments/payment_<32 hex>` inexistente | `400 ERROR_GET_PAYMENT`, con un mensaje que empieza `"The request tried to retrieve a payment, but the payment was not found."` y termina `"Use a valid payment ID."`; el texto completo es el de [Retrieve Payment](https://docs.rapyd.net/en/retrieve-payment.html) |
+| `GET /v1/checkout/checkout_<32 hex>` inexistente | `400 ERROR_GET_HOSTED_PAGE_PAYMENT`, con un mensaje que empieza `"The request tried to retrieve a hosted page, but the page was not found."` |
+
+La medición registró solo el comienzo del segundo mensaje. El texto completo de la
+[documentación oficial](https://docs.rapyd.net/en/retrieve-checkout-page.html) empieza igual y
+sigue `"The request was rejected. Corrective action: Use the ID of a valid hosted page."`.
+Los dos son `400` y no `404`, así que el SDK los traduce a `INVALID_REQUEST`.
+
 ---
 
 ## 2. Tarjetas de Crédito / Débito (Transacciones con Error)

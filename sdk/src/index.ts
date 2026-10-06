@@ -36,6 +36,8 @@ export { RejectionReason } from "./domain/value-objects/RejectionReason";
 export { ReturnUrlConfig } from "./domain/value-objects/ReturnUrlConfig";
 export { KitPagosErrorCode } from "./domain/value-objects/KitPagosErrorCode";
 export { TransactionStatus } from "./domain/value-objects/TransactionStatus";
+export { Environment, isEnvironment, parseEnvironment } from "./domain/value-objects/Environment";
+export { GATEWAY_URL_CATALOG, resolveGatewayCatalogUrl } from "./infrastructure/config/gateway-urls";
 export { WebhookEvent } from "./domain/value-objects/WebhookEvent";
 
 // Tipos del puerto y de la entrada de un pago

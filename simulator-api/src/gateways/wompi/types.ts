@@ -62,6 +62,11 @@ export interface WompiTransaction {
   payment_method?: WompiPaymentMethod;
   /** URL de retorno del comercio, que Wompi refleja tal como se la enviaron. */
   redirect_url?: string;
+  /**
+   * Explicación del desenlace. El simulador solo la emite donde está medida: el PSE del
+   * banco de prueba `3` (5 de octubre de 2026). Para los demás desenlaces no hay medición.
+   */
+  status_message?: string;
 }
 
 /** Envoltorio de respuesta real de Wompi: el objeto de negocio siempre viaja dentro de `data`. */
@@ -82,4 +87,35 @@ export interface WompiMerchantResponse {
       permalink: string;
     };
   };
+}
+
+/** Solicitud para tokenizar una tarjeta en Wompi (POST /v1/tokens/cards). */
+export interface WompiTokenizeCardRequestBody {
+  number: string;
+  cvc: string;
+  exp_month: string;
+  exp_year: string;
+  card_holder: string;
+}
+
+/** Objeto de tarjeta tokenizada retornado por Wompi dentro de `data`. */
+export interface WompiCardTokenData {
+  id: string;
+  created_at: string;
+  brand: string;
+  name: string;
+  last_four: string;
+  bin: string;
+  exp_year: string;
+  exp_month: string;
+  card_holder: string;
+  created_with_cvc: boolean;
+  expires_at: string;
+  validity_ends_at: null;
+}
+
+/** Respuesta de Wompi para tokenización de tarjeta. */
+export interface WompiTokenizeCardResponse {
+  status: "CREATED";
+  data: WompiCardTokenData;
 }

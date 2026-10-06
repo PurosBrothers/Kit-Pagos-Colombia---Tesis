@@ -7,6 +7,7 @@ import {
   KushkiTransferInitResponse,
   KushkiTransferStatus,
   KushkiTransferStatusResponse,
+  KushkiTransferTokenRequestBody,
 } from "./types";
 
 /**
@@ -177,6 +178,64 @@ export class GatewayMockFactory {
   }
 
   /**
+   * El registro de la transferencia en el momento en que se emite el token (issue #124).
+   *
+   * Antes la transferencia no existía hasta que alguien la consultaba, y esa consulta
+   * armaba la respuesta de cero con un `bankId` y un `callbackUrl` de mentira. Tres
+   * cosas se rompían a la vez:
+   *
+   * - El comercio que mandaba `bankId: "007"` recibía un `001` al consultar.
+   * - El `callbackUrl` que él había registrado nunca volvía, así que la conciliación
+   *   por referencia no tenía contra qué compararse.
+   * - El monto era fijo, y un cobro de 20.000 pesos se reportaba como de 150.000.
+   *
+   * La transferencia nace aquí, cuando se emite el token, y de ahí en adelante la
+   * consulta responde el registro guardado en vez de fabricar uno. Es el mismo cambio
+   * que en las otras tres pasarelas: **lo que se guardó es lo que se devuelve.**
+   *
+   * Los campos que envió el comercio al pedir el token vuelven tal cual en la consulta.
+   * Nivel 1 para la referencia: la consulta medida contra Kushki UAT devuelve
+   * `paymentDescription` con la referencia del comercio intacta
+   * (`docs/testing-data/kushki.md`, sección del Transfer In, «La consulta de estado
+   * devuelve otra forma»). `email`, `amount`, `bankId`, `documentType`, `documentNumber`
+   * y `callbackUrl` aparecen en esa misma respuesta, pero el registro no dice si repiten
+   * la petición: que vuelvan tal cual es una decisión del simulador, de nivel 3. Antes la
+   * semilla fijaba `ORDER-SIM-PSE` y un correo de relleno, así que el SDK devolvía siempre
+   * la misma referencia y la conciliación no tenía contra qué compararse.
+   *
+   * Los valores fijos son solo el relleno de un campo que la petición no trajo; el resto
+   * (`country`, `merchantName`, `transactionReference`) lo genera Kushki y no lo controla
+   * el comercio.
+   */
+  buildTransferSeed(
+    token: string,
+    request: KushkiTransferTokenRequestBody,
+  ): KushkiTransferStatusResponse {
+    return {
+      status: "requestedToken",
+      token,
+      paymentDescription: request.paymentDescription ?? "ORDER-SIM-PSE",
+      email: request.email ?? "comprador@example.com",
+      amount: request.amount ?? {
+        subtotalIva0: 150000,
+        subtotalIva: 0,
+        iva: 0,
+        ice: 0,
+        currency: "COP",
+      },
+      transactionReference: randomUUID(),
+      bankId: request.bankId ?? "001",
+      documentType: request.documentType ?? "CC",
+      documentNumber: request.documentNumber ?? "1999888777",
+      currency: request.currency ?? "COP",
+      country: "Colombia",
+      created: Date.now(),
+      merchantName: "KIT PAGOS COLOMBIA",
+      callbackUrl: request.callbackUrl ?? "https://comercio.example.com/retorno",
+    };
+  }
+
+  /**
    * Respuesta de `GET /transfer/v1/status/{token}`, con la forma medida.
    *
    * Antes reusaba la forma de un cobro con tarjeta, con el token metido en
@@ -185,6 +244,12 @@ export class GatewayMockFactory {
    * `transaction_status` ni `contactDetails`, trae `token`, `status` y `email` en la
    * raiz. El mock que se acomoda al codigo confirma el codigo en vez de verificarlo,
    * y eso es justo lo que escondio el defecto (punto 48).
+   *
+   * La ruta ya no la usa para construir la respuesta de una consulta: la transferencia
+   * se guardó al emitir el token (`buildTransferSeed`) y la consulta devuelve el registro
+   * con su estado movido por la máquina. Queda porque es la forma del registro y porque
+   * una respuesta de estado tiene que poder construirse sin pasar por el almacén, como en
+   * las pruebas de tabla.
    */
   buildTransferStatus(
     token: string,

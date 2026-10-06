@@ -4,7 +4,6 @@ import {
   WompiCreateTransactionRequestBody,
   WompiTransactionResponse,
 } from "../gateways/wompi/types";
-import { transactionStore } from "../store/TransactionStore";
 
 /** Cabeceras reconocidas para solicitar escenarios de simulación. */
 export const SCENARIO_HEADERS = [
@@ -21,6 +20,7 @@ export const DEFAULT_SCENARIO = "APPROVED";
 export enum SimulatorScenario {
   APPROVED = "APPROVED",
   APPROVAL = "APPROVAL",
+  PENDING = "PENDING",
   DECLINED = "DECLINED",
   REJECTED = "REJECTED",
   EXPIRED = "EXPIRED",
@@ -88,8 +88,11 @@ export class ScenarioEngine {
     const normalized = scenario.trim().toUpperCase();
 
     switch (normalized) {
+      // `PENDING` construye lo mismo que el aprobado porque en Wompi los dos nacen
+      // pendientes. La diferencia la pone el destino que registra la ruta, no la creación.
       case "APPROVED":
       case "APPROVAL":
+      case "PENDING":
         if (requestBody.payment_method?.type === "PSE") {
           return this.wompiMockFactory.buildPendingPseResponse(requestBody);
         }
@@ -107,23 +110,6 @@ export class ScenarioEngine {
     }
   }
 
-  /**
-   * Maneja el escenario de flapping (auto-recuperación) para una clave dada.
-   * Retorna true si debe responder 503 Service Unavailable, o false si ya superó
-   * los intentos transitorios y debe proceder con el flujo exitoso.
-   */
-  static handleFlapping(key: string, requiredAttempts = 2): boolean {
-    const flappingKey = `flapping_${key}`;
-    const current = (transactionStore.findById(flappingKey) as number | undefined) ?? 0;
-
-    if (current < requiredAttempts) {
-      transactionStore.save(flappingKey, current + 1);
-      return true;
-    }
-
-    transactionStore.save(flappingKey, 0);
-    return false;
-  }
 
   /**
    * Cierra abruptamente el socket TCP si está disponible (para simular NETWORK_ERROR)

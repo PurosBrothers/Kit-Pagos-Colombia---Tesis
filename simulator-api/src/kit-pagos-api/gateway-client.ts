@@ -1,6 +1,5 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Gateway, KitPagos } from "kit-pagos-colombia";
-import { classifyTarget, TargetEnvironment } from "../auth/targetEnvironment";
 import { CREDENTIAL_WARNING_HEADER } from "../services/KitPagosProvider";
 
 /** Código de la advertencia en el cuerpo, para que un cliente la detecte sin leer el texto. */
@@ -58,18 +57,17 @@ export function attachCredentialWarnings(app: FastifyInstance): void {
   });
 }
 
-const POLICY_BY_TARGET: Record<TargetEnvironment, string> = {
-  simulator: "Local simulator: server credentials allowed",
-  sandbox: "Real sandbox: server credentials allowed with a warning on every response",
-  production: "Production: server credentials never used, every request must bring its own",
-};
-
-/** Deja en el log de arranque a dónde apunta cada pasarela y qué credenciales admite. */
+/** Deja en el log de arranque que la resolución de ambientes es dinámica y los endpoints del simulador. */
 export function logCredentialPolicy(app: FastifyInstance): void {
   for (const gateway of Object.values(Gateway)) {
-    const target = classifyTarget(gateway, app.kitPagosProvider.resolveBaseUrl(gateway));
-    const log = target === "simulator" ? app.log.info.bind(app.log) : app.log.warn.bind(app.log);
-    log({ gateway: gateway.toLowerCase(), target }, POLICY_BY_TARGET[target]);
+    const simUrl =
+      typeof app.kitPagosProvider?.resolveSimulatorBaseUrl === "function"
+        ? app.kitPagosProvider.resolveSimulatorBaseUrl(gateway)
+        : undefined;
+    app.log.info(
+      { gateway: gateway.toLowerCase(), simulatorUrl: simUrl },
+      "Dynamic environment resolution via 'x-kit-pagos-environment' (simulator | sandbox | production)",
+    );
   }
 }
 

@@ -1,46 +1,49 @@
-import { Gateway } from "kit-pagos-colombia";
-import { classifyTarget } from "../src/auth/targetEnvironment";
+import { Gateway, KitPagosError, KitPagosErrorCode } from "kit-pagos-colombia";
+import {
+  ENVIRONMENT_HEADER,
+  resolveTargetEnvironment,
+} from "../src/auth/targetEnvironment";
 
-describe("classifyTarget", () => {
-  it("should treat a missing base URL as the simulator, which is the SDK default", () => {
-    expect(classifyTarget(Gateway.WOMPI, undefined)).toBe("simulator");
+describe("resolveTargetEnvironment", () => {
+  it("devuelve 'simulator' si las cabeceras no se especifican", () => {
+    expect(resolveTargetEnvironment(undefined)).toBe("simulator");
   });
 
-  it("should recognize the simulator path, local or deployed", () => {
-    expect(classifyTarget(Gateway.WOMPI, "http://localhost:3000/v1/sim/wompi")).toBe("simulator");
-    expect(classifyTarget(Gateway.RAPYD, "https://kit-pagos.onrender.com/v1/sim/rapyd/")).toBe(
-      "simulator",
-    );
+  it("devuelve 'simulator' si la cabecera x-kit-pagos-environment está ausente o vacía", () => {
+    expect(resolveTargetEnvironment({})).toBe("simulator");
+    expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "" })).toBe("simulator");
+    expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "   " })).toBe("simulator");
   });
 
-  it("should not take another gateway's simulator path as its own", () => {
-    expect(classifyTarget(Gateway.WOMPI, "http://localhost:3000/v1/sim/rapyd")).toBe("production");
+  it("reconoce los tres ambientes válidos en minúsculas y mayúsculas", () => {
+    expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "simulator" })).toBe("simulator");
+    expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "sandbox" })).toBe("sandbox");
+    expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "production" })).toBe("production");
+
+    // Case-insensitivity:
+    expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "SANDBOX" })).toBe("sandbox");
+    expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "Production" })).toBe("production");
+    expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "  simulator  " })).toBe("simulator");
   });
 
-  it.each([
-    [Gateway.WOMPI, "https://sandbox.wompi.co/v1"],
-    [Gateway.RAPYD, "https://sandboxapi.rapyd.net/v1"],
-    [Gateway.KUSHKI, "https://api-uat.kushkipagos.com"],
-  ])("should recognize the published sandbox of %s", (gateway, baseUrl) => {
-    expect(classifyTarget(gateway, baseUrl)).toBe("sandbox");
+  it("acepta cabecera recibida como arreglo de strings", () => {
+    expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: ["sandbox"] })).toBe("sandbox");
   });
 
-  it.each([
-    [Gateway.WOMPI, "https://production.wompi.co/v1"],
-    [Gateway.RAPYD, "https://api.rapyd.net/v1"],
-    [Gateway.KUSHKI, "https://api.kushkipagos.com"],
-    [Gateway.MERCADOPAGO, "https://api.mercadopago.com/v1"],
-  ])("should treat the real host of %s as production", (gateway, baseUrl) => {
-    expect(classifyTarget(gateway, baseUrl)).toBe("production");
-  });
+  it("lanza KitPagosError con INVALID_REQUEST si el ambiente no es válido", () => {
+    expect(() =>
+      resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "staging" }, Gateway.WOMPI),
+    ).toThrow(KitPagosError);
 
-  /** Ante la duda, la API no presta las credenciales del servidor. */
-  it("should treat anything it cannot vouch for as production", () => {
-    expect(classifyTarget(Gateway.WOMPI, "http://sandbox.wompi.co/v1")).toBe("production");
-    expect(classifyTarget(Gateway.WOMPI, "https://sandboxapi.rapyd.net/v1")).toBe("production");
-    expect(classifyTarget(Gateway.WOMPI, "https://sandbox.wompi.co.evil.example/v1")).toBe(
-      "production",
-    );
-    expect(classifyTarget(Gateway.WOMPI, "no es una url")).toBe("production");
+    try {
+      resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "dev" }, Gateway.RAPYD);
+      fail("Debe lanzar KitPagosError");
+    } catch (err) {
+      expect(err).toBeInstanceOf(KitPagosError);
+      const error = err as KitPagosError;
+      expect(error.code).toBe(KitPagosErrorCode.INVALID_REQUEST);
+      expect(error.gateway).toBe(Gateway.RAPYD);
+      expect(error.message).toContain("Ambiente 'dev' no válido");
+    }
   });
 });

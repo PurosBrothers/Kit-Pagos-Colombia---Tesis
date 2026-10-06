@@ -111,9 +111,19 @@ Kit-Pagos-Colombia---Tesis/
 │   ├── gateways/                               <-- Una GatewayMockFactory + types.ts por pasarela
 │   │   ├── wompi/  mercadopago/  rapyd/  kushki/
 │   ├── scenarios/
-│   │   └── ScenarioEngine.ts                   <-- Scenario Execution Engine (hoy solo APPROVED; RF-10 pendiente)
-│   └── store/
-│       └── TransactionStore.ts                 <-- Estado en memoria, efímero a propósito
+│   │   └── ScenarioEngine.ts                   <-- Escenarios de creación de Wompi (APPROVED, PENDING, DECLINED, EXPIRED; el resto, 501)
+│   ├── state/                                  <-- Máquinas de estado por pasarela (issue #124)
+│   │   ├── StateMachine.ts                     <-- Motor puro: NO persiste, NO lee cabeceras
+│   │   ├── Transition.ts                       <-- Tipo de transición: from/on/to/when/apply
+│   │   ├── wompiStateMachine.ts                <-- PENDING → APPROVED | DECLINED | ERROR, o sigue PENDING si se registró
+│   │   ├── rapydStateMachine.ts                <-- Checkout NEW→DON (pago CLO|ERR) y pago ACT→CLO, o sigue ACT si se registró
+│   │   ├── mercadopagoStateMachine.ts          <-- Payments sin transiciones y orders action_required→processed|expired, o sigue
+│   │   ├── kushkiStateMachine.ts               <-- Charge sin transiciones y transfer requestedToken→initializedTransaction→approved|declined, o sigue
+│   │   └── scenarioTarget.ts                   <-- Destinos de escenarios asíncronos, fuera del payload nativo
+│   └── store/                                  <-- Estado en memoria, efímero a propósito
+│       ├── TransactionStore.ts                 <-- Almacén genérico tipado por el registro que guarda
+│       ├── GatewayStores.ts                    <-- Un almacén por pasarela y recurso + resetSimulatorState()
+│       └── ScenarioMarks.ts                    <-- Marcas de FLAPPING y DUPLICATE_PAYMENT
 │
 └── docs/testing-data/                          <-- CONTENEDOR 3: DOCUMENTACIÓN DE DATOS DE PRUEBA
     ├── README.md                               <-- Índice, nivel de evidencia y huecos por pasarela
@@ -123,7 +133,7 @@ Kit-Pagos-Colombia---Tesis/
     └── rapyd.md
 ```
 
-> **Qué cambió respecto de la versión 1.0.0 de este árbol.** La versión anterior describía un contenedor `api/` con componentes (`router.ts`, `ScenarioEngine` en `engine/`, cinco factorías de mock en `factories/`, `SignatureGenerator`, `WebhookTriggerEndpoint`, `OpenAPIProvider`) que no corresponden a la implementación real en `simulator-api/src/`. También citaba `SdkError.ts` y `SdkErrorCode.ts`, renombrados a `KitPagosError`, y le faltaban el normalizador de Kushki, `PaymentResult`, `PaymentMethod`, `PseBank`, `Credentials`, `native-status.ts` y los once módulos auxiliares de adaptador. El árbol de arriba se generó contra el código y corresponde a 61 unidades de producción en `sdk/src` y 17 en `simulator-api/src`. La verificación de que la regla de dependencia se cumple está en [2-hexagonal-en-kit-pagos.md](2-hexagonal-en-kit-pagos.md) §2.
+> **Qué cambió respecto de la versión 1.0.0 de este árbol.** La versión anterior describía un contenedor `api/` con componentes (`router.ts`, `ScenarioEngine` en `engine/`, cinco factorías de mock en `factories/`, `SignatureGenerator`, `WebhookTriggerEndpoint`, `OpenAPIProvider`) que no corresponden a la implementación real en `simulator-api/src/`. También citaba `SdkError.ts` y `SdkErrorCode.ts`, renombrados a `KitPagosError`, y le faltaban el normalizador de Kushki, `PaymentResult`, `PaymentMethod`, `PseBank`, `Credentials`, `native-status.ts` y los once módulos auxiliares de adaptador. El árbol de arriba se generó contra el código y corresponde a 61 unidades de producción en `sdk/src` y 39 en `simulator-api/src`. La verificación de que la regla de dependencia se cumple está en [2-hexagonal-en-kit-pagos.md](2-hexagonal-en-kit-pagos.md) §2.
 >
 > Las secciones 3.1 a 3.6 describen la implementación real en `simulator-api/src/` con los nombres de archivo del código (la correspondencia con los nombres de componente del SAD se conserva en los encabezados). Los límites de fidelidad declarados y lo que falta para cerrar el componente están en [3-api-de-simulacion.md](3-api-de-simulacion.md).
 
@@ -177,7 +187,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   - Cobro con tarjeta: `payment_method: {type: "CARD", token, installments}`. Sin ese campo responde `422 "No se especificó método de pago o fuente de pago"`, y **el cobro nace `PENDING`, no `APPROVED`**: se resuelve solo unos cientos de milisegundos después, así que el resultado nunca está en la respuesta de creación y el comercio tiene que consultarlo (punto 50 del `architecture-log.md`).
   - Mapeo de estado: campo `data.status` con valores `APPROVED`, `DECLINED`, `VOIDED`, `PENDING`.
   - Verificación de firma: SHA-256 sobre cadena de propiedades + timestamp + secreto de integridad.
-- **Prioridad:** Alta. Es el adaptador de referencia del proyecto: implementación completa y 16 pruebas de contrato contra el sandbox real (`sdk/test/sandbox/wompi.sandbox.test.ts`), además de los hallazgos medidos de los puntos 43, 44 y 50 del `architecture-log.md`.
+- **Prioridad:** Alta. Es el adaptador de referencia del proyecto: implementación completa y 3 pruebas de contrato contra el sandbox real (`sdk/test/sandbox/wompi.sandbox.test.ts`), además de los hallazgos medidos de los puntos 43, 44 y 50 del `architecture-log.md`.
 - **Modo simulación:** Redirige solicitudes al simulador con el header `x-simulate-scenario`. Es el **único** header que el simulador intercepta: el `x-simulate-delay` descrito en versiones anteriores no existe (ver sección 3.1).
 
 ---
@@ -322,7 +332,9 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 - **Responsabilidad:** Son la puerta de entrada del simulador, un plugin Fastify por pasarela registrado desde `app.ts`: `wompi.ts`, `rapyd.ts`, `mercadopago.ts`, `kushki.ts` y `health.ts`.
 - **Enrutamiento:** Cada router replica la forma de las rutas nativas de su pasarela bajo `/v1/sim/<pasarela>/*` — 23 endpoints en total (4 de Wompi, 7 de Rapyd, 5 de Mercado Pago, 6 de Kushki y 1 de `health`), enumerados en [3-api-de-simulacion.md](3-api-de-simulacion.md). **No existe `/v1/sim/payu/*`**: PayU no es pasarela del proyecto (ver sección 2.6 y `architecture-log.md`, punto 15).
 - **Headers interceptados:**
-  - `x-simulate-scenario`: escenario a ejecutar. El único valor implementado es `APPROVED` (por defecto); cualquier otro escenario (`RECHAZADO`, `FONDOS_INSUFICIENTES`, `TIMEOUT`, `ERROR_RED`) responde HTTP `501 Not Implemented` (RF-10, pendiente — issue #65).
+  - `x-simulator-scenario` y `x-simulate-scenario`: escenario a ejecutar. Son equivalentes y ambas se aceptan; por defecto el escenario es `APPROVED`. Las que el motor todavía no implementa responden HTTP `501 Not Implemented` (RF-10, pendiente — issue #65).
+  - **El escenario se fija en la creación y las consultas no lo leen** (issue #124). Una ruta de creación construye el cobro con el estado que pidió la prueba y lo guarda; una ruta de consulta responde lo que hay, y su tabla mueve el registro si corresponde. Cuando el desenlace solo se conoce después de una redirección —el caso de PSE en las cuatro pasarelas—, la creación registra el destino en `state/scenarioTarget.ts` y la consulta lo aplica. Esa información vive **fuera del registro** para que el payload que sale sea exactamente el nativo de la pasarela.
+  - **Las fallas técnicas no crean ni mutan estado.** Se resuelven antes de construir nada y devuelven el error nativo sin tocar los almacenes: un `504` no deja un cobro fantasma que estorbe al reintento. En sentido inverso, la consulta de un cobro no falla por escenario, porque el cobro ya existe.
   - **No existe el header `x-simulate-delay`** que describían versiones anteriores de este documento.
 - **Fuentes de solicitud:** SDK Kit Pagos Colombia en modo simulación, o directamente el Desarrollador o Tester mediante herramientas REST (Postman, curl).
 
@@ -335,6 +347,7 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
   - `APPROVED` (valor por defecto): delega la construcción del payload al `GatewayMockFactory` de Wompi y devuelve `201` con `data.status: "APPROVED"` (para tarjeta) o `PENDING` (para PSE, que no se resuelve en el camino feliz — sección 2.5).
   - Cualquier otro valor: lanza `UnsupportedScenarioError`, que el router traduce a HTTP `501`. Es una decisión deliberada: producir un `APPROVED` falso para un escenario no implementado invalidaría silenciosamente las pruebas de manejo de rechazos del SDK (RF-10, issue #65). Los routers de Rapyd, Mercado Pago y Kushki no pasan por este motor: resuelven el escenario en su propia fábrica de mocks, porque el motor hoy está acoplado al tipo de Wompi (ver comentario en `routes/rapyd.ts`).
 - **Responsabilidad y límite:** Detectar el escenario pedido es del router; decidir qué payload construir, de la fábrica. El motor intermedia para Wompi. Los dos extremos lo documentan en el código (`scenarios/ScenarioEngine.ts` y `gateways/<pasarela>/GatewayMockFactory.ts`).
+  - **Desde el issue #124 la fábrica es una función pura de la petición y del escenario**: no recibe el almacén por el constructor, no guarda lo que construye y no mueve un cobro entre estados. Guardar es de la ruta y moverlo es de la tabla. Los métodos que antes lo hacían —`advanceCardTransaction`, `advancePseTransaction`, `payCheckout` y `buildStatusResponse`— se eliminaron porque duplicaban la tabla y ya discrepaban de ella.
 
 ---
 

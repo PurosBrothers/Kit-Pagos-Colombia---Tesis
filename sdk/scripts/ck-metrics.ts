@@ -421,6 +421,7 @@ function printReport(metrics: ClassMetrics[]): void {
  */
 function main(): void {
   const sdkRoot = path.resolve(__dirname, '..', 'src');
+  const browserRoot = path.resolve(__dirname, '..', 'src-browser');
 
   // Load TypeScript project using SDK's tsconfig.json
   const project = new Project({
@@ -428,18 +429,26 @@ function main(): void {
     skipAddingFilesFromTsConfig: true,
   });
 
-  // Add all source files matching sdk/src/**/*.ts (exclude tests)
+  // Add all source files matching sdk/src/**/*.ts and sdk/src-browser/**/*.ts (exclude tests)
   project.addSourceFilesAtPaths([
     `${sdkRoot}/**/*.ts`,
     `!${sdkRoot}/**/*.test.ts`,
     `!${sdkRoot}/**/*.spec.ts`,
+    `${browserRoot}/**/*.ts`,
+    `!${browserRoot}/**/*.test.ts`,
+    `!${browserRoot}/**/*.spec.ts`,
   ]);
 
   const allMetrics: ClassMetrics[] = [];
 
   // Process each source file
   for (const sourceFile of project.getSourceFiles()) {
-    const relPath = path.relative(sdkRoot, sourceFile.getFilePath());
+    const filePath = path.normalize(sourceFile.getFilePath());
+    const normBrowserRoot = path.normalize(browserRoot);
+    const normSdkRoot = path.normalize(sdkRoot);
+    const relPath = filePath.startsWith(normBrowserRoot)
+      ? path.join('src-browser', path.relative(normBrowserRoot, filePath))
+      : path.relative(normSdkRoot, filePath);
     const classes = sourceFile.getClasses();
 
     // Process each class in the file

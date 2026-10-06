@@ -1,6 +1,6 @@
 # Clase por clase
 
-Todas las clases y módulos del SDK, por capa, cada uno con su responsabilidad y con el porqué de estar hecho así. Las 61 unidades de producción de `sdk/src`.
+Todas las clases y módulos del SDK, por capa, cada uno con su responsabilidad y con el porqué de estar hecho así. Las 63 unidades de producción de `sdk/src`.
 
 Cuando una decisión parece rara, casi siempre tiene una razón medida detrás, y está citada.
 

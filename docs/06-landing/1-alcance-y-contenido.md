@@ -2,7 +2,7 @@
 
 Uno de los cuatro entregables de la Iteración 3. Este documento define qué es, qué no es, qué tiene que decir y cómo se evita que se desactualice.
 
-> **Estado: propuesto, no construido.** Lo que sigue es la especificación acordada antes de escribir código. Cuando la página exista, este documento pasa a describirla en presente.
+> **Estado: construido.** La página de presentación vive en `landing/` y describe el artefacto en presente siguiendo esta especificación.
 
 ---
 
@@ -79,10 +79,10 @@ Que el Kit Pagos son tres cosas y no una es la idea que más se pierde cuando al
 | Componente | Qué es | Para qué sirve |
 |---|---|---|
 | **SDK** | El paquete npm con la arquitectura hexagonal | Integrar una vez y cambiar de pasarela por configuración |
-| **API de Simulación** | Cuatro mocks locales con 23 rutas | Probar flujos que los sandboxes reales no permiten probar |
+| **API de Simulación** | Cuatro mocks locales con 23 rutas y capa REST | Probar flujos que los sandboxes reales no permiten probar y evaluar cobros vía HTTP |
 | **Documentación de datos** | Las tarjetas, bancos y credenciales de prueba | Reproducir cualquiera de los flujos sin adivinar |
 
-El tercero es el que más se subestima y el que más tiempo ahorra: es el que responde "¿qué número de tarjeta pongo para que me rechace el pago en Kushki?".
+El tercero es el que más se subestima y el que más tiempo ahorra: es el que responde "¿qué número de tarjeta pongo para que me rechace el pago en Kushki?". Además, la página documenta para cada pasarela sus peculiaridades de sandbox (URL oficial de sandbox, números de tarjetas de prueba, credenciales y trampas operativas).
 
 ### 3.4 Lo que el proyecto no hace
 
@@ -98,7 +98,7 @@ Esta sección no es humildad decorativa. Es lo que separa un trabajo de grado de
 
 ### 3.5 Cómo empezar
 
-Tres comandos, y el enlace a [03-sdk/4-guia-de-implementacion.md](../03-sdk/4-guia-de-implementacion.md) para todo lo demás. La página no duplica la guía de implementación: la anuncia.
+Muestra la vía más rápida: la **capa REST**, que permite probar el flujo con una sola petición `curl` sin necesidad de escribir código en TypeScript ni configurar proyectos locales. A continuación, detalla la instalación del SDK vía npm (`npm install kit-pagos-colombia`) y la ejecución local con la API de Simulación. Enlaza a [03-sdk/4-guia-de-implementacion.md](../03-sdk/4-guia-de-implementacion.md) para la guía completa. La página no duplica la guía de implementación: la anuncia.
 
 ### 3.6 El contexto académico
 
@@ -117,15 +117,13 @@ Marcar esto por adelantado evita que crezca sin control:
 
 ---
 
-## 5. Dónde vive
+## 5. Dónde vive y cómo se despliega
 
-Una decisión pendiente, con dos opciones y una recomendación.
+La página vive en el directorio `landing/` del monorepositorio.
 
-**GitHub Pages desde `docs/landing/` o desde una rama `gh-pages`.** Es gratis, no agrega infraestructura, se despliega con la misma acción de GitHub que ya corre las pruebas, y la URL vive junto al repositorio que es la evidencia.
+Se compila como sitio web estático mediante Vite y Vanilla TypeScript/CSS. El despliegue se realiza automáticamente sobre **GitHub Pages** mediante GitHub Actions en cada actualización de ramas troncales (`devops` y `main`).
 
-La alternativa sería un servicio de hosting estático como Vercel o Netlify. Da mejores dominios y despliegues por rama, pero introduce una cuenta y un panel más que mantener para una página estática que no lo necesita.
-
-**La recomendación es GitHub Pages**, por una razón que no es técnica: es un trabajo de grado, y que la página y el código estén en el mismo lugar hace la auditoría más simple.
+Esto asegura que la página, la documentación y el código residan en el mismo repositorio, garantizando máxima transparencia y trazabilidad para el jurado y la comunidad de desarrolladores.
 
 ---
 
@@ -139,23 +137,21 @@ De ahí salió `npm run check:readme`, que extrae los bloques de TypeScript del 
 
 **La landing tiene exactamente el mismo problema, y peor:** es la primera cosa que alguien va a leer, y a diferencia del README, nadie la mira al cambiar el SDK.
 
-Así que la regla es que **los fragmentos de código de la página tienen que estar sujetos a la misma guarda**, con dos caminos posibles:
+Así que la regla es que **los fragmentos de código de la página están sujetos a una guarda equivalente automatizada**:
 
-1. **Extenderla.** Que `check:readme` también procese los archivos de la landing. Es lo más simple si los fragmentos viven en Markdown o en un archivo `.ts` aparte.
-2. **Derivarlos.** Que la página tome sus fragmentos de los archivos de `examples/`, que ya pasan por `npm run typecheck` en el paquete de ejemplos. Es más robusto —el código mostrado es literalmente código que corre— pero requiere un paso de construcción que recorte las partes relevantes.
-
-**Lo que no es aceptable es la tercera opción**, que es copiar y pegar y confiar. Ya sabemos cómo termina eso, y en la landing el costo es más alto porque es la primera impresión del proyecto.
+- En `landing/scripts/check-snippets.ts`, se implementa la verificación estricta: todos los fragmentos presentados en la landing se compilan mediante `tsc --noEmit` directamente contra las definiciones `dist/` del SDK.
+- El comando `npm run check:snippets` corre en la suite de integración de la landing y en el flujo de CI. Si un método cambia de firma en el SDK, la landing no compila hasta ser corregida.
 
 ---
 
-## 7. Qué falta decidir
+## 7. Decisiones resueltas
 
-| Decisión | Estado |
-|---|---|
-| Hosting (Pages vs. Vercel/Netlify) | Recomendado Pages, sin cerrar |
-| Cómo se guarda el código mostrado (extender `check:readme` vs. derivar de `examples/`) | Abierta |
-| Si la página es una sola HTML o usa un generador estático | Abierta |
-| Idioma: español solo, o español e inglés | Abierta; el repositorio es en español por convención |
+| Decisión | Resolución | Justificación |
+|---|---|---|
+| **Hosting** | GitHub Pages | Despliegue estático automatizado en GitHub Actions desde `landing/dist/`. Mantiene el sitio dentro de la misma infraestructura del repositorio para auditoría académica directa. |
+| **Guarda del código** | `check:snippets` dedicado | Script TypeScript (`landing/scripts/check-snippets.ts`) que extrae los bloques tipados de la landing y los compila con `tsc --noEmit` contra `sdk/dist`, análogo a `check:readme`. |
+| **Estructura** | Vite + Vanilla TS / CSS | Cero runtime frameworks pesados, carga instantánea, tipado estricto y estilos CSS puros con paleta verde esmeralda inspirada en Kirafin AI. |
+| **Idioma** | Español | El repositorio, la tesis y el ecosistema fintech colombiano operan en español; mantener un solo idioma evita desalineaciones en la documentación técnica. |
 
 ---
 

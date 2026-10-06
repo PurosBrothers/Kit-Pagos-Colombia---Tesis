@@ -48,7 +48,7 @@ No todo lo que está acá tiene el mismo respaldo, y los archivos lo distinguen 
 
 Lo más fuerte. Hay una petición HTTP real y su respuesta. Las secciones `1.1` de los cuatro archivos son de este nivel, fechadas el 18 y 19 de septiembre de 2026, y también lo es el flujo completo de Transfer In de Kushki (§5.2.1).
 
-Esto es lo que las [pruebas de contrato](../04-metricas-y-pruebas/3-pruebas-de-contrato.md) mantienen vigente: 16 pruebas que corren contra los sandboxes reales y fallan si alguna pasarela cambia lo que estos archivos afirman.
+Esto es lo que las [pruebas de contrato](../04-metricas-y-pruebas/3-pruebas-de-contrato.md) mantienen vigente: 18 pruebas que corren contra los sandboxes reales y fallan si alguna pasarela cambia lo que estos archivos afirman.
 
 ### Nivel 2 — Medido, pero solo hasta cierto punto del flujo
 
@@ -60,7 +60,7 @@ Los archivos lo dicen sin adornos. Rapyd §5.7: *"lo que el SDK afirma hoy de PS
 
 Los métodos que el proyecto no integra caen acá: Nequi, Daviplata, efectivo, suscripciones, dispersión. Están documentados porque el catálogo completo sirve para entender el ecosistema, pero **nadie los ejecutó**.
 
-Wompi §3 marca uno de estos huecos en una tabla: el banco de prueba `"3"` simula un error, pero *"sin confirmar cuál es el estado resultante"*.
+Wompi §3 marcaba uno de estos huecos: el banco de prueba `"3"` simulaba un error *"sin confirmar cuál es el estado resultante"*. Se midió el 5 de octubre de 2026 y termina en `ERROR` (`wompi.md`, línea 139), así que ya no es de nivel 3.
 
 **La regla de lectura:** si una afirmación no tiene fecha, asumila de nivel 3. Y si vas a construir sobre ella, medila primero — el punto 50 del architecture-log existe justamente porque dos creencias de nivel 3 sobre el cobro con tarjeta resultaron falsas.
 
@@ -73,12 +73,11 @@ Estos son los límites reales de lo que el proyecto puede afirmar hoy.
 | Pasarela | Hueco | Por qué |
 |---|---|---|
 | **Wompi** | El desenlace de PSE no se puede observar | El sandbox publica la URL de redirección en el mismo instante en que resuelve el pago: cuando la URL existe, ya no sirve (punto 43) |
-| **Wompi** | El banco de prueba `"3"` (error) | No se confirmó qué estado produce |
-| **Mercado Pago** | La Orders API de PSE | Responde `401` con credenciales de prueba y exige un token de producción (punto 45) |
+| **Mercado Pago** | La Orders API de PSE | `POST /v1/orders` responde `401` con el token `TEST-` y exige el token `APP_USR-` (punto 45; `mercado-pago.md`, líneas 108 a 111, no se volvió a medir). Con el token `APP_USR-`, `GET /v1/orders/{id}` sí responde: `404 order_not_found` para una orden inexistente (medido el 5 de octubre de 2026) |
 | **Kushki** | El desenlace de Transfer In | Exige que una persona autorice en el portal del banco |
 | **Rapyd** | Estados finales de PSE | No se sabe si el sandbox permite forzarlos como sí lo permite con 3DS |
 | **Rapyd** | Qué métodos PSE tiene activa una cuenta real | El sandbox devuelve los 47 de la plataforma; producción devuelve solo los habilitados |
-| **Las cuatro** | Escenarios de rechazo y timeout | El simulador todavía responde `501` a cualquier `x-simulate-scenario` distinto de `APPROVED` |
+| **Las cuatro** | Escenarios de rechazo y timeout desde el SDK y `/v1/api` | En `/v1/sim` el simulador produce rechazos, pendientes y fallas técnicas con la cabecera de escenario, y responde `501` solo a los escenarios que una ruta no sabe producir. Lo que falta es alcanzarlos desde el SDK y desde `/v1/api`, que no envían la cabecera ([#122](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/issues/122)) |
 
 Los tres primeros huecos son la razón de que la API de Simulación exista: es el único lugar donde esos flujos se pueden ejercitar de punta a punta. Está explicado en [02-arquitectura/3-api-de-simulacion.md](../02-arquitectura/3-api-de-simulacion.md) §1.
 
@@ -100,7 +99,7 @@ Lo mismo aplica a [`architecture-log.md`](../architecture/architecture-log.md), 
 
 **Si vas a probar un flujo específico**, buscá la sección del método en el archivo de la pasarela. Cada una trae el payload completo, no un fragmento.
 
-**Si algo no funciona como dice acá**, revisá la fecha de la afirmación. Los sandboxes cambian, y una medición de septiembre de 2026 puede no valer hoy. Las 16 pruebas de contrato existen para detectar exactamente eso:
+**Si algo no funciona como dice acá**, revisá la fecha de la afirmación. Los sandboxes cambian, y una medición de septiembre de 2026 puede no valer hoy. Las 18 pruebas de contrato existen para detectar exactamente eso:
 
 ```bash
 cd sdk && npm run test:sandbox
@@ -112,4 +111,4 @@ cd sdk && npm run test:sandbox
 
 - **[01-producto/3-las-cuatro-pasarelas.md](../01-producto/3-las-cuatro-pasarelas.md)** — La comparación conceptual de las cuatro, que es la lectura previa a estos archivos.
 - **[04-metricas-y-pruebas/3-pruebas-de-contrato.md](../04-metricas-y-pruebas/3-pruebas-de-contrato.md)** — Cómo se mantiene vigente lo que acá se afirma.
-- **[05-ejemplos/README.md](../05-ejemplos/README.md)** — Los diez ejemplos que consumen estos datos.
+- **[05-ejemplos/README.md](../05-ejemplos/README.md)** — Los once ejemplos que consumen estos datos.
