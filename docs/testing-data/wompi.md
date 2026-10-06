@@ -64,6 +64,19 @@ posterior devuelve la transacción sin ese campo.
 }
 ```
 
+### 1.2. Consulta de una transacción que no existe (5 de octubre de 2026)
+
+> **Medido contra el sandbox real entre las 11:58 y las 12:11 (UTC−5).**
+
+`GET /v1/transactions/{id}` con un identificador inexistente responde `404`. Da lo mismo un uuid o un
+id con la forma del nativo, y da lo mismo enviar `Authorization` o no:
+
+```json
+{"error":{"type":"NOT_FOUND_ERROR","reason":"La entidad solicitada no existe"}}
+```
+
+El mensaje no incluye el identificador consultado.
+
 ---
 
 ## 2. Nequi
@@ -108,9 +121,9 @@ bancos**: son tres entidades de prueba cuyo código fuerza el desenlace.
 | `"2"` | Banco que declina |
 | `"3"` | Banco que simula un error |
 
-El tercero no estaba documentado en este archivo y sí existe. Lo medido es la lista, no el desenlace:
-el nombre dice qué simula cada uno, pero solo los códigos `1` y `2` tienen su estado final
-confirmado en la tabla de abajo, que venía de antes. Vale la pena no maquillar estos
+El tercero no estaba documentado en este archivo y sí existe. En esta medición se registró la lista,
+no el desenlace. El estado final del código `3` se midió después, el 5 de octubre de 2026, y está en
+la tabla de abajo. Vale la pena no maquillar estos
 nombres al mostrarlos: un comercio que ve "Banco que declina" en su selector sabe al instante contra
 qué entorno está apuntando.
 
@@ -123,7 +136,14 @@ de arriba:
 | --- | --- |
 | **Aprobada (`APPROVED`)** | `"1"` |
 | **Declinada (`DECLINED`)** | `"2"` |
-| Error simulado (sin confirmar cuál es el estado resultante) | `"3"` |
+| **Error (`ERROR`)**, medido el 5 de octubre de 2026 | `"3"` |
+
+> **Medido contra el sandbox real el 5 de octubre de 2026, entre las 11:58 y las 12:11 (UTC−5).**
+> El banco `"3"` crea la transacción con `201` y `PENDING`. Con consultas cada ~2 s, a los 2 931 ms
+> sigue `PENDING` y sin `async_payment_url`. A los 4 964 ms está en `ERROR`, con
+> `status_message: "Transacción con ERROR en Sandbox"` y con `async_payment_url` presente. El estado
+> se mantiene igual hasta los 41 865 ms, la última consulta. Igual que en los bancos `1` y `2`, la URL
+> y el desenlace aparecen en la misma consulta.
 
 ### Integración con Widget
 

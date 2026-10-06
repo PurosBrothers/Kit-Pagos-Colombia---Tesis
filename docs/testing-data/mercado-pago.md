@@ -239,6 +239,23 @@ GET https://api.mercadopago.com/v1/orders/{id}
 
 Reemplaza `{id}` por el identificador de la orden devuelto en la creación. El campo `status` contendrá el resultado de la prueba.
 
+### Consulta de un identificador que no existe (5 de octubre de 2026)
+
+> **Medido contra la API real entre las 11:58 y las 12:11 (UTC−5).** Las órdenes se consultaron
+> con el token `APP_USR-`. Con ese token, `GET /v1/orders/{id}` sí responde; el `401` de las líneas
+> 108 a 111 es del token `TEST-` en `POST /v1/orders` y no se volvió a medir.
+
+| Consulta | Respuesta |
+| --- | --- |
+| `GET /v1/payments/1` o `/v1/payments/99999999999` | `404 {"message":"Payment not found","error":"not_found","status":404,"cause":[{"code":2000,"description":"Payment not found","data":"<fecha>;<uuid>"}]}` |
+| `GET /v1/payments/abc` (no numérico) | `404` con el cuerpo del enrutador: `{"error":"resource not found","message":"Si quieres conocer los recursos de la API…"}` |
+| `GET /v1/orders/ORD01JZZZZZZZZZZZZZZZZZZZZZZZ` (con la forma del id real) | `404 {"errors":[{"code":"order_not_found","message":"Order not found."}]}` |
+| `GET /v1/orders/ORDabc` (formato inválido) | `400 {"errors":[{"code":"invalid_path_param","message":"path param order id is invalid"}]}` |
+
+Las dos APIs usan sobres de error distintos, igual que con `X-Idempotency-Key`. La medición no
+registró el formato de la fecha de `cause[].data`. El simulador imita las filas primera y tercera,
+y responde a la segunda como a la primera, y a la cuarta como a la tercera.
+
 ### Reembolsos de Prueba
 
 Si necesitas realizar un reembolso de prueba (`POST /v1/orders/{id}/refund`), ejecuta el llamado a la API utilizando únicamente tu **`Access Token` de prueba** (`APP_USR-`).
