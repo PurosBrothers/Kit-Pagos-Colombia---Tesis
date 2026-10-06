@@ -49,16 +49,16 @@ describe("Gateway URL Catalog", () => {
 
   it("resuelve las URLs de simulación por defecto hacia Render", () => {
     expect(resolveGatewayCatalogUrl(Gateway.WOMPI, Environment.SIMULATOR)).toBe(
-      "https://kit-pagos-colombia.onrender.com/v1/sim/wompi",
+      "http://localhost:3000/v1/sim/wompi",
     );
     expect(resolveGatewayCatalogUrl(Gateway.MERCADOPAGO, Environment.SIMULATOR)).toBe(
-      "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago",
+      "http://localhost:3000/v1/sim/mercadopago",
     );
     expect(resolveGatewayCatalogUrl(Gateway.RAPYD, Environment.SIMULATOR)).toBe(
-      "https://kit-pagos-colombia.onrender.com/v1/sim/rapyd",
+      "http://localhost:3000/v1/sim/rapyd",
     );
     expect(resolveGatewayCatalogUrl(Gateway.KUSHKI, Environment.SIMULATOR)).toBe(
-      "https://kit-pagos-colombia.onrender.com/v1/sim/kushki",
+      "http://localhost:3000/v1/sim/kushki",
     );
   });
 });

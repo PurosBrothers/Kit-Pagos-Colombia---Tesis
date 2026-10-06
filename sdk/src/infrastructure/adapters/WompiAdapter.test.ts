@@ -79,7 +79,7 @@ describe("WompiAdapter", () => {
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://kit-pagos-colombia.onrender.com/v1/sim/wompi/transactions",
+        "http://localhost:3000/v1/sim/wompi/transactions",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -158,7 +158,7 @@ describe("WompiAdapter", () => {
       await adapter.createPayment(validRequest);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://kit-pagos-colombia.onrender.com/v1/sim/wompi/transactions",
+        "http://localhost:3000/v1/sim/wompi/transactions",
         expect.objectContaining({
           headers: {
             "Content-Type": "application/json",
@@ -308,7 +308,7 @@ describe("WompiAdapter", () => {
       const transaction = await adapter.getStatus("wompi-mock-tx-123");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://kit-pagos-colombia.onrender.com/v1/sim/wompi/transactions/wompi-mock-tx-123",
+        "http://localhost:3000/v1/sim/wompi/transactions/wompi-mock-tx-123",
         expect.objectContaining({ method: "GET" }),
       );
 

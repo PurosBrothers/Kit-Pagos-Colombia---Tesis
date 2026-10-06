@@ -46,7 +46,7 @@ import {
  * método arma su ruta. Contra la API real de pruebas el valor equivalente es
  * `https://api-uat.kushkipagos.com`.
  */
-const DEFAULT_KUSHKI_BASE_URL = "https://kit-pagos-colombia.onrender.com/v1/sim/kushki";
+const DEFAULT_KUSHKI_BASE_URL = "http://localhost:3000/v1/sim/kushki";
 
 /**
  * Las dos credenciales de Kushki no son intercambiables y cada ruta pide una.

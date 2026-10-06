@@ -38,7 +38,7 @@ import {
 } from "kit-pagos-colombia";
 
 /** Raíz de la API de Wompi en el simulador, no el endpoint de transacciones. */
-const SIMULATOR_WOMPI_URL = "https://kit-pagos-colombia.onrender.com/v1/sim/wompi";
+const SIMULATOR_WOMPI_URL = "http://localhost:3000/v1/sim/wompi";
 
 
 const options: SDKOptions = {

@@ -6,7 +6,8 @@ import { Environment } from "../../domain/value-objects/Environment";
  *
  * - sandbox: URLs medidas por las pruebas de contrato en `sdk/test/sandbox/sandbox-env.ts`.
  * - production: URLs tomadas de la documentación oficial de cada pasarela (nivel de evidencia: sin medir).
- * - simulator: URLs por defecto hacia el simulador desplegado en Render (`https://kit-pagos-colombia.onrender.com/v1/sim/<pasarela>`).
+ * - simulator: la API de Simulación local (`http://localhost:3000/v1/sim/<pasarela>`). El despliegue
+ *   en Render se usa con `baseUrl`, porque el valor por defecto no debe sacar peticiones de la máquina.
  */
 export const GATEWAY_URL_CATALOG: Readonly<Record<Environment, Readonly<Record<Gateway, string>>>> = {
   [Environment.SANDBOX]: {
@@ -22,10 +23,10 @@ export const GATEWAY_URL_CATALOG: Readonly<Record<Environment, Readonly<Record<G
     [Gateway.KUSHKI]: "https://api.kushkipagos.com",
   },
   [Environment.SIMULATOR]: {
-    [Gateway.WOMPI]: "https://kit-pagos-colombia.onrender.com/v1/sim/wompi",
-    [Gateway.MERCADOPAGO]: "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago",
-    [Gateway.RAPYD]: "https://kit-pagos-colombia.onrender.com/v1/sim/rapyd",
-    [Gateway.KUSHKI]: "https://kit-pagos-colombia.onrender.com/v1/sim/kushki",
+    [Gateway.WOMPI]: "http://localhost:3000/v1/sim/wompi",
+    [Gateway.MERCADOPAGO]: "http://localhost:3000/v1/sim/mercadopago",
+    [Gateway.RAPYD]: "http://localhost:3000/v1/sim/rapyd",
+    [Gateway.KUSHKI]: "http://localhost:3000/v1/sim/kushki",
   },
 };
 

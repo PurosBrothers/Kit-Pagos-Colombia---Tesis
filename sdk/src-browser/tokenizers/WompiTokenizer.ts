@@ -16,7 +16,7 @@ import { resolveCatalogUrl } from "./base-url-catalog";
 const WOMPI_BASE_URLS: Readonly<Record<BrowserEnvironment, string>> = {
   sandbox: "https://sandbox.wompi.co/v1",
   production: "https://production.wompi.co/v1",
-  simulator: "https://kit-pagos-colombia.onrender.com/v1/sim/wompi",
+  simulator: "http://localhost:3000/v1/sim/wompi",
 };
 
 /** Cuerpo de error de Wompi, con la forma medida el 3 de octubre de 2026. */

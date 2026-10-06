@@ -43,7 +43,7 @@ import type { PseBank } from "../../domain/value-objects/PseBank";
  * npm (issue #88), así que es el único momento en que corregirlo no le cuesta
  * nada a nadie.
  */
-const DEFAULT_MERCADOPAGO_BASE_URL = "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago";
+const DEFAULT_MERCADOPAGO_BASE_URL = "http://localhost:3000/v1/sim/mercadopago";
 
 /**
  * Adapter concreto de Mercado Pago.

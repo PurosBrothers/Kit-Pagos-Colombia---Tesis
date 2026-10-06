@@ -234,7 +234,7 @@ describe("KitPagos", () => {
       const transaction = await buildConfiguredSdk().getPaymentStatus("wompi-tx-abc-123");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://kit-pagos-colombia.onrender.com/v1/sim/wompi/transactions/wompi-tx-abc-123",
+        "http://localhost:3000/v1/sim/wompi/transactions/wompi-tx-abc-123",
         expect.objectContaining({
           method: "GET",
           headers: expect.objectContaining({
@@ -867,7 +867,7 @@ describe("KitPagos", () => {
       }
 
       it("should validate native notification (step 1) and retrieve full transaction via getPaymentStatus (step 2)", async () => {
-        const sdk = buildMercadoPagoSdk("https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago");
+        const sdk = buildMercadoPagoSdk("http://localhost:3000/v1/sim/mercadopago");
 
         // Paso 1: Validar firma y parsear la notificación entrante
         const event = sdk.validateWebhook(nativePayload, headers);
@@ -896,7 +896,7 @@ describe("KitPagos", () => {
         const transaction = await sdk.getPaymentStatus(event.gatewayTransactionId);
 
         expect(mockFetch).toHaveBeenCalledWith(
-          "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/payments/1234567890",
+          "http://localhost:3000/v1/sim/mercadopago/payments/1234567890",
           expect.objectContaining({
             method: "GET",
             headers: expect.objectContaining({
@@ -917,7 +917,7 @@ describe("KitPagos", () => {
       });
 
       it("should reconcile a rejected payment in step 2 correctly", async () => {
-        const sdk = buildMercadoPagoSdk("https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago");
+        const sdk = buildMercadoPagoSdk("http://localhost:3000/v1/sim/mercadopago");
 
         const event = sdk.validateWebhook(nativePayload, headers);
         expect(event.newStatus).toBe("PENDING");
@@ -951,7 +951,7 @@ describe("KitPagos", () => {
       const sdk = new KitPagos({
         gateway: Gateway.WOMPI,
         credentials: { [Gateway.WOMPI]: wompiCredentials },
-        baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim/wompi",
+        baseUrl: "http://localhost:3000/v1/sim/wompi",
         maxRetries: 2,
       });
 
@@ -983,7 +983,7 @@ describe("KitPagos", () => {
       const sdk = new KitPagos({
         gateway: Gateway.WOMPI,
         credentials: { [Gateway.WOMPI]: wompiCredentials },
-        baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim/wompi",
+        baseUrl: "http://localhost:3000/v1/sim/wompi",
       });
 
       let callCount = 0;
@@ -1006,7 +1006,7 @@ describe("KitPagos", () => {
       const sdk = new KitPagos({
         gateway: Gateway.WOMPI,
         credentials: { [Gateway.WOMPI]: wompiCredentials },
-        baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim/wompi",
+        baseUrl: "http://localhost:3000/v1/sim/wompi",
       });
 
       let callCount = 0;

@@ -28,7 +28,7 @@ import {
 // endpoint de transacciones: el adaptador le agrega la ruta que necesite, porque
 // PSE además consulta /merchants para el token de aceptación. Esto, junto con las
 // llaves, debería vivir en configuración externa como un .env.
-const SIMULATOR_WOMPI_URL = "https://kit-pagos-colombia.onrender.com/v1/sim/wompi";
+const SIMULATOR_WOMPI_URL = "http://localhost:3000/v1/sim/wompi";
 
 /**
  * Paso 1: configurar el SDK.

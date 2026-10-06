@@ -156,9 +156,9 @@ describe("SDKConfigurator", () => {
         credentials: { [Gateway.WOMPI]: wompiCredentials },
       });
       expect(configurator.getEnvironment()).toBe("simulator");
-      expect(configurator.getBaseUrl()).toBe("https://kit-pagos-colombia.onrender.com/v1/sim/wompi");
-      expect(configurator.getBaseUrl(Gateway.WOMPI)).toBe("https://kit-pagos-colombia.onrender.com/v1/sim/wompi");
-      expect(configurator.getBaseUrl(Gateway.RAPYD)).toBe("https://kit-pagos-colombia.onrender.com/v1/sim/rapyd");
+      expect(configurator.getBaseUrl()).toBe("http://localhost:3000/v1/sim/wompi");
+      expect(configurator.getBaseUrl(Gateway.WOMPI)).toBe("http://localhost:3000/v1/sim/wompi");
+      expect(configurator.getBaseUrl(Gateway.RAPYD)).toBe("http://localhost:3000/v1/sim/rapyd");
     });
 
     it("should resolve sandbox URLs when environment is set to sandbox", () => {

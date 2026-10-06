@@ -53,7 +53,7 @@ import {
 } from "kit-pagos-colombia";
 
 /** Raíz de la API de Mercado Pago en el simulador, no el endpoint de pagos. */
-const SIMULATOR_MERCADOPAGO_URL = "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago";
+const SIMULATOR_MERCADOPAGO_URL = "http://localhost:3000/v1/sim/mercadopago";
 
 
 const options: SDKOptions = {

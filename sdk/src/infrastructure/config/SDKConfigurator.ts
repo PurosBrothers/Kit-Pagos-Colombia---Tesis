@@ -11,7 +11,7 @@ export interface SDKOptions {
   /**
    * Ambiente de ejecución. Resuelve automáticamente las URLs oficiales
    * de cada pasarela desde un catálogo cerrado:
-   * - "simulator": API de simulación (por defecto https://kit-pagos-colombia.onrender.com/v1/sim/<pasarela>).
+   * - "simulator": API de simulación (por defecto http://localhost:3000/v1/sim/<pasarela>).
    * - "sandbox": Sandboxes oficiales medidos de cada proveedor.
    * - "production": Endpoints productivos oficiales de cada proveedor (sin medir).
    * Por defecto: "simulator".
@@ -67,6 +67,11 @@ export class SdkConfigurator {
 
   getActiveGateway(): Gateway {
     if (!this.activeGateway) {
+      // Se mantiene Error nativo y no KitPagosError: este fallo ocurre antes de que
+      // exista una pasarela, y KitPagosError exige el atributo gateway por la
+      // seccion 15.1 del SAD. Convertirlo obligaria a ensanchar ese contrato
+      // del dominio, decision que no corresponde a este issue
+      // (ver docs/architecture/architecture-log.md, punto 20).
       throw new Error("No active gateway has been configured");
     }
     return this.activeGateway;

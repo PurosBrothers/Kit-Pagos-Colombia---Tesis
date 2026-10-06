@@ -16,7 +16,7 @@ import { resolveCatalogUrl } from "./base-url-catalog";
 const MERCADOPAGO_BASE_URLS: Readonly<Record<BrowserEnvironment, string>> = {
   sandbox: "https://api.mercadopago.com/v1",
   production: "https://api.mercadopago.com/v1",
-  simulator: "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago",
+  simulator: "http://localhost:3000/v1/sim/mercadopago",
 };
 
 interface MercadoPagoErrorResponse {

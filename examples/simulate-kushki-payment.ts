@@ -26,7 +26,7 @@ import {
  * transferencia en `/transfer/v1/...`. Este ejemplo apuntaba a `/charges`, la ruta que el
  * SDK usaba antes de medirla contra la API real, donde responde `403 Forbidden`.
  */
-const SIMULATOR_KUSHKI_URL = "https://kit-pagos-colombia.onrender.com/v1/sim/kushki";
+const SIMULATOR_KUSHKI_URL = "http://localhost:3000/v1/sim/kushki";
 
 const options: SDKOptions = {
   gateway: Gateway.KUSHKI,
