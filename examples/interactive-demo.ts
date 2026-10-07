@@ -8,7 +8,7 @@
  * Este muestra **qué está haciendo**, y lo muestra con datos reales.
  *
  * La afirmación central de la tesis es que el SDK normaliza cuatro pasarelas
- * heterogéneas detrás de un mismo puerto. Hasta acá esa afirmación se podía
+ * heterogéneas detrás de un mismo puerto. Hasta aquí esa afirmación se podía
  * verificar leyendo los adaptadores o creyéndole a la documentación. Este programa
  * la vuelve observable: quien elige Wompi ve salir `amount_in_cents: 15000000`, y
  * quien elige Mercado Pago ve salir `transaction_amount` en unidades decimales,
@@ -36,7 +36,7 @@
  *
  * `readline/promises` del núcleo de Node alcanza para leer opciones por consola.
  * Parte de lo que este ejemplo demuestra es que consumir el SDK no exige nada
- * especial, y meter una librería de prompts justo acá lo debilitaría.
+ * especial, y meter una librería de prompts justo aquí lo debilitaría.
  *
  * ## Cómo correrlo
  *
@@ -83,7 +83,7 @@ const exchanges: HttpExchange[] = [];
  * Envuelve el `fetch` global para quedarse con lo que viajó.
  *
  * Clona la respuesta antes de leerla porque el cuerpo de una `Response` se
- * consume una sola vez: leerlo acá sin clonar le dejaría al adaptador un cuerpo
+ * consume una sola vez: leerlo aquí sin clonar le dejaría al adaptador un cuerpo
  * vacío, y el ejemplo rompería lo que vino a observar.
  */
 function installNetworkSpy(): void {
@@ -266,7 +266,7 @@ async function choose<T>(
   });
 
   for (;;) {
-    const raw = await ask("  Elegí un número o escribí parte del nombre", "1");
+    const raw = await ask("  Elija un número o escriba parte del nombre", "1");
 
     const byIndex = options[Number(raw) - 1];
     if (byIndex !== undefined) {
@@ -353,7 +353,7 @@ const CREDENTIALS: SDKOptions["credentials"] = {
  * Cómo conseguir cada dato que un adaptador puede exigir, indexado por el nombre
  * del campo **del dominio**.
  *
- * Acá está la parte que evita el `switch (gateway)`. Los tres adaptadores que
+ * Aquí está la parte que evita el `switch (gateway)`. Los tres adaptadores que
  * validan PSE localmente acumulan todo lo que falta en un único `INVALID_REQUEST`
  * y lo nombran con los campos del contrato: `payer.firstName`, `payer.address`,
  * `ipAddress`, `returnUrlConfig`. La demo lee esos nombres del error y pregunta
@@ -432,7 +432,7 @@ const EXTRA_FIELD_PROMPTS: Record<
  * El otro efecto es que un campo que el SDK nombre y que no esté en el catálogo
  * simplemente no se pregunta, y el SDK vuelve a reclamarlo. Preferible pedir de
  * menos y que el ciclo se repita, que abortar la demo porque apareció un dato
- * nuevo que nadie agregó acá todavía.
+ * nuevo que nadie agregó aquí todavía.
  *
  * El costo de buscar por contención es que un nombre que sea prefijo de otro
  * arrastra al más largo. Hoy no pasa: `payer.phone` es prefijo de
@@ -455,7 +455,7 @@ function missingFieldsFrom(message: string): string[] {
  * Los datos que el usuario fue dando, todavía mutables.
  *
  * Existe como objeto aparte porque `CreatePaymentRequest` se arma con objetos de
- * valor que validan en su constructor, y acá hace falta poder completar campos de
+ * valor que validan en su constructor, y aquí hace falta poder completar campos de
  * a poco, entre una pregunta y la siguiente.
  */
 interface PaymentDraft {
@@ -484,7 +484,7 @@ interface PaymentDraft {
  * enseñaría nada, y pedir el número de tarjeta enseñaría lo contrario de lo
  * correcto.
  *
- * Si el método es PSE sin banco, `PaymentMethod.pse()` lanza. No se verifica acá a
+ * Si el método es PSE sin banco, `PaymentMethod.pse()` lanza. No se verifica aquí a
  * propósito: el objeto de valor existe justamente para hacer imposible ese estado,
  * y repetir la verificación afuera crearía una segunda fuente de verdad.
  */
@@ -526,7 +526,7 @@ async function collectDraft(): Promise<{
   kitPagos: KitPagos;
 }> {
   const gateway = await choose(
-    "¿Por qué pasarela querés cobrar?",
+    "¿Por qué pasarela quiere cobrar?",
     GATEWAYS,
     (option) => option,
   );
@@ -570,7 +570,7 @@ async function collectDraft(): Promise<{
     printExchanges("Consulta de bancos");
 
     draft.bank = await choose(
-      `La pasarela devolvió ${banks.length} banco(s). ¿Con cuál pagás?`,
+      `La pasarela devolvió ${banks.length} banco(s). ¿Con cuál paga?`,
       banks.slice(0, 10),
       (bank) => `${bank.name}  (código ${bank.code})`,
     );
@@ -718,7 +718,7 @@ async function main(): Promise<void> {
    * La ramificación sobre `PaymentResult` es obligatoria, no opcional: el
    * compilador no deja leer `result.transaction` hasta que se descarta la
    * redirección. Es el mejor lugar del repositorio para mostrar por qué existe la
-   * unión discriminada del issue #64, porque acá la obligación se ve en pantalla.
+   * unión discriminada del issue #64, porque aquí la obligación se ve en pantalla.
    */
   if (result.outcome === "REDIRECT_REQUIRED") {
     console.log("\n=== El resultado es una redirección pendiente ===\n");
@@ -738,7 +738,7 @@ async function main(): Promise<void> {
      * URL, y hacerlo mantiene el orden verdadero de los eventos —crear, redirigir,
      * consultar— en lugar de saltarse el paso del medio.
      *
-     * El fallo se tolera porque **no todas las URL son visitables desde acá**, y eso
+     * El fallo se tolera porque **no todas las URL son visitables desde aquí**, y eso
      * no es un defecto de la demo: Kushki devuelve una del dominio
      * `sandbox-pse.kushkipagos.com`, que es lo que devuelve de verdad, así que el
      * destino queda fuera del simulador. Tratarlo como error haría que la demo se
@@ -750,7 +750,7 @@ async function main(): Promise<void> {
       console.log("  Visitada.");
     } catch {
       console.log(
-        "  No se pudo visitar desde acá: la URL apunta a un dominio de la\n" +
+        "  No se pudo visitar desde aquí: la URL apunta a un dominio de la\n" +
           "  pasarela y no al simulador. En un pago real la abre el pagador en su\n" +
           "  navegador, así que esto no es un fallo del cobro.",
       );
@@ -800,7 +800,7 @@ main()
       error.code === KitPagosErrorCode.CONNECTION_FAILED
     ) {
       console.error("\nNo se pudo conectar con la API de Simulación.");
-      console.error("Levantala en otra terminal y volvé a correr la demo:\n");
+      console.error("Levántela en otra terminal y vuelva a ejecutar la demo:\n");
       console.error("  cd simulator-api && npm run dev\n");
       process.exitCode = 1;
       return;

@@ -218,6 +218,28 @@ Explicación completa, con los límites de la demostración, en [`docs/05-ejempl
 
 ---
 
+### 6b. Escenarios de rechazo y de error, solo con el SDK
+
+```bash
+npm run simulate:scenarios
+```
+
+* **Archivo:** `simulate-scenarios.ts`
+* **Qué demuestra:** que un comercio puede provocar cada desenlace y cada código de error del SDK
+  contra la API de Simulación **sin cabeceras de escenario**, solo con los datos que pasa al SDK:
+  los datos de prueba de cada pasarela (la tarjeta 4111 de Wompi, el titular de Mercado Pago, el
+  documento de PSE de Kushki), los montos reservados y las marcas en la credencial. La tabla de la
+  convención está en la sección 4 de
+  [`docs/02-arquitectura/3-api-de-simulacion.md`](../docs/02-arquitectura/3-api-de-simulacion.md).
+* **Qué esperar:** una línea por caso con la pasarela, el caso, lo esperado, lo obtenido y `OK` o
+  `FAIL`, y un total al final. **Sale con código 1 si algún caso falla**, así que también sirve
+  como prueba de regresión.
+* **Lo que no alcanza:** el rechazo de la tarjeta de Rapyd ocurre en su página alojada, así que el
+  SDK solo ve `REDIRECT_REQUIRED`; y la falla intermitente en la creación (monto 10 002) se ve como
+  el primer error, porque `createPayment()` no reintenta (punto 35 del `architecture-log.md`).
+
+---
+
 ### 7. Demo interactiva
 
 ```bash
@@ -225,12 +247,12 @@ npm run demo
 ```
 
 * **Archivo:** `interactive-demo.ts`
-* **Qué demuestra:** los diez ejemplos anteriores muestran **que** el SDK funciona; este muestra **qué está haciendo**. Pregunta pasarela, método de pago, monto y datos del pagador, y en cada paso imprime la petición que realmente salió y la respuesta que realmente llegó, al lado de la `Transaction` normalizada que produjo el `ResponseNormalizer`.
+* **Qué demuestra:** los once ejemplos anteriores muestran **que** el SDK funciona; este muestra **qué está haciendo**. Pregunta pasarela, método de pago, monto y datos del pagador, y en cada paso imprime la petición que realmente salió y la respuesta que realmente llegó, al lado de la `Transaction` normalizada que produjo el `ResponseNormalizer`.
 * **Nada de lo que imprime está escrito a mano.** Las peticiones salen de un espía sobre `globalThis.fetch`, así que son los bytes que el adaptador envió. Si un adaptador cambia lo que manda, la salida cambia sola: el ejemplo no puede desincronizarse del código como sí puede un texto que lo describa.
 * **Sin conocimiento de pasarelas propio.** No hay ni un `switch` sobre `Gateway` con detalles de ninguna API. El espía es agnóstico por construcción, y los datos extra que cada pasarela exige se preguntan leyendo los nombres de campo del `INVALID_REQUEST` que devuelve el SDK, así que la demo **aprende del SDK** qué pedir en vez de saberlo.
 * **Qué esperar:** con `150000.00 COP`, Wompi recibe `amount_in_cents: 15000000` en dos llamadas y Mercado Pago `transaction_amount: 150000` en una. Con PSE aparecen seis vocabularios nativos distintos para el mismo estado normalizado, y la rama `REDIRECT_REQUIRED` que el compilador obliga a distinguir.
 * **Modo no interactivo:** `npm run demo -- wompi pse` recorre un camino concreto sin preguntar nada, tomando las respuestas de los argumentos en orden y el valor por omisión para el resto. Cada opción acepta el número o parte del nombre. Sirve para reproducir un caso y para mostrarlo en una sustentación sin tipear en vivo.
-* **Sin dependencias nuevas:** usa `readline/promises` del núcleo de Node. Parte de lo que el ejemplo demuestra es que consumir el SDK no exige nada especial, y meter una librería de prompts justo acá lo debilitaría.
+* **Sin dependencias nuevas:** usa `readline/promises` del núcleo de Node. Parte de lo que el ejemplo demuestra es que consumir el SDK no exige nada especial, y meter una librería de prompts justo aquí lo debilitaría.
 
 Recorrido completo, con la salida real de los ocho caminos, en [`docs/05-ejemplos/demo-interactiva.md`](../docs/05-ejemplos/demo-interactiva.md).
 

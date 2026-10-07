@@ -68,9 +68,9 @@ async function main(): Promise<void> {
   /**
    * Paso 2: describir el pago con vocabulario del dominio.
    *
-   * Acá no se escribe ningún campo nativo de Wompi como `amount_in_cents`. Se usan
+   * Aquí no se escribe ningún campo nativo de Wompi como `amount_in_cents`. Se usan
    * objetos de valor que validan en su propio constructor: un monto con más de dos
-   * decimales, una divisa que no sea ISO 4217 o un pagador sin correo fallan acá,
+   * decimales, una divisa que no sea ISO 4217 o un pagador sin correo fallan aquí,
    * antes de que exista cualquier petición de red.
    *
    * El monto se escribe como string, no como number. Es el único tipo que preserva
@@ -117,7 +117,7 @@ async function main(): Promise<void> {
    * Una sola llamada. Por dentro el SDK resuelve la pasarela activa, obtiene sus
    * credenciales, construye el adaptador de Wompi, traduce los objetos de valor al
    * formato nativo, hace la petición HTTP y normaliza la respuesta. Nada de eso se
-   * filtra hasta acá.
+   * filtra hasta aquí.
    */
   const result = await kitPagos.createPayment(request);
 
@@ -125,7 +125,7 @@ async function main(): Promise<void> {
   // compilador obliga a distinguirlas: `result.transaction` no existe hasta que se
   // descarta el caso de redirección. Un cobro con tarjeta en Wompi nunca redirige
   // —el comercio cobra el token de servidor a servidor— así que esta rama no se
-  // alcanza acá. Es la rama que toma PSE, y también el flujo de tarjeta de Rapyd.
+  // alcanza aquí. Es la rama que toma PSE, y también el flujo de tarjeta de Rapyd.
   if (result.outcome === "REDIRECT_REQUIRED") {
     console.log(`El pago requiere redirigir a: ${result.redirect.redirectUrl}`);
     return;
@@ -151,7 +151,7 @@ async function main(): Promise<void> {
    * de verdad: medido contra `sandbox.wompi.co`, `POST /transactions` responde
    * `PENDING` con `finalized_at: null` y la transacción se resuelve unos 600 ms
    * después. Así que el desenlace de un cobro con tarjeta nunca está en la respuesta
-   * de la creación: el comercio tiene que consultarlo, exactamente como acá abajo.
+   * de la creación: el comercio tiene que consultarlo, exactamente como aquí abajo.
    *
    * El id que se pasa es el identificador nativo que Wompi devolvió al crear el pago.
    */
@@ -180,7 +180,7 @@ main().catch((error: unknown) => {
   // levantada. Se traduce a una instrucción concreta en vez de un volcado de pila.
   if (error instanceof KitPagosError && error.code === KitPagosErrorCode.CONNECTION_FAILED) {
     console.error("\nNo se pudo conectar con la API de Simulación.");
-    console.error("Levantala en otra terminal y volvé a correr el ejemplo:\n");
+    console.error("Levántela en otra terminal y vuelva a ejecutar el ejemplo:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }
