@@ -141,6 +141,29 @@ segunda (punto 50 del `architecture-log.md`):
   `sdk/test/sandbox/`, para que esto se pueda volver a medir en vez de creerle a este párrafo.
   Que la primera versión de este párrafo fuera falsa es el argumento de por qué están.
 
+### 1.2. Credenciales inválidas (6 de octubre de 2026)
+
+> **Medido contra `api-uat.kushkipagos.com` entre las 10:37 y las 10:39 (UTC−5), para el issue #122.**
+
+| Petición | Qué se varió | HTTP | Respuesta |
+| --- | --- | --- | --- |
+| `GET /transfer/v1/bankList` | `Public-Merchant-Id` con 32 ceros | `403` | `{"Message":"User is not authorized to access this resource because no identity-based policy allows the execute-api:Invoke action"}` |
+| `GET /transfer/v1/status/{token}` | `Private-Merchant-Id` con 32 ceros | `403` | El mismo cuerpo |
+| `POST /transfer/v1/tokens` (14:05-14:12) | `Public-Merchant-Id` inexistente de 32 caracteres | `403` | El mismo cuerpo |
+| `POST /transfer/v1/init` (14:05-14:12) | `Private-Merchant-Id` inexistente, token válido | `403` | El mismo cuerpo |
+| `GET /transfer/v1/status/{token}` | Llave válida, token inexistente de 32 caracteres | `400` | `{"code":"T004","message":"No existe la transacción"}` |
+| `POST /card/v1/charges` | `Private-Merchant-Id` con 32 ceros o con 3 caracteres, token mal formado | **`400`** | `{"message": "ID de comercio o credencial no válido", "code": "K004"}` |
+| `POST /card/v1/charges` | Llave válida, el mismo token mal formado | `400` | `K001 "Cuerpo de la petición inválido."`, el token debe cumplir `^[a-zA-Z0-9]{32}$` |
+
+- Las rutas de transferencia responden con el cuerpo de AWS API Gateway: la clave es `Message`,
+  con mayúscula, y no hay `code`.
+- **El cobro con tarjeta rechaza una credencial inválida con `400 K004`, no con `401` ni `403`**,
+  y la revisa antes que el cuerpo. Como el SDK traduce por el código HTTP, ese `400` llegaría al
+  comercio como `INVALID_REQUEST` si nada lo distingue. Esto último sale de leer el código, no de
+  correrlo.
+- Que haya dos autorizadores distintos (uno propio para tarjeta y una política de IAM para
+  transferencias) es una explicación posible, no medida.
+
 ---
 
 ## 2. Validación Antifraude en Tarjetas

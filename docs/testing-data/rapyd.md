@@ -65,7 +65,23 @@ Detalles de la página que importan al integrar:
 La medición registró solo el comienzo del segundo mensaje. El texto completo de la
 [documentación oficial](https://docs.rapyd.net/en/retrieve-checkout-page.html) empieza igual y
 sigue `"The request was rejected. Corrective action: Use the ID of a valid hosted page."`.
-Los dos son `400` y no `404`, así que el SDK los traduce a `INVALID_REQUEST`.
+Los dos son `400` y no `404`, así que el SDK los traduce a `INVALID_REQUEST`. El primero se
+volvió a medir el 6 de octubre de 2026, con el mismo texto.
+
+**Credenciales inválidas.** Medido contra `sandboxapi.rapyd.net` el 6 de octubre de 2026, entre
+las 10:37 y las 10:39 (UTC−5), con `GET /v1/payment_methods/country?country=CO&currency=COP`:
+
+| Qué se varió | HTTP | `status.message` |
+| --- | --- | --- |
+| Firma calculada con una llave secreta equivocada | `401` | `"The API received a request, but the signature did not match. The request was rejected. Corrective action: (1) Remove all whitespace that is not inside a string. (2) Remove trailing zeroes and decimal points, or wrap numbers in a string."` |
+| `access_key` inexistente, de 24 o de 36 caracteres | `401` | `"The request was rejected due to an authentication issue. Corrective action: Check the status of your account in the 'Account Details' page of the Client Portal."` |
+
+Entre las 14:05 y las 14:12 del mismo día, `POST /v1/checkout`, `GET /v1/checkout/{id existente}` y
+`GET /v1/payments/{id}` con una `access_key` inexistente (firmada con el secreto real) dieron el
+mismo `401` con el mensaje de «authentication issue», exista o no el recurso.
+
+En todos los casos el cuerpo es
+`{"status":{"error_code":"UNAUTHENTICATED_API_CALL","status":"ERROR","message":"…","response_code":"UNAUTHENTICATED_API_CALL","operation_id":"<uuid>"}}`.
 
 ---
 

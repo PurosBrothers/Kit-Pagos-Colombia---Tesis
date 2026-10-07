@@ -104,14 +104,23 @@ Kit-Pagos-Colombia---Tesis/
 │   ├── app.ts                                  <-- buildApp(): instancia Fastify sin abrir puerto
 │   ├── routes/
 │   │   ├── health.ts                           <-- GET /health
-│   │   ├── wompi.ts                            <-- 4 rutas bajo /v1/sim/wompi/
-│   │   ├── mercadopago.ts                      <-- 5 rutas bajo /v1/sim/mercadopago/
+│   │   ├── wompi.ts                            <-- 5 rutas bajo /v1/sim/wompi/
+│   │   ├── mercadopago.ts                      <-- 6 rutas bajo /v1/sim/mercadopago/
 │   │   ├── rapyd.ts                            <-- 7 rutas bajo /v1/sim/rapyd/
-│   │   └── kushki.ts                           <-- 6 rutas bajo /v1/sim/kushki/
+│   │   ├── kushki.ts                           <-- 6 rutas bajo /v1/sim/kushki/
+│   │   └── webhooks.ts                         <-- POST /v1/sim/webhooks/trigger (RF-12)
 │   ├── gateways/                               <-- Una GatewayMockFactory + types.ts por pasarela
 │   │   ├── wompi/  mercadopago/  rapyd/  kushki/
 │   ├── scenarios/
-│   │   └── ScenarioEngine.ts                   <-- Escenarios de creación de Wompi (APPROVED, PENDING, DECLINED, EXPIRED; el resto, 501)
+│   │   ├── ScenarioEngine.ts                   <-- Escenarios de creación de Wompi (APPROVED, PENDING, DECLINED, EXPIRED; el resto, 501)
+│   │   ├── scenarioFromRequest.ts              <-- Precedencia del escenario y montos reservados (issue #122)
+│   │   ├── invalidCredential.ts                <-- Marcas de credencial inválida
+│   │   └── technicalFailure.ts                 <-- Fallas técnicas compartidas por las cuatro pasarelas
+│   ├── webhooks/                               <-- Webhooks salientes (RF-12, issue #122)
+│   │   ├── SignatureGenerator.ts               <-- Cuerpo nativo y firma con los secretos del servidor
+│   │   ├── signatures.ts                       <-- Fórmulas de firma, escritas desde la documentación oficial
+│   │   ├── webhookDispatch.ts                  <-- Envío al destino de SIMULATOR_WEBHOOK_TARGET_URL
+│   │   └── autoEmission.ts                     <-- Emisión automática opcional (SIMULATOR_WEBHOOK_AUTO)
 │   ├── state/                                  <-- Máquinas de estado por pasarela (issue #124)
 │   │   ├── StateMachine.ts                     <-- Motor puro: NO persiste, NO lee cabeceras
 │   │   ├── Transition.ts                       <-- Tipo de transición: from/on/to/when/apply
@@ -123,7 +132,8 @@ Kit-Pagos-Colombia---Tesis/
 │   └── store/                                  <-- Estado en memoria, efímero a propósito
 │       ├── TransactionStore.ts                 <-- Almacén genérico tipado por el registro que guarda
 │       ├── GatewayStores.ts                    <-- Un almacén por pasarela y recurso + resetSimulatorState()
-│       └── ScenarioMarks.ts                    <-- Marcas de FLAPPING y DUPLICATE_PAYMENT
+│       ├── ScenarioMarks.ts                    <-- Marcas de FLAPPING, DUPLICATE_PAYMENT y fallas de consulta
+│       └── CardTokenOutcomes.ts                <-- Desenlace derivado de la tarjeta por token, nunca el número
 │
 └── docs/testing-data/                          <-- CONTENEDOR 3: DOCUMENTACIÓN DE DATOS DE PRUEBA
     ├── README.md                               <-- Índice, nivel de evidencia y huecos por pasarela
@@ -188,7 +198,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   - Mapeo de estado: campo `data.status` con valores `APPROVED`, `DECLINED`, `VOIDED`, `PENDING`.
   - Verificación de firma: SHA-256 sobre cadena de propiedades + timestamp + secreto de integridad.
 - **Prioridad:** Alta. Es el adaptador de referencia del proyecto: implementación completa y 3 pruebas de contrato contra el sandbox real (`sdk/test/sandbox/wompi.sandbox.test.ts`), además de los hallazgos medidos de los puntos 43, 44 y 50 del `architecture-log.md`.
-- **Modo simulación:** Redirige solicitudes al simulador con el header `x-simulate-scenario`. Es el **único** header que el simulador intercepta: el `x-simulate-delay` descrito en versiones anteriores no existe (ver sección 3.1).
+- **Modo simulación:** con `Environment.SIMULATOR`, el SDK apunta a `http://localhost:3000/v1/sim/wompi` (`sdk/src/infrastructure/config/gateway-urls.ts`). No envía cabeceras de escenario: el escenario lo eligen la tarjeta, el banco, el monto o la credencial (sección 3.1). El `x-simulate-delay` descrito en versiones anteriores no existe.
 
 ---
 
@@ -329,12 +339,14 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 
 ### 3.1. HTTP Routers por pasarela (`simulator-api/src/routes/*.ts`)
 
-- **Responsabilidad:** Son la puerta de entrada del simulador, un plugin Fastify por pasarela registrado desde `app.ts`: `wompi.ts`, `rapyd.ts`, `mercadopago.ts`, `kushki.ts` y `health.ts`.
-- **Enrutamiento:** Cada router replica la forma de las rutas nativas de su pasarela bajo `/v1/sim/<pasarela>/*` — 23 endpoints en total (4 de Wompi, 7 de Rapyd, 5 de Mercado Pago, 6 de Kushki y 1 de `health`), enumerados en [3-api-de-simulacion.md](3-api-de-simulacion.md). **No existe `/v1/sim/payu/*`**: PayU no es pasarela del proyecto (ver sección 2.6 y `architecture-log.md`, punto 15).
-- **Headers interceptados:**
-  - `x-simulator-scenario` y `x-simulate-scenario`: escenario a ejecutar. Son equivalentes y ambas se aceptan; por defecto el escenario es `APPROVED`. Las que el motor todavía no implementa responden HTTP `501 Not Implemented` (RF-10, pendiente — issue #65).
-  - **El escenario se fija en la creación y las consultas no lo leen** (issue #124). Una ruta de creación construye el cobro con el estado que pidió la prueba y lo guarda; una ruta de consulta responde lo que hay, y su tabla mueve el registro si corresponde. Cuando el desenlace solo se conoce después de una redirección —el caso de PSE en las cuatro pasarelas—, la creación registra el destino en `state/scenarioTarget.ts` y la consulta lo aplica. Esa información vive **fuera del registro** para que el payload que sale sea exactamente el nativo de la pasarela.
-  - **Las fallas técnicas no crean ni mutan estado.** Se resuelven antes de construir nada y devuelven el error nativo sin tocar los almacenes: un `504` no deja un cobro fantasma que estorbe al reintento. En sentido inverso, la consulta de un cobro no falla por escenario, porque el cobro ya existe.
+- **Responsabilidad:** Son la puerta de entrada del simulador, un plugin Fastify por pasarela registrado desde `app.ts`: `wompi.ts`, `rapyd.ts`, `mercadopago.ts`, `kushki.ts`, `webhooks.ts` y `health.ts`.
+- **Enrutamiento:** Cada router replica la forma de las rutas nativas de su pasarela bajo `/v1/sim/<pasarela>/*` — 26 endpoints en total (5 de Wompi, 7 de Rapyd, 6 de Mercado Pago, 6 de Kushki, el trigger de webhooks y `health`), enumerados en [3-api-de-simulacion.md](3-api-de-simulacion.md). **No existe `/v1/sim/payu/*`**: PayU no es pasarela del proyecto (ver sección 2.6 y `architecture-log.md`, punto 15).
+- **Cómo se elige el escenario** (issue #122, punto 83 del `architecture-log.md`):
+  - `x-simulator-scenario` y `x-simulate-scenario`: escenario a ejecutar. Son equivalentes y ambas se aceptan; por defecto el escenario es `APPROVED`. Las sigue usando quien llama a `/v1/sim` directamente; el SDK no las envía.
+  - Sin cabecera, deciden en este orden una marca en la credencial (`invalid`, `inexistente`, `not_found`), el dato de prueba de la pasarela (la tarjeta `4111` de Wompi, el titular de Mercado Pago, el documento de PSE de Kushki, el banco de Wompi) y un monto reservado (10 100 a 10 604 COP). Las tablas completas están en la sección 4 de [3-api-de-simulacion.md](3-api-de-simulacion.md).
+  - Las combinaciones sin evidencia de cómo las responde la pasarela real responden HTTP `501 Not Implemented`, listadas en el mismo documento.
+  - **El escenario de negocio se fija en la creación y las consultas no lo leen** (issue #124). Una ruta de creación construye el cobro con el estado que pidió la prueba y lo guarda; una ruta de consulta responde lo que hay, y su tabla mueve el registro si corresponde. Cuando el desenlace solo se conoce después de una redirección —el caso de PSE en las cuatro pasarelas—, la creación registra el destino en `state/scenarioTarget.ts` y la consulta lo aplica. Esa información vive **fuera del registro** para que el payload que sale sea exactamente el nativo de la pasarela.
+  - **Las fallas técnicas no crean ni mutan estado.** Se resuelven antes de construir nada y devuelven el error nativo sin tocar los almacenes: un `504` no deja un cobro fantasma que estorbe al reintento. La consulta falla solo si la creación lo pidió con un monto de consulta (10 600, 10 602 o 10 604), para ejercitar los reintentos de `getPaymentStatus()`; la falla se aplica sin tocar el registro.
   - **No existe el header `x-simulate-delay`** que describían versiones anteriores de este documento.
 - **Fuentes de solicitud:** SDK Kit Pagos Colombia en modo simulación, o directamente el Desarrollador o Tester mediante herramientas REST (Postman, curl).
 
@@ -344,8 +356,9 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 
 - **Responsabilidad:** Es el componente de decisión del simulador, tipado contra el cuerpo y la respuesta de Wompi.
 - **Lógica de ejecución por escenario:**
-  - `APPROVED` (valor por defecto): delega la construcción del payload al `GatewayMockFactory` de Wompi y devuelve `201` con `data.status: "APPROVED"` (para tarjeta) o `PENDING` (para PSE, que no se resuelve en el camino feliz — sección 2.5).
-  - Cualquier otro valor: lanza `UnsupportedScenarioError`, que el router traduce a HTTP `501`. Es una decisión deliberada: producir un `APPROVED` falso para un escenario no implementado invalidaría silenciosamente las pruebas de manejo de rechazos del SDK (RF-10, issue #65). Los routers de Rapyd, Mercado Pago y Kushki no pasan por este motor: resuelven el escenario en su propia fábrica de mocks, porque el motor hoy está acoplado al tipo de Wompi (ver comentario en `routes/rapyd.ts`).
+  - `APPROVED` (valor por defecto) y `PENDING`: delega la construcción del payload al `GatewayMockFactory` de Wompi y devuelve `201` con `data.status: "PENDING"`, como el sandbox real (punto 50); la consulta lo resuelve según el destino registrado.
+  - `DECLINED` construye el rechazo nativo con tarjeta; con PSE, la transacción nace `PENDING` como en el camino feliz y la primera consulta la cierra (sección 4.1 de [3-api-de-simulacion.md](3-api-de-simulacion.md)). `EXPIRED` construye un `VOIDED`. Las fallas técnicas no llegan al motor: las resuelve antes `technicalFailure()`, compartida por las cuatro pasarelas.
+  - Cualquier otro valor: lanza `UnsupportedScenarioError`, que el router traduce a HTTP `501`. Es una decisión deliberada: producir un `APPROVED` falso para un escenario no implementado invalidaría silenciosamente las pruebas de manejo de rechazos del SDK (RF-10, issue #65). Los routers de Rapyd, Mercado Pago y Kushki no pasan por este motor: resuelven el escenario en su propia ruta, porque el motor hoy está acoplado al tipo de Wompi (ver comentario en `routes/rapyd.ts`).
 - **Responsabilidad y límite:** Detectar el escenario pedido es del router; decidir qué payload construir, de la fábrica. El motor intermedia para Wompi. Los dos extremos lo documentan en el código (`scenarios/ScenarioEngine.ts` y `gateways/<pasarela>/GatewayMockFactory.ts`).
   - **Desde el issue #124 la fábrica es una función pura de la petición y del escenario**: no recibe el almacén por el constructor, no guarda lo que construye y no mueve un cobro entre estados. Guardar es de la ruta y moverlo es de la tabla. Los métodos que antes lo hacían —`advanceCardTransaction`, `advancePseTransaction`, `payCheckout` y `buildStatusResponse`— se eliminaron porque duplicaban la tabla y ya discrepaban de ella.
 
@@ -363,21 +376,22 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 
 ---
 
-### 3.4. Signature Generator — **no existe** en la implementación actual (RF-12)
+### 3.4. Signature Generator (`simulator-api/src/webhooks/SignatureGenerator.ts`, RF-12)
 
-- **Responsabilidad prevista:** Calcular la firma criptográfica que acompaña a los webhooks simulados, de modo que el `Webhook Verifier` del SDK pueda verificarla con su lógica de validación real.
-- **Estado real:** no hay carpeta `security/` ni archivo `SignatureGenerator.ts` en `simulator-api/src/`. El webhook sintético completo (Signature Generator + Webhook Trigger Endpoint de la sección 3.5) sigue siendo el requisito **RF-12, pendiente**. Las fórmulas por pasarela que tendrá que implementar son las que `WebhookVerifier.ts` del SDK ya implementa y valida (sección 2.10): SHA-256 para Wompi, `Base64(HMAC-SHA256(...))` para Rapyd, y HMAC-SHA256 para Mercado Pago y Kushki.
-- **Invocación prevista:** No operaría de forma automática; lo invocaría el `Webhook Trigger Endpoint` cuando el desarrollador solicite explícitamente el envío de un webhook sintético.
+- **Responsabilidad:** Arma el cuerpo nativo del webhook de cada pasarela y calcula su firma, de modo que el `Webhook Verifier` del SDK pueda verificarla con su lógica de validación real. Implementado en el issue #122 (punto 83 del `architecture-log.md`).
+- **Fórmulas:** están en `webhooks/signatures.ts`, escritas desde la documentación oficial de cada pasarela y no copiadas del verificador del SDK, para que una prueba que valida con el SDK demuestre algo (punto 67): SHA-256 para Wompi, `Base64` del HMAC-SHA256 hexadecimal para Rapyd, y HMAC-SHA256 para Mercado Pago y Kushki.
+- **Secretos:** salen solo del perfil del servidor, nunca de la petición. Un evento cuyo cuerpo la pasarela no documenta lanza `WEBHOOK_EVENT_NOT_DOCUMENTED` en vez de inventarlo.
+- **Invocación:** lo usan el `Webhook Trigger Endpoint` (sección 3.5) y, si está encendida, la emisión automática (DA-03).
 
 ---
 
-### 3.5. Webhook Trigger Endpoint — **no existe** en la implementación actual (RF-12)
+### 3.5. Webhook Trigger Endpoint (`simulator-api/src/routes/webhooks.ts`, RF-12)
 
-- **Responsabilidad prevista:** Gestionar el envío de webhooks sintéticos de forma controlada y explícita mediante `POST /v1/sim/webhooks/trigger`.
-- **Estado real:** no hay carpeta `endpoints/` ni archivo `WebhookTriggerEndpoint.ts` en `simulator-api/src/`. Es la segunda mitad del requisito **RF-12, pendiente**.
-- **Parámetros de entrada previstos:** URL destino, tipo de evento y pasarela a simular.
-- **Justificación del diseño manual:** Esta decisión responde a una restricción práctica del contexto de evaluación académica. Los proyectos prototípicos que integran el framework corren típicamente en entornos locales sin URL pública fija, lo que hace inviable el dispatch automático sin una solución de tunelización adicional como ngrok. Al requerir invocación manual, el componente elimina esa dependencia sin sacrificar la capacidad de probar el flujo completo de validación de webhooks.
-- **Flujo previsto:** Recibe la solicitud → delega la generación de firma al `Signature Generator` → ejecuta HTTP POST hacia la URL destino indicada → retorna el resultado del intento de entrega.
+- **Responsabilidad:** Envía el webhook firmado de una transacción del simulador mediante `POST /v1/sim/webhooks/trigger`. Implementado en el issue #122.
+- **Parámetros de entrada:** solo `gateway` y `transactionId`. La URL destino **no** es un parámetro, como preveía este documento: sale de `SIMULATOR_WEBHOOK_TARGET_URL`, porque un destino elegido por quien llama convierte al simulador en un proxy hacia cualquier host (SSRF). El tipo de evento lo decide el estado de la transacción.
+- **Autenticación:** con `API_AUTH_TOKEN` configurado exige el mismo `Bearer` que `/v1/api`, porque su respuesta trae un webhook firmado con los secretos del servidor; sin token configurado opera abierto, en modo de desarrollo local.
+- **Flujo:** Recibe la solicitud → avanza la transacción como una consulta → delega el cuerpo y la firma al `Signature Generator` → envía el POST al destino configurado, sin seguir redirecciones → retorna el resultado del intento de entrega y el webhook enviado. Sin destino configurado responde `409` con el webhook, para reenviarlo a mano. El detalle de las respuestas está en la sección 4.2 de [3-api-de-simulacion.md](3-api-de-simulacion.md).
+- **Justificación del disparo manual:** Los proyectos prototípicos que integran el framework corren típicamente en entornos locales sin URL pública fija, lo que hace inviable el dispatch automático sin una solución de tunelización adicional como ngrok. Por eso el disparo manual sigue siendo el comportamiento por omisión (DA-03).
 
 ---
 
@@ -414,14 +428,17 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 
 ---
 
-### DA-03 — Webhook Trigger Manual sobre Dispatch Automático
+### DA-03 — Webhook Trigger Manual sobre Dispatch Automático (revisada por el punto 83)
 
 | Campo | Detalle |
 |---|---|
-| **Decisión** | El envío de webhooks sintéticos requiere invocación manual mediante `POST /v1/sim/webhooks/trigger` en lugar de operar de forma automática y asíncrona |
+| **Estado** | Revisada en el issue #122 (punto 83 del `architecture-log.md`). El disparo manual sigue siendo el comportamiento por omisión. Se agregó una emisión automática **opcional**, apagada salvo con `SIMULATOR_WEBHOOK_AUTO=true` y un destino en `SIMULATOR_WEBHOOK_TARGET_URL` |
+| **Por qué se revisó** | El flujo real notifica solo, sin que el comercio lo pida: la tarjeta `4111` de Wompi nace `PENDING` y termina `DECLINED` sin intervención (`docs/testing-data/wompi.md`, sección 1.3). Un comercio que quiera probar ese camino necesita que el webhook llegue sin invocar el trigger. La emisión se engancha en el `onStatusChange` de las máquinas de estado y no en cada ruta, que habría significado siete puntos de llamada, y sale sin esperar: la respuesta de la pasarela no depende del webhook |
+| **Lo que no cambió** | El destino sigue siendo explícito, y ahora es del servidor: sale de `SIMULATOR_WEBHOOK_TARGET_URL`, no de la petición ni del trigger (sección 3.5). Sin destino configurado no sale ningún webhook, así que el problema de la URL pública que motivó la decisión original no aparece |
+| **Decisión original** | El envío de webhooks sintéticos requiere invocación manual mediante `POST /v1/sim/webhooks/trigger` en lugar de operar de forma automática y asíncrona |
 | **Alternativa considerada** | Webhook Dispatcher Worker que despacha automáticamente tras cada transacción simulada |
 | **Justificación** | Los proyectos prototípicos de evaluación corren en entornos locales sin URL pública. Un dispatch automático requeriría que el comercio exponga un endpoint público en todo momento, lo que implica dependencia de herramientas de tunelización como ngrok durante las pruebas. Al hacer el dispatch manual y explícito, el desarrollador controla cuándo y hacia qué URL se envía el webhook, eliminando la dependencia de infraestructura adicional |
-| **Consecuencias** | El flujo de webhooks no es completamente automático. El desarrollador debe invocar el trigger manualmente para probar el flujo de notificaciones asíncronas. Esta limitación queda documentada como trabajo futuro |
+| **Consecuencias** | Por omisión, el flujo de webhooks no es automático: el desarrollador invoca el trigger para probar las notificaciones asíncronas. La emisión automática opcional cubre el resto; como el simulador no tiene reloj, el webhook automático sale cuando una consulta o la visita a la página de pago mueve el cobro, no por el paso del tiempo |
 
 ---
 
@@ -446,14 +463,14 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 | **RF-02** Respuesta normalizada con Transaction | `ResponseNormalizer` → `Transaction Entity` | `GatewayMockFactory` (payload de referencia) |
 | **RF-03** Consultar estado de transacción | `KitPagos` → `Adapter` → `ResponseNormalizer` | `GatewayMockFactory` |
 | **RF-04** Validar firma de webhook y retornar evento normalizado | `WebhookVerifier` (`verify()` + `parse()`) → `WebhookEvent` | `SignatureGenerator` → `WebhookTriggerEndpoint` |
-| **RF-05** Excepciones tipadas KitPagosError | `ErrorHandler` (`KitPagosError` + `KitPagosErrorCode`) | `ScenarioEngine` (escenario `ERROR_RED`, RF-10 pendiente) |
+| **RF-05** Excepciones tipadas KitPagosError | `ErrorHandler` (`KitPagosError` + `KitPagosErrorCode`) | `technicalFailure()` (montos reservados de error técnico y marcas de credencial, RF-10) |
 | **RF-06** Cambiar pasarela sin modificar código | `SDKConfigurator` + `GatewayFactory` | N/A |
-| **RF-07** Reintentos con backoff exponencial | `RetryHandler` | `ScenarioEngine` (escenario `TIMEOUT`, RF-10 pendiente) |
+| **RF-07** Reintentos con backoff exponencial | `RetryHandler` | `technicalFailure()` (montos de consulta 10 600, 10 602 y 10 604, RF-10) |
 | **RF-08** Credenciales no expuestas en logs | `SDKConfigurator` + `ErrorHandler` | N/A |
 | **RF-09** Endpoints REST por pasarela | N/A | `HTTPRouter` (`/v1/sim/{pasarela}/*`) |
-| **RF-10** Escenarios controlados configurables | `SDKConfigurator` (header `x-simulate-scenario`) | `HTTPRouter` → `ScenarioEngine` |
+| **RF-10** Escenarios controlados configurables | N/A: el SDK no envía cabeceras; el escenario sale de los datos que ya envía (monto, credencial, dato de prueba) | `HTTPRouter` → `resolveScenario()` → `ScenarioEngine` o la ruta de cada pasarela |
 | **RF-11** Estructura de error nativa por pasarela | `ResponseNormalizer` (campo `rawStatus`) | `GatewayMockFactory` (payload de error nativo) |
-| **RF-12** Webhook sintético hacia URL destino | `WebhookVerifier` (validación del receptor) | `WebhookTriggerEndpoint` → `SignatureGenerator` (ambos pendientes) |
+| **RF-12** Webhook sintético hacia URL destino | `WebhookVerifier` (validación del receptor) | `webhookTriggerRoute` → `SignatureGenerator` → `WebhookDispatcher` (issue #122) |
 | **RF-13** Especificación OpenAPI 3.0 en `/docs` | N/A | `OpenAPIProvider` (pendiente) |
 | **RF-14** Documentación de datos de prueba por pasarela | N/A | Documentación centralizada (repositorio) |
 | **RF-15** Comportamiento esperado por dato de prueba | `ResponseNormalizer` (mapeo de estados) | `GatewayMockFactory` (escenarios por dato) |
