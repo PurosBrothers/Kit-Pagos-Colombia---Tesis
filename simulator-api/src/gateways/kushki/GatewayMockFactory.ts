@@ -132,7 +132,7 @@ export class GatewayMockFactory {
     return [
       /*
        * El primer elemento no es un banco: es el texto de relleno de un `<select>`
-       * viajando dentro de los datos. Esta aca porque **la API real lo devuelve**,
+       * viajando dentro de los datos. Está aquí porque **la API real lo devuelve**,
        * medido el 18 de septiembre de 2026, y el mock existe para reproducir lo que
        * la pasarela contesta y no lo que conviene. Sin esta entrada, la prueba de que
        * el SDK lo descarta no probaria nada.

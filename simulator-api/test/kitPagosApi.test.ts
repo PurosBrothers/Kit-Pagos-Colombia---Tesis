@@ -40,15 +40,15 @@ describe("REST module /v1/api", () => {
     it("should require the Bearer token when authentication is enabled", async () => {
       const app = buildApp({ authOptions: { expectedToken: "api_token_test" } });
 
-      const sinToken = await app.inject({ method: "GET", url: "/v1/api/gateways" });
-      const conToken = await app.inject({
+      const withoutToken = await app.inject({ method: "GET", url: "/v1/api/gateways" });
+      const withToken = await app.inject({
         method: "GET",
         url: "/v1/api/gateways",
         headers: { authorization: "Bearer api_token_test" },
       });
 
-      expect(sinToken.statusCode).toBe(401);
-      expect(conToken.statusCode).toBe(200);
+      expect(withoutToken.statusCode).toBe(401);
+      expect(withToken.statusCode).toBe(200);
 
       await app.close();
     });

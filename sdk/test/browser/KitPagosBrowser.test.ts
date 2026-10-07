@@ -18,7 +18,7 @@ describe("KitPagosBrowser", () => {
     globalThis.fetch = originalFetch;
   });
 
-  it("delega la tokenización a WompiTokenizer para Gateway.WOMPI", async () => {
+  it("delegates tokenization to WompiTokenizer for Gateway.WOMPI", async () => {
     globalThis.fetch = jest.fn(async () => {
       return {
         ok: true,
@@ -48,7 +48,7 @@ describe("KitPagosBrowser", () => {
     expect(result.brand).toBe("VISA");
   });
 
-  it("delega la tokenización a MercadoPagoTokenizer para Gateway.MERCADOPAGO", async () => {
+  it("delegates tokenization to MercadoPagoTokenizer for Gateway.MERCADOPAGO", async () => {
     globalThis.fetch = jest.fn(async () => {
       return {
         ok: true,
@@ -82,7 +82,7 @@ describe("KitPagosBrowser", () => {
     expect(result.lastFour).toBe("4242");
   });
 
-  it("permite que el mismo formulario del comercio tokenice en Wompi y en Mercado Pago cambiando solo la pasarela", async () => {
+  it("lets the same merchant form tokenize on Wompi and Mercado Pago by changing only the gateway", async () => {
     const unifiedFormCard: CardData = {
       number: "4013540682746260",
       cvc: "123",
@@ -137,7 +137,7 @@ describe("KitPagosBrowser", () => {
     expect(mpResult.gateway).toBe(Gateway.MERCADOPAGO);
   });
 
-  it("rechaza Gateway.KUSHKI con UNSUPPORTED_OPERATION sin hacer llamadas de red", async () => {
+  it("rejects Gateway.KUSHKI with UNSUPPORTED_OPERATION without network calls", async () => {
     const fetchSpy = jest.fn();
     globalThis.fetch = fetchSpy;
 
@@ -155,7 +155,7 @@ describe("KitPagosBrowser", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("rechaza Gateway.RAPYD con UNSUPPORTED_OPERATION sin hacer llamadas de red", async () => {
+  it("rejects Gateway.RAPYD with UNSUPPORTED_OPERATION without network calls", async () => {
     const fetchSpy = jest.fn();
     globalThis.fetch = fetchSpy;
 
@@ -173,7 +173,7 @@ describe("KitPagosBrowser", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("rechaza pasarelas desconocidas con UNSUPPORTED_OPERATION", async () => {
+  it("rejects unknown gateways with UNSUPPORTED_OPERATION", async () => {
     await expect(
       KitPagosBrowser.tokenizeCard({
         gateway: "STRIPE" as unknown as BrowserSupportedGateway,
@@ -186,7 +186,7 @@ describe("KitPagosBrowser", () => {
     });
   });
 
-  it("valida que publicKey esté presente", async () => {
+  it("validates that publicKey is present", async () => {
     await expect(
       KitPagosBrowser.tokenizeCard({
         gateway: Gateway.WOMPI,
@@ -199,7 +199,7 @@ describe("KitPagosBrowser", () => {
     });
   });
 
-  it("valida que card esté presente", async () => {
+  it("validates that card is present", async () => {
     await expect(
       KitPagosBrowser.tokenizeCard({
         gateway: Gateway.WOMPI,

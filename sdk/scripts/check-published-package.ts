@@ -178,7 +178,7 @@ function main(): void {
      * recién subidos, que es la ventana donde vive el secuestro de cadena de
      * suministro. Es una buena política y no se toca.
      *
-     * Pero acá estorba y por una razón de fondo: este script existe justamente para
+     * Pero aquí estorba y por una razón de fondo: este script existe justamente para
      * verificar una versión **recién publicada**, y con la política activa el
      * paquete propio queda inelegible durante tres días. El error que produce no se
      * parece en nada a la causa: `ETARGET ... no matching version found with a date

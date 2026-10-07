@@ -4,7 +4,7 @@ import { KitPagosError } from "../errors/KitPagosError";
 import { KitPagosErrorCode } from "./KitPagosErrorCode";
 
 describe("Environment Value Object", () => {
-  it("contiene los tres ambientes canónicos", () => {
+  it("contains the three canonical environments", () => {
     expect(ALL_ENVIRONMENTS).toEqual(["simulator", "sandbox", "production"]);
     expect(Environment.SIMULATOR).toBe("simulator");
     expect(Environment.SANDBOX).toBe("sandbox");
@@ -12,13 +12,13 @@ describe("Environment Value Object", () => {
   });
 
   describe("isEnvironment", () => {
-    it("reconoce cadenas válidas", () => {
+    it("recognizes valid strings", () => {
       expect(isEnvironment("simulator")).toBe(true);
       expect(isEnvironment("sandbox")).toBe(true);
       expect(isEnvironment("production")).toBe(true);
     });
 
-    it("rechaza valores inválidos o de otros tipos", () => {
+    it("rejects invalid values or values of other types", () => {
       expect(isEnvironment("staging")).toBe(false);
       expect(isEnvironment("dev")).toBe(false);
       expect(isEnvironment("")).toBe(false);
@@ -29,13 +29,13 @@ describe("Environment Value Object", () => {
   });
 
   describe("parseEnvironment", () => {
-    it("devuelve el ambiente si es válido", () => {
+    it("returns the environment if it is valid", () => {
       expect(parseEnvironment("simulator")).toBe("simulator");
       expect(parseEnvironment("sandbox")).toBe("sandbox");
       expect(parseEnvironment("production")).toBe("production");
     });
 
-    it("lanza KitPagosError con INVALID_REQUEST si el ambiente no es válido", () => {
+    it("throws KitPagosError with INVALID_REQUEST if the environment is not valid", () => {
       expect(() => parseEnvironment("staging", Gateway.WOMPI)).toThrow(KitPagosError);
       try {
         parseEnvironment("staging", Gateway.WOMPI);

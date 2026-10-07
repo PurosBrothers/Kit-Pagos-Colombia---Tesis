@@ -3,7 +3,7 @@ import { Environment } from "../../domain/value-objects/Environment";
 import { GATEWAY_URL_CATALOG, resolveGatewayCatalogUrl } from "./gateway-urls";
 
 describe("Gateway URL Catalog", () => {
-  it("contiene entradas para las 12 combinaciones posibles (4 pasarelas x 3 ambientes)", () => {
+  it("contains entries for the 12 possible combinations (4 gateways x 3 environments)", () => {
     const gateways = [Gateway.WOMPI, Gateway.MERCADOPAGO, Gateway.RAPYD, Gateway.KUSHKI];
     const envs = [Environment.SIMULATOR, Environment.SANDBOX, Environment.PRODUCTION];
 
@@ -17,7 +17,7 @@ describe("Gateway URL Catalog", () => {
     }
   });
 
-  it("resuelve las URLs de sandbox medidas en las pruebas de contrato", () => {
+  it("resolves the sandbox URLs measured in the contract tests", () => {
     expect(resolveGatewayCatalogUrl(Gateway.WOMPI, Environment.SANDBOX)).toBe(
       "https://sandbox.wompi.co/v1",
     );
@@ -32,7 +32,7 @@ describe("Gateway URL Catalog", () => {
     );
   });
 
-  it("resuelve las URLs oficiales de producción", () => {
+  it("resolves the official production URLs", () => {
     expect(resolveGatewayCatalogUrl(Gateway.WOMPI, Environment.PRODUCTION)).toBe(
       "https://production.wompi.co/v1",
     );
@@ -47,7 +47,7 @@ describe("Gateway URL Catalog", () => {
     );
   });
 
-  it("resuelve las URLs de simulación por defecto hacia Render", () => {
+  it("resolves the default simulation URLs to Render", () => {
     expect(resolveGatewayCatalogUrl(Gateway.WOMPI, Environment.SIMULATOR)).toBe(
       "http://localhost:3000/v1/sim/wompi",
     );

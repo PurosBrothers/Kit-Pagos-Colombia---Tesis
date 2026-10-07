@@ -16,10 +16,10 @@ import { tokenizeKushkiCard } from "./tokenize";
 
 const baseUrl = SANDBOX_BASE_URL[Gateway.KUSHKI];
 
-async function mostrar(path: string, header: string, valor: string): Promise<void> {
+async function show(path: string, header: string, rawValue: string): Promise<void> {
   const response = await fetch(`${baseUrl}${path}`, {
     method: "GET",
-    headers: { "Content-Type": "application/json", [header]: valor },
+    headers: { "Content-Type": "application/json", [header]: rawValue },
   });
   const body = await response.text();
   console.log(`\n--- GET ${path}`);
@@ -68,14 +68,14 @@ async function main(): Promise<void> {
   console.log(`transactionReference: ${transactionReference}`);
 
   for (const id of [ticket, transactionId, transactionReference].filter(Boolean)) {
-    await mostrar(`/card-async/v1/status/${id}`, "Private-Merchant-Id", credentials.privateKey);
+    await show(`/card-async/v1/status/${id}`, "Private-Merchant-Id", credentials.privateKey);
   }
 
   // Sin identificador, para ver si el 400 se queja del parámetro o del recurso.
-  await mostrar("/card-async/v1/status", "Private-Merchant-Id", credentials.privateKey);
+  await show("/card-async/v1/status", "Private-Merchant-Id", credentials.privateKey);
 
   // La de PSE, como referencia de cómo se ve un 400 de esta familia de rutas.
-  await mostrar(`/transfer/v1/status/${ticket}`, "Private-Merchant-Id", credentials.privateKey);
+  await show(`/transfer/v1/status/${ticket}`, "Private-Merchant-Id", credentials.privateKey);
 }
 
 void main();

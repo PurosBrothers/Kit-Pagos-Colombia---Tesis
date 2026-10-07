@@ -20,7 +20,7 @@ describe("extractRapydRedirect", () => {
     },
   };
 
-  it("extrae la redirección cuando Rapyd entrega redirect_url", () => {
+  it("extracts the redirect when Rapyd provides redirect_url", () => {
     const redirect = extractRapydRedirect(respuesta3ds);
 
     expect(redirect).not.toBeNull();
@@ -30,7 +30,7 @@ describe("extractRapydRedirect", () => {
     expect(redirect?.rawStatus).toBe("ACT");
   });
 
-  it("conserva el identificador para poder consultar el pago después", () => {
+  it("keeps the identifier so the payment can be queried later", () => {
     // Sin él, un pago redirigido sería irrastreable si el pagador nunca vuelve.
     const redirect = extractRapydRedirect(respuesta3ds);
 
@@ -38,34 +38,34 @@ describe("extractRapydRedirect", () => {
     expect(redirect?.gatewayTransactionId.gateway).toBe(Gateway.RAPYD);
   });
 
-  it("no reporta redirección en un pago normal sin redirect_url", () => {
-    const aprobado = {
+  it("does not report a redirect for a normal payment without redirect_url", () => {
+    const approvedPayment = {
       status: { status: "SUCCESS" },
       data: { id: "payment_ok", status: "CLO", paid: true },
     };
 
-    expect(extractRapydRedirect(aprobado)).toBeNull();
+    expect(extractRapydRedirect(approvedPayment)).toBeNull();
   });
 
-  it("no reporta redirección cuando redirect_url viene vacía", () => {
+  it("does not report a redirect when redirect_url is empty", () => {
     // Rapyd incluye la clave con string vacío en los pagos que no la necesitan;
     // tratar la presencia de la clave como señal daría falsos positivos.
-    const conUrlVacia = {
+    const withEmptyUrl = {
       data: { id: "payment_ok", status: "CLO", redirect_url: "" },
     };
 
-    expect(extractRapydRedirect(conUrlVacia)).toBeNull();
+    expect(extractRapydRedirect(withEmptyUrl)).toBeNull();
   });
 
-  it("no reporta redirección cuando falta el id, para no mandar al pagador a un pago irrastreable", () => {
-    const sinId = {
+  it("does not report a redirect when the id is missing, so the payer is not sent to an untraceable payment", () => {
+    const withoutId = {
       data: { status: "ACT", redirect_url: "https://sandbox.rapyd.net/3ds/x" },
     };
 
-    expect(extractRapydRedirect(sinId)).toBeNull();
+    expect(extractRapydRedirect(withoutId)).toBeNull();
   });
 
-  it("tolera respuestas sin envoltorio data sin lanzar", () => {
+  it("tolerates responses without a data envelope without throwing", () => {
     expect(extractRapydRedirect(null)).toBeNull();
     expect(extractRapydRedirect({})).toBeNull();
     expect(extractRapydRedirect({ status: { status: "ERROR" } })).toBeNull();

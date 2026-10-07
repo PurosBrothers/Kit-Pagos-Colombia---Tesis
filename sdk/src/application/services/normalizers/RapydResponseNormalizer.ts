@@ -107,7 +107,7 @@ export class RapydResponseNormalizer implements GatewayResponseNormalizer {
         return "PENDING";
       case "NEW":
         // No es un estado de pago sino de **checkout**: la página existe y nadie la
-        // completó todavía. Entra acá porque desde el issue #64 un cobro con tarjeta en
+        // completó todavía. Entra aquí porque desde el issue #64 un cobro con tarjeta en
         // Rapyd devuelve un checkout, y consultarlo antes de que el pagador pague
         // responde `status: "NEW"` con `payment.id` en null (ver `rapyd-checkout.ts`).
         // Sin esta rama caía en `default` y un cobro recién creado se reportaba como

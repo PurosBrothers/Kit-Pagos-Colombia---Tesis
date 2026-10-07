@@ -5,17 +5,17 @@ import {
 } from "../src/auth/targetEnvironment";
 
 describe("resolveTargetEnvironment", () => {
-  it("devuelve 'simulator' si las cabeceras no se especifican", () => {
+  it("returns 'simulator' if the headers are not specified", () => {
     expect(resolveTargetEnvironment(undefined)).toBe("simulator");
   });
 
-  it("devuelve 'simulator' si la cabecera x-kit-pagos-environment está ausente o vacía", () => {
+  it("returns 'simulator' if the x-kit-pagos-environment header is missing or empty", () => {
     expect(resolveTargetEnvironment({})).toBe("simulator");
     expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "" })).toBe("simulator");
     expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "   " })).toBe("simulator");
   });
 
-  it("reconoce los tres ambientes válidos en minúsculas y mayúsculas", () => {
+  it("recognizes the three valid environments in lower and upper case", () => {
     expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "simulator" })).toBe("simulator");
     expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "sandbox" })).toBe("sandbox");
     expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "production" })).toBe("production");
@@ -26,11 +26,11 @@ describe("resolveTargetEnvironment", () => {
     expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "  simulator  " })).toBe("simulator");
   });
 
-  it("acepta cabecera recibida como arreglo de strings", () => {
+  it("accepts a header received as an array of strings", () => {
     expect(resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: ["sandbox"] })).toBe("sandbox");
   });
 
-  it("lanza KitPagosError con INVALID_REQUEST si el ambiente no es válido", () => {
+  it("throws KitPagosError with INVALID_REQUEST if the environment is not valid", () => {
     expect(() =>
       resolveTargetEnvironment({ [ENVIRONMENT_HEADER]: "staging" }, Gateway.WOMPI),
     ).toThrow(KitPagosError);
