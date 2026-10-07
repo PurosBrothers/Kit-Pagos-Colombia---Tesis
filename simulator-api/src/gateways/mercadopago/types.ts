@@ -130,8 +130,11 @@ export interface MercadoPagoOrderResponse {
   currency: string;
   created_date: string;
   last_updated_date: string;
-  /** La API real solo devuelve `entity_type` acá; no repite el email del pagador. */
-  payer: { entity_type?: string };
+  /**
+   * La API real solo devuelve `entity_type` aquí; no repite el email del pagador. Falta en la
+   * consulta de una orden fallida (medido el 7 de octubre de 2026).
+   */
+  payer?: { entity_type?: string };
   config?: { online?: { callback_url?: string } };
   transactions: {
     payments: Array<{

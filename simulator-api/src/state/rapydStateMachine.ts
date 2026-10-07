@@ -141,10 +141,14 @@ export const RAPYD_PAYMENT_TRANSITIONS: readonly Transition<
 export const rapydCheckoutMachine = new StateMachine<
   RapydCheckout,
   RapydCheckoutStatus
->(RAPYD_CHECKOUT_TRANSITIONS, {
-  statusOf: (checkout) => checkout.status,
-  withStatus: (checkout, status) => ({ ...checkout, status }),
-});
+>(
+  RAPYD_CHECKOUT_TRANSITIONS,
+  {
+    statusOf: (checkout) => checkout.status,
+    withStatus: (checkout, status) => ({ ...checkout, status }),
+  },
+  "rapyd.checkout",
+);
 
 /** La máquina del pago de Rapyd. */
 export const rapydPaymentMachine = new StateMachine<RapydPayment, RapydPaymentStatus>(
@@ -153,4 +157,5 @@ export const rapydPaymentMachine = new StateMachine<RapydPayment, RapydPaymentSt
     statusOf: (payment) => payment.status,
     withStatus: (payment, status) => ({ ...payment, status }),
   },
+  "rapyd.payment",
 );

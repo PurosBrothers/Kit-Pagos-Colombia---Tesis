@@ -135,13 +135,17 @@ export const kushkiChargeMachine = new StateMachine<
     ...charge,
     details: { ...charge.details, transactionStatus: status },
   }),
-});
+}, "kushki.charge");
 
 /** La máquina de transferencias de Kushki. */
 export const kushkiTransferMachine = new StateMachine<
   KushkiTransferStatusResponse,
   KushkiTransferStatus
->(KUSHKI_TRANSFER_TRANSITIONS, {
-  statusOf: (transfer) => transfer.status,
-  withStatus: (transfer, status) => ({ ...transfer, status }),
-});
+>(
+  KUSHKI_TRANSFER_TRANSITIONS,
+  {
+    statusOf: (transfer) => transfer.status,
+    withStatus: (transfer, status) => ({ ...transfer, status }),
+  },
+  "kushki.transfer",
+);

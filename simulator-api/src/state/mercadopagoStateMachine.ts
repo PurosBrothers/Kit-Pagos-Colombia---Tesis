@@ -136,16 +136,24 @@ export const MP_ORDER_TRANSITIONS: readonly Transition<
 export const mpPaymentMachine = new StateMachine<
   MercadoPagoPaymentResponse,
   MercadoPagoPaymentStatus
->(MP_PAYMENT_TRANSITIONS, {
-  statusOf: (payment) => payment.status,
-  withStatus: (payment, status) => ({ ...payment, status }),
-});
+>(
+  MP_PAYMENT_TRANSITIONS,
+  {
+    statusOf: (payment) => payment.status,
+    withStatus: (payment, status) => ({ ...payment, status }),
+  },
+  "mercadopago.payment",
+);
 
 /** La máquina de órdenes de Mercado Pago. */
 export const mpOrderMachine = new StateMachine<
   MercadoPagoOrderResponse,
   MercadoPagoOrderStatus
->(MP_ORDER_TRANSITIONS, {
-  statusOf: (order) => order.status,
-  withStatus: (order, status) => ({ ...order, status }),
-});
+>(
+  MP_ORDER_TRANSITIONS,
+  {
+    statusOf: (order) => order.status,
+    withStatus: (order, status) => ({ ...order, status }),
+  },
+  "mercadopago.order",
+);

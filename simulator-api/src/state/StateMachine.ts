@@ -25,6 +25,54 @@ export interface StateMachineAdapter<TRecord, TStatus extends string> {
   withStatus: (record: TRecord, status: TStatus) => TRecord;
 }
 
+/** Un cambio de estado que una máquina acaba de aplicar. */
+export interface StatusChange {
+  /** El nombre de la máquina, por ejemplo `wompi.transaction`. */
+  machine: string;
+  from: string;
+  to: string;
+  /** El registro ya movido, con todos sus campos. */
+  record: unknown;
+}
+
+export type StatusChangeListener = (change: StatusChange) => void;
+
+const listeners = new Set<StatusChangeListener>();
+
+/**
+ * Escucha los cambios de estado de todas las máquinas (issue #122, paso 7).
+ *
+ * Existe para la emisión automática de webhooks, que es opcional y está apagada por omisión.
+ * La máquina sigue sin saber de HTTP: avisa y sigue. Un oyente que lanza no rompe la
+ * transición, porque la respuesta de la pasarela no puede depender de que el aviso salga bien.
+ *
+ * @returns La función que deja de escuchar.
+ */
+export function onStatusChange(listener: StatusChangeListener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function notify(change: StatusChange): void {
+  for (const listener of listeners) {
+    try {
+      listener(change);
+    } catch {
+      // El aviso es secundario: el oyente registra sus propias fallas.
+    }
+  }
+}
+
+export interface TransitionOptions {
+  /**
+   * `false` para mover sin avisar. Lo usa el trigger de webhooks, que envía su propio
+   * webhook y no debe provocar además el automático.
+   */
+  notify?: boolean;
+}
+
 /**
  * La máquina de estados de una pasarela (issue #124).
  *
@@ -60,6 +108,7 @@ export class StateMachine<TRecord, TStatus extends string> {
   /**
    * @param transitions La tabla de transiciones de la pasarela.
    * @param adapter     Cómo se lee y se escribe el estado del registro.
+   * @param name        Cómo se identifica en `onStatusChange`: `<pasarela>.<recurso>`.
    *
    * @throws Error si la tabla tiene dos transiciones indistinguibles para el mismo
    *   par `(estado, petición)`. Ver `assertUnambiguousTable()`.
@@ -67,6 +116,7 @@ export class StateMachine<TRecord, TStatus extends string> {
   constructor(
     transitions: readonly Transition<TStatus, TRecord>[],
     private readonly adapter: StateMachineAdapter<TRecord, TStatus>,
+    readonly name = "unnamed",
   ) {
     assertUnambiguousTable(transitions);
     this.transitions = transitions;
@@ -87,7 +137,7 @@ export class StateMachine<TRecord, TStatus extends string> {
    *
    * @returns El registro nuevo, o el mismo registro si la petición no mueve el estado.
    */
-  transition(record: TRecord, on: Trigger): TRecord {
+  transition(record: TRecord, on: Trigger, options: TransitionOptions = {}): TRecord {
     const current = this.adapter.statusOf(record);
     const applicable = findTransition(this.transitions, record, current, on);
 
@@ -97,8 +147,15 @@ export class StateMachine<TRecord, TStatus extends string> {
 
     const next = resolveTarget(applicable, record);
     const moved = next === current ? record : this.adapter.withStatus(record, next);
+    const result = applicable.apply !== undefined ? applicable.apply(moved, next) : moved;
 
-    return applicable.apply !== undefined ? applicable.apply(moved, next) : moved;
+    // Solo un cambio de estado avisa: publicar la URL del banco sin salir de `PENDING` no es
+    // un evento que una pasarela notifique.
+    if (next !== current && options.notify !== false) {
+      notify({ machine: this.name, from: current, to: next, record: result });
+    }
+
+    return result;
   }
 
   /**

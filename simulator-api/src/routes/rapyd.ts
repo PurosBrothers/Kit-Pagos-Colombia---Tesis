@@ -5,23 +5,42 @@ import {
   RapydCreateCustomerRequestBody,
   RapydCreatePaymentRequestBody,
 } from "../gateways/rapyd/types";
-import {
-  getSimulatorScenario,
-  ScenarioEngine,
-} from "../scenarios/ScenarioEngine";
+import { randomUUID } from "node:crypto";
+import { invalidCredentialRequested } from "../scenarios/invalidCredential";
+import { resolveScenario, wholePesosFromDecimal } from "../scenarios/scenarioFromRequest";
+import { bankListFailure, queryFailure, technicalFailure } from "../scenarios/technicalFailure";
 import {
   rapydCheckoutMachine,
   rapydPaymentMachine,
 } from "../state/rapydStateMachine";
 import { rememberScenarioTarget } from "../state/scenarioTarget";
+import { requestOrigin } from "../store/BankRedirectOrigins";
 import { rapydCheckouts, rapydPayments } from "../store/GatewayStores";
 import {
   hasDuplicateMark,
   markDuplicate,
   nextFlappingAttempt,
+  rememberQueryFailure,
 } from "../store/ScenarioMarks";
 
 const DEFAULT_SCENARIO = "APPROVED";
+
+/**
+ * El cuerpo de `MALFORMED_BODY`: el sobre de éxito de Rapyd sin los campos de `data`.
+ *
+ * Nivel 3 — decisión del simulador. No imita una respuesta medida: existe para que el
+ * normalizador del SDK encuentre un `200` sin `data.id` (issue #122).
+ */
+const MALFORMED_BODY = {
+  status: {
+    status: "SUCCESS",
+    error_code: "",
+    message: "",
+    response_code: "",
+    operation_id: "",
+  },
+  data: {},
+} as const;
 
 /** El cuerpo de Rapyd ante una página de pago que no existe; la fuente está en `GET /v1/checkout/:id`. */
 const HOSTED_PAGE_NOT_FOUND = {
@@ -53,7 +72,7 @@ const HOSTED_PAGE_NOT_FOUND = {
  *    es el destino de `redirect_url`.
  *
  * Sigue el mismo reparto que la ruta de Mercado Pago: instancia su propia
- * fabrica y resuelve el escenario aca, sin pasar por `ScenarioEngine`. Ese
+ * fabrica y resuelve el escenario aquí, sin pasar por `ScenarioEngine`. Ese
  * motor hoy esta tipado contra el cuerpo y la respuesta de Wompi, y
  * generalizarlo para recibir la pasarela como parametro es trabajo declarado de
  * la Iteracion 3 en `layers-and-components.md`. Forzarlo ahora obligaria a
@@ -65,66 +84,69 @@ const HOSTED_PAGE_NOT_FOUND = {
  *
  * **El mock no verifica la firma de las peticiones entrantes.** Rapyd exige
  * `access_key`, `salt`, `timestamp` y `signature` en cada request, y el SDK los
- * envia, pero validarlos aca requiere la clase `SignatureGenerator` que
+ * envia, pero validarlos aquí requiere la clase `SignatureGenerator` que
  * `layers-and-components.md` marca como pendiente en la API de Simulacion. Sin
  * eso, un adaptador que calcule mal la firma pasaria igual contra el mock: por
  * eso la correccion de la firma se cubre con pruebas unitarias del adaptador
  * contra el vector de la documentacion oficial, y no confiando en el mock.
  * 5. `GET  /v1/sim/rapyd/checkout/:checkoutId/pagar` — la visita del pagador a la pagina.
  */
+/**
+ * El rechazo de un `access_key` desconocido.
+ *
+ * Nivel 1 — medido contra `sandboxapi.rapyd.net` el 6 de octubre de 2026
+ * (`docs/testing-data/rapyd.md`, sección 1, «Credenciales inválidas»): `401` con este cuerpo y
+ * un `operation_id` nuevo en cada respuesta. Medido en `GET /v1/payment_methods/country` y,
+ * entre las 14:05 y las 14:12, en `POST /v1/checkout`, `GET /v1/checkout/{id existente}` y
+ * `GET /v1/payments/{id}`, exista o no el recurso. `POST /v1/payments` y `POST /v1/customers`
+ * no se midieron y reciben el mismo cuerpo.
+ */
+function unauthenticatedApiCall() {
+  return {
+    status: {
+      error_code: "UNAUTHENTICATED_API_CALL",
+      status: "ERROR",
+      message:
+        "The request was rejected due to an authentication issue. Corrective action: Check the status of your account in the 'Account Details' page of the Client Portal.",
+      response_code: "UNAUTHENTICATED_API_CALL",
+      operation_id: randomUUID(),
+    },
+  };
+}
+
 export async function rapydRoutes(app: FastifyInstance): Promise<void> {
   const mockFactory = new GatewayMockFactory();
 
-  /**
-   * Contesta una falla técnica del escenario, si el escenario pide una.
-   *
-   * Devuelve `undefined` cuando el escenario no es una falla. La comparten las dos rutas
-   * de creación —el pago y el checkout— porque antes la del checkout no tenía ninguna y
-   * un `TIMEOUT` creaba la página con `200`. Ninguna rama guarda nada: una falla de
-   * transporte no crea ni muta estado.
+  /*
+   * Todas las rutas de la API de Rapyd revisan la llave antes que el cuerpo, porque la firma
+   * se verifica sobre la petición entera. El orden frente a las validaciones del cuerpo no se
+   * midió. La página `/pagar` queda fuera: es del simulador y el pagador no manda llaves.
    */
-  function technicalFailure(
-    scenario: string,
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ): FastifyReply | undefined {
-    if (scenario === "TIMEOUT" || scenario === "GATEWAY_TIMEOUT") {
-      return reply.code(504).send(mockFactory.buildTimeoutResponse());
-    }
+  const API_ROUTES = new Set([
+    "/v1/sim/rapyd/payments",
+    "/v1/sim/rapyd/payments/:paymentId",
+    "/v1/sim/rapyd/checkout",
+    "/v1/sim/rapyd/checkout/:checkoutId",
+    "/v1/sim/rapyd/customers",
+    "/v1/sim/rapyd/payment_methods/country",
+  ]);
 
-    if (scenario === "NETWORK_ERROR" || scenario === "CONNECTION_ERROR") {
-      return ScenarioEngine.handleNetworkError(request, reply);
+  app.addHook("preHandler", async (request, reply) => {
+    if (API_ROUTES.has(request.routeOptions.url ?? "") && invalidCredentialRequested(request, ["access_key"])) {
+      return reply.code(401).send(unauthenticatedApiCall());
     }
-
-    if (scenario === "RATE_LIMIT" || scenario === "TOO_MANY_REQUESTS" || scenario === "429") {
-      return reply.code(429).send(mockFactory.buildRateLimitResponse());
-    }
-
-    if (scenario === "SERVER_ERROR" || scenario === "INTERNAL_ERROR" || scenario === "500") {
-      return reply.code(500).send(mockFactory.buildServerErrorResponse(500));
-    }
-
-    if (scenario === "BAD_GATEWAY" || scenario === "502") {
-      return reply.code(502).send(mockFactory.buildServerErrorResponse(502));
-    }
-
-    if (scenario === "SERVICE_UNAVAILABLE" || scenario === "503") {
-      return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
-    }
-
-    return undefined;
-  }
+  });
 
   app.post(
     "/v1/sim/rapyd/payments",
     async (request: FastifyRequest, reply: FastifyReply) => {
-      // Fastify tipa las cabeceras como string | string[] | undefined. La rama
-      // del arreglo no se alcanza por HTTP (Node colapsa cabeceras repetidas en
-      // un solo string), se conserva para satisfacer el tipo.
-      let scenario = getSimulatorScenario(request);
       const requestBody = request.body as RapydCreatePaymentRequestBody;
+      const resolved = resolveScenario(request, {
+        wholePesos: wholePesosFromDecimal(requestBody?.amount),
+      });
+      let scenario = resolved.scenario;
 
-      const failure = technicalFailure(scenario, request, reply);
+      const failure = await technicalFailure(scenario, request, reply, mockFactory, MALFORMED_BODY);
 
       if (failure !== undefined) {
         return failure;
@@ -156,6 +178,13 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
         scenario = DEFAULT_SCENARIO;
       }
 
+      // La falla de consulta que pidió el monto se ata al pago recién guardado.
+      const rememberFailure = (paymentId: string): void => {
+        if (resolved.queryFailure !== undefined) {
+          rememberQueryFailure("rapyd", "payment", paymentId, resolved.queryFailure);
+        }
+      };
+
       if (scenario === "DECLINED" || scenario === "REJECTED") {
         const declined = mockFactory.buildDeclinedResponse(requestBody);
         rapydPayments.save(declined.data.id, declined.data);
@@ -173,7 +202,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
       // PSE se reconoce por el prefijo del metodo de pago, que en Rapyd son 47
       // tipos `co_pse_{banco}_bank` en vez de un metodo con un campo de banco.
       const methodType = (requestBody.payment_method as { type?: unknown })?.type;
-      const esPse =
+      const isPse =
         typeof methodType === "string" && methodType.startsWith("co_pse_");
 
       /*
@@ -181,7 +210,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
        * resolver. Con tarjeta el pago nace cerrado, y un pendiente sería un estado que nadie
        * midió en ese camino.
        */
-      const wantsPending = scenario === "PENDING" && esPse;
+      const wantsPending = scenario === "PENDING" && isPse;
 
       if (
         scenario !== DEFAULT_SCENARIO &&
@@ -194,7 +223,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
           .send({ error: `Escenario aun no soportado: ${scenario}` });
       }
 
-      if (esPse) {
+      if (isPse) {
         // Rapyd rechaza el pago sin cliente previo, medido como
         // `MISSING_PAYMENT_METHOD_REQUIRED_FIELD - [CUSTOMER]`. El mock lo
         // reproduce para que una prueba note si el adaptador se saltara la
@@ -226,6 +255,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
          */
         const pse = mockFactory.buildPseCreatedResponse(requestBody);
         rapydPayments.save(pse.data.id, pse.data);
+        rememberFailure(pse.data.id);
 
         if (wantsPending) {
           rememberScenarioTarget("rapyd", "payment", pse.data.id, "ACT");
@@ -236,6 +266,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
 
       const approved = mockFactory.buildApprovedResponse(requestBody);
       rapydPayments.save(approved.data.id, approved.data);
+      rememberFailure(approved.data.id);
 
       return reply.code(201).send(approved);
     },
@@ -252,7 +283,6 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/v1/sim/rapyd/checkout",
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const scenario = getSimulatorScenario(request);
       const requestBody = request.body as RapydCreateCheckoutRequestBody;
 
       // Rapyd no crea una página sin monto, divisa y país; el mock tampoco, para que una
@@ -269,10 +299,35 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const failure = technicalFailure(scenario, request, reply);
+      const resolved = resolveScenario(request, {
+        wholePesos: wholePesosFromDecimal(requestBody.amount),
+      });
+      let scenario = resolved.scenario;
+
+      const failure = await technicalFailure(scenario, request, reply, mockFactory, MALFORMED_BODY);
 
       if (failure !== undefined) {
         return failure;
+      }
+
+      /*
+       * El monto 10101 pide el pendiente nativo de este camino: la página que nadie visitó
+       * se queda en `NEW` (nivel 1, medido). Con la cabecera `PENDING` la ruta sigue
+       * respondiendo `501`, como antes del issue #122, porque esa prueba existe y no cambia.
+       */
+      if (resolved.source === "amount" && scenario === "PENDING") {
+        scenario = DEFAULT_SCENARIO;
+      }
+
+      // La misma falla transitoria que en `POST /payments`: dos `503` y después la página.
+      // Antes respondía `501`; ninguna prueba lo fijaba y el camino de tarjeta de Rapyd era
+      // el único de creación sin reintento ejercitable (issue #122).
+      if (scenario === "FLAPPING") {
+        const key = `rapyd_checkout_${requestBody.merchant_reference_id ?? "flapping"}`;
+        if (nextFlappingAttempt(key)) {
+          return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+        }
+        scenario = DEFAULT_SCENARIO;
       }
 
       const wantsDecline = scenario === "DECLINED" || scenario === "REJECTED";
@@ -297,7 +352,10 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
 
       // 200 y no 201: se midió que Rapyd responde 200 al crear una página de pago, a
       // diferencia de `POST /v1/payments`, que responde 201. La misma API usa los dos.
-      const created = mockFactory.buildCheckoutCreatedResponse(requestBody);
+      const created = mockFactory.buildCheckoutCreatedResponse(
+        requestBody,
+        requestOrigin(request),
+      );
       rapydCheckouts.save(created.data.id, created.data);
 
       /*
@@ -307,6 +365,10 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
        */
       if (wantsDecline) {
         rememberScenarioTarget("rapyd", "checkout", created.data.id, "ERR");
+      }
+
+      if (resolved.queryFailure !== undefined) {
+        rememberQueryFailure("rapyd", "checkout", created.data.id, resolved.queryFailure);
       }
 
       return reply.code(200).send(created);
@@ -336,6 +398,15 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
        */
       if (!checkout) {
         return reply.code(400).send(HOSTED_PAGE_NOT_FOUND);
+      }
+
+      const failure = await queryFailure(
+        { gateway: "rapyd", resource: "checkout", id: checkoutId },
+        reply,
+        mockFactory,
+      );
+      if (failure !== undefined) {
+        return failure;
       }
 
       // Lectura pura: la página se paga cuando alguien la visita, no cuando el comercio
@@ -384,10 +455,10 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
        * intencionada: aquí el simulador representa la visita a la página; en Wompi avanza por
        * consultas porque la URL del banco es un destino externo que no puede servir.
        */
-      const pagado = rapydCheckoutMachine.transition(checkout, "pay");
+      const paidCheckout = rapydCheckoutMachine.transition(checkout, "pay");
 
-      if (pagado !== checkout) {
-        rapydCheckouts.save(checkoutId, pagado);
+      if (paidCheckout !== checkout) {
+        rapydCheckouts.save(checkoutId, paidCheckout);
 
         /*
          * El pago que acaba de nacer también es un registro consultable.
@@ -404,7 +475,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
          * dentro del checkout, y no el que se crea con `POST /payments`, es lo que hace que
          * el flujo de tarjeta de Rapyd tenga la misma forma de ciclo de vida que el de PSE.
          */
-        const checkoutPayment = mockFactory.buildPaymentFromCheckout(pagado);
+        const checkoutPayment = mockFactory.buildPaymentFromCheckout(paidCheckout);
 
         if (checkoutPayment !== undefined) {
           rapydPayments.save(checkoutPayment.id, checkoutPayment);
@@ -413,7 +484,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
 
       return reply
         .code(200)
-        .send({ paid: pagado.payment.paid === true, payment_id: pagado.payment.id });
+        .send({ paid: paidCheckout.payment.paid === true, payment_id: paidCheckout.payment.id });
     },
   );
 
@@ -459,6 +530,15 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
             operation_id: "",
           },
         });
+      }
+
+      const failure = await queryFailure(
+        { gateway: "rapyd", resource: "payment", id: paymentId },
+        reply,
+        mockFactory,
+      );
+      if (failure !== undefined) {
+        return failure;
       }
 
       const moved = rapydPaymentMachine.transition(payment, "query");
@@ -521,7 +601,12 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/rapyd/payment_methods/country",
-    async (_request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const failure = bankListFailure(request, reply, mockFactory, "rapyd");
+      if (failure !== undefined) {
+        return failure;
+      }
+
       return reply.code(200).send(mockFactory.buildPaymentMethodsResponse());
     },
   );
