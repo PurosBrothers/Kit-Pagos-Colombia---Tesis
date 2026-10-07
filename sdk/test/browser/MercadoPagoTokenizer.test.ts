@@ -36,7 +36,7 @@ describe("MercadoPagoTokenizer", () => {
     } as unknown as Response;
   };
 
-  it("tokeniza una tarjeta exitosamente en sandbox por defecto", async () => {
+  it("tokenizes a card successfully in sandbox by default", async () => {
     let capturedUrl = "";
     let capturedOptions: RequestInit | undefined;
 
@@ -74,7 +74,7 @@ describe("MercadoPagoTokenizer", () => {
     expect(body.cardholder.identification.number).toBe("19119119100");
   });
 
-  it("garantiza que solo se llama al host de Mercado Pago y a ningún otro", async () => {
+  it("ensures only the Mercado Pago host is called and no other", async () => {
     const urlsCalled: string[] = [];
     const mockFetch = jest.fn(async (url: string | URL | Request) => {
       urlsCalled.push(String(url));
@@ -96,7 +96,7 @@ describe("MercadoPagoTokenizer", () => {
     expect(urlsCalled[0]).not.toContain("wompi");
   });
 
-  it("convierte año de 2 dígitos a 4 dígitos correctamente", async () => {
+  it("converts a 2-digit year to 4 digits correctly", async () => {
     let capturedOptions: RequestInit | undefined;
     const mockFetch = jest.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       capturedOptions = init;
@@ -116,14 +116,14 @@ describe("MercadoPagoTokenizer", () => {
     expect(body.expiration_year).toBe(2035);
   });
 
-  it("resuelve las URLs base según el catálogo cerrado", () => {
+  it("resolves the base URLs from the closed catalog", () => {
     expect(MercadoPagoTokenizer.resolveBaseUrl("sandbox")).toBe("https://api.mercadopago.com/v1");
     expect(MercadoPagoTokenizer.resolveBaseUrl("production")).toBe("https://api.mercadopago.com/v1");
     expect(MercadoPagoTokenizer.resolveBaseUrl("simulator")).toBe("http://localhost:3000/v1/sim/mercadopago");
   });
 
   it.each(["prod", "constructor", "toString", "__proto__"])(
-    "rechaza el ambiente '%s' sin llamar a fetch: no cae en sandbox ni arma una URL relativa",
+    "rejects the '%s' environment without calling fetch: does not fall back to sandbox or build a relative URL",
     async (environment) => {
       const mockFetch = jest.fn();
 
@@ -148,7 +148,7 @@ describe("MercadoPagoTokenizer", () => {
     },
   );
 
-  it("ignora una URL colada desde JavaScript: el host sale solo del catálogo", async () => {
+  it("ignores a URL smuggled in from JavaScript: the host comes only from the catalog", async () => {
     let capturedUrl = "";
     const mockFetch = jest.fn(async (url: string | URL | Request) => {
       capturedUrl = String(url);
@@ -169,7 +169,7 @@ describe("MercadoPagoTokenizer", () => {
     expect(capturedUrl).toBe("https://api.mercadopago.com/v1/card_tokens?public_key=TEST-pub-key-123");
   });
 
-  it("falla con INVALID_REQUEST antes de la red si falta docType o docNumber", async () => {
+  it("fails with INVALID_REQUEST before the network if docType or docNumber is missing", async () => {
     const mockFetch = jest.fn();
 
     // Sin docType
@@ -227,7 +227,7 @@ describe("MercadoPagoTokenizer", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it("falla con INVALID_REQUEST antes de la red si faltan datos de tarjeta", async () => {
+  it("fails with INVALID_REQUEST before the network if card data is missing", async () => {
     const mockFetch = jest.fn();
 
     await expect(
@@ -263,7 +263,7 @@ describe("MercadoPagoTokenizer", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it("falla con INVALID_REQUEST si expMonth o expYear no son numéricos válidos", async () => {
+  it("fails with INVALID_REQUEST if expMonth or expYear are not valid numbers", async () => {
     const mockFetch = jest.fn();
 
     // Mes inválido
@@ -320,7 +320,65 @@ describe("MercadoPagoTokenizer", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it("falla con INVALID_CREDENTIALS si no se proporciona publicKey", async () => {
+  // `parseInt` aceptaba "12abc" como 12 y "2030x" como 2030 (PR #128, primer comentario del
+  // issue #122). El mes tiene uno o dos dígitos y el año dos o cuatro, sin nada más.
+  it.each([
+    ["expMonth", "12abc", /mes de expiración/i],
+    ["expMonth", "1.5", /mes de expiración/i],
+    ["expMonth", "123", /mes de expiración/i],
+    ["expMonth", "0", /mes de expiración/i],
+    ["expMonth", "-1", /mes de expiración/i],
+    ["expYear", "2030x", /año de expiración/i],
+    ["expYear", "203", /año de expiración/i],
+    ["expYear", "20301", /año de expiración/i],
+    ["expYear", "3e1", /año de expiración/i],
+  ])("fails with INVALID_REQUEST if %s is %p, without calling the network", async (field, value, message) => {
+    const mockFetch = jest.fn();
+
+    await expect(
+      MercadoPagoTokenizer.tokenize(
+        {
+          gateway: Gateway.MERCADOPAGO,
+          publicKey: "TEST-pub-key-123",
+          card: { ...validCard, [field]: value },
+        },
+        mockFetch as unknown as typeof fetch,
+      ),
+    ).rejects.toThrow(
+      expect.objectContaining({
+        code: KitPagosErrorCode.INVALID_REQUEST,
+        message: expect.stringMatching(message),
+      }),
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [" 7 ", " 2031 ", 7, 2031],
+    ["07", "31", 7, 2031],
+    ["12", "2099", 12, 2099],
+  ])("accepts expMonth %p and expYear %p and sends %p/%p", async (expMonth, expYear, month, year) => {
+    const mockFetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ id: "tok_ok" }),
+    });
+
+    await MercadoPagoTokenizer.tokenize(
+      {
+        gateway: Gateway.MERCADOPAGO,
+        publicKey: "TEST-pub-key-123",
+        card: { ...validCard, expMonth, expYear },
+      },
+      mockFetch as unknown as typeof fetch,
+    );
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+    expect(body.expiration_month).toBe(month);
+    expect(body.expiration_year).toBe(year);
+  });
+
+  it("fails with INVALID_CREDENTIALS if publicKey is not provided", async () => {
     const mockFetch = jest.fn();
 
     await expect(
@@ -341,7 +399,7 @@ describe("MercadoPagoTokenizer", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it("traduce respuestas HTTP 401 y 403 a INVALID_CREDENTIALS", async () => {
+  it("maps HTTP 401 and 403 responses to INVALID_CREDENTIALS", async () => {
     const mockFetch401 = jest.fn(async () => ({
       ok: false,
       status: 401,
@@ -386,7 +444,7 @@ describe("MercadoPagoTokenizer", () => {
     );
   });
 
-  it("traduce respuestas de error HTTP 400 a INVALID_REQUEST con la causa nativa", async () => {
+  it("maps HTTP 400 error responses to INVALID_REQUEST with the native cause", async () => {
     const mockFetch400 = jest.fn(async () => ({
       ok: false,
       status: 400,
@@ -414,7 +472,7 @@ describe("MercadoPagoTokenizer", () => {
     );
   });
 
-  it("traduce errores de red a CONNECTION_FAILED", async () => {
+  it("maps network errors to CONNECTION_FAILED", async () => {
     const mockFetchNetworkError = jest.fn(async () => {
       throw new Error("Failed to fetch");
     });
@@ -436,7 +494,7 @@ describe("MercadoPagoTokenizer", () => {
     );
   });
 
-  it("lanza GATEWAY_SERVER_ERROR ante un 5xx de Mercado Pago", async () => {
+  it("throws GATEWAY_SERVER_ERROR on a Mercado Pago 5xx", async () => {
     const mockFetch500 = jest.fn(async () => ({
       ok: false,
       status: 500,
@@ -458,7 +516,7 @@ describe("MercadoPagoTokenizer", () => {
     });
   });
 
-  it("lanza RATE_LIMIT_EXCEEDED ante un 429 de Mercado Pago", async () => {
+  it("throws RATE_LIMIT_EXCEEDED on a Mercado Pago 429", async () => {
     const mockFetch429 = jest.fn(async () => ({
       ok: false,
       status: 429,
@@ -480,7 +538,7 @@ describe("MercadoPagoTokenizer", () => {
     });
   });
 
-  it("lanza MALFORMED_RESPONSE si la respuesta fue ok pero no incluye id", async () => {
+  it("throws MALFORMED_RESPONSE if the response was ok but has no id", async () => {
     const mockFetchNoId = jest.fn(async () => ({
       ok: true,
       status: 200,

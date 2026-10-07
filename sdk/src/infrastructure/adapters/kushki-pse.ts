@@ -30,7 +30,7 @@ import type { TaxBreakdown } from "../../domain/value-objects/TaxBreakdown";
  *    directo al banco. Depende de la configuración del comercio, así que el SDK no
  *    debe documentar que lleva al banco.
  *
- * ## Qué está medido acá
+ * ## Qué está medido aquí
  *
  * Este módulo se escribió primero contra la documentación, porque no había
  * credenciales de API, y **después se midió contra la API UAT real** el 18 de
@@ -76,7 +76,7 @@ const INITIALIZED_TRANSFER_STATUS = "initializedTransaction";
  * Tipos de documento válidos para Colombia.
  *
  * El enum de la API incluye además `RUC`, `CURP`, `RFC`, `RUT`, `DNI`, `PAS`,
- * `CI` y `DE`, que son de otros países. No se aceptan acá: que la API los liste no
+ * `CI` y `DE`, que son de otros países. No se aceptan aquí: que la API los liste no
  * los hace válidos para una transacción colombiana, y dejarlos pasar sería
  * aceptar localmente algo que Kushki va a rechazar después.
  */
@@ -103,7 +103,7 @@ function toUserType(payerKind?: PayerKind): string {
  * Falla, antes de tocar la red, si falta algo que Kushki va a exigir.
  *
  * Acumula en vez de cortar en el primero por lo mismo que en Rapyd y Mercado
- * Pago: un comercio que integra merece la lista completa en un intento. Y acá
+ * Pago: un comercio que integra merece la lista completa en un intento. Y aquí
  * importa más que en ninguna, porque el flujo son tres llamadas y un rechazo en la
  * tercera deja atrás un token ya emitido.
  */
@@ -161,7 +161,7 @@ export function buildTransferTokenPayload(
 ): Record<string, unknown> {
   return {
     bankId: request.paymentMethod?.bankCode,
-    // Acá es donde `ReturnUrlConfig` finalmente se usa en Kushki. Se resuelve
+    // Aquí es donde `ReturnUrlConfig` finalmente se usa en Kushki. Se resuelve
     // para PENDING porque el pagador vuelve del banco antes de que la
     // transferencia esté confirmada: es el mismo criterio que el camino de Wompi.
     callbackUrl: request.returnUrlConfig?.resolveFor("PENDING"),
@@ -267,7 +267,7 @@ export function extractTransferRedirect(
     // La respuesta de `init` no trae estado: medido, devuelve `bankId`, `bankName`,
     // `redirectUrl`, `transactionReference` y `trazabilityCode`, nada más. El estado
     // hay que consultarlo, y en ese momento la transferencia está en
-    // `initializedTransaction`, que es el valor nativo que se reporta acá. Antes
+    // `initializedTransaction`, que es el valor nativo que se reporta aquí. Antes
     // decía `INITIALIZED`, que es el vocabulario de tarjeta y un valor que Kushki
     // nunca devuelve para una transferencia.
     rawStatus:
@@ -334,7 +334,7 @@ export function parseKushkiPseBanks(rawResponse: unknown): PseBank[] {
  *
  * Se consideró deducirlo de la forma, como hace el adaptador de Mercado Pago, que
  * elige entre la Orders API y la Payments API según el prefijo `ORD`. No es
- * comparable: ese prefijo está documentado y se midió, mientras que acá la regla
+ * comparable: ese prefijo está documentado y se midió, mientras que aquí la regla
  * candidata —"el ticket de tarjeta es solo dígitos"— no se pudo verificar contra la
  * API, y basta que Kushki emita un token de solo dígitos para mandar la consulta a
  * la ruta equivocada y reportar "no existe" sobre un pago que sí existe.
@@ -352,7 +352,9 @@ export function parseKushkiPseBanks(rawResponse: unknown): PseBank[] {
  * un "no existe" del que se pueda encadenar, y el respaldo nunca se activaría.
  *
  * La de transferencia sí discrimina: devuelve `200` con el estado para un token que
- * conoce, y `400 T001` para uno que no. Así que es la única que puede ir primero.
+ * conoce, `400 T004` para un id de 32 caracteres que no existe y `400 T001` para un id
+ * de otra longitud, como el ticket de tarjeta de 18 (remedido el 5 de octubre de 2026,
+ * `docs/testing-data/kushki.md` §1.1). Así que es la única que puede ir primero.
  *
  * ## `card-async`: la ruta que la primera medición no vio
  *
@@ -367,12 +369,12 @@ export function parseKushkiPseBanks(rawResponse: unknown): PseBank[] {
  * | Ruta | Llave privada | Llave pública |
  * | --- | --- | --- |
  * | `/card-async/v1/status/{id}` | `400 CAS004 "No existe la transacción"` | `401` |
- * | `/transfer/v1/status/{id}` (existe, es la de PSE) | `400 T001` | `401` |
+ * | `/transfer/v1/status/{id}` (existe, es la de PSE) | `400 T001` con ids de tarjeta; `400 T004` con uno de 32 caracteres | `401` |
  * | `/card/v1/status/{id}` | `403` igual que una inventada | `403` |
  * | `/card-async/v1/status` (sin id) | `403 "Missing Authentication Token"` | — |
  *
  * `CAS004` es la aplicación de Kushki hablando después del autorizador, igual que el
- * `T001` de PSE: la ruta está publicada. Lo que contesta es que **el cobro no está en
+ * `T001` o `T004` de PSE: la ruta está publicada. Lo que contesta es que **el cobro no está en
  * ese almacén**, y se probó con los tres identificadores que devuelve la creación
  * (`ticketNumber`, `transactionId` y `transactionReference`). Es coherente con lo que
  * documenta Kushki: `card-async` es el flujo asíncrono de tarjeta —preautorización y
@@ -430,13 +432,13 @@ export function kushkiStatusPaths(gatewayTransactionId: string): readonly string
  * veinticuatro combinaciones de ruta e identificador entre las dos mediciones, con el
  * `ticketNumber` y con el `transactionId`, y ninguna contestó distinto de una inventada.
  *
- * ## Por qué acá sí se puede afirmar que el 403 no es de credenciales
+ * ## Por qué aquí sí se puede afirmar que el 403 no es de credenciales
  *
  * Porque **a la segunda ruta solo se llega si la primera contestó desde la aplicación**. Con
  * credenciales inválidas, `GET /transfer/v1/status/{id}` responde `403` y el adaptador se
- * rinde ahí mismo, sin llegar acá. Si contestó `400 T001` —"cuerpo de la petición
- * inválido"—, eso es la aplicación de Kushki hablando, o sea que la llave privada pasó el
- * autorizador. Un `403` después de eso no puede ser de la llave: es la ruta.
+ * rinde ahí mismo, sin llegar aquí. Si contestó `400` —`T001` "cuerpo de la petición
+ * inválido" o `T004` "no existe la transacción"—, eso es la aplicación de Kushki hablando,
+ * o sea que la llave privada pasó el autorizador. Un `403` después de eso no puede ser de la llave: es la ruta.
  *
  * Ese razonamiento es todo el contenido del parámetro `credentialsAlreadyProven`, y por eso
  * no se puede resolver mirando el error solo.
@@ -457,11 +459,11 @@ export function kushkiStatusFailure(
     return undefined;
   }
 
-  const esForbidden =
+  const isForbidden =
     error instanceof KitPagosError &&
     error.code === KitPagosErrorCode.INVALID_CREDENTIALS;
 
-  if (credentialsAlreadyProven && esForbidden) {
+  if (credentialsAlreadyProven && isForbidden) {
     return new KitPagosError(
       KitPagosErrorCode.UNSUPPORTED_OPERATION,
       Gateway.KUSHKI,
@@ -469,10 +471,10 @@ export function kushkiStatusFailure(
       `Kushki no permite consultar un cobro con tarjeta hecho por su flujo síncrono, así ` +
         `que no se puede consultar ${gatewayTransactionId}. La única consulta de tarjeta que ` +
         `publica es la del flujo asíncrono (/card-async, preautorización y captura), y ahí ` +
-        `este cobro no está registrado. No te quedás sin el dato: el cobro ya devuelve su ` +
+        `este cobro no está registrado. El dato sigue disponible: el cobro ya devuelve su ` +
         `estado final en la respuesta de createPayment(), y los cambios posteriores llegan ` +
-        `por webhook, que podés verificar con validateWebhook(). Esto no es un problema de ` +
-        `tus credenciales: la consulta de transferencias con estas mismas llaves respondió ` +
+        `por webhook, que se verifica con validateWebhook(). Esto no es un problema de ` +
+        `credenciales: la consulta de transferencias con estas mismas llaves respondió ` +
         `bien.`,
     );
   }
@@ -484,9 +486,12 @@ export function kushkiStatusFailure(
  * Distingue "esta ruta no sabe de ese identificador" de cualquier otro fallo.
  *
  * Acepta dos códigos porque Kushki y el simulador contestan distinto lo mismo: la API real
- * responde `400` (`T001`, "cuerpo de la petición inválido") cuando el identificador no es de
- * esa ruta, y el simulador responde `404`. Medido contra la API UAT el 18 de septiembre de
- * 2026; antes solo se aceptaba `404`, así que contra Kushki real el respaldo no se activaba
+ * responde `400` cuando el identificador no es de esa ruta —`T004` si tiene 32 caracteres,
+ * `T001` si tiene otra longitud (remedido el 5 de octubre de 2026,
+ * `docs/testing-data/kushki.md` §1.1)—, igual que el simulador. `404` se sigue aceptando
+ * porque es lo que el simulador responde en `/charges/{id}` ante un ticket que no creó
+ * (`K404`, un código propio del simulador). Medido contra la API
+ * UAT el 18 de septiembre de 2026; antes solo se aceptaba `404`, así que contra Kushki real el respaldo no se activaba
  * nunca.
  *
  * Deliberadamente **no** incluye `INVALID_CREDENTIALS`: un 401 o un 403 puede ser una llave

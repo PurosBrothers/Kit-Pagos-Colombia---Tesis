@@ -8,6 +8,7 @@ import {
   TokenizeCardParams,
 } from "../types";
 import { resolveCatalogUrl } from "./base-url-catalog";
+import { sendCardTokenRequest } from "./card-token-request";
 
 /**
  * Catálogo cerrado de URLs base de Wompi. Es el único lugar de donde sale el host al
@@ -104,26 +105,22 @@ export class WompiTokenizer {
 
     const url = `${this.resolveBaseUrl(environment)}/tokens/cards`;
 
-    let response: Response;
-    try {
-      response = await fetchFn(url, {
+    const { response, text } = await sendCardTokenRequest(
+      url,
+      {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${publicKey.trim()}`,
         },
         body: JSON.stringify(this.buildRequestBody(card)),
-      });
-    } catch (error) {
-      throw new KitPagosError(
-        KitPagosErrorCode.CONNECTION_FAILED,
-        Gateway.WOMPI,
-        error,
-        `Error de conexión al tokenizar tarjeta en Wompi: ${(error as Error).message}`,
-      );
-    }
+      },
+      fetchFn,
+      params.timeoutMs,
+      Gateway.WOMPI,
+    );
 
-    return this.handleResponse(response);
+    return this.handleResponse(response, text);
   }
 
   private static buildRequestBody(card: CardData): Record<string, string> {
@@ -155,8 +152,7 @@ export class WompiTokenizer {
     }
   }
 
-  private static async handleResponse(response: Response): Promise<CardTokenResult> {
-    const text = await response.text();
+  private static handleResponse(response: Response, text: string): CardTokenResult {
     let json: Record<string, unknown>;
     try {
       json = JSON.parse(text) as Record<string, unknown>;

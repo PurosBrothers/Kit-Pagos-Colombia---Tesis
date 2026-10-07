@@ -14,26 +14,28 @@ export class GatewayFactory {
    *
    * Recibe las credenciales y el endpoint ya resueltos por el SdkConfigurator
    * en lugar de leerlos por su cuenta: la Factory decide QUE clase instanciar,
-   * no DE DONDE sale la configuracion. Ambos son opcionales para que un
-   * Adapter siga siendo construible con sus valores por defecto.
+   * no DE DONDE sale la configuracion. Los tres son opcionales para que un
+   * Adapter siga siendo construible con sus valores por defecto; el
+   * `undefined` en tercera posicion deja el WebhookVerifier por defecto.
    */
   create(
     gateway: Gateway,
     credentials?: Credentials,
     baseUrl?: string,
+    timeoutMs?: number,
   ): PaymentGatewayPort {
     switch (gateway) {
       case Gateway.WOMPI:
-        return new WompiAdapter(baseUrl, credentials);
+        return new WompiAdapter(baseUrl, credentials, undefined, timeoutMs);
 
       case Gateway.MERCADOPAGO:
-        return new MercadoPagoAdapter(baseUrl, credentials);
+        return new MercadoPagoAdapter(baseUrl, credentials, undefined, timeoutMs);
 
       case Gateway.RAPYD:
-        return new RapydAdapter(baseUrl, credentials);
+        return new RapydAdapter(baseUrl, credentials, undefined, timeoutMs);
 
       case Gateway.KUSHKI:
-        return new KushkiAdapter(baseUrl, credentials);
+        return new KushkiAdapter(baseUrl, credentials, undefined, timeoutMs);
       default:
         throw new KitPagosError(
           KitPagosErrorCode.UNSUPPORTED_OPERATION,

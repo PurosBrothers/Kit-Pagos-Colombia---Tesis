@@ -1,3 +1,4 @@
+import { jsonErrorResponse } from "../../test-support/http-response";
 import { KushkiAdapter } from "./KushkiAdapter";
 import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
 import { Amount } from "../../domain/value-objects/Amount";
@@ -88,6 +89,7 @@ describe("KushkiAdapter", () => {
             // y no alcanza para construir una Transaction: falta el estado y el monto.
             fullResponse: true,
           }),
+          signal: expect.any(AbortSignal),
         },
       );
 
@@ -385,6 +387,30 @@ describe("KushkiAdapter", () => {
         expect(result.redirect.gatewayTransactionId.gateway).toBe(Gateway.KUSHKI);
       }
     });
+
+    // Cuerpos medidos el 6 de octubre de 2026, docs/testing-data/kushki.md §1.2: el cobro
+    // rechaza la credencial con 400 K004, y con la credencial válida el mismo cuerpo da K001.
+    it("maps the 400 K004 of an invalid credential to INVALID_CREDENTIALS and keeps the body", async () => {
+      const body = { message: "ID de comercio o credencial no válido", code: "K004" };
+      global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(400, body));
+
+      const error = await new KushkiAdapter().createPayment(validRequest).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(KitPagosError);
+      expect((error as KitPagosError).code).toBe(KitPagosErrorCode.INVALID_CREDENTIALS);
+      expect((error as KitPagosError).gateway).toBe(Gateway.KUSHKI);
+      expect((error as KitPagosError).originalPayload).toEqual(body);
+    });
+
+    it("still maps the 400 K001 of an invalid body to INVALID_REQUEST", async () => {
+      const body = { message: "Cuerpo de la petición inválido.", code: "K001" };
+      global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(400, body));
+
+      const error = await new KushkiAdapter().createPayment(validRequest).catch((e: unknown) => e);
+
+      expect((error as KitPagosError).code).toBe(KitPagosErrorCode.INVALID_REQUEST);
+      expect((error as KitPagosError).originalPayload).toEqual(body);
+    });
   });
 
   describe("getStatus()", () => {
@@ -392,23 +418,20 @@ describe("KushkiAdapter", () => {
      * Consultar un ticket de tarjeta cuesta dos llamadas desde que la ruta de
      * transferencia va primero: es lo que hay que pagar para que la de transferencia
      * pueda encadenar, porque `/charges/{id}` no sabe decir que no conoce un id. El
-     * primer paso responde el `400 T001` de la API real.
+     * primer paso responde el `400 T001` que da la API real para un id de 18 caracteres,
+     * como el ticket de tarjeta (con uno de 32 sería `T004`; `docs/testing-data/kushki.md` §1.1).
      */
     it("should return a normalized transaction", async () => {
       const mockFetch = jest
         .fn()
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 400,
-          json: async () => ({ code: "T001", message: "Cuerpo de la peticion invalido." }),
-        })
+        .mockResolvedValueOnce(
+          jsonErrorResponse(400, { code: "T001", message: "Cuerpo de la peticion invalido." }),
+        )
         // La consulta del flujo asíncrono de tarjeta: existe, y contesta que no tiene
         // registrado un cobro síncrono. Es el `CAS004` medido contra la UAT.
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 400,
-          json: async () => ({ code: "CAS004", message: "No existe la transaccion" }),
-        })
+        .mockResolvedValueOnce(
+          jsonErrorResponse(400, { code: "CAS004", message: "No existe la transaccion" }),
+        )
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
@@ -452,6 +475,7 @@ describe("KushkiAdapter", () => {
           headers: {
             "Content-Type": "application/json",
           },
+          signal: expect.any(AbortSignal),
         },
       );
 
@@ -477,7 +501,7 @@ describe("KushkiAdapter", () => {
  * punto 48 del architecture-log los detalla. Lo unico que sigue sin medir es el
  * desenlace, que exige autorizar en el portal del banco simulado.
  */
-describe("KushkiAdapter con PSE", () => {
+describe("KushkiAdapter with PSE", () => {
   const originalFetch = global.fetch;
 
   const credentials: Credentials = {
@@ -517,7 +541,7 @@ describe("KushkiAdapter con PSE", () => {
     global.fetch = originalFetch;
   });
 
-  it("pide el token y despues inicia la transferencia, en ese orden", async () => {
+  it("requests the token and then initiates the transfer, in that order", async () => {
     const mockFetch = jest
       .fn()
       .mockResolvedValueOnce(tokenResponse)
@@ -540,7 +564,7 @@ describe("KushkiAdapter con PSE", () => {
    * mandar la privada donde va la publica funciona pero expone la credencial de
    * cobro. El adaptador elige explicitamente en cada llamada.
    */
-  it("usa la credencial publica para el token y la privada para el inicio", async () => {
+  it("uses the public credential for the token and the private one for the init", async () => {
     const mockFetch = jest
       .fn()
       .mockResolvedValueOnce(tokenResponse)
@@ -566,7 +590,7 @@ describe("KushkiAdapter con PSE", () => {
    * Es el unico caso de las cuatro pasarelas donde la URL de retorno del comercio
    * viaja en un paso previo al cobro. Cierra la pieza 3 del issue #64 para Kushki.
    */
-  it("manda la URL de retorno del comercio al pedir el token", async () => {
+  it("sends the merchant return URL when requesting the token", async () => {
     const mockFetch = jest
       .fn()
       .mockResolvedValueOnce(tokenResponse)
@@ -580,7 +604,7 @@ describe("KushkiAdapter con PSE", () => {
     expect(tokenBody.bankId).toBe("007");
   });
 
-  it("usa el token como identificador de la transaccion", async () => {
+  it("uses the token as the transaction identifier", async () => {
     const mockFetch = jest
       .fn()
       .mockResolvedValueOnce(tokenResponse)
@@ -615,9 +639,9 @@ describe("KushkiAdapter con PSE", () => {
    * primero porque es la unica que sabe contestar que no conoce un identificador:
    * medido contra la API UAT, `/charges/{id}` responde 403 para cualquiera.
    */
-  describe("getStatus() con dos rutas posibles", () => {
+  describe("getStatus() with two possible routes", () => {
     /** La forma de la respuesta es la medida: `token` y `status`, sin `ticketNumber`. */
-    it("consulta transferencia primero y no gasta la segunda llamada si responde", async () => {
+    it("queries transfer first and does not spend the second call if it answers", async () => {
       const mockFetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 200,
@@ -645,21 +669,19 @@ describe("KushkiAdapter con PSE", () => {
 
     /**
      * El `400 T001` es lo que la API real contesta cuando el identificador no es de
-     * esa ruta, y significa lo mismo que el 404 del simulador: por aca no es.
+     * esa ruta y no tiene 32 caracteres, como este ticket de 18 (con 32 es `T004`;
+     * `docs/testing-data/kushki.md` §1.1). Significa lo mismo que el 404 del simulador:
+     * por aca no es.
      */
-    it("pasa a la ruta de tarjeta cuando transferencia responde 400, como la API real", async () => {
+    it("moves to the card route when transfer answers 400, like the real API", async () => {
       const mockFetch = jest
         .fn()
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 400,
-          json: async () => ({ code: "T001", message: "Cuerpo de la peticion invalido." }),
-        })
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 400,
-          json: async () => ({ code: "CAS004", message: "No existe la transaccion" }),
-        })
+        .mockResolvedValueOnce(
+          jsonErrorResponse(400, { code: "T001", message: "Cuerpo de la peticion invalido." }),
+        )
+        .mockResolvedValueOnce(
+          jsonErrorResponse(400, { code: "CAS004", message: "No existe la transaccion" }),
+        )
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
@@ -692,14 +714,12 @@ describe("KushkiAdapter con PSE", () => {
      * la certeza de que no está sale de preguntarle a Kushki en el momento, no de citar su
      * documentación; y si algún día registra los cobros síncronos ahí, esto ya funciona.
      */
-    it("devuelve la transacción cuando la consulta asíncrona de tarjeta sí la conoce", async () => {
+    it("returns the transaction when the asynchronous card query does know it", async () => {
       const mockFetch = jest
         .fn()
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 400,
-          json: async () => ({ code: "T001", message: "Cuerpo de la peticion invalido." }),
-        })
+        .mockResolvedValueOnce(
+          jsonErrorResponse(400, { code: "T001", message: "Cuerpo de la peticion invalido." }),
+        )
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
@@ -723,48 +743,58 @@ describe("KushkiAdapter con PSE", () => {
       expect(transaction.getStatus()).toBe("APPROVED");
     });
 
-    /** El 404 del simulador tiene que seguir encadenando igual que el 400 real. */
-    it("pasa a la ruta de tarjeta cuando transferencia responde 404, como el simulador", async () => {
+    /**
+     * Un id de 32 caracteres que no existe da `400 T004`, en Kushki y en el simulador
+     * (medido el 5 y el 6 de octubre de 2026, docs/testing-data/kushki.md §1.1 y §1.2), y
+     * tiene que encadenar igual que el `T001` de un id de otra longitud.
+     */
+    it("moves to the card route when transfer answers 400 T004", async () => {
+      const unknownId = "0123456789abcdef0123456789abcdef";
       const mockFetch = jest
         .fn()
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 404,
-          json: async () => ({ code: "K004", message: "No encontrado" }),
-        })
+        // K004 es el rechazo de credencial del cobro, no un «no encontrado».
+        .mockResolvedValueOnce(
+          jsonErrorResponse(400, { code: "T004", message: "No existe la transacción" }),
+        )
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
           json: async () => ({
-            ticketNumber: "123456789012345678",
+            ticketNumber: unknownId,
             transaction_status: "APPROVAL",
             amount: { subtotalIva0: 150000, subtotalIva: 0, iva: 0, ice: 0, currency: "COP" },
           }),
         });
       global.fetch = mockFetch;
 
-      await new KushkiAdapter("https://api.example.com").getStatus("123456789012345678");
+      await new KushkiAdapter("https://api.example.com").getStatus(unknownId);
 
       expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls[1][0]).toBe(`https://api.example.com/card-async/v1/status/${unknownId}`);
     });
 
     /**
-     * Un 401 en la primera ruta no dice nada sobre la segunda. Seguir probando
-     * convertiria un problema de credenciales en un "no encontrado", que manda a
-     * buscar al lugar equivocado.
+     * Un fallo de credenciales en la primera ruta no dice nada sobre la segunda. Seguir
+     * probando convertiria un problema de credenciales en un "no encontrado", que manda a
+     * buscar al lugar equivocado. El cuerpo es el que responde `/transfer/v1/status` con
+     * una llave privada inválida, medido el 6 de octubre de 2026,
+     * docs/testing-data/kushki.md §1.2.
      */
-    it("no prueba la segunda ruta si el fallo es de credenciales", async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: false,
-        status: 401,
-        json: async () => ({ message: "Unauthorized" }),
-      });
+    it("does not try the second route if the failure is about credentials", async () => {
+      const mockFetch = jest.fn().mockResolvedValue(
+        jsonErrorResponse(403, {
+          Message:
+            "User is not authorized to access this resource because no identity-based policy allows the execute-api:Invoke action",
+        }),
+      );
       global.fetch = mockFetch;
 
-      await expect(
-        new KushkiAdapter("https://api.example.com").getStatus("cualquier-id"),
-      ).rejects.toBeInstanceOf(KitPagosError);
+      const error = await new KushkiAdapter("https://api.example.com")
+        .getStatus("cualquier-id")
+        .catch((e: unknown) => e);
 
+      expect(error).toBeInstanceOf(KitPagosError);
+      expect((error as KitPagosError).code).toBe(KitPagosErrorCode.INVALID_CREDENTIALS);
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
@@ -774,21 +804,16 @@ describe("KushkiAdapter con PSE", () => {
      * `INVALID_CREDENTIALS`, o sea que el SDK mandaba al comercio a rotar unas llaves que
      * estaban bien. El 403 no era de autorización sino de una ruta que no existe, y eso se
      * puede afirmar porque **a esta segunda ruta solo se llega si la primera contestó
-     * `400 T001`**, que es la aplicación de Kushki hablando después del autorizador.
+     * `400`** (`T001` con un ticket como este; `T004` con un id de 32 caracteres), que es la
+     * aplicación de Kushki hablando después del autorizador.
      */
-    it("no culpa a las credenciales cuando la primera ruta ya probó que sirven", async () => {
+    it("does not blame the credentials when the first route already proved they work", async () => {
       const mockFetch = jest
         .fn()
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 400,
-          json: async () => ({ code: "T001", message: "Cuerpo de la peticion invalido." }),
-        })
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 403,
-          json: async () => ({ message: "Forbidden" }),
-        });
+        .mockResolvedValueOnce(
+          jsonErrorResponse(400, { code: "T001", message: "Cuerpo de la peticion invalido." }),
+        )
+        .mockResolvedValueOnce(jsonErrorResponse(403, { message: "Forbidden" }));
       global.fetch = mockFetch;
 
       try {
@@ -800,7 +825,8 @@ describe("KushkiAdapter con PSE", () => {
         // El mensaje tiene que decir las dos cosas: que no es de credenciales, y qué usar
         // en vez de la consulta, o el comercio queda sin saber cómo conciliar.
         expect(sdkError.message).toContain("validateWebhook()");
-        expect(sdkError.message).toContain("no es un problema de tus credenciales");
+        expect(sdkError.message).toContain("no es un problema de credenciales");
+        expect(sdkError.message).not.toMatch(/quedás|podés|\btus\b/);
       }
 
       expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -812,12 +838,10 @@ describe("KushkiAdapter con PSE", () => {
      * adaptador se rinde ahí, sin haber probado nada. Ese 403 sí es de credenciales y tiene
      * que seguir diciéndolo.
      */
-    it("sigue culpando a las credenciales cuando ninguna ruta llegó a contestar", async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: false,
-        status: 403,
-        json: async () => ({ message: "Forbidden" }),
-      });
+    it("still blames the credentials when no route got to answer", async () => {
+      const mockFetch = jest.fn().mockResolvedValue(
+        jsonErrorResponse(403, { message: "Forbidden" }),
+      );
       global.fetch = mockFetch;
 
       try {
@@ -832,7 +856,7 @@ describe("KushkiAdapter con PSE", () => {
   });
 
   describe("getPseBanks()", () => {
-    it("pide la lista con la credencial publica", async () => {
+    it("requests the list with the public credential", async () => {
       const mockFetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 200,

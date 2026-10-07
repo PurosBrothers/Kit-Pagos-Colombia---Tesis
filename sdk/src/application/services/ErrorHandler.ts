@@ -53,9 +53,62 @@ function hasTimeoutSignal(errCode: string, msg: string): boolean {
   );
 }
 
-/** Normaliza el `code` de un `Error` nativo a mayúsculas, o cadena vacía. */
-function nativeErrorCode(error: Error): string {
-  return (error as { code?: string }).code?.toUpperCase() ?? "";
+/**
+ * Detecta el rechazo de `fetch` por un `AbortSignal` vencido o abortado.
+ *
+ * Se decide por `name` y no por el mensaje ni por `instanceof`. Medido el 6 de octubre de
+ * 2026 en Node 20.20.2 y 22.22.3: `AbortSignal.timeout` rechaza con un `DOMException` de
+ * `name` `"TimeoutError"` y `AbortController.abort()` con uno de `name` `"AbortError"`. El
+ * mensaje es texto de Node que puede cambiar, y `instanceof Error` no es confiable cuando el
+ * `DOMException` nace en otro reino de JavaScript, como en el entorno de Jest.
+ */
+function isAbortSignalError(error: unknown): boolean {
+  const name = (error as { name?: unknown } | null)?.name;
+  return name === "TimeoutError" || name === "AbortError";
+}
+
+/** Lo que se lee de un error nativo, sin suponer de qué reino de JavaScript viene. */
+interface NativeErrorShape {
+  message: string;
+  name?: unknown;
+  code?: unknown;
+  cause?: unknown;
+}
+
+/**
+ * Reconoce un error nativo por su forma y no con `instanceof Error`.
+ *
+ * Dentro de Jest, los errores que crean el `fetch` y el `JSON.parse` internos de Node nacen
+ * en otro reino de JavaScript que el código de la prueba, e `instanceof Error` da `false`.
+ * Con el SDK instalado desde npm en el simulador, la conexión rechazada y el JSON inválido
+ * llegaban como UNKNOWN_ERROR dentro de Jest y bien clasificados fuera de él (con
+ * `ts-node`). Lo mismo pasaba con el `DOMException` del timeout.
+ */
+function isNativeErrorShape(error: unknown): error is NativeErrorShape {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    typeof (error as { message?: unknown }).message === "string"
+  );
+}
+
+/** Un `code` de texto en mayúsculas, o cadena vacía si no lo es. */
+function textCode(code: unknown): string {
+  return typeof code === "string" ? code.toUpperCase() : "";
+}
+
+/**
+ * Normaliza el `code` de un error nativo a mayúsculas, o cadena vacía.
+ *
+ * Solo se toman los `code` de texto: el `DOMException` de un timeout trae `code` numérico
+ * (`23`, medido en Node 20 y 22), y llamarle `toUpperCase()` hacía fallar al propio
+ * `ErrorHandler` con un `TypeError` en vez de traducir el error. Si el error no trae
+ * `code`, se usa el de `cause`: el `fetch` de Node rechaza con `TypeError: fetch failed` y
+ * deja el `ECONNREFUSED` del socket en `cause.code`.
+ */
+function nativeErrorCode(error: NativeErrorShape): string {
+  const cause = error.cause as { code?: unknown } | null | undefined;
+  return textCode(error.code) || textCode(cause?.code);
 }
 
 /**
@@ -82,7 +135,11 @@ export function classifyError(error: unknown): ErrorFamily {
       : ErrorFamily.FINAL;
   }
 
-  if (error instanceof Error) {
+  if (isAbortSignalError(error)) {
+    return ErrorFamily.RETRIABLE;
+  }
+
+  if (isNativeErrorShape(error)) {
     const msg = error.message.toLowerCase();
     const errCode = nativeErrorCode(error);
     if (
@@ -120,7 +177,7 @@ function sanitize(message: string): string {
     // Ocultar patrones comunes de API Keys o Secrets en JSON o strings
     .replace(
       // La lista es por nombre, así que **un campo nuevo en `Credentials` tiene que
-      // agregarse acá o se filtra**. `webhookSecret` entró por eso, con el campo.
+      // agregarse aquí o se filtra**. `webhookSecret` entró por eso, con el campo.
       /(?:privateKey|secretKey|publicKey|apiKey|access_key|secret_key|integritySecret|webhookSecret|acceptance_token)\s*[:=]\s*["']?[^"'\s,;]+["']?/gi,
       (match) => {
         const parts = match.split(/[:=]/);
@@ -151,6 +208,11 @@ function formatGatewayName(gateway: Gateway): string {
  * 401 y 403 colapsan en INVALID_CREDENTIALS porque las pasarelas no son
  * consistentes en cuál devuelven ante una llave inválida, y para el comercio la
  * acción correctiva es la misma.
+ *
+ * 409 es INVALID_REQUEST y no UNKNOWN_ERROR (issue #122): un conflicto, como un cobro
+ * duplicado, lo corrige el comercio cambiando la petición, y reintentarla igual daría
+ * el mismo 409. Que una pasarela real responda 409 no está medido; el que se conoce es
+ * el del escenario `DUPLICATE_PAYMENT` de la API de Simulación.
  */
 function mapHttpStatus(httpStatus: number): KitPagosErrorCode {
   switch (httpStatus) {
@@ -164,6 +226,7 @@ function mapHttpStatus(httpStatus: number): KitPagosErrorCode {
     case 429:
       return KitPagosErrorCode.RATE_LIMIT_EXCEEDED;
     case 400:
+    case 409:
     case 422:
       return KitPagosErrorCode.INVALID_REQUEST;
     default:
@@ -222,7 +285,7 @@ export class ErrorHandler {
     if (isHttpErrorShape(rawError)) {
       return this.fromHttpStatus(rawError, gatewayName);
     }
-    if (rawError instanceof Error) {
+    if (isNativeErrorShape(rawError)) {
       return this.fromNativeError(rawError, gatewayName);
     }
     if (typeof rawError === "string") {
@@ -250,12 +313,12 @@ export class ErrorHandler {
     };
   }
 
-  /** Caso B: instancia de `Error` estándar de Node.js o JavaScript. */
-  private fromNativeError(rawError: Error, gatewayName: string): Classified {
+  /** Caso B: error nativo de Node.js o JavaScript, de este reino o de otro. */
+  private fromNativeError(rawError: NativeErrorShape, gatewayName: string): Classified {
     const msg = rawError.message.toLowerCase();
     const errCode = nativeErrorCode(rawError);
 
-    if (hasTimeoutSignal(errCode, msg)) {
+    if (isAbortSignalError(rawError) || hasTimeoutSignal(errCode, msg)) {
       return {
         code: KitPagosErrorCode.GATEWAY_TIMEOUT,
         originalPayload: rawError,
@@ -269,7 +332,7 @@ export class ErrorHandler {
         message: `Failed to connect to ${gatewayName} gateway: ${rawError.message}`,
       };
     }
-    if (rawError instanceof SyntaxError || msg.includes("json")) {
+    if (rawError.name === "SyntaxError" || msg.includes("json")) {
       return {
         code: KitPagosErrorCode.MALFORMED_RESPONSE,
         originalPayload: rawError,

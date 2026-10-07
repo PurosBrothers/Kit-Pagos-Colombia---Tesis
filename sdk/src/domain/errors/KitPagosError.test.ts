@@ -4,7 +4,7 @@ import { Gateway } from "../value-objects/Gateway";
 
 describe("KitPagosError", () => {
     describe("constructor", () => {
-        it("preserva code, gateway y originalPayload sin transformarlos", () => {
+        it("preserves code, gateway and originalPayload without transforming them", () => {
             const payload = {
                 transactionId: "123",
             };
@@ -13,7 +13,7 @@ describe("KitPagosError", () => {
             expect(error.gateway).toBe(Gateway.WOMPI);
             expect(error.originalPayload).toBe(payload);
         });
-        it("funciona igual con otro code y otro gateway", () => {
+        it("works the same with another code and another gateway", () => {
             const payload = {
                 transactionId: "123",
             };
@@ -24,38 +24,81 @@ describe("KitPagosError", () => {
         });
     });
 
+    describe("cause", () => {
+        it("stores the cause as a non-enumerable property, like Error in ES2022", () => {
+            const original = new KitPagosError(KitPagosErrorCode.GATEWAY_TIMEOUT, Gateway.WOMPI, null);
+            const error = new KitPagosError(KitPagosErrorCode.MAX_RETRIES_EXCEEDED, Gateway.WOMPI, null, "agotado", { cause: original });
+            expect(error.cause).toBe(original);
+            expect(Object.keys(error)).not.toContain("cause");
+            expect(JSON.stringify(error)).not.toContain("GATEWAY_TIMEOUT");
+        });
+        it("does not define cause when it is not passed", () => {
+            const error = new KitPagosError(KitPagosErrorCode.GATEWAY_TIMEOUT, Gateway.WOMPI, null);
+            expect(error.cause).toBeUndefined();
+            expect(Object.prototype.hasOwnProperty.call(error, "cause")).toBe(false);
+        });
+    });
+
     describe("message", () => {
-        it("usa el code como mensaje por defecto cuando no se pasa un mensaje", () => {
+        it("uses the code as the default message when no message is passed", () => {
             const error = new KitPagosError(KitPagosErrorCode.RATE_LIMIT_EXCEEDED, Gateway.KUSHKI, { transactionId: "123" });
             expect(error.message).toBe(KitPagosErrorCode.RATE_LIMIT_EXCEEDED);
         });
-        it("usa el mensaje personalizado cuando se pasa un mensaje", () => {
+        it("uses the custom message when a message is passed", () => {
             const error = new KitPagosError(KitPagosErrorCode.WEBHOOK_SIGNATURE_INVALID, Gateway.WOMPI, { transactionId: "123" }, "test message");
             expect(error.message).toBe("test message");
         });
-        it("conserva un mensaje vacio en vez de caer al code por defecto", () => {
+        it("keeps an empty message instead of falling back to the default code", () => {
             const error = new KitPagosError(KitPagosErrorCode.MALFORMED_RESPONSE, Gateway.MERCADOPAGO, { transactionId: "123" }, "");
             expect(error.message).toBe("");
         });
     });
 
     describe("name", () => {
-        it("siempre es KitPagosError", () => {
+        it("is always KitPagosError", () => {
             const error = new KitPagosError(KitPagosErrorCode.UNSUPPORTED_OPERATION, Gateway.KUSHKI, { transactionId: "123" });
             expect(error.name).toBe("KitPagosError");
         });
     });
 
-    describe("herencia de Error", () => {
-        it("es una instancia de KitPagosError y de Error nativo", () => {
+    describe("Error inheritance", () => {
+        it("is an instance of KitPagosError and of the native Error", () => {
             const error = new KitPagosError(KitPagosErrorCode.MAX_RETRIES_EXCEEDED, Gateway.WOMPI, { transactionId: "123" });
             expect(error).toBeInstanceOf(KitPagosError);
             expect(error).toBeInstanceOf(Error);
         });
     });
 
+    describe("instanceof across copies of the class", () => {
+        const brand = Symbol.for("kit-pagos-colombia.KitPagosError");
+
+        it("recognizes an object with the global brand, like the one the browser bundle copy creates", () => {
+            const fromOtherCopy = Object.assign(new Error("x"), { [brand]: true });
+            expect(fromOtherCopy instanceof KitPagosError).toBe(true);
+        });
+        it("does not recognize an Error without the brand nor values that are not objects", () => {
+            expect(new Error("x") instanceof KitPagosError).toBe(false);
+            expect({ [brand]: "true" } instanceof KitPagosError).toBe(false);
+            expect((null as unknown) instanceof KitPagosError).toBe(false);
+            expect(("KitPagosError" as unknown) instanceof KitPagosError).toBe(false);
+        });
+        it("a subclass only accepts its own instances, not any branded error", () => {
+            class SubclassError extends KitPagosError {}
+            const sub = new SubclassError(KitPagosErrorCode.UNKNOWN_ERROR, Gateway.WOMPI, null);
+            const base = new KitPagosError(KitPagosErrorCode.UNKNOWN_ERROR, Gateway.WOMPI, null);
+            expect(sub instanceof SubclassError).toBe(true);
+            expect(sub instanceof KitPagosError).toBe(true);
+            expect(base instanceof SubclassError).toBe(false);
+        });
+        it("the brand is non-enumerable and read-only", () => {
+            const error = new KitPagosError(KitPagosErrorCode.UNKNOWN_ERROR, Gateway.WOMPI, null);
+            const descriptor = Object.getOwnPropertyDescriptor(error, brand);
+            expect(descriptor).toMatchObject({ value: true, enumerable: false, writable: false });
+        });
+    });
+
     describe("originalPayload", () => {
-        it("conserva un objeto por referencia, no una copia", () => {
+        it("keeps an object by reference, not a copy", () => {
             const payload = {
                 transactionId: "123",
                 amount: 100,
@@ -71,7 +114,7 @@ describe("KitPagosError", () => {
             const error = new KitPagosError(KitPagosErrorCode.GATEWAY_SERVER_ERROR, Gateway.MERCADOPAGO, payload);
             expect(error.originalPayload).toBe(payload);
         });
-        it("conserva valores primitivos o null sin transformarlos", () => {
+        it("keeps primitive values or null without transforming them", () => {
             const error = new KitPagosError(KitPagosErrorCode.UNKNOWN_ERROR, Gateway.KUSHKI, null);
             expect(error.originalPayload).toBeNull();
         });

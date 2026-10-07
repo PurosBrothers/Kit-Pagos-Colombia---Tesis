@@ -92,6 +92,55 @@ describe("SDKConfigurator", () => {
     });
   });
 
+  describe("getTimeoutMs()", () => {
+    const base = {
+      gateway: Gateway.WOMPI,
+      credentials: { [Gateway.WOMPI]: wompiCredentials },
+    };
+
+    it("should default to 30000 ms before and after configure() without timeoutMs", () => {
+      expect(configurator.getTimeoutMs()).toBe(30_000);
+      configurator.configure(base);
+      expect(configurator.getTimeoutMs()).toBe(30_000);
+    });
+
+    it.each([1, 5_000, 2_147_483_647])("should accept timeoutMs = %p", (timeoutMs) => {
+      configurator.configure({ ...base, timeoutMs });
+      expect(configurator.getTimeoutMs()).toBe(timeoutMs);
+    });
+
+    it("should go back to the default when reconfigured without timeoutMs", () => {
+      configurator.configure({ ...base, timeoutMs: 5_000 });
+      configurator.configure(base);
+      expect(configurator.getTimeoutMs()).toBe(30_000);
+    });
+
+    // 2 147 483 648 es el primer valor que Node convierte en un plazo de 1 ms (medido el
+    // 6 de octubre de 2026 en Node 20.20.2 y 22.22.3).
+    it.each([0, -1, 1.5, NaN, Infinity, 2_147_483_648, "1000", null])(
+      "should reject timeoutMs = %p with INVALID_REQUEST and keep the previous configuration",
+      (timeoutMs) => {
+        configurator.configure({ ...base, timeoutMs: 5_000 });
+        let thrown: unknown;
+        try {
+          configurator.configure({
+            gateway: Gateway.RAPYD,
+            credentials: { [Gateway.RAPYD]: rapydCredentials },
+            timeoutMs: timeoutMs as number,
+          });
+        } catch (error) {
+          thrown = error;
+        }
+        expect(thrown).toBeInstanceOf(KitPagosError);
+        expect((thrown as KitPagosError).code).toBe(KitPagosErrorCode.INVALID_REQUEST);
+        expect((thrown as KitPagosError).gateway).toBe(Gateway.RAPYD);
+        expect((thrown as KitPagosError).message).toContain("timeoutMs");
+        expect(configurator.getTimeoutMs()).toBe(5_000);
+        expect(configurator.getActiveGateway()).toBe(Gateway.WOMPI);
+      },
+    );
+  });
+
   describe("getCredentials()", () => {
     it("should return credentials for the configured gateway", () => {
       configurator.configure({

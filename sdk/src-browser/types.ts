@@ -66,6 +66,12 @@ export interface TokenizeCardParams {
   card: CardData;
   /** Ambiente de ejecución. Por defecto: "sandbox". */
   environment?: BrowserEnvironment;
+  /**
+   * Límite de la petición a la pasarela, en milisegundos. Por defecto: 30 000. Un entero
+   * entre 1 y 2 147 483 647, igual que `SDKOptions.timeoutMs`; fuera de ese rango lanza
+   * `INVALID_REQUEST` sin enviar la tarjeta. Si se agota, lanza `GATEWAY_TIMEOUT`.
+   */
+  timeoutMs?: number;
 }
 
 /** Opciones de configuración inicial para la fachada KitPagosBrowser. */
