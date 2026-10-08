@@ -191,9 +191,7 @@ describe("POST /v1/sim/webhooks/trigger: the signed webhook reaches /v1/api/webh
 
       const accepted = await replay(gateway, webhook);
       expect(accepted.statusCode).toBe(200);
-      // El SDK 0.3.0 lee `transaction_id` en Kushki, que no es el ticket por el que consulta.
-      const expectedId = gateway === "kushki" ? JSON.parse(webhook.body).transaction_id : transactionId;
-      expect(accepted.json().gatewayTransactionId).toBe(expectedId);
+      expect(accepted.json().gatewayTransactionId).toBe(transactionId);
 
       const tampered = await replay(gateway, webhook, alterIdByte(webhook.body, transactionId));
       expect(tampered.statusCode).toBe(401);
@@ -256,20 +254,13 @@ describe("POST /v1/sim/webhooks/trigger: the signed webhook reaches /v1/api/webh
     expect(body).not.toHaveProperty("transaction_id");
     expect(body).not.toHaveProperty("transaction_status");
 
-    /*
-     * La firma vale, pero el SDK 0.3.0 instalado solo lee `transaction_id` y
-     * `transaction_status`, que este cuerpo no trae: deja el id vacío y el estado en `ERROR`.
-     * TODO(#122): con `kit-pagos-colombia@^0.4.0`, que usa `ticket_number ?? token` como id y
-     * lee `status`, esto llega con el `token` de la transferencia (no el `ticketNumber`) y
-     * `APPROVED`.
-     */
     const accepted = await replay("kushki", webhook);
     expect(accepted.statusCode).toBe(200);
     expect(accepted.json()).toEqual({
       eventType: "transaction.updated",
       gateway: "kushki",
-      gatewayTransactionId: "",
-      newStatus: "ERROR",
+      gatewayTransactionId: token,
+      newStatus: "APPROVED",
     });
 
     const tampered = await replay("kushki", webhook, alterIdByte(webhook.body, token));

@@ -275,18 +275,11 @@ describe("POST /v1/api/payments with a reserved amount and no scenario header", 
     expect(res.json().code).toBe("MALFORMED_RESPONSE");
   });
 
-  /*
-   * El SDK 0.3.x lee el cuerpo con `json()` y, si falla, intenta `text()` sobre el mismo
-   * cuerpo: el `TypeError: Body is unusable` sale sin envolver y Fastify responde su 500 por
-   * omisión, sin `code`. Comprobado también fuera de Jest con `ts-node` el 6 de octubre de 2026.
-   * TODO(#122): con `kit-pagos-colombia@^0.4.0` esto llega como `GATEWAY_SERVER_ERROR`, 502.
-   */
-  it.each(PATHS)("%s: 10006 (HTML_ERROR) escapes the installed SDK as a raw TypeError", async (path) => {
+  it.each(PATHS)("%s: 10006 (HTML_ERROR) arrives as GATEWAY_SERVER_ERROR", async (path) => {
     const res = await pay(path, 10006);
 
-    expect(res.statusCode).toBe(500);
-    expect(res.json().message).toContain("Body is unusable");
-    expect(res.json().code).toBeUndefined();
+    expect(res.statusCode).toBe(502);
+    expect(res.json().code).toBe("GATEWAY_SERVER_ERROR");
   });
 
   /*
@@ -294,13 +287,12 @@ describe("POST /v1/api/payments with a reserved amount and no scenario header", 
    * SDK instalado la toma como una redirección sin mirar el estado. Es un hallazgo del SDK; el
    * simulador no lo esconde.
    */
-  it("wompi pse: 10100 (DECLINED) arrives as a redirect whose rawStatus is DECLINED", async () => {
+  it("wompi pse: 10100 (DECLINED) arrives as a DECLINED transaction", async () => {
     const res = await pay("wompi pse", 10100);
 
     expect(res.statusCode).toBe(201);
-    expect(res.json().outcome).toBe("REDIRECT_REQUIRED");
-    expect(res.json().redirect.rawStatus).toBe("DECLINED");
-    expect(res.json().redirect.redirectUrl).toContain("pse/redirect?ticket_id=");
+    expect(res.json().outcome).toBe("TRANSACTION");
+    expect(res.json().transaction.status).toBe("DECLINED");
   });
 
   describe("10003 (SLOW)", () => {
@@ -343,11 +335,12 @@ describe("POST /v1/api/payments with a reserved amount and no scenario header", 
     expect(res.json().code).toBe("GATEWAY_SERVER_ERROR");
   });
 
-  it("mercadopago pse: 10100 gets the order's native 402, which SDK 0.3 maps to UNKNOWN_ERROR", async () => {
+  it("mercadopago pse: 10100 gets the order's native 402, which SDK 0.4 normalizes as DECLINED", async () => {
     const res = await pay("mercadopago pse", 10100);
 
-    expect(res.statusCode).toBe(500);
-    expect(res.json().code).toBe("UNKNOWN_ERROR");
+    expect(res.statusCode).toBe(201);
+    expect(res.json().outcome).toBe("TRANSACTION");
+    expect(res.json().transaction.status).toBe("DECLINED");
   });
 
   it.each([
@@ -373,8 +366,8 @@ describe("POST /v1/api/payments with a reserved amount and no scenario header", 
     const second = await pay("wompi card", 10409, ref);
 
     expect(first.statusCode).toBe(201);
-    // El SDK 0.3 no traduce el 409: `mapHttpStatus` lo deja en UNKNOWN_ERROR.
-    expect(second.json().code).toBe("UNKNOWN_ERROR");
+    expect(second.statusCode).toBe(400);
+    expect(second.json().code).toBe("INVALID_REQUEST");
   });
 });
 
@@ -421,7 +414,7 @@ describe("GET /v1/api/payments/:id with a query failure that does not recover", 
    * caso espera los tres reintentos de `RetryHandler` (alrededor de 7 s).
    */
   it.each(["wompi card", "mercadopago pse", "rapyd card", "kushki pse"])(
-    "%s: 10600 answers 500 every time and arrives as GATEWAY_SERVER_ERROR",
+    "%s: 10600 answers 500 every time and arrives as MAX_RETRIES_EXCEEDED",
     async (path) => {
       const created = await pay(path, 10600);
       expect(created.statusCode).toBe(201);
@@ -430,13 +423,13 @@ describe("GET /v1/api/payments/:id with a query failure that does not recover", 
       const res = await statusOf(gateway, createdId(created.json()));
 
       expect(res.statusCode).toBe(502);
-      expect(res.json().code).toBe("GATEWAY_SERVER_ERROR");
+      expect(res.json().code).toBe("MAX_RETRIES_EXCEEDED");
     },
     RETRY_TIMEOUT_MS,
   );
 
   it(
-    "mercadopago card: 10604 answers SLOW (a late 504) and arrives as GATEWAY_SERVER_ERROR",
+    "mercadopago card: 10604 answers SLOW (a late 504) and arrives as MAX_RETRIES_EXCEEDED",
     async () => {
       const previous = process.env.SIMULATOR_SLOW_RESPONSE_MS;
       process.env.SIMULATOR_SLOW_RESPONSE_MS = "30";
@@ -447,7 +440,7 @@ describe("GET /v1/api/payments/:id with a query failure that does not recover", 
       process.env.SIMULATOR_SLOW_RESPONSE_MS = previous;
 
       expect(res.statusCode).toBe(502);
-      expect(res.json().code).toBe("GATEWAY_SERVER_ERROR");
+      expect(res.json().code).toBe("MAX_RETRIES_EXCEEDED");
     },
     RETRY_TIMEOUT_MS,
   );

@@ -593,7 +593,7 @@ describe("/v1/api: the invalid credential as the SDK reports it", () => {
     return (body.transaction ?? body.redirect).gatewayTransactionId;
   }
 
-  it.each(["mercadopago", "rapyd", "kushki pse"])(
+  it.each(["mercadopago", "rapyd", "kushki pse", "kushki", "wompi"])(
     "%s: POST /v1/api/payments arrives as INVALID_CREDENTIALS",
     async (path) => {
       const res = await create(path, INVALID_KEYS[path]);
@@ -602,29 +602,6 @@ describe("/v1/api: the invalid credential as the SDK reports it", () => {
       expect(res.json().code).toBe("INVALID_CREDENTIALS");
     },
   );
-
-  // TODO(#122): cambiar a 401 INVALID_CREDENTIALS cuando la dependencia pase a
-  // kit-pagos-colombia ^0.4.0, que traduce el K004. El SDK 0.3 instalado traduce por el
-  // código HTTP, y el 400 llega como INVALID_REQUEST.
-  it("kushki card: POST /v1/api/payments gets the 400 K004, which SDK 0.3 reports as INVALID_REQUEST", async () => {
-    const res = await create("kushki", INVALID_KEYS.kushki);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.json().code).toBe("INVALID_REQUEST");
-  });
-
-  /*
-   * El SDK pide `GET /merchants/{llave pública}` antes de crear, y con una llave pública
-   * inexistente Wompi responde ahí `404` (medido el 6 de octubre de 2026). El SDK 0.3
-   * instalado lo traduce por el código HTTP.
-   * TODO(#122): cambiar a 401 INVALID_CREDENTIALS con kit-pagos-colombia ^0.4.0.
-   */
-  it("wompi: POST /v1/api/payments dies at GET /merchants, which SDK 0.3 reports as RESOURCE_NOT_FOUND", async () => {
-    const res = await create("wompi", INVALID_KEYS.wompi);
-
-    expect(res.statusCode).toBe(404);
-    expect(res.json().code).toBe("RESOURCE_NOT_FOUND");
-  });
 
   // El SDK consulta con la llave pública, y Wompi lee la transacción con una pública
   // inexistente (medido el 6 de octubre de 2026).
