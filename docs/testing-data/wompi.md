@@ -94,7 +94,8 @@ El mensaje no incluye el identificador consultado.
 | `GET /transactions/{id}` sin `Authorization`, con la llave pública o con la privada | `200` | La transacción completa |
 
 - El token de aceptación es de un solo uso (reusarlo da `422 "El token de aceptación ya fue
-  usado"`), pero un intento rechazado con `401` no lo gasta.
+  usado"`), pero un intento rechazado con `401` no lo gasta. Un `422` por firma sí lo gasta (ver
+  «Errores de firma», abajo).
 - Con una llave sin formato de sandbox, el `reason` repite la llave recibida. No se comprobó qué
   pasa con una llave de producción enviada al sandbox.
 
@@ -116,6 +117,29 @@ El mensaje no incluye el identificador consultado.
 Wompi rechaza la llave pública inexistente solo en las rutas que crean algo; en las lecturas
 parece revisar solo el prefijo y el ambiente. Esa es una explicación posible, no medida. La lista
 de bancos no exige una llave pública existente, solo una con forma de sandbox.
+
+**Errores de firma.** Medido el 7 de octubre de 2026 entre las 21:13 y las 21:24 (UTC−5), para el
+issue #130, con `POST /transactions` (PSE, banco `1`, 5 000 000 centavos), la llave privada y un
+token de aceptación nuevo en cada caso, salvo donde se dice lo contrario. Cada caso cambia una sola
+cosa respecto del control:
+
+| Caso | HTTP | Respuesta |
+| --- | --- | --- |
+| Sin `signature`, o con `signature: null` | `422` | `{"error":{"type":"INPUT_VALIDATION_ERROR","messages":{"signature":["Firma de integridad requerida no enviada"]}}}` |
+| `signature` vacía, `"no-es-hex"`, 64 `z`, 64 hex calculados con un secreto equivocado, o la firma correcta en mayúsculas | `422` | `{"error":{"type":"INPUT_VALIDATION_ERROR","messages":{"signature":["La firma es inválida"]}}}` |
+| Sin `acceptance_token` y sin `signature` | `422` | `{"error":{"type":"INPUT_VALIDATION_ERROR","messages":{"acceptance_token":["No está presente"]}}}` |
+| Cualquier firma, incluida la correcta, con el token de un intento anterior que falló por firma | `422` | `{"error":{"type":"INPUT_VALIDATION_ERROR","messages":{"acceptance_token":["El token de aceptación ya fue usado"]}}}` |
+| Control: la firma correcta y un token nuevo | `201` | La transacción en `PENDING` |
+
+- El sobre trae un solo campo y un solo mensaje, y no lleva `reason`. El `422` no trae cabeceras
+  propias del error.
+- **Un `422` por firma gasta el token de aceptación.** Después de ese error, reintentar con el
+  mismo token no funciona: hace falta pedir otro en `GET /merchants/{llave}`. Dos consultas
+  seguidas a esa ruta devuelven tokens distintos.
+- El token se valida antes que la firma, como dice la sección 1.1.
+- Sin medir: si Wompi compara la firma como texto exacto contra el hex en minúsculas, y si marca
+  el token como usado antes de validar la firma. Las dos son explicaciones posibles de lo
+  observado.
 
 ### 1.4. Validación del número en `POST /tokens/cards` (6 de octubre de 2026)
 
