@@ -83,6 +83,29 @@ mismo `401` con el mensaje de «authentication issue», exista o no el recurso.
 En todos los casos el cuerpo es
 `{"status":{"error_code":"UNAUTHENTICATED_API_CALL","status":"ERROR","message":"…","response_code":"UNAUTHENTICATED_API_CALL","operation_id":"<uuid>"}}`.
 
+**La firma, el `timestamp` y el `salt`.** Medido el 7 de octubre de 2026 entre las 21:25 y las
+21:27 (UTC−5), para el issue #130, firmando como `sdk/src/infrastructure/adapters/rapyd-signature.ts`.
+`GET /v1/payment_methods/country?country=CO&currency=COP` y `POST /v1/checkout` respondieron igual
+en todos los casos. El reloj local coincidió en el mismo segundo con la cabecera `Date` de Rapyd.
+
+| Caso | HTTP | `error_code` | `message` |
+| --- | --- | --- | --- |
+| Firma calculada con un secreto equivocado | `401` | `UNAUTHENTICATED_API_CALL` | `"The API received a request, but the signature did not match. The request was rejected. Corrective action: (1) Remove all whitespace that is not inside a string. (2) Remove trailing zeroes and decimal points, or wrap numbers in a string."` |
+| `timestamp` de 360 a 600 s atrás, con la firma correcta | `401` | `UNAUTHENTICATED_API_CALL` | `"timestamp header is out of allowed range"` |
+| `timestamp` de 45 a 300 s atrás, o de 600 a 3 600 s adelante | `200` | `""` (`SUCCESS`) | — |
+| `salt` ya aceptado en otra petición, aunque cambien el `timestamp` y la firma | `401` | `UNAUTHENTICATED_API_CALL` | `"salt header value is not valid, same value used not long ago"` |
+| Sin la cabecera `signature` | `400` | `MISSING_AUTHENTICATION_HEADERS` | `"The request did not contain the required headers for authentication. The request was rejected. Corrective action: Add authentication headers."` |
+
+- `error_code` y `response_code` traen siempre el mismo valor, y el `operation_id` es un uuid
+  nuevo en cada respuesta.
+- **Con varios problemas a la vez**, Rapyd responde primero por la cabecera que falta (`400`),
+  después por la firma, y al final por el `timestamp` o el `salt`.
+- **Un `salt` usado en una petición rechazada por firma no queda gastado:** la misma petición con
+  la firma correcta pasa.
+- **La ventana del `timestamp` no es de 60 s.** Hacia atrás termina entre 300 y 360 s; hacia
+  adelante, nada se rechazó hasta +3 600 s, y más allá no se midió. Tampoco se midió cuánto tiempo
+  recuerda Rapyd un `salt`.
+
 ---
 
 ## 2. Tarjetas de Crédito / Débito (Transacciones con Error)

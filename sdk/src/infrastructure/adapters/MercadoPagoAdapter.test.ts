@@ -660,6 +660,10 @@ describe("MercadoPagoAdapter PSE", () => {
       expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.MERCADOPAGO);
       expect(transaction.orderReference.getValue()).toBe("kp122-tu-1791382104");
       expect(transaction.amount.getValue()).toBe("5000.00");
+      expect(transaction.rejectionReason).toEqual({
+        rejectionCode: "processing_error",
+        rejectionCategory: "UNKNOWN",
+      });
     });
 
     it.each([

@@ -40,10 +40,10 @@ export interface WompiCreateTransactionRequestBody {
    * la pasarela aplica su método por defecto. El SDK solo lo envía para PSE.
    */
   payment_method?: WompiPaymentMethod;
-  /** Los tres campos de autenticación que Wompi exige y el mock no valida. */
   redirect_url?: string;
+  /** El token y la firma los valida `integritySignature.ts` (punto 86). */
   acceptance_token?: string;
-  signature?: string;
+  signature?: string | null;
 }
 
 /** Objeto `transaction` que Wompi retorna dentro de `data` al crear una transacción. */

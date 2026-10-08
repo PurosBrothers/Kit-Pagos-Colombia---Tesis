@@ -144,7 +144,7 @@ El ejemplo 11 imprime ese número medido en cada corrida, así que la tabla de a
 
 - **La validación de webhooks.** Necesita un servidor HTTP que reciba peticiones, y eso no encaja en un script que corre y termina. Está documentada en [03-sdk/4-guia-de-implementacion.md](../03-sdk/4-guia-de-implementacion.md) §7 con los manejadores de Express y Fastify completos.
 - **Los escenarios que el simulador no sabe producir.** El ejemplo 12 recorre los rechazos, las esperas y los errores que la convención del issue #122 hace alcanzables desde el SDK. Las combinaciones sin evidencia de cómo las responde la pasarela real —un checkout de Rapyd vencido, un duplicado en el PSE de Mercado Pago o de Kushki, entre otras— siguen respondiendo `501`, y están listadas en la sección 4 de [3-api-de-simulacion.md](../02-arquitectura/3-api-de-simulacion.md).
-- **Las pasarelas reales.** Para eso están las 18 pruebas de contrato: `cd sdk && npm run test:sandbox`, documentadas en [04-metricas-y-pruebas/3-pruebas-de-contrato.md](../04-metricas-y-pruebas/3-pruebas-de-contrato.md).
+- **Las pasarelas reales.** Para eso están las pruebas de contrato: `cd sdk && npm run test:sandbox`, documentadas en [04-metricas-y-pruebas/3-pruebas-de-contrato.md](../04-metricas-y-pruebas/3-pruebas-de-contrato.md).
 
 ---
 

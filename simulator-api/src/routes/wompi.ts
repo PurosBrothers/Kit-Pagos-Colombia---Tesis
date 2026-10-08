@@ -14,6 +14,12 @@ import {
 } from "../scenarios/invalidCredential";
 import { GatewayMockFactory } from "../gateways/wompi/GatewayMockFactory";
 import {
+  integrityRejection,
+  missingFieldRejection,
+  SpentAcceptanceTokens,
+} from "../gateways/wompi/integritySignature";
+import { wompiIntegritySecret } from "../auth/merchantSecrets";
+import {
   WompiCreateTransactionRequestBody,
   WompiTokenizeCardRequestBody,
 } from "../gateways/wompi/types";
@@ -138,6 +144,7 @@ function sendsPrivateKey(request: FastifyRequest): boolean {
 export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   const scenarioEngine = new ScenarioEngine();
   const mockFactory = new GatewayMockFactory();
+  const spentTokens = new SpentAcceptanceTokens();
 
   // ── POST /v1/sim/wompi/transactions ──────────────────────────────────────
   app.post(
@@ -163,8 +170,24 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      const missingField = missingFieldRejection(requestBody);
+      if (missingField !== undefined) {
+        return reply.code(422).send(missingField);
+      }
+
       if (invalidCredentialRequested(request, ["authorization"])) {
         return reply.code(401).send(INVALID_KEY_ON_CREATE);
+      }
+
+      // El secreto es el del perfil, venga la llave que venga: el simulador es una sola
+      // cuenta de comercio (punto 86).
+      const integrity = integrityRejection(
+        requestBody,
+        wompiIntegritySecret(app.credentialResolver),
+        spentTokens,
+      );
+      if (integrity !== undefined) {
+        return reply.code(422).send(integrity);
       }
 
       // La tarjeta de prueba decide antes que el monto; ver `resolveScenario()`.

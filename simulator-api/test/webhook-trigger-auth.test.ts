@@ -1,6 +1,6 @@
 import * as http from "http";
 import { FastifyInstance } from "fastify";
-import { buildApp } from "../src/app";
+import { buildSignedApp as buildApp } from "./helpers/signedRequests";
 import { CredentialResolver } from "../src/auth/CredentialResolver";
 import { resetSimulatorState } from "../src/store/GatewayStores";
 

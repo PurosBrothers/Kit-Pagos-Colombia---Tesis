@@ -45,6 +45,7 @@ import {
   type SDKOptions,
   type PseBank,
 } from "kit-pagos-colombia";
+import { RAPYD_SECRET_KEY, WOMPI_INTEGRITY_SECRET } from "./simulator-secrets";
 
 /**
  * Las cuatro pasarelas, cada una apuntada a la raíz de su API en el simulador.
@@ -81,9 +82,12 @@ function buildOptions(gateway: Gateway, baseUrl: string): SDKOptions {
   return {
     gateway,
     credentials: {
+      // Rapyd firma cada petición, también la lista de bancos, y el simulador la verifica
+      // con el secreto de su cuenta (`simulator-secrets.ts`).
       [gateway]: {
         publicKey: "pub_test_ejemplo_no_real",
-        privateKey: "prv_test_ejemplo_no_real",
+        privateKey: gateway === Gateway.RAPYD ? RAPYD_SECRET_KEY : "prv_test_ejemplo_no_real",
+        integritySecret: gateway === Gateway.WOMPI ? WOMPI_INTEGRITY_SECRET : undefined,
       },
     },
     baseUrl,

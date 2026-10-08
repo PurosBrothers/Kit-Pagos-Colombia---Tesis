@@ -1692,6 +1692,8 @@ Cada hueco es un lugar donde un ejemplo verde miente. Y cerrarlos a mano tiene u
 
 > **Revisado en el punto 83.** El simulador ya produce los escenarios de rechazo, pendiente, timeout y error, y se alcanzan desde el SDK sin cabecera; solo responden `501` los casos sin evidencia que lista el punto 83.
 
+> **Revisado en el punto 86.** Se tomó la opción A (decisión de Joan del 7 de octubre de 2026): el simulador sigue simulando, y verifica la firma de integridad de Wompi y la firma de Rapyd como una sola cuenta de comercio, con los cuerpos y el orden medidos ese día.
+
 ---
 
 ### 60. El desglose tributario de Kushki se resolvió reusando `TaxBreakdown`, no armándolo a mano en el adaptador
@@ -2766,6 +2768,137 @@ Todo el 7 de octubre de 2026 (UTC−5), sobre `3d96ea8` más los cambios de esta
 - Sin medir: si la consulta de una orden `action_required` o `processed` trae `payer`, si `failed` sigue igual pasados más de 6 segundos y qué responde el reenvío de la misma `X-Idempotency-Key` después del `402`. Tampoco el cuerpo y la firma reales del webhook de transferencia de Kushki, ni si Kushki notifica `initializedTransaction` o `expiredTransaction`, ni qué devuelve el `permalink` real de Wompi.
 - El repositorio usa «nivel 3» con dos sentidos: `docs/testing-data/README.md` lo define como documentación oficial sin comprobar, y los puntos 80 y 83 y unos 22 comentarios de `simulator-api/src` lo usan para las decisiones del simulador.
 - La ruta del checkout de Rapyd en el simulador termina en `/pagar`, en español.
+
+> **Revisado en el punto 85.** La URL de Render se midió en el despliegue el 7 de octubre de 2026 y salió con `http://`, posiblemente porque la variable no llegó al servicio. Después de que Joshua cerró el issue #144, el 8 de octubre a las 00:18, la URL ya sale con `https://`.
+
+> **Revisado en los puntos 86 y 87.** La ruta `/pagar` pasó a `/pay` (punto 86). La redacción de credenciales cubre ahora todos los `KitPagosError` del adaptador, salvo el prefijo de 10 caracteres que repite el `SyntaxError`, y el `DECLINED` del `402` lleva `processing_error` en `rejectionReason` (punto 87).
+
+### 85. La 0.4.0 publicada, el simulador sobre ella y los requisitos que cierra (issue #130)
+
+**Responsable:** Joan (issue #130, PR pendiente). La subida del simulador es de Joshua.
+
+**Contexto.**
+El PR [#143](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/pull/143) se integró en `devops` el 7 de octubre de 2026 a las 19:54 (UTC−5), y `kit-pagos-colombia@0.4.0` se publicó a las 19:58 (`npm view kit-pagos-colombia time`). A las 20:30, Joshua subió el simulador a `^0.4.0` y quitó los `TODO(#122)` de sus pruebas (`b50bb12`, con la CI en verde). Este punto registra lo que quedaba de esa subida y lo que la subida permite cerrar.
+
+**Decisión 1: el simulador ya no envuelve `fetch` en sus pruebas.**
+`scenario-through-sdk.test.ts` volvía a lanzar los errores de `fetch` con las clases del contexto de Jest, porque el `ErrorHandler` del SDK 0.3.x preguntaba `instanceof Error`. El 0.4.0 clasifica por la forma del error (punto 83), así que el envoltorio sobra. Sin él pasan las 144 pruebas del archivo (7 de octubre de 2026, 21:12).
+
+**Decisión 2: RF-10, RF-12 y RF-15 pasan a `Implementado`, con sus límites declarados.**
+Decisión de Joan del 7 de octubre de 2026. El criterio de la matriz pide issue, PR y pruebas, y los tres los tienen con el #143. Lo que les falta no es trabajo pendiente: son límites que se declaran en su fila.
+
+- **RF-10.** Las combinaciones que responden `501` (sección 4 de `3-api-de-simulacion.md`, «Lo que responde 501, a propósito») no tienen evidencia de cómo las responde la pasarela real. Por ejemplo, el `expiredTransaction` de Kushki «solo aplica a México» (`docs/testing-data/kushki.md`, sección 5.4). Imitarlas sería inventar un comportamiento.
+- **RF-15.** Ningún dato de prueba de la tarjeta de Kushki, de la de Rapyd ni del PSE de Mercado Pago llega al simulador. Kushki.js tokeniza en el navegador, y en los otros dos decide la página del banco o de la pasarela. Esos desenlaces se eligen con los montos reservados.
+- **RF-12** queda con el #143, que implementó el bloque 1 del #130.
+
+*Alternativa descartada.* Mantener RF-10 y RF-15 en `Parcial` hasta medir esas combinaciones. Varias no se pueden medir en ningún sandbox (el `EXPIRED` de Kushki para Colombia, una tarjeta que el simulador nunca ve), así que el estado `Parcial` no se cerraría nunca.
+
+**Decisión 3: la documentación dice lo que entrega la 0.4.0 por `/v1/api`.**
+Las tablas de la sección 4 de `3-api-de-simulacion.md` describían el SDK 0.3.0. Ahora describen la 0.4.0, con lo que fijan las pruebas de `scenario-through-sdk.test.ts` y, donde ese archivo no llega, las del SDK:
+
+- `10 003` da `GATEWAY_TIMEOUT` a los 30 s con la espera por omisión de 35 s (lo prueba `KitPagos.timeout.test.ts` del SDK); con una espera menor da `GATEWAY_SERVER_ERROR`, que es lo que fija `scenario-through-sdk.test.ts`;
+- `10 006` da `GATEWAY_SERVER_ERROR`. El HTML queda en el `originalPayload` del SDK, y `/v1/api` no lo expone;
+- `10 600` da `MAX_RETRIES_EXCEEDED`;
+- `10 409` da `INVALID_REQUEST`;
+- el PSE de Wompi y el de Mercado Pago con `10 100` dan un cobro `DECLINED`.
+
+**Lo medido.**
+
+- **El despliegue en Render** (7 de octubre de 2026, 20:42). `/health` y `/v1/sim/wompi/terms` responden `200`, así que el servicio ya corre el código del #143. El `permalink` de `GET /v1/sim/wompi/merchants/pub_test_x` y el `redirect_url` de `POST /v1/sim/rapyd/checkout` salen con `http://kit-pagos-colombia.onrender.com`: el host es el público y el protocolo es el interno. Es lo que el punto 84 supuso sin medir: Render reenvía por HTTP, y sin `SIMULATOR_PUBLIC_ORIGIN` la URL toma ese protocolo. Posiblemente, la variable que declara `render.yaml` no llegó al servicio. Configurarla en el dashboard quedó en el issue [#144](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/issues/144), asignado a Joshua.
+- **El despliegue, después del #144** (8 de octubre de 2026, 00:18). Joshua cerró el issue, y el `permalink` de `GET /v1/sim/wompi/merchants/pub_test_x` sale con `https://kit-pagos-colombia.onrender.com/v1/sim/wompi/terms`.
+
+**Estado:** Resuelto. La deuda del punto 84 que toca código se trata en este mismo PR (puntos 86 y 87).
+
+### 86. El simulador sigue simulando y verifica las firmas de Wompi y Rapyd (issue #130, bloque 2)
+
+**Responsable:** Joan (issue #130, PR pendiente).
+
+**Contexto.**
+El punto 59 dejó abierta la pregunta de si la API de Simulación sigue replicando lo medido o pasa a reenviar las peticiones a los sandbox reales. El bloque 2 del #130 pedía cerrarla y, con ella, los dos huecos de fidelidad que afectan a los prototipos. El prototipo A va a calcular a mano firmas que el simulador no comprobaba, así que un prototipo A defectuoso pasaría la lista de verificación funcional.
+
+**Decisión 1: el simulador sigue simulando (opción A del punto 59).**
+Decisión de Joan del 7 de octubre de 2026. El punto 59 anota que las pruebas de contrato ya detectan cuándo el simulador se aparta de la pasarela real. Además, el SDK puede apuntar `baseUrl` al sandbox real de cada pasarela (`SDKConfigurator.ts`). Reenviar al sandbox no desbloquea los flujos que el sandbox tampoco completa, como el PSE, que necesita a una persona en el portal del banco. Además saca al simulador de la CI, porque exige credenciales reales.
+
+*Alternativas descartadas.* La opción B, reenviar todo al sandbox, y la C, un modo híbrido por pasarela, por las razones anteriores.
+
+**Decisión 2: las dos firmas se verifican como una sola cuenta de comercio.**
+En `/v1/sim` solo viajan las llaves: el secreto de integridad de Wompi y el `secret_key` de Rapyd nunca están en la petición. Joan decidió el 7 de octubre de 2026 que el simulador verifique siempre con el secreto de su perfil (`WOMPI_INTEGRITY_SECRET` y `RAPYD_API_SECRET_KEY`, que `CredentialResolver.getServerCredentials()` lee del `.env` de la raíz y del entorno). Sin perfil, usa los valores por omisión de `src/auth/merchantSecrets.ts`: `test_integrity_kit_pagos_simulator` y `rapyd_secret_kit_pagos_simulator`. Un cliente que firma con otro secreto recibe el rechazo de firma, como lo recibiría con otra cuenta en la pasarela real. Los ejemplos y la demo resuelven el secreto con las mismas reglas (`examples/simulator-secrets.ts`).
+
+*Alternativas descartadas.*
+- Verificar solo cuando la llave es la del perfil: un cliente con otras llaves no se comprobaría nunca.
+- Un registro de llaves y secretos: más configuración, sin un caso que lo pida.
+- Un secreto por petición: contradice la idea de una sola cuenta.
+
+**Decisión 3: los cuerpos, los códigos y el orden son los medidos.**
+Medido el 7 de octubre de 2026 entre las 21:06 y las 21:27 (`docs/testing-data/wompi.md`, «Errores de firma», y `docs/testing-data/rapyd.md`, «La firma, el `timestamp` y el `salt`»).
+
+- **Wompi** (`src/gateways/wompi/integritySignature.ts`):
+  - El orden es: el `acceptance_token` ausente (`422 "No está presente"`), la firma ausente o `null` (`422 "Firma de integridad requerida no enviada"`), la marca en la credencial (`401`), el token ya gastado (`422 "El token de aceptación ya fue usado"`) y la firma distinta del hex en minúsculas (`422 "La firma es inválida"`).
+  - Un `422` por firma gasta el token, como en Wompi.
+- **Rapyd** (`src/gateways/rapyd/requestSignature.ts`):
+  - El orden es: una cabecera de autenticación ausente (`400 MISSING_AUTHENTICATION_HEADERS`; solo se midió la falta de `signature`), la marca en la credencial (`401` con el mensaje de cuenta que ya existía), la firma, el `timestamp` y el `salt`, los tres con `401 UNAUTHENTICATED_API_CALL` y su mensaje medido.
+  - La ventana del `timestamp` va de 300 s atrás a 3 600 s adelante.
+  - Un `salt` se recuerda hasta que su `timestamp` sale de la ventana, y no queda gastado si la petición se rechazó antes, por la firma o por el `timestamp`.
+  - La firma se calcula sobre el cuerpo tal como llegó, así que un cuerpo con espacios de más ya no pasa.
+  - La página `/pay` no lleva firma, porque no es de la API de Rapyd.
+- **Lo que el simulador decide sin medición, y lo dice en cada constante:**
+  - el lugar de la marca en el orden;
+  - el orden entre `timestamp` y `salt`;
+  - el `400` cuando falta `access_key`, `salt` o `timestamp`, que se extiende desde la falta de `signature`;
+  - rechazar un `timestamp` más allá de +3 600 s, o uno que no es un número;
+  - cuánto se recuerda un `salt`;
+  - que un `201` de Wompi no gaste el token;
+  - aceptar un token de aceptación que el simulador nunca entregó, porque no registra los que entrega `GET /merchants`.
+
+*Alternativas descartadas.* Volver a serializar el cuerpo de Rapyd para firmarlo, porque aceptaba cuerpos que Rapyd rechaza. Y registrar los tokens que entrega `GET /merchants`, porque obligaba a inventar la respuesta ante un token desconocido.
+
+**Decisión 4: la página de pago de Rapyd pasa a `/pay`.**
+Era `/pagar`, en español (deuda del punto 84). La ruta vieja responde `308` hacia la nueva y no paga la página (`test/rapyd-checkout.test.ts`).
+
+**Lo que cambió en las pruebas.**
+- Las pruebas que llaman a `/v1/sim` firman como el SDK, con el secreto que usa la app (`test/helpers/signedRequests.ts`), y 13 archivos cambian el import a `buildSignedApp`; 11 de ellos no cambian nada más.
+- `payments.test.ts` manda el secreto de la cuenta del simulador.
+- En `scenario-through-sdk.test.ts`, la prueba de `sim_flapping` de Rapyd ahora pone la marca solo en la llave pública. La privada de Rapyd es el `secret_key` con que el SDK firma. El primer diagnóstico del fallo culpaba al `salt` repetido, pero el SDK firma con un `salt` nuevo en cada intento (`rapyd-signature.ts`, `generateSalt()` por petición), y el `401` venía de la firma.
+
+**Lo medido.**
+- **Mutaciones**, entre las 21:52 y las 22:27. Cada guarda nueva se quitó, se vio fallar su prueba y se restauró. Según el informe del desarrollador, sobre las dos suites de firma (36 pruebas): sin la guarda de la firma inválida de Wompi fallan 7, y sin el registro de `salt` de las peticiones rechazadas, 7.
+- Las cifras de la suite, de los ejemplos, del contrato y del paquete van en la verificación final del PR.
+
+**Estado:** Resuelto con deuda nombrada. Sin medir: si un `201` de Wompi gasta el token, qué responde Wompi ante un token que nunca emitió, un `timestamp` de Rapyd más allá de +3 600 s, cuánto recuerda Rapyd un `salt` y si un `salt` queda gastado tras una respuesta 5xx.
+
+### 87. El SDK del #130: métricas sobre un proyecto externo, redacción en todos los caminos de error y el motivo de rechazo en las cuatro pasarelas
+
+**Responsable:** Joan (issue #130, PR pendiente).
+
+**Contexto.** El issue pedía tres cosas del SDK: que `ck-metrics.ts` pudiera medir los prototipos de la Fase 5 (prerrequisito 3 del plan de evaluación, `4-medir-los-prototipos.md` §3), que `check:published` cubriera también `kit-pagos-colombia/browser`, y cerrar la deuda del punto 84: la redacción de credenciales fuera del error HTTP con cuerpo y el `processing_error` del `402` de Mercado Pago.
+
+**Decisión 1: `ck-metrics.ts` con `--root`, `--tsconfig`, `--mode` y `--json`.** Sin argumentos, el script analiza `sdk/src` y `sdk/src-browser`, aplica `KNOWN_EXCEPTIONS` y sale con 1 ante una violación; la salida es idéntica a la anterior (`diff` vacío, 7 de octubre de 2026). Con `--root`, el modo por omisión es medición (sale con 0) y las excepciones no se aplican. Se descartó un indicador para activar las excepciones desde afuera: están indexadas por nombre de clase y documentan decisiones del SDK, y una clase `Amount` de un prototipo habría heredado la excepción de WMC del `Amount` del SDK. Se descartó también derivar el modo solo de `--root`: `--mode guard` permite usar la guarda sobre otro proyecto. Una prueba con un proyecto de muestra (`sdk/test/scripts/fixtures/ck-sample`, clase `Amount` con WMC 23) lo comprueba; con las excepciones aplicadas siempre fallan 4 de 13 pruebas.
+
+**Decisión 2: la redacción de todos los caminos se aplica en un solo lugar, `GatewayFactory`.** `httpFailure()` conserva la suya, así que el error HTTP con cuerpo se redacta dos veces, sin efecto. `withCredentialRedaction()` (`redacting-gateway.ts`) envuelve el adaptador en un `Proxy` que pasa por `redactCredentials()` todo `KitPagosError` que el adaptador rechace o lance. Se descartó repetir la llamada en cada `catch` de los cuatro adaptadores, porque el próximo camino nuevo habría salido sin ella, y se descartó ponerla en `KitPagos` por su MaxCC 10. Se descartó un objeto con los cuatro métodos del puerto: el `Proxy` conserva `instanceof` y cubre un método nuevo sin tocar el envoltorio. `GatewayFactory` pasa de WMC 5 a 6 y de RFC 1 a 2.
+
+**Defecto encontrado.** `isPlainObject()` comparaba contra el `Object.prototype` del reino del SDK. Un cuerpo leído con `response.json()` dentro de Jest viene del reino del `fetch` de Node, y no se limpiaba: el error nativo de Rapyd con estado 200 salía con la llave en `originalPayload`. Ahora se compara contra la raíz de la cadena de prototipos. Además, la redacción entra en errores (el `SyntaxError` que es `originalPayload` y `cause` de un `MALFORMED_RESPONSE`) y conserva su clase.
+
+**Lo observado.** Con Node 22.22.3, el `SyntaxError` de `response.json()` ante un cuerpo que no es JSON repite solo los primeros 10 caracteres del cuerpo (`"merchant-p"... is not valid JSON`, 7 de octubre de 2026). La búsqueda del valor exacto no limpia ese prefijo.
+
+**Decisión 3: `rejectionReason` en las cuatro pasarelas.**
+`Transaction.rejectionReason` estaba en la API pública y `sdk/README.md` le enseñaba al comercio a leer `rejectionCode` y `rejectionCategory` en un rechazo, pero ningún normalizador lo llenaba. Joan decidió llenarlo en este PR (7 de octubre de 2026).
+
+- **Una función común**, `rejectionFor()` (`rejection-reason.ts`). Solo hay motivo cuando el estado es `DECLINED`: un `ERROR` no es un rechazo del banco (punto 46). El código se guarda tal como llega, y la categoría sale de la tabla de cada pasarela; un código sin correspondencia con fuente queda en `UNKNOWN`.
+- **Una tabla por pasarela, en su propio módulo** (`mercadopago-rejection.ts`, `rapyd-rejection.ts` y `kushki-rejection.ts`), para no subir el WMC ni el CBO de los normalizadores:
+  - **Mercado Pago:** el `status_detail` del pago, y en una orden de PSE el del primer pago. Solo cuatro códigos tienen categoría, con el significado de los titulares de prueba de `docs/testing-data/mercado-pago.md`: `cc_rejected_insufficient_amount` es `INSUFFICIENT_FUNDS`, y los tres `cc_rejected_bad_filled_*` son `INVALID_CARD_DATA`. `cc_rejected_high_risk` y `cc_rejected_max_attempts`, los dos medidos en la cuenta de prueba (`docs/testing-data/mercado-pago.md`, sección 1.1), y el `processing_error` del `402` quedan en `UNKNOWN`, porque Mercado Pago no informa la causa.
+  - **Rapyd:** el `failure_code` del pago. `ERROR_PROCESSING_CARD - [51]` es `INSUFFICIENT_FUNDS` (`docs/testing-data/rapyd.md`, sección 2, documentación de Rapyd sin medir).
+  - **Kushki:** el `responseCode`. Solo `00011`, «Fondos insuficientes» en los códigos de la red PSE (`docs/testing-data/kushki.md`, sección 5.5), tiene categoría. Los códigos de tarjeta no tienen tabla en el repositorio, y la cuenta UAT aprueba todo.
+  - **Wompi** no envía un código de rechazo, solo un `status_message` de texto libre que cambia por método y, posiblemente, por ambiente (solo se midió el sandbox). `rejectionReason` queda vacío, y el README lo dice.
+- **Mutaciones** (8 de octubre de 2026, 00:11, corridas por el agente principal): sin la guarda de `DECLINED` fallan 3 de 90 pruebas (las de `src/application/services/normalizers` y `MercadoPagoAdapter.test.ts`); sin la correspondencia de Mercado Pago o de Rapyd, 1 de 60 cada una (las de `normalizers`).
+
+*Alternativa descartada.* Tomar el `status_message` de Wompi como código: es un texto, no un código estable, y cambia con el método.
+
+**`check:published`.** Compila un segundo programa contra `kit-pagos-colombia/browser` y lo carga con `import` y con `require`. Corrido contra la 0.4.0 publicada el 7 de octubre de 2026 con Node 22.22.3: compila y carga. El script fallaba antes de llegar a compilar, porque leía `require('kit-pagos-colombia/package.json')` y `exports` no publica `./package.json` (`ERR_PACKAGE_PATH_NOT_EXPORTED`).
+
+**Decisión 4: el SDK pasa a 0.5.0.** Decisión de Joan del 8 de octubre de 2026. `rejectionReason` empieza a llenarse y la redacción cubre todos los errores: son cambios que el comercio ve, sin cambiar la API. La 0.5.0 se publica después de integrar el PR, y entonces el simulador sube a `^0.5.0`. Hasta ese momento, `/v1/api` sigue con la 0.4.0 de npm.
+
+**Lo medido.** Las cifras de la suite completa, de los ejemplos, del contrato y del paquete van en la verificación final del PR.
+
+**Estado:** Resuelto con deuda nombrada: el prefijo de 10 caracteres del `SyntaxError`, el cuerpo original del `402` fuera de la API pública, y las categorías que no tienen fuente (`UNKNOWN`), sobre todo en Kushki con tarjeta, cuya cuenta UAT no rechaza.
 
 ---
 

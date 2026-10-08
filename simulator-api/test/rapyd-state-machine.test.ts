@@ -21,7 +21,7 @@ function checkout(id = "checkout_01ABCDEF0123456789AB"): RapydCheckout {
   return {
     id,
     status: "NEW",
-    redirect_url: `http://localhost:3000/v1/sim/rapyd/checkout/${id}/pagar`,
+    redirect_url: `http://localhost:3000/v1/sim/rapyd/checkout/${id}/pay`,
     payment: {
       id: null,
       status: null,

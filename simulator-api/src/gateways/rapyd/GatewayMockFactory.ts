@@ -210,7 +210,7 @@ export class GatewayMockFactory {
    * redirección, igual que en PSE.
    *
    * `origin` es el `protocolo://host` de la petición que crea la página (`requestOrigin()`):
-   * la URL apunta a la página `/pagar` del propio simulador, y con el host fijo en
+   * la URL apunta a la página `/pay` del propio simulador, y con el host fijo en
    * `localhost:3000` el simulador desplegado mandaba al pagador a su propia máquina.
    */
   buildCheckoutCreatedResponse(
@@ -221,7 +221,7 @@ export class GatewayMockFactory {
     const checkout: RapydCheckout = {
       id,
       status: "NEW",
-      redirect_url: `${origin}/v1/sim/rapyd/checkout/${id}/pagar`,
+      redirect_url: `${origin}/v1/sim/rapyd/checkout/${id}/pay`,
       payment: {
         id: null,
         status: null,

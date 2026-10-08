@@ -14,7 +14,7 @@ La respuesta corta es que **los sandboxes reales no permiten ejercitar los flujo
 | La Orders API de Mercado Pago, la única con PSE, responde `401` con credenciales de prueba y exige token de producción (punto 45) | El PSE de Mercado Pago no se puede probar en sandbox en absoluto |
 | Kushki no registra los cobros síncronos de tarjeta en la ruta de consulta que publica: responde `CAS004 "No existe la transacción"` (punto 54) | El ciclo de vida completo de un cobro con tarjeta en Kushki no se puede mostrar contra su sandbox |
 
-Y hay una razón más, que aplica a los cuatro: **un sandbox real declina cuando quiere.** Por eso las 18 pruebas de contrato del proyecto no afirman `APPROVED`, solo que la petición fue aceptada y la respuesta tiene la forma esperada. Una prueba automatizada que necesite un desenlace concreto no puede depender de un servicio de un tercero.
+Y hay una razón más, que aplica a los cuatro: **un sandbox real declina cuando quiere.** Por eso las pruebas de contrato del proyecto no afirman `APPROVED`, solo que la petición fue aceptada y la respuesta tiene la forma esperada. Una prueba automatizada que necesite un desenlace concreto no puede depender de un servicio de un tercero.
 
 El simulador resuelve las dos cosas: es **determinista**, así que una prueba puede afirmar un resultado, y **no necesita credenciales**, así que corre en CI y cualquiera lo puede levantar recién clonado el repositorio.
 
@@ -132,7 +132,7 @@ Son **un almacén por pasarela y por recurso**, en `src/store/GatewayStores.ts`,
 |---|---|
 | **Wompi** (5) | `POST /transactions`, `GET /transactions/:id`, `GET /merchants/:publicKey`, `GET /pse/financial_institutions`, `POST /tokens/cards` |
 | **Mercado Pago** (6) | `POST /payments`, `GET /payments/:id`, `POST /orders`, `GET /orders/:id`, `GET /payment_methods`, `POST /card_tokens` |
-| **Rapyd** (7) | `POST /payments`, `GET /payments/:paymentId`, `POST /checkout`, `GET /checkout/:checkoutId`, `GET /checkout/:checkoutId/pagar`, `POST /customers`, `GET /payment_methods/country` |
+| **Rapyd** (7) | `POST /payments`, `GET /payments/:paymentId`, `POST /checkout`, `GET /checkout/:checkoutId`, `GET /checkout/:checkoutId/pay`, `POST /customers`, `GET /payment_methods/country` |
 | **Kushki** (6) | `POST /card/v1/charges`, `GET /charges/:ticketNumber`, `GET /transfer/v1/bankList`, `POST /transfer/v1/tokens`, `POST /transfer/v1/init`, `GET /transfer/v1/status/:token` |
 | **Webhooks** (1) | `POST /v1/sim/webhooks/trigger` (sección 4.2) |
 | **Salud** (1) | `GET /health` |
@@ -141,7 +141,7 @@ Son **un almacén por pasarela y por recurso**, en `src/store/GatewayStores.ts`,
 
 La asimetría en el número de rutas no es descuido: es el reflejo directo de que cada pasarela necesita una cantidad distinta de llamadas para el mismo flujo. Rapyd tiene siete porque su tarjeta va por checkout alojado y su PSE necesita crear un cliente primero.
 
-`GET /checkout/:checkoutId/pagar` es la única ruta que **no** existe en ninguna pasarela real: es el botón que simula al pagador completando el pago en la página alojada de Rapyd. Sin ella no habría forma de avanzar un checkout desde una prueba automatizada.
+`GET /checkout/:checkoutId/pay` es la única ruta que **no** existe en ninguna pasarela real (la anterior, `/pagar`, responde `308` hacia ella): es el botón que simula al pagador completando el pago en la página alojada de Rapyd. Sin ella no habría forma de avanzar un checkout desde una prueba automatizada.
 
 ---
 
@@ -183,44 +183,37 @@ El simulador recuerda, por token, el desenlace que deriva de la tarjeta (`src/st
 
 Son una convención del simulador, sin equivalente en ninguna pasarela. Están en pesos enteros, porque el PSE de Mercado Pago no admite centavos, y cada ruta normaliza su monto antes de buscarlo: los centavos de Wompi (`amount_in_cents`), el decimal de Mercado Pago y de Rapyd, y la suma del desglose de Kushki. Un monto con centavos distintos de cero no es un monto reservado. Se reconocen al crear un cobro con tarjeta o con PSE en las cuatro pasarelas, y la falla elegida se guarda con la transacción.
 
-La columna del SDK es lo que reporta `kit-pagos-colombia` 0.3.0, que es la versión que usa `/v1/api` hoy (`simulator-api/package.json` pide `^0.3.0`), comprobado en `test/scenario-through-sdk.test.ts`.
+La columna del SDK es lo que reporta `kit-pagos-colombia` 0.4.0, que es la versión que usa `/v1/api` (`simulator-api/package.json` pide `^0.4.0`), comprobado en `test/scenario-through-sdk.test.ts`.
 
-| Monto (COP) | Escenario | Lo que responde el simulador | Con el SDK 0.3.0 |
+| Monto (COP) | Escenario | Lo que responde el simulador | Con el SDK 0.4.0 |
 |---|---|---|---|
-| 10 100 | `DECLINED` | El rechazo nativo de la pasarela | `DECLINED` en las tarjetas de Wompi, Mercado Pago y Kushki y, al consultar, en los PSE de Rapyd y Kushki. Rapyd tarjeta y Wompi PSE devuelven una redirección (la de Wompi, con `rawStatus: "DECLINED"`). El PSE de Mercado Pago responde el `402` nativo, que llega como `UNKNOWN_ERROR` |
+| 10 100 | `DECLINED` | El rechazo nativo de la pasarela | `DECLINED` en las tarjetas de Wompi, Mercado Pago y Kushki; en el PSE de Wompi, que cierra con la URL en la primera consulta; en el PSE de Mercado Pago, cuyo `402` trae la orden en `data` y sale con su id; y, al consultar, en los PSE de Rapyd y Kushki. Rapyd tarjeta devuelve la redirección a su página de pago |
 | 10 101 | `PENDING` | El pendiente nativo | `PENDING`, al crear o al consultar |
-| 10 102 | `EXPIRED` | La expiración nativa | `VOIDED` en las tarjetas de Wompi y Mercado Pago; `EXPIRED`, al consultar, en los PSE de Mercado Pago y Rapyd |
-| 10 409 | `DUPLICATE_PAYMENT` | El primer cobro se crea; el segundo con la misma referencia (en Kushki tarjeta, el mismo token) recibe el `409` nativo | `UNKNOWN_ERROR` en el segundo |
+| 10 102 | `EXPIRED` | La expiración nativa | `VOIDED` en las tarjetas de Wompi y Mercado Pago; `EXPIRED`, al consultar, en los PSE de Mercado Pago y Rapyd. Rapyd tarjeta y el PSE de Kushki responden `501` (ver «Lo que responde 501, a propósito»), que llega como `GATEWAY_SERVER_ERROR` |
+| 10 409 | `DUPLICATE_PAYMENT` | El primer cobro se crea; el segundo con la misma referencia (en Kushki tarjeta, el mismo token) recibe el `409` nativo | `INVALID_REQUEST` en el segundo |
 | 10 429 | `RATE_LIMIT` | `429` | `RATE_LIMIT_EXCEEDED` |
 | 10 500, 10 502, 10 503 | `SERVER_ERROR`, `BAD_GATEWAY`, `SERVICE_UNAVAILABLE` | `500`, `502`, `503` con el cuerpo nativo | `GATEWAY_SERVER_ERROR` |
 | 10 504 | `TIMEOUT` | `504` inmediato | `GATEWAY_SERVER_ERROR` |
 | 10 001 | `NETWORK_ERROR` | Cierra el socket | `CONNECTION_FAILED` |
 | 10 002 | `FLAPPING` | Dos `503` y, al tercer intento con la misma referencia (en Kushki tarjeta, el mismo token), crea el cobro | `GATEWAY_SERVER_ERROR`: `createPayment()` no reintenta (punto 35) |
-| 10 003 | `SLOW` | Espera `SIMULATOR_SLOW_RESPONSE_MS` (35 000 ms por omisión) y responde el `504` nativo | `GATEWAY_SERVER_ERROR`: el 0.3.0 no tiene límite por petición, así que espera el `504` |
+| 10 003 | `SLOW` | Espera `SIMULATOR_SLOW_RESPONSE_MS` (35 000 ms por omisión) y responde el `504` nativo | `GATEWAY_TIMEOUT` a los 30 s, el límite por petición del SDK por omisión (`timeoutMs`). Con una espera menor que el límite, el `504` llega como `GATEWAY_SERVER_ERROR` |
 | 10 004 | `MALFORMED_JSON` | `200` con un cuerpo que no es JSON | `MALFORMED_RESPONSE` |
 | 10 005 | `MALFORMED_BODY` | `200` con la forma nativa sin los campos que el normalizador necesita | `MALFORMED_RESPONSE`; en el PSE de Wompi, `RESOURCE_NOT_FOUND`, porque el sondeo de la URL pide `/transactions/undefined` |
-| 10 006 | `HTML_ERROR` | `502` con `text/html`, como la página de un proxy | Un `TypeError: Body is unusable` sin tipar, que `/v1/api` responde como `500` sin `code` |
+| 10 006 | `HTML_ERROR` | `502` con `text/html`, como la página de un proxy | `GATEWAY_SERVER_ERROR`. El SDK guarda el texto de la página en `originalPayload`, que `/v1/api` no expone |
 
-Las combinaciones de ruta y monto que responden `501` están al final de esta sección.
+Las combinaciones de ruta y monto que responden `501` están al final de esta sección, con su razón.
 
 Los montos de la consulta hacen que la creación salga bien y que falle el `GET` de estado, que es la operación que el SDK sí reintenta:
 
-| Monto (COP) | Lo que responde la consulta | Con el SDK 0.3.0 |
+| Monto (COP) | Lo que responde la consulta | Con el SDK 0.4.0 |
 |---|---|---|
 | 10 602 | `503` en las dos primeras consultas y la transacción en la tercera. El contador vuelve a cero al recuperarse, así que cada `getPaymentStatus()` muestra su propio reintento | `getPaymentStatus()` reintenta y termina con la transacción |
-| 10 600 | `500` en cada consulta | `GATEWAY_SERVER_ERROR` después de los reintentos |
-| 10 604 | `SLOW` en cada consulta | `GATEWAY_SERVER_ERROR`, por el `504` que llega al final de la espera |
+| 10 600 | `500` en cada consulta | `MAX_RETRIES_EXCEEDED` después de los reintentos, con el último `GATEWAY_SERVER_ERROR` en `cause` |
+| 10 604 | `SLOW` en cada consulta | `MAX_RETRIES_EXCEEDED` después de los reintentos. Con `maxRetries: 0`, `GATEWAY_TIMEOUT` (o `GATEWAY_SERVER_ERROR` si la espera es menor que el límite) |
 
 La primera consulta de un PSE de Wompi no falla aunque el monto lo pida: es la que hace el propio SDK dentro de `createPayment()` para obtener la URL del banco, y fallarla haría fallar la creación.
 
-**Con el SDK 0.4.0 de esta rama cambian varias filas.** Tiene un límite por petición, `timeoutMs`, de 30 000 ms por omisión, menor que la espera de `SLOW`; un servidor que no responde dentro del límite da `GATEWAY_TIMEOUT` (`sdk/src/infrastructure/facade/KitPagos.timeout.test.ts`). Un `502` con cuerpo HTML da `GATEWAY_SERVER_ERROR` con el texto en `originalPayload` (`KitPagos.http-errors.test.ts`). Y un fallo transitorio que persiste en todos los intentos da `MAX_RETRIES_EXCEEDED`, con el último error en `cause` (`RetryHandler.ts`). Esas pruebas corren contra un servidor HTTP propio, no contra el simulador; el recorrido contra el simulador es `examples/simulate-scenarios.ts` (sección 9).
-
-En la fila del 10 100 cambian dos casos:
-
-- **El PSE de Wompi** ya no devuelve una redirección: un estado final que llega con la URL sale como el cobro normalizado, `DECLINED` (`sdk/src/infrastructure/adapters/wompi-pse.ts`).
-- **El `402` del PSE de Mercado Pago** sale como un cobro `DECLINED`, con el id de la orden que trae `data`, y la consulta de esa orden también da `DECLINED` (`mercadopago-pse.ts` y `native-status.ts`). Un `402` sin la orden en `data` sigue llegando como `UNKNOWN_ERROR`.
-
-El `409` del 10 409 llega como `INVALID_REQUEST` (`ErrorHandler.ts`).
+El límite por petición, el `502` con HTML y `MAX_RETRIES_EXCEEDED` se prueban también contra un servidor HTTP propio, fuera del simulador: `sdk/src/infrastructure/facade/KitPagos.timeout.test.ts`, `KitPagos.http-errors.test.ts` y `RetryHandler.test.ts`. El recorrido completo contra el simulador, solo con el SDK, es `examples/simulate-scenarios.ts` (sección 9).
 
 ### Las marcas en la credencial
 
@@ -231,13 +224,13 @@ Una credencial que contiene `invalid`, `inexistente` o `not_found`, sin distingu
 | Wompi | `POST /transactions`: `401 INVALID_ACCESS_TOKEN "Llave no válida"`. `GET /merchants/{llave}`: `404 NOT_FOUND_ERROR`, con la marca leída de la ruta. `GET /transactions/:id`: `403` solo si la llave es privada (`prv_…`); con la pública responde `200`. `GET /pse/financial_institutions`: `200`, sin mirar la marca. `POST /tokens/cards`: `404 MERCHANT_NOT_FOUND` | `docs/testing-data/wompi.md`, sección 1.3 |
 | Mercado Pago | `POST /payments`: `401 "user not found"`. `GET /payments/:id`, `POST /orders` y `GET /orders/:id`: `401 "invalid access token"`. `GET /payment_methods`: `401 invalid_token` con el sobre `message`/`error`/`status`/`cause` | `docs/testing-data/mercado-pago.md`, sección 1.2 |
 | Kushki | Transferencias (`bankList`, `tokens`, `init`, `status`): `403` de AWS API Gateway, con `Message` en mayúscula y sin `code`. Tarjeta: `400 K004 "ID de comercio o credencial no válido"`, revisado antes que el cuerpo | `docs/testing-data/kushki.md`, sección 1.2 |
-| Rapyd | Todas las rutas de su API, salvo la página `/pagar` del simulador: `401 UNAUTHENTICATED_API_CALL`, con un `operation_id` nuevo en cada respuesta. `POST /payments` y `POST /customers` no se midieron y reciben el mismo cuerpo | `docs/testing-data/rapyd.md`, sección 1, «Credenciales inválidas» |
+| Rapyd | Todas las rutas de su API, salvo la página `/pay` del simulador: `401 UNAUTHENTICATED_API_CALL`, con un `operation_id` nuevo en cada respuesta. `POST /payments` y `POST /customers` no se midieron y reciben el mismo cuerpo | `docs/testing-data/rapyd.md`, sección 1, «Credenciales inválidas» |
 
-Que la llave lleve la marca en el texto es una convención del simulador: el sandbox real no tiene una llave de prueba que se rechace. Wompi responde la llave inexistente solo en las rutas que crean algo, así que un cobro de Wompi con la marca muere en `GET /merchants/{llave}`, que es la primera llamada del SDK. El SDK 0.3.0 reporta ese `404` como `RESOURCE_NOT_FOUND` y el `K004` de Kushki como `INVALID_REQUEST`; el 0.4.0 los reclasifica a `INVALID_CREDENTIALS` (`reclassifyWompiMerchantLookupError` en `wompi-pse.ts` y `reclassifyKushkiCredentialError` en `kushki-charge.ts`).
+Que la llave lleve la marca en el texto es una convención del simulador: el sandbox real no tiene una llave de prueba que se rechace. Wompi responde la llave inexistente solo en las rutas que crean algo, así que un cobro de Wompi con la marca muere en `GET /merchants/{llave}`, que es la primera llamada del SDK. El SDK reclasifica ese `404` y el `K004` de Kushki a `INVALID_CREDENTIALS` (`reclassifyWompiMerchantLookupError` en `wompi-pse.ts` y `reclassifyKushkiCredentialError` en `kushki-charge.ts`), así que por `/v1/api` llegan como `401 INVALID_CREDENTIALS` (`test/invalid-credentials.test.ts`).
 
 La lista de bancos de PSE no tiene monto ni datos de prueba, así que se controla también con la credencial. Con `sim_flapping` responde `503` dos veces y después la lista, y `getPseBanks()` termina bien; con `sim_server_error` responde `500` siempre. Las dos son convención del simulador (`bankListFailure()` en `technicalFailure.ts`).
 
-### Lo que todavía responde 501
+### Lo que responde 501, a propósito
 
 `ScenarioEngine.execute()` construye la transacción de Wompi según el escenario. Las otras tres pasarelas resuelven el escenario en su propio router.
 
@@ -271,7 +264,7 @@ La lista de bancos de PSE no tiene monto ni datos de prueba, así que se control
     }
 ```
 
-**Cualquier otro escenario lanza `UnsupportedScenarioError`, que el router traduce a un HTTP 501 Not Implemented.** Las otras tres pasarelas siguen la misma regla en cada ruta que crea un cobro: una falla técnica sale por `technicalFailure()`, un desenlace declarado por su destino, y cualquier otro escenario responde `501` sin guardar nada. El `501` sale igual si el escenario lo pidió la cabecera o un monto reservado. Estas combinaciones siguen en `501` porque no hay evidencia de cómo las responde la pasarela real:
+**Cualquier otro escenario lanza `UnsupportedScenarioError`, que el router traduce a un HTTP 501 Not Implemented.** Las otras tres pasarelas siguen la misma regla en cada ruta que crea un cobro: una falla técnica sale por `technicalFailure()`, un desenlace declarado por su destino, y cualquier otro escenario responde `501` sin guardar nada. El `501` sale igual si el escenario lo pidió la cabecera o un monto reservado. Estas combinaciones responden `501` porque no hay evidencia de cómo las responde la pasarela real, y son los límites declarados de RF-10: imitarlas sería inventar un comportamiento que ninguna medición respalda.
 
 | Ruta | Escenario | Por qué |
 |---|---|---|
@@ -354,7 +347,7 @@ stateDiagram-v2
 
 El PSE aprobado necesita dos consultas y la tarjeta solo una. Lo medido es que el aprobado también publica la URL y resuelve en la misma consulta; separarlos es una decisión del simulador (nivel 3, punto 43) que deja una ventana para ejercitar la redirección, la que el pagador necesita en el flujo real antes de que haya desenlace. Esa es también la diferencia con Rapyd, donde la página de pago sí es del simulador y por eso su visita puede representarse (siguiente diagrama).
 
-Que el rechazo llegue con la URL tiene una consecuencia para el comercio: un SDK que se detiene en cuanto ve la URL, sin mirar el estado, entrega una redirección hacia un pago ya rechazado (`docs/testing-data/wompi.md`, sección 3). Con el SDK 0.3.0, `POST /v1/api/payments` con el PSE de Wompi y el monto 10 100 responde `REDIRECT_REQUIRED` con `rawStatus: "DECLINED"` (`test/scenario-through-sdk.test.ts`). El simulador no lo esconde: es un hallazgo del SDK.
+Que el rechazo llegue con la URL tiene una consecuencia para el comercio: un SDK que se detiene en cuanto ve la URL, sin mirar el estado, entrega una redirección hacia un pago ya rechazado (`docs/testing-data/wompi.md`, sección 3). El SDK 0.3.x hacía exactamente eso. Desde la 0.4.0 solo trata como redirección un `PENDING` con URL, y `POST /v1/api/payments` con el PSE de Wompi y el monto 10 100 responde un cobro `DECLINED` (`test/scenario-through-sdk.test.ts`).
 
 Con el escenario `PENDING`, la transacción no resuelve: la tarjeta se queda `PENDING`, y el PSE publica la URL y después se queda `PENDING`. Es una decisión del simulador (nivel 3): el sandbox no tiene un banco ni una tarjeta que dejen el cobro pendiente.
 
@@ -530,11 +523,13 @@ Ninguna de las cuatro pasarelas publica un vector completo, con entradas, secret
 
 Un simulador que no declare en qué se aparta de la realidad es una trampa. Estos son los apartamientos conocidos:
 
-**El mock de Rapyd no verifica la firma HMAC de las peticiones entrantes.** Rapyd real rechaza cualquier petición mal firmada. Contra el simulador, un adaptador con la firma rota funciona igual, así que la corrección de esa firma **solo** la garantizan las pruebas unitarias con vectores independientes y las pruebas de contrato.
+**El mock de Rapyd no verificaba la firma de las peticiones.** Rapyd real rechaza cualquier petición mal firmada, y contra el simulador un adaptador con la firma rota funcionaba igual. Desde el punto 86, las rutas de la API de Rapyd verifican `access_key`, `salt`, `timestamp` y `signature` con los cuerpos, los códigos y el orden medidos el 7 de octubre de 2026 (`docs/testing-data/rapyd.md`, «La firma, el `timestamp` y el `salt`»): la ventana del `timestamp` va de 300 s atrás a 3 600 s adelante, y un `salt` ya aceptado se rechaza. La firma se calcula sobre el cuerpo tal como llegó. La página `/pay` no lleva firma, porque no es de la API de Rapyd.
 
 **`GET /charges/:ticketNumber` de Kushki no existe en Kushki real.** Se midió que responde `403` para cualquier identificador, igual que una ruta inventada. El simulador la implementa porque es la que permite mostrar el ciclo de vida completo de un cobro con tarjeta en un ejemplo ejecutable. Contra Kushki real, ese estado llega por webhook.
 
-**El simulador no exige la firma de integridad de Wompi.** Wompi real responde `422 "Firma de integridad requerida no enviada"`. Ese defecto vivió en el SDK sin que nadie lo notara justamente porque el simulador no la pedía (punto 44).
+**El simulador no exigía la firma de integridad de Wompi.** Wompi real responde `422 "Firma de integridad requerida no enviada"`, y ese defecto vivió en el SDK sin que nadie lo notara justamente porque el simulador no la pedía (punto 50). Desde el punto 86, `POST /v1/sim/wompi/transactions` la exige con los cuerpos y el orden medidos el 7 de octubre de 2026 (`docs/testing-data/wompi.md`, «Errores de firma»). Un `422` por firma gasta el token de aceptación, como en Wompi. El simulador no registra los tokens que entrega `GET /merchants`, así que acepta cualquier token que no haya gastado un `422`: qué responde Wompi ante un token que nunca emitió no está medido.
+
+**El simulador verifica las dos firmas como una sola cuenta de comercio** (decisión de Joan del 7 de octubre de 2026, punto 86). El secreto es el de su perfil (`WOMPI_INTEGRITY_SECRET` y `RAPYD_API_SECRET_KEY`, del `.env` de la raíz o del entorno). Sin perfil, usa los valores por omisión `test_integrity_kit_pagos_simulator` y `rapyd_secret_kit_pagos_simulator` (`src/auth/merchantSecrets.ts`). Un cliente que firme con otro secreto recibe el rechazo de firma, como lo recibiría con otra cuenta en la pasarela real. Los ejemplos de `examples/` resuelven el secreto con las mismas reglas (`examples/simulator-secrets.ts`).
 
 **El simulador no exigía `X-Idempotency-Key` en Mercado Pago.** Mercado Pago real responde `400`, y el SDK no la enviaba sin que el simulador lo notara (punto 48). Hoy el mock la exige en `POST /payments` y `POST /orders`, con el mensaje distinto que da cada API (`src/routes/mercadopago.ts`).
 
@@ -556,9 +551,9 @@ La convención de escenarios del issue #122 agrega sus propios apartamientos, ta
 
 El primer entregable de la Iteración 3 asigna cuatro partes a la API de Simulación:
 
-1. **Los escenarios de fallo:** rechazo, fondos insuficientes, timeout y error de red, para las cuatro pasarelas y no solo para Wompi (requisito RF-10). Implementados en el issue #122 con la convención de la sección 4, alcanzable desde el SDK sin cabeceras (punto 83). Quedan fuera las combinaciones que responden `501`, y los resultados que dependen del SDK 0.4.0 —`GATEWAY_TIMEOUT`, `MAX_RETRIES_EXCEEDED` y la página HTML tipada— todavía no se ven a través de `/v1/api`, que usa el 0.3.0 publicado.
+1. **Los escenarios de fallo:** rechazo, fondos insuficientes, timeout y error de red, para las cuatro pasarelas y no solo para Wompi (requisito RF-10). Implementados en el issue #122 con la convención de la sección 4, alcanzable desde el SDK sin cabeceras (punto 83). Las combinaciones que responden `501` quedan declaradas como límites, con su razón (sección 4). Desde que `/v1/api` usa el SDK 0.4.0, `GATEWAY_TIMEOUT`, `MAX_RETRIES_EXCEEDED` y el `GATEWAY_SERVER_ERROR` de la página HTML también se ven por REST.
 2. **Que el motor reciba la pasarela como parámetro** en vez de asumir Wompi.
-3. **El despliegue en la nube (completado):** desplegado oficialmente en Render como Web Service en [`https://kit-pagos-colombia.onrender.com`](https://kit-pagos-colombia.onrender.com). La infraestructura está codificada en `render.yaml` (Blueprint / IaC) en la raíz del repositorio, configurada para compilar e iniciar Fastify sobre Node 20 en el puerto dinámico de Render (`10000`), con healthcheck nativo en `/health` y hook de despliegue automatizado (`RENDER_DEPLOY_HOOK_URL`). El servicio consume el paquete oficial publicado en npm (`kit-pagos-colombia@^0.3.0`, según `simulator-api/package.json`), asegurando que la simulación opere como un consumidor real desacoplado del árbol local del monorepo (punto 79 del `architecture-log.md`).
+3. **El despliegue en la nube (completado):** desplegado oficialmente en Render como Web Service en [`https://kit-pagos-colombia.onrender.com`](https://kit-pagos-colombia.onrender.com). La infraestructura está codificada en `render.yaml` (Blueprint / IaC) en la raíz del repositorio, configurada para compilar e iniciar Fastify sobre Node 20 en el puerto dinámico de Render (`10000`), con healthcheck nativo en `/health` y hook de despliegue automatizado (`RENDER_DEPLOY_HOOK_URL`). El servicio consume el paquete oficial publicado en npm (`kit-pagos-colombia@^0.4.0`, según `simulator-api/package.json`), asegurando que la simulación opere como un consumidor real desacoplado del árbol local del monorepo (punto 79 del `architecture-log.md`).
 4. **La colección Postman versionada:** pospuesta de mutuo acuerdo para consolidarse una vez se cierren los endpoints y escenarios de fallo restantes de la Iteración 3, evitando mantener especificaciones desfasadas mientras la superficie REST evoluciona.
 
 **El punto 1 bloqueaba a los prototipos**, y por eso el orden dentro de la iteración no es libre. Una de las seis variables que mide el experimento de la Fase 5 es si el prototipo distingue un rechazo de negocio de un fallo técnico y reintenta solo el segundo. Contra un simulador que solo sabía aprobar, eso no se podía implementar ni medir; con la convención de la sección 4, un prototipo provoca esos casos con el monto o la credencial, sin código propio de prueba. La secuencia sigue siendo **escenarios → prototipos → métricas**.
@@ -575,7 +570,7 @@ Hay una pregunta sin resolver sobre el futuro de este componente, y está regist
 
 **C. Híbrido:** el mock por defecto, con un modo de paso directo por pasarela.
 
-Y un dato que conviene tener antes de decidir: **el SDK ya habla con los sandboxes reales sin pasar por el simulador.** El campo `baseUrl` admite un mapa por pasarela desde el punto 57, y las 18 pruebas de contrato lo hacen hoy. Si lo que se busca es que los prototipos corran contra comportamiento real, se apunta `baseUrl` al sandbox y listo.
+Y un dato que conviene tener antes de decidir: **el SDK ya habla con los sandboxes reales sin pasar por el simulador.** El campo `baseUrl` admite un mapa por pasarela desde el punto 57, y las pruebas de contrato lo hacen hoy. Si lo que se busca es que los prototipos corran contra comportamiento real, se apunta `baseUrl` al sandbox y listo.
 
 Eso reformula la pregunta: no es "¿cómo hacemos el simulador más real?" sino **"¿qué gana el simulador siendo proxy que no se consiga apuntando el SDK al sandbox?"**, que es bastante más fácil de responder.
 
@@ -591,7 +586,7 @@ cd simulator-api && npm install && npm run dev
 curl http://localhost:3000/health
 ```
 
-Las suites de prueba (38 suites con 970 pruebas en total, contadas el 7 de octubre de 2026 sobre la rama del issue #122 antes de su commit) corren con `npm test` y no necesitan que el servidor esté levantado, porque usan `app.inject()`.
+Las suites de prueba (40 suites con 1007 pruebas en total, contadas el 8 de octubre de 2026 sobre la rama del issue #130 antes de su commit) corren con `npm test` y no necesitan que el servidor esté levantado, porque usan `app.inject()`.
 
 Las variables que cambian el comportamiento de la convención de escenarios y de los webhooks:
 

@@ -34,6 +34,7 @@ import {
   type CreatePaymentRequest,
   type SDKOptions,
 } from "kit-pagos-colombia";
+import { RAPYD_SECRET_KEY, WOMPI_INTEGRITY_SECRET } from "./simulator-secrets";
 import { KitPagosBrowser, Gateway as BrowserGateway } from "kit-pagos-colombia/browser";
 
 /** El límite por petición de los casos de espera. Corto para que el recorrido sea rápido. */
@@ -44,13 +45,14 @@ type GatewayCredentials = { publicKey: string; privateKey: string; integritySecr
 /**
  * Credenciales ficticias que el simulador acepta. Las de los casos de credencial
  * inválida y de lista de bancos se derivan de estas agregando la marca que el
- * simulador reconoce (`invalid`, `sim_flapping`, `sim_server_error`).
+ * simulador reconoce (`invalid`, `sim_flapping`, `sim_server_error`). Los dos
+ * secretos que firman son los de la cuenta del simulador (`simulator-secrets.ts`).
  */
 const VALID_CREDENTIALS: Record<Gateway, GatewayCredentials> = {
   [Gateway.WOMPI]: {
     publicKey: "pub_test_escenarios",
     privateKey: "prv_test_escenarios",
-    integritySecret: "test_integrity_escenarios",
+    integritySecret: WOMPI_INTEGRITY_SECRET,
   },
   [Gateway.MERCADOPAGO]: {
     publicKey: "APP_USR_pub_escenarios",
@@ -62,7 +64,7 @@ const VALID_CREDENTIALS: Record<Gateway, GatewayCredentials> = {
   },
   [Gateway.RAPYD]: {
     publicKey: "rapyd_access_escenarios",
-    privateKey: "rapyd_secret_escenarios",
+    privateKey: RAPYD_SECRET_KEY,
   },
 };
 

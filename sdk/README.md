@@ -87,8 +87,8 @@ const sdk = new KitPagos({
       webhookSecret: process.env.KUSHKI_WEBHOOK_SECRET,
     },
     [Gateway.RAPYD]: {
-      publicKey: process.env.RAPYD_ACCESS_KEY!,
-      privateKey: process.env.RAPYD_SECRET_KEY!,
+      publicKey: process.env.RAPYD_API_ACCESS_KEY!,
+      privateKey: process.env.RAPYD_API_SECRET_KEY!,
       // Rapyd es la única que firma sus webhooks con la misma llave de la API,
       // así que aquí `webhookSecret` no hace falta.
     },
@@ -294,6 +294,8 @@ async function verificarEstado(transactionId: string) {
   }
 }
 ```
+
+`rejectionReason` solo existe cuando el estado es `DECLINED`. `rejectionCode` es el código nativo tal como lo envía la pasarela: el `status_detail` en Mercado Pago, el `failure_code` en Rapyd y el `responseCode` en Kushki. Wompi no envía un código de rechazo, así que en Wompi `rejectionReason` queda vacío. `rejectionCategory` es una categoría normalizada solo cuando hay una fuente para la correspondencia; en los demás casos es `UNKNOWN`, y conviene decidir con el código nativo.
 
 `getPaymentStatus()` y `getPseBanks()` se reintentan solos ante fallos transitorios
 (`CONNECTION_FAILED`, `GATEWAY_TIMEOUT`, `GATEWAY_SERVER_ERROR`, `RATE_LIMIT_EXCEEDED`), hasta
