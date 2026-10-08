@@ -36,6 +36,7 @@ import {
   KitPagosErrorCode,
   type SDKOptions,
 } from "kit-pagos-colombia";
+import { WOMPI_INTEGRITY_SECRET } from "./simulator-secrets";
 
 /** Raíz de la API de Wompi en el simulador, no el endpoint de transacciones. */
 const SIMULATOR_WOMPI_URL = "http://localhost:3000/v1/sim/wompi";
@@ -49,9 +50,9 @@ const options: SDKOptions = {
       privateKey: "prv_test_ejemplo_no_real",
       // Wompi firma cada transacción con este secreto. Es distinto del secreto
       // de eventos con el que se validan los webhooks: uno firma lo que sale, el
-      // otro valida lo que entra. El simulador no las valida, pero el dato viaja
-      // por el mismo camino que uno real.
-      integritySecret: "test_integrity_ejemplo_no_real",
+      // otro valida lo que entra. El simulador verifica la firma con el secreto
+      // de su cuenta, así que este valor sale de `simulator-secrets.ts`.
+      integritySecret: WOMPI_INTEGRITY_SECRET,
     },
   },
   baseUrl: SIMULATOR_WOMPI_URL,

@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { buildApp } from "../src/app";
+import { buildSignedApp as buildApp } from "./helpers/signedRequests";
 import { resetSimulatorState } from "../src/store/GatewayStores";
 
 /**

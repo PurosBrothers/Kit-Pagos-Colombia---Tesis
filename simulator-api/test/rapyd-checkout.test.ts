@@ -1,4 +1,4 @@
-import { buildApp } from "../src/app";
+import { buildSignedApp as buildApp } from "./helpers/signedRequests";
 
 /**
  * Página de pago alojada de Rapyd: el camino de tarjeta.
@@ -61,7 +61,7 @@ describe("Rapyd payment page", () => {
       const { id, redirect_url } = response.json().data;
 
       expect(redirect_url).toBe(
-        `http://simulator.example.com:8443/v1/sim/rapyd/checkout/${id}/pagar`,
+        `http://simulator.example.com:8443/v1/sim/rapyd/checkout/${id}/pay`,
       );
 
       await app.close();
@@ -78,7 +78,7 @@ describe("Rapyd payment page", () => {
       });
       const { id, redirect_url } = response.json().data;
 
-      expect(redirect_url).toBe(`https://kit-pagos-colombia.onrender.com/v1/sim/rapyd/checkout/${id}/pagar`);
+      expect(redirect_url).toBe(`https://kit-pagos-colombia.onrender.com/v1/sim/rapyd/checkout/${id}/pay`);
 
       await app.close();
     });
@@ -127,6 +127,22 @@ describe("Rapyd payment page", () => {
         expect(response.statusCode).toBe(400);
         expect(response.json().status.error_code).toBe("MISSING_REQUIRED_FIELD");
       }
+
+      await app.close();
+    });
+  });
+
+  describe("GET /v1/sim/rapyd/checkout/:checkoutId/pagar (the old Spanish route)", () => {
+    it("answers 308 to /pay without paying the page", async () => {
+      const app = buildApp();
+      const { data } = await createCheckout(app);
+
+      const old = await app.inject({ method: "GET", url: `/v1/sim/rapyd/checkout/${data.id}/pagar` });
+      const page = await app.inject({ method: "GET", url: `/v1/sim/rapyd/checkout/${data.id}` });
+
+      expect(old.statusCode).toBe(308);
+      expect(old.headers.location).toBe(`/v1/sim/rapyd/checkout/${data.id}/pay`);
+      expect(page.json().data.status).toBe("NEW");
 
       await app.close();
     });

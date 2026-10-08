@@ -1,8 +1,5 @@
-import Fastify, { FastifyInstance } from "fastify";
-import { wompiRoutes } from "../src/routes/wompi";
-import { mercadopagoRoutes } from "../src/routes/mercadopago";
-import { rapydRoutes } from "../src/routes/rapyd";
-import { kushkiRoutes } from "../src/routes/kushki";
+import { FastifyInstance } from "fastify";
+import { buildSignedApp } from "./helpers/signedRequests";
 
 /**
  * Endpoints que PSE agrego a las cuatro pasarelas: la lista de bancos en las cuatro,
@@ -15,11 +12,9 @@ describe("PSE in the four gateways", () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    app = Fastify();
-    await app.register(wompiRoutes);
-    await app.register(mercadopagoRoutes);
-    await app.register(rapydRoutes);
-    await app.register(kushkiRoutes);
+    // La app completa y no las cuatro rutas sueltas: las de Wompi y Rapyd verifican la firma
+    // con el `credentialResolver` que decora `buildApp()` (punto 86).
+    app = buildSignedApp();
     await app.ready();
   });
 

@@ -63,6 +63,7 @@ import {
   type PseBank,
   type Transaction,
 } from "kit-pagos-colombia";
+import { RAPYD_SECRET_KEY, WOMPI_INTEGRITY_SECRET } from "./simulator-secrets";
 
 // ---------------------------------------------------------------------------
 // El espía de red
@@ -324,12 +325,16 @@ const SIMULATOR_ENDPOINTS: Record<Gateway, string> = {
  * Que Wompi necesite un tercer valor y las otras tres no es parte de lo que la
  * demo deja ver: **las credenciales sí cambian entre pasarelas, y el código del
  * pago no.** Lo que el SDK unifica es el cobro, no la cuenta que hay que abrir.
+ *
+ * Los dos secretos que firman (el de integridad de Wompi y el `secret_key` de
+ * Rapyd) son los de la cuenta del simulador, que verifica las firmas
+ * (`simulator-secrets.ts`).
  */
 const CREDENTIALS: SDKOptions["credentials"] = {
   [Gateway.WOMPI]: {
     publicKey: "pub_test_demo_no_real",
     privateKey: "prv_test_demo_no_real",
-    integritySecret: "test_integrity_demo_no_real",
+    integritySecret: WOMPI_INTEGRITY_SECRET,
   },
   [Gateway.MERCADOPAGO]: {
     publicKey: "APP_USR_public_demo_no_real",
@@ -341,7 +346,7 @@ const CREDENTIALS: SDKOptions["credentials"] = {
   },
   [Gateway.RAPYD]: {
     publicKey: "rapyd_access_key_demo_no_real",
-    privateKey: "rapyd_secret_key_demo_no_real",
+    privateKey: RAPYD_SECRET_KEY,
   },
 };
 

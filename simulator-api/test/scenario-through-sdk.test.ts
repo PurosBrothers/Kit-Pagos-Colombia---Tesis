@@ -12,9 +12,8 @@ import { resetSimulatorState } from "../src/store/GatewayStores";
  * código de `KitPagosErrorCode` que llega a `POST /v1/api/payments` y a
  * `GET /v1/api/payments/:id`, producido por el SDK instalado.
  *
- * Fuera de este archivo, a propósito: `GATEWAY_TIMEOUT` por un límite de tiempo del cliente
- * y un `MAX_RETRIES_EXCEEDED` lanzado por `RetryHandler`. Los dos dependen de una versión
- * del SDK que todavía no está publicada.
+ * Fuera de este archivo, a propósito: `GATEWAY_TIMEOUT` por el límite de tiempo del cliente,
+ * que se prueba contra un servidor propio en `sdk/src/infrastructure/facade/KitPagos.timeout.test.ts`.
  */
 
 /** Sin `...process.env`, por la misma razón que en `payments.test.ts`. */
@@ -35,61 +34,6 @@ const RETRY_TIMEOUT_MS = 15000;
 
 let app: FastifyInstance;
 const testEnv: Record<string, string | undefined> = { ...SERVER_CREDENTIALS };
-
-/*
- * Jest corre cada archivo en su propio contexto de `vm`, y el `fetch` de Node no: los
- * errores que lanza —el `TypeError: fetch failed` del socket cerrado y el `SyntaxError` de
- * `response.json()`— son instancias del `Error` de otro contexto. El `ErrorHandler` del SDK
- * pregunta `rawError instanceof Error`, la respuesta es `false` y el fallo termina en
- * `UNKNOWN_ERROR`. Fuera de Jest, la misma petición llega como `CONNECTION_FAILED` y
- * `MALFORMED_RESPONSE` (comprobado con `ts-node` el 6 de octubre de 2026). Este envoltorio
- * solo vuelve a lanzar esos errores con las clases de este contexto; no cambia qué falla.
- */
-const nativeFetch = globalThis.fetch;
-
-function sameRealm(error: unknown, ErrorClass: typeof TypeError | typeof SyntaxError): unknown {
-  if (error instanceof Error || typeof error !== "object" || error === null) {
-    return error;
-  }
-  return new ErrorClass((error as { message?: string }).message ?? String(error));
-}
-
-beforeAll(() => {
-  globalThis.fetch = async (...args: Parameters<typeof fetch>) => {
-    let response: Response;
-    try {
-      response = await nativeFetch(...args);
-    } catch (error) {
-      throw sameRealm(error, TypeError);
-    }
-    const parse = response.json.bind(response);
-    Object.defineProperty(response, "json", {
-      value: async () => {
-        try {
-          return await parse();
-        } catch (error) {
-          throw sameRealm(error, SyntaxError);
-        }
-      },
-    });
-    // `text()` sobre un cuerpo que `json()` ya consumió lanza `TypeError: Body is unusable`.
-    const read = response.text.bind(response);
-    Object.defineProperty(response, "text", {
-      value: async () => {
-        try {
-          return await read();
-        } catch (error) {
-          throw sameRealm(error, TypeError);
-        }
-      },
-    });
-    return response;
-  };
-});
-
-afterAll(() => {
-  globalThis.fetch = nativeFetch;
-});
 
 beforeAll(async () => {
   const credentialResolver = new CredentialResolver(testEnv);
@@ -283,9 +227,8 @@ describe("POST /v1/api/payments with a reserved amount and no scenario header", 
   });
 
   /*
-   * Wompi publica la URL del banco junto con el rechazo (medido el 6 de octubre de 2026), y el
-   * SDK instalado la toma como una redirección sin mirar el estado. Es un hallazgo del SDK; el
-   * simulador no lo esconde.
+   * Wompi publica la URL del banco junto con el rechazo (medido el 6 de octubre de 2026). Desde
+   * la 0.4.0, el SDK mira el estado y solo trata como redirección un `PENDING` con URL.
    */
   it("wompi pse: 10100 (DECLINED) arrives as a DECLINED transaction", async () => {
     const res = await pay("wompi pse", 10100);
@@ -323,7 +266,7 @@ describe("POST /v1/api/payments with a reserved amount and no scenario header", 
 
   /*
    * Las rutas que no saben producir el desenlace conservan su `501`, igual que con la
-   * cabecera, y el SDK 0.3 lo traduce como cualquier 5xx.
+   * cabecera, y el SDK lo traduce como cualquier 5xx.
    */
   it.each([
     ["rapyd card", 10102],
@@ -392,12 +335,16 @@ describe("GET /v1/api/pse-banks with a marked credential", () => {
   it.each(["wompi", "mercadopago", "rapyd", "kushki"])(
     "%s: sim_flapping fails twice and RetryHandler ends with the list",
     async (gateway) => {
+      // En Rapyd la llave privada es el `secret_key` con que el SDK firma, y el simulador
+      // verifica con el de su perfil (punto 86): la marca va solo en la llave pública.
+      const privateKey =
+        gateway === "rapyd" ? SERVER_CREDENTIALS.RAPYD_API_SECRET_KEY : "prv_test_sim_flapping";
       const res = await app.inject({
         method: "GET",
         url: `/v1/api/pse-banks?gateway=${gateway}`,
         headers: {
           "x-gateway-public-key": "pub_test_sim_flapping",
-          "x-gateway-private-key": "prv_test_sim_flapping",
+          "x-gateway-private-key": privateKey,
         },
       });
 

@@ -1,4 +1,4 @@
-import { buildApp } from "../src/app";
+import { buildSignedApp as buildApp } from "./helpers/signedRequests";
 import { CredentialResolver } from "../src/auth/CredentialResolver";
 import { KitPagosProvider } from "../src/services/KitPagosProvider";
 import { ScenarioEngine } from "../src/scenarios/ScenarioEngine";

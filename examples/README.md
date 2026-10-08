@@ -20,13 +20,24 @@ npm run build
 ```
 
 ### 2. Levantar la API de Simulación
-Los ejemplos realizan peticiones HTTP reales contra los mocks locales en el puerto 3000. Déjala corriendo en una terminal:
+Los ejemplos realizan peticiones HTTP reales contra los mocks locales en el puerto 3000. Déjela corriendo en una terminal:
 
 ```bash
 cd simulator-api
 npm install
 npm run dev
 ```
+
+### 3. Los secretos con los que firman los ejemplos
+
+La API de Simulación verifica la firma de integridad de Wompi y la firma de cada petición de Rapyd como una sola cuenta de comercio (punto 86 del `architecture-log.md`): con el secreto de su perfil, que lee del `.env` de la raíz y del entorno, o, si no tiene perfil, con un valor por omisión. Los ejemplos resuelven el mismo secreto con las mismas reglas (`simulator-secrets.ts`), así que no hay que configurar nada para correrlos contra el simulador local.
+
+| Pasarela | Secreto del perfil | Se usa si también está | Valor por omisión |
+|---|---|---|---|
+| Wompi | `WOMPI_INTEGRITY_SECRET` | `WOMPI_PUBLIC_KEY` y `WOMPI_PRIVATE_KEY` | `test_integrity_kit_pagos_simulator` |
+| Rapyd | `RAPYD_API_SECRET_KEY` | `RAPYD_API_ACCESS_KEY` | `rapyd_secret_kit_pagos_simulator` |
+
+Contra un simulador desplegado en otra máquina, exporte en la terminal los secretos de ese despliegue: el entorno gana sobre el `.env`. Con otro secreto, el simulador rechaza el cobro como lo haría la pasarela real con otra cuenta: `422 "La firma es inválida"` en Wompi y `401 UNAUTHENTICATED_API_CALL` en Rapyd.
 
 ---
 
