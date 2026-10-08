@@ -6,7 +6,7 @@ import { KushkiResponseNormalizer } from "./KushkiResponseNormalizer";
  * campos que el SDK lee. Medida el 19 de septiembre de 2026 contra
  * api-uat.kushkipagos.com con la tarjeta de prueba 4242 4242 4242 4242.
  */
-const respuestaRealDeCobro = {
+const realChargeResponse = {
   details: {
     transactionStatus: "APPROVAL",
     trackingCode: "ord-12345",
@@ -25,11 +25,11 @@ const respuestaRealDeCobro = {
 
 describe("kushki-card", () => {
   describe("isKushkiFullResponseCharge", () => {
-    it("reconoce el cobro con fullResponse por su objeto details", () => {
-      expect(isKushkiFullResponseCharge(respuestaRealDeCobro)).toBe(true);
+    it("recognizes the fullResponse charge by its details object", () => {
+      expect(isKushkiFullResponseCharge(realChargeResponse)).toBe(true);
     });
 
-    it("no confunde un cobro sin fullResponse, que no trae details", () => {
+    it("does not mistake a charge without fullResponse, which has no details", () => {
       expect(
         isKushkiFullResponseCharge({
           ticketNumber: "713915823527394740",
@@ -38,7 +38,7 @@ describe("kushki-card", () => {
       ).toBe(false);
     });
 
-    it("no confunde la forma plana que sirve el simulador", () => {
+    it("does not mistake the flat shape served by the simulator", () => {
       expect(
         isKushkiFullResponseCharge({
           ticketNumber: "kushki-mock-tx-123",
@@ -48,7 +48,7 @@ describe("kushki-card", () => {
       ).toBe(false);
     });
 
-    it("no se deja engañar por un details que no es objeto", () => {
+    it("is not fooled by a details that is not an object", () => {
       expect(isKushkiFullResponseCharge({ details: "APPROVAL" })).toBe(false);
       expect(isKushkiFullResponseCharge({ details: null })).toBe(false);
       expect(isKushkiFullResponseCharge({ details: ["APPROVAL"] })).toBe(false);
@@ -56,14 +56,14 @@ describe("kushki-card", () => {
   });
 
   describe("flattenKushkiCharge", () => {
-    it("saca el estado de details y lo pone donde el normalizador lo busca", () => {
-      expect(flattenKushkiCharge(respuestaRealDeCobro).transaction_status).toBe(
+    it("takes the status out of details and puts it where the normalizer looks for it", () => {
+      expect(flattenKushkiCharge(realChargeResponse).transaction_status).toBe(
         "APPROVAL",
       );
     });
 
-    it("rearma el objeto amount con los cuatro componentes", () => {
-      expect(flattenKushkiCharge(respuestaRealDeCobro).amount).toEqual({
+    it("rebuilds the amount object with the four components", () => {
+      expect(flattenKushkiCharge(realChargeResponse).amount).toEqual({
         subtotalIva0: 50000,
         subtotalIva: 0,
         iva: 0,
@@ -72,16 +72,16 @@ describe("kushki-card", () => {
       });
     });
 
-    it("conserva el ticketNumber de la raíz, que es el identificador del cobro", () => {
-      expect(flattenKushkiCharge(respuestaRealDeCobro).ticketNumber).toBe(
+    it("keeps the root ticketNumber, which is the charge identifier", () => {
+      expect(flattenKushkiCharge(realChargeResponse).ticketNumber).toBe(
         "978471849144483984",
       );
     });
 
-    it("usa COP cuando la respuesta no trae divisa, en vez de fallar", () => {
-      const aplanada = flattenKushkiCharge({ details: {}, ticketNumber: "1" });
+    it("uses COP when the response has no currency, instead of failing", () => {
+      const flattened = flattenKushkiCharge({ details: {}, ticketNumber: "1" });
 
-      expect((aplanada.amount as Record<string, unknown>).currency).toBe("COP");
+      expect((flattened.amount as Record<string, unknown>).currency).toBe("COP");
     });
   });
 
@@ -90,10 +90,10 @@ describe("kushki-card", () => {
    * producir una Transaction. Antes de medir, esta misma respuesta fallaba con
    * `MALFORMED_RESPONSE: missing amount`.
    */
-  describe("normalización de punta a punta", () => {
-    it("convierte la respuesta real de un cobro aprobado en una Transaction", () => {
+  describe("end-to-end normalization", () => {
+    it("turns the real response of an approved charge into a Transaction", () => {
       const transaction = new KushkiResponseNormalizer().normalize(
-        respuestaRealDeCobro,
+        realChargeResponse,
       );
 
       expect(transaction.getStatus()).toBe("APPROVED");
@@ -104,11 +104,11 @@ describe("kushki-card", () => {
       expect(transaction.payer.email).toBe("comprador@example.com");
     });
 
-    it("traduce un rechazo del emisor a DECLINED", () => {
+    it("maps an issuer rejection to DECLINED", () => {
       const transaction = new KushkiResponseNormalizer().normalize(
         {
-          ...respuestaRealDeCobro,
-          details: { ...respuestaRealDeCobro.details, transactionStatus: "DECLINED" },
+          ...realChargeResponse,
+          details: { ...realChargeResponse.details, transactionStatus: "DECLINED" },
         },
       );
 

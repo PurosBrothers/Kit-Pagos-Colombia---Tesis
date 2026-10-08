@@ -2,8 +2,8 @@ import { buildApp } from "../src/app";
 import { Gateway } from "kit-pagos-colombia";
 import { CredentialResolver } from "../src/auth/CredentialResolver";
 
-describe("Integración general en buildApp()", () => {
-  it("decora la instancia de Fastify con credentialResolver y kitPagosProvider", async () => {
+describe("General integration in buildApp()", () => {
+  it("decorates the Fastify instance with credentialResolver and kitPagosProvider", async () => {
     const app = buildApp({ logger: false });
 
     expect(app.credentialResolver).toBeDefined();
@@ -12,7 +12,7 @@ describe("Integración general en buildApp()", () => {
     await app.close();
   });
 
-  it("responde 401 si un handler lanza MissingCredentialsError", async () => {
+  it("answers 401 if a handler throws MissingCredentialsError", async () => {
     // Resolver sin credenciales configuradas
     const emptyResolver = new CredentialResolver({});
     const app = buildApp({
@@ -43,7 +43,7 @@ describe("Integración general en buildApp()", () => {
     await app.close();
   });
 
-  it("permite el acceso sin token a /health y a rutas mock /v1/sim/* aun con auth activa", async () => {
+  it("allows access without a token to /health and to the /v1/sim/* mock routes even with auth enabled", async () => {
     const app = buildApp({
       logger: false,
       authOptions: {

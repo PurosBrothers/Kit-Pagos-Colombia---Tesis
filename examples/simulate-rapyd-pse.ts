@@ -19,7 +19,7 @@
  *
  * En Rapyd PSE no es un método con un campo de banco: son **47 métodos de pago
  * distintos**, uno por entidad, con el patrón `co_pse_{banco}_bank`. Por eso el
- * `bankCode` que recibe `PaymentMethod.pse()` acá es `"co_pse_bancolombia_bank"` y no
+ * `bankCode` que recibe `PaymentMethod.pse()` aquí es `"co_pse_bancolombia_bank"` y no
  * un número. El ejemplo lo saca de `getPseBanks()` en vez de escribirlo, que es la
  * única forma en que un comercio puede conocerlo sin leer la documentación de Rapyd.
  *
@@ -155,14 +155,14 @@ main().catch((error: unknown) => {
     error.code === KitPagosErrorCode.CONNECTION_FAILED
   ) {
     console.error("\nNo se pudo conectar con la API de Simulación.");
-    console.error("Levantala en otra terminal y volvé a correr el ejemplo:\n");
+    console.error("Levántela en otra terminal y vuelva a ejecutar el ejemplo:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }
 
   /**
    * Los datos que faltan se detectan antes de cualquier petición, así que este error
-   * llega sin haber creado nada en Rapyd. Es la diferencia entre enterarse acá y
+   * llega sin haber creado nada en Rapyd. Es la diferencia entre enterarse aquí y
    * enterarse después de haber dejado un cliente huérfano.
    */
   if (

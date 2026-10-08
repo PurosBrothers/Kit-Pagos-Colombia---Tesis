@@ -5,6 +5,13 @@ import {
   ScenarioEngine,
   UnsupportedScenarioError,
 } from "../scenarios/ScenarioEngine";
+import { resolveScenario, wholePesosFromCents } from "../scenarios/scenarioFromRequest";
+import { bankListFailure, queryFailure, technicalFailure } from "../scenarios/technicalFailure";
+import {
+  hasInvalidCredentialMarker,
+  invalidCredentialIn,
+  invalidCredentialRequested,
+} from "../scenarios/invalidCredential";
 import { GatewayMockFactory } from "../gateways/wompi/GatewayMockFactory";
 import {
   WompiCreateTransactionRequestBody,
@@ -12,12 +19,96 @@ import {
 } from "../gateways/wompi/types";
 import { rememberScenarioTarget } from "../state/scenarioTarget";
 import { wompiStateMachine } from "../state/wompiStateMachine";
+import { rememberBankRedirectOrigin, requestOrigin } from "../store/BankRedirectOrigins";
 import { wompiTransactions } from "../store/GatewayStores";
+import { cardTokenOutcomeFor, rememberCardTokenOutcome } from "../store/CardTokenOutcomes";
 import {
   hasDuplicateMark,
   markDuplicate,
   nextFlappingAttempt,
+  rememberQueryFailure,
 } from "../store/ScenarioMarks";
+
+/**
+ * La tarjeta de prueba que el sandbox de Wompi declina. Nivel 1, medido el 6 de octubre de
+ * 2026 (`docs/testing-data/wompi.md`, sección 1.3): nace `PENDING` y la consulta la muestra
+ * `DECLINED`; el `status_message` lo pone `wompiStateMachine.ts`.
+ */
+const DECLINING_TEST_CARD = "4111111111111111";
+
+/** El patrón que Wompi exige al número de tarjeta, tal como lo cita en su `422`. */
+const CARD_NUMBER_PATTERN = /^\d{12,19}$/;
+
+/** El algoritmo de Luhn sobre un número que ya pasó `CARD_NUMBER_PATTERN`. */
+function passesLuhn(digits: string): boolean {
+  let sum = 0;
+  for (let index = 0; index < digits.length; index++) {
+    let digit = Number(digits[digits.length - 1 - index]);
+    if (index % 2 === 1) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+  }
+  return sum % 10 === 0;
+}
+
+/*
+ * Credencial inválida. Nivel 1 — medido contra `sandbox.wompi.co` el 6 de octubre de 2026
+ * (`docs/testing-data/wompi.md`, sección 1.3), con una llave privada inexistente y, aparte,
+ * con una pública inexistente («Con una llave pública inexistente»), que es la que el SDK manda
+ * en todas las rutas de Wompi.
+ *
+ * - `POST /transactions` con cuerpo válido: `401` con este cuerpo, con las dos llaves. Con
+ *   cuerpo `{}` respondió `422`: Wompi valida el cuerpo antes que la llave, y la ruta conserva
+ *   ese orden.
+ * - `GET /transactions/{id}`: `403`, con otro `reason`, solo con la llave **privada**
+ *   inexistente. Con la pública inexistente, sin `Authorization` o con una llave válida
+ *   responde `200` con la transacción.
+ * - `GET /merchants/{llave}` con la pública inexistente: `404`, también sin `Authorization`.
+ * - `GET /pse/financial_institutions`: `200` con las dos llaves inexistentes; la ruta no mira
+ *   la marca.
+ *
+ * No se imita la variante cuyo `reason` repite la llave recibida (la llave `garbage`), para no
+ * devolver una credencial en una respuesta.
+ */
+const INVALID_KEY_ON_CREATE = {
+  error: { type: "INVALID_ACCESS_TOKEN", reason: "Llave no válida" },
+} as const;
+
+const INVALID_KEY_ON_QUERY = {
+  error: { type: "INVALID_ACCESS_TOKEN", reason: "El token no tiene suficientes permisos" },
+} as const;
+
+/** Nivel 1 — medido el 5 y el 6 de octubre de 2026: transacción o comercio inexistente. */
+const NOT_FOUND = {
+  error: { type: "NOT_FOUND_ERROR", reason: "La entidad solicitada no existe" },
+} as const;
+
+/** La página de `GET /v1/sim/wompi/pse/redirect`. La lee una persona, así que va en español. */
+const PSE_REDIRECT_PAGE =
+  '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
+  "<title>Redirección simulada al banco (PSE)</title></head><body>" +
+  "<h1>Redirección simulada al banco</h1>" +
+  "<p>Esta página es de la API de Simulación de Kit Pagos Colombia. No es de Wompi ni de " +
+  "un banco, y no imita la página real del banco.</p>" +
+  "<p>El resultado del pago quedó decidido al crear la transacción. " +
+  "Consulte la transacción para conocerlo.</p></body></html>";
+
+/** La página de `GET /v1/sim/wompi/terms`. La lee una persona, así que va en español. */
+const TERMS_PAGE =
+  '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
+  "<title>Términos de aceptación simulados</title></head><body>" +
+  "<h1>Términos de aceptación simulados</h1>" +
+  "<p>Esta página es de la API de Simulación de Kit Pagos Colombia: no son los términos de " +
+  "Wompi.</p>" +
+  "<p>En producción, el comercio debe mostrarle al pagador el <code>permalink</code> real " +
+  "que entrega Wompi en <code>presigned_acceptance</code>.</p></body></html>";
+
+/** Si la petición llega con una llave privada (`Bearer prv_…`). */
+function sendsPrivateKey(request: FastifyRequest): boolean {
+  return request.headers.authorization?.startsWith("Bearer prv_") ?? false;
+}
 
 /**
  * Wompi HTTP router (issue #55).
@@ -52,12 +143,6 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/v1/sim/wompi/transactions",
     async (request: FastifyRequest, reply: FastifyReply) => {
-      // Fastify types headers as string | string[] | undefined, hence the
-      // array check. In practice that branch is never reached over HTTP: the
-      // Node parser collapses a repeated header into a single comma-separated
-      // string and only returns an array for set-cookie. Kept to satisfy the
-      // type, not because it describes a real case.
-      let scenario = getSimulatorScenario(request);
       const requestBody = request.body as WompiCreateTransactionRequestBody;
 
       /*
@@ -78,29 +163,21 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      // ── Manejo de escenarios técnicos ──
-      if (scenario === "TIMEOUT" || scenario === "GATEWAY_TIMEOUT") {
-        return reply.code(504).send(mockFactory.buildTimeoutResponse());
+      if (invalidCredentialRequested(request, ["authorization"])) {
+        return reply.code(401).send(INVALID_KEY_ON_CREATE);
       }
 
-      if (scenario === "NETWORK_ERROR" || scenario === "CONNECTION_ERROR") {
-        return ScenarioEngine.handleNetworkError(request, reply);
-      }
+      // La tarjeta de prueba decide antes que el monto; ver `resolveScenario()`.
+      const resolved = resolveScenario(request, {
+        gatewayData: cardTokenOutcomeFor("wompi", requestBody.payment_method?.token)?.scenario,
+        wholePesos: wholePesosFromCents(requestBody.amount_in_cents),
+      });
+      let scenario = resolved.scenario;
 
-      if (scenario === "RATE_LIMIT" || scenario === "TOO_MANY_REQUESTS" || scenario === "429") {
-        return reply.code(429).send(mockFactory.buildRateLimitResponse());
-      }
+      const failure = await technicalFailure(scenario, request, reply, mockFactory, { data: {} });
 
-      if (scenario === "SERVER_ERROR" || scenario === "INTERNAL_ERROR" || scenario === "500") {
-        return reply.code(500).send(mockFactory.buildServerErrorResponse(500));
-      }
-
-      if (scenario === "BAD_GATEWAY" || scenario === "502") {
-        return reply.code(502).send(mockFactory.buildServerErrorResponse(502));
-      }
-
-      if (scenario === "SERVICE_UNAVAILABLE" || scenario === "503") {
-        return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+      if (failure !== undefined) {
+        return failure;
       }
 
       if (scenario === "FLAPPING") {
@@ -145,10 +222,35 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
          */
         wompiTransactions.save(response.data.id, response.data);
 
+        // La URL del banco se publica en una consulta, que no sabe con qué host se creó el PSE.
+        if (response.data.payment_method?.type === "PSE") {
+          rememberBankRedirectOrigin("wompi", response.data.id, requestOrigin(request));
+        }
+
         // `PENDING` nace igual que el aprobado; lo que lo distingue es que la consulta no lo
         // resuelve. Es una decisión del simulador (nivel 3), ver `wompiStateMachine.ts`.
         if (scenario === "PENDING") {
           rememberScenarioTarget("wompi", "transaction", response.data.id, "PENDING");
+        }
+
+        // Un PSE rechazado nace pendiente y la primera consulta lo cierra con la URL del
+        // banco, igual que el banco `2` (medido el 6 de octubre de 2026). Antes nacía
+        // `DECLINED` sin URL, y el SDK la esperaba hasta agotar su plazo.
+        if (
+          (scenario === "DECLINED" || scenario === "REJECTED") &&
+          response.data.payment_method?.type === "PSE"
+        ) {
+          rememberScenarioTarget("wompi", "transaction", response.data.id, "DECLINED");
+        }
+
+        // La tarjeta `4111` nace pendiente, como toda tarjeta en Wompi, y la consulta la
+        // resuelve declinada, que es el desenlace que el sandbox documenta para ese número.
+        if (scenario === "PENDING_THEN_DECLINED") {
+          rememberScenarioTarget("wompi", "transaction", response.data.id, "DECLINED");
+        }
+
+        if (resolved.queryFailure !== undefined) {
+          rememberQueryFailure("wompi", "transaction", response.data.id, resolved.queryFailure);
         }
 
         return reply.code(201).send(response);
@@ -166,6 +268,14 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
     "/v1/sim/wompi/transactions/:id",
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { id } = request.params as { id: string };
+
+      // Solo la llave privada inexistente da `403`; la pública inexistente lee la transacción
+      // (medido el 6 de octubre de 2026). La llave se revisa antes de buscar la transacción;
+      // con un id inexistente no se midió cuál de las dos respuestas gana.
+      if (sendsPrivateKey(request) && invalidCredentialRequested(request, ["authorization"])) {
+        return reply.code(403).send(INVALID_KEY_ON_QUERY);
+      }
+
       const transaction = wompiTransactions.findById(id);
 
       if (!transaction) {
@@ -173,12 +283,28 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         // inexistente (uuid o con la forma del id nativo, con o sin `Authorization`)
         // responde este 404, sin el id en el mensaje. El SDK lo traduce a
         // RESOURCE_NOT_FOUND con `ErrorHandler`.
-        return reply.code(404).send({
-          error: {
-            type: "NOT_FOUND_ERROR",
-            reason: "La entidad solicitada no existe",
-          },
-        });
+        return reply.code(404).send(NOT_FOUND);
+      }
+
+      /*
+       * La falla de consulta que pidió la creación (issue #122) no se aplica mientras un PSE
+       * no publique la URL del banco: esa consulta la hace el propio SDK dentro de
+       * `createPayment()` (`resolvePendingRedirect`), y fallarla haría fallar la creación,
+       * que es la operación que el SDK no reintenta.
+       */
+      const awaitingBankUrl =
+        transaction.payment_method?.type === "PSE" &&
+        transaction.payment_method.extra?.async_payment_url === undefined;
+
+      if (!awaitingBankUrl) {
+        const failure = await queryFailure(
+          { gateway: "wompi", resource: "transaction", id },
+          reply,
+          mockFactory,
+        );
+        if (failure !== undefined) {
+          return failure;
+        }
       }
 
       /*
@@ -214,12 +340,20 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   // ── GET /v1/sim/wompi/merchants/:publicKey ───────────────────────────────
   //
   // El SDK la llama antes de crear cualquier transacción, porque Wompi exige un
-  // `acceptance_token` firmado y de un solo uso. Existe acá para que el SDK
+  // `acceptance_token` firmado y de un solo uso. Existe aquí para que el SDK
   // tenga un solo camino de código y no una rama "modo simulador".
   app.get(
     "/v1/sim/wompi/merchants/:publicKey",
-    async (_request: FastifyRequest, reply: FastifyReply) => {
-      return reply.code(200).send(mockFactory.buildMerchantResponse());
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      // La llave va en la ruta y Wompi responde igual sin `Authorization` (medido el 6 de
+      // octubre de 2026), así que la marca se lee de la ruta y no de la cabecera.
+      const { publicKey } = request.params as { publicKey: string };
+
+      if (invalidCredentialIn(request, [publicKey])) {
+        return reply.code(404).send(NOT_FOUND);
+      }
+
+      return reply.code(200).send(mockFactory.buildMerchantResponse(requestOrigin(request)));
     },
   );
 
@@ -236,7 +370,12 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/wompi/pse/financial_institutions",
-    async (_request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const failure = bankListFailure(request, reply, mockFactory, "wompi");
+      if (failure !== undefined) {
+        return failure;
+      }
+
       return reply.code(200).send({
         data: [
           { financial_institution_code: "1", financial_institution_name: "Banco que aprueba" },
@@ -247,6 +386,34 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
       });
     },
   );
+
+  /**
+   * El destino de `async_payment_url`: la redirección al banco de un PSE (issue #122).
+   *
+   * Nivel 3 — convención del simulador. La ruta existe en Wompi (medida como URL el 6 de
+   * octubre de 2026, `docs/testing-data/wompi.md`, sección 3), pero el contenido de la página
+   * del banco no se imita. Antes la URL apuntaba aquí y la ruta no estaba registrada: abrirla
+   * daba 404.
+   *
+   * No mueve la transacción: en Wompi el desenlace lo decide el banco de prueba elegido al
+   * crearla y se ve al consultarla (`wompiStateMachine.ts`). Tampoco repite `ticket_id` en
+   * la página, para no devolver en HTML algo que vino en la URL.
+   */
+  app.get("/v1/sim/wompi/pse/redirect", async (_request: FastifyRequest, reply: FastifyReply) => {
+    return reply.code(200).header("content-type", "text/html; charset=utf-8").send(PSE_REDIRECT_PAGE);
+  });
+
+  /**
+   * El destino del `permalink` de `presigned_acceptance` en `GET /merchants/{llave}`.
+   *
+   * Nivel 3 — convención del simulador. Lo que devuelve el `permalink` real de Wompi no está
+   * medido en `docs/testing-data/wompi.md`, así que la página no imita nada: dice que es del
+   * simulador. Antes el `permalink` apuntaba aquí y la ruta no estaba registrada: abrirlo daba
+   * 404.
+   */
+  app.get("/v1/sim/wompi/terms", async (_request: FastifyRequest, reply: FastifyReply) => {
+    return reply.code(200).header("content-type", "text/html; charset=utf-8").send(TERMS_PAGE);
+  });
 
   // ── POST /v1/sim/wompi/tokens/cards (issue #126) ─────────────────────────
   app.post(
@@ -278,11 +445,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
        * Nivel de evidencia 1 para la forma medida contra sandbox.wompi.co el 3 y 4 de octubre de 2026:
        * Ante una llave pública inexistente, Wompi responde 404 con code: "MERCHANT_NOT_FOUND".
        */
-      if (
-        publicKey.includes("inexistente") ||
-        publicKey.includes("invalid") ||
-        publicKey.includes("not_found")
-      ) {
+      if (hasInvalidCredentialMarker(publicKey)) {
         return reply.code(404).send({
           error: {
             type: "NOT_FOUND",
@@ -292,24 +455,15 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const scenario = getSimulatorScenario(request);
-      if (scenario === "TIMEOUT" || scenario === "GATEWAY_TIMEOUT") {
-        return reply.code(504).send(mockFactory.buildTimeoutResponse());
-      }
-      if (scenario === "NETWORK_ERROR" || scenario === "CONNECTION_ERROR") {
-        return ScenarioEngine.handleNetworkError(request, reply);
-      }
-      if (scenario === "RATE_LIMIT" || scenario === "TOO_MANY_REQUESTS" || scenario === "429") {
-        return reply.code(429).send(mockFactory.buildRateLimitResponse());
-      }
-      if (scenario === "SERVER_ERROR" || scenario === "INTERNAL_ERROR" || scenario === "500") {
-        return reply.code(500).send(mockFactory.buildServerErrorResponse(500));
-      }
-      if (scenario === "BAD_GATEWAY" || scenario === "502") {
-        return reply.code(502).send(mockFactory.buildServerErrorResponse(502));
-      }
-      if (scenario === "SERVICE_UNAVAILABLE" || scenario === "503") {
-        return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+      const failure = await technicalFailure(
+        getSimulatorScenario(request),
+        request,
+        reply,
+        mockFactory,
+        { status: "CREATED", data: {} },
+      );
+      if (failure !== undefined) {
+        return failure;
       }
 
       const body = request.body as WompiTokenizeCardRequestBody;
@@ -352,19 +506,38 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const cleanNumber = String(body.number).replace(/\s+/g, "");
-      if (cleanNumber.length < 13 || !/^\d+$/.test(cleanNumber)) {
+      /*
+       * Nivel 1 — medido contra `sandbox.wompi.co` el 6 de octubre de 2026, con la llave
+       * pública (`docs/testing-data/wompi.md`, sección 1.4): el número se valida contra `^\d{12,19}$` sin quitar espacios (`4242` y
+       * `4242 4242 4242 4242` dan este `422`), y solo después con Luhn. «patron» va sin tilde,
+       * como lo escribe Wompi.
+       */
+      const cleanNumber = String(body.number);
+      if (!CARD_NUMBER_PATTERN.test(cleanNumber)) {
         return reply.code(422).send({
           error: {
             type: "INPUT_VALIDATION_ERROR",
-            messages: {
-              number: ["debe coincidir con el patron …"],
-            },
+            messages: { number: ['debe coincidir con el patron "^\\d{12,19}$"'] },
+          },
+        });
+      }
+
+      // Nivel 1, la misma medición: un número de 16 o de 19 dígitos que no pasa Luhn.
+      if (!passesLuhn(cleanNumber)) {
+        return reply.code(422).send({
+          error: {
+            type: "INPUT_VALIDATION_ERROR",
+            messages: { number: ["El número de tarjeta es inválido. Luhn check falló."] },
           },
         });
       }
 
       const response = mockFactory.buildTokenCardResponse(body);
+
+      if (cleanNumber === DECLINING_TEST_CARD) {
+        rememberCardTokenOutcome("wompi", response.data.id, { scenario: "PENDING_THEN_DECLINED" });
+      }
+
       return reply.code(201).send(response);
     },
   );

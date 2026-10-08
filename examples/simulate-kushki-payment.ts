@@ -82,7 +82,7 @@ async function main(): Promise<void> {
   // createPayment() devuelve o una transacción o una redirección pendiente, y el
   // compilador obliga a distinguirlas: `result.transaction` no existe hasta que se
   // descarta el caso de redirección. El cobro con tarjeta de Kushki es sincrono, así
-  // que esta rama es inalcanzable acá; se vuelve alcanzable con Transfer In, que es
+  // que esta rama es inalcanzable aquí; se vuelve alcanzable con Transfer In, que es
   // el PSE de Kushki.
   if (result.outcome === "REDIRECT_REQUIRED") {
     console.log(`El pago requiere redirigir a: ${result.redirect.redirectUrl}`);
@@ -115,7 +115,7 @@ main().catch((error: unknown) => {
     error.code === KitPagosErrorCode.CONNECTION_FAILED
   ) {
     console.error("\nNo se pudo conectar con la API de Simulación.");
-    console.error("Iníciala en otra terminal:\n");
+    console.error("Iníciela en otra terminal:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }

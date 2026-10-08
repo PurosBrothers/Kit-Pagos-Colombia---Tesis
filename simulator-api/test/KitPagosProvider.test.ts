@@ -16,7 +16,7 @@ describe("KitPagosProvider", () => {
     "x-gateway-private-key": "prv_custom",
   };
 
-  it("reutiliza la misma instancia para el perfil del servidor en el mismo ambiente", () => {
+  it("reuses the same instance for the server profile in the same environment", () => {
     const provider = new KitPagosProvider(undefined, mockServerEnv);
 
     const instance1 = provider.resolveClient(Gateway.WOMPI).kitPagos;
@@ -25,7 +25,7 @@ describe("KitPagosProvider", () => {
     expect(instance1).toBe(instance2);
   });
 
-  it("mantiene instancias separadas por pasarela y por ambiente", () => {
+  it("keeps separate instances per gateway and per environment", () => {
     const provider = new KitPagosProvider(undefined, mockServerEnv);
 
     const wompiSim = provider.resolveClient(Gateway.WOMPI, {
@@ -42,7 +42,7 @@ describe("KitPagosProvider", () => {
     expect(wompiSim).not.toBe(mpSim);
   });
 
-  it("crea una instancia nueva bajo demanda cuando se envían cabeceras de cliente", () => {
+  it("creates a new instance on demand when client headers are sent", () => {
     const provider = new KitPagosProvider(undefined, mockServerEnv);
 
     const serverInstance = provider.resolveClient(Gateway.WOMPI).kitPagos;
@@ -54,7 +54,7 @@ describe("KitPagosProvider", () => {
     expect(clientInstance1).not.toBe(clientInstance2);
   });
 
-  it("resuelve baseUrl de simulación con SIMULATOR_SDK_BASE_URL agregando el path de la pasarela", () => {
+  it("resolves the simulation baseUrl with SIMULATOR_SDK_BASE_URL, appending the gateway path", () => {
     const customEnv = {
       ...mockServerEnv,
       SIMULATOR_SDK_BASE_URL: "https://kit-pagos-colombia.onrender.com",
@@ -69,14 +69,14 @@ describe("KitPagosProvider", () => {
     );
   });
 
-  it("resuelve baseUrl de simulación hacia el propio proceso cuando no hay SIMULATOR_SDK_BASE_URL", () => {
+  it("resolves the simulation baseUrl to the process itself when there is no SIMULATOR_SDK_BASE_URL", () => {
     const provider = new KitPagosProvider(undefined, mockServerEnv);
     expect(provider.resolveSimulatorBaseUrl(Gateway.WOMPI)).toBe(
       "http://localhost:3000/v1/sim/wompi",
     );
   });
 
-  it("usa el PORT del proceso cuando no hay SIMULATOR_SDK_BASE_URL", () => {
+  it("uses the process PORT when there is no SIMULATOR_SDK_BASE_URL", () => {
     const provider = new KitPagosProvider(undefined, { ...mockServerEnv, PORT: "10000" });
     expect(provider.resolveSimulatorBaseUrl(Gateway.KUSHKI)).toBe(
       "http://localhost:10000/v1/sim/kushki",

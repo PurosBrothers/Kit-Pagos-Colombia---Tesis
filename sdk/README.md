@@ -12,13 +12,13 @@ Diseñado bajo los principios de **Arquitectura Hexagonal (Ports & Adapters)** y
 
 ## Características Principales
 
-- **Intercambiabilidad real sin *vendor lock-in*:** Cambia de proveedor de pagos (ej. de Wompi a Mercado Pago o Kushki) modificando únicamente el archivo de configuración.
+- **Intercambiabilidad real sin *vendor lock-in*:** Permite cambiar de proveedor de pagos (ej. de Wompi a Mercado Pago o Kushki) modificando únicamente el archivo de configuración.
 - **Tipado estricto de extremo a extremo:** Contratos, entidades, objetos de valor y enumeraciones en TypeScript con declaraciones `.d.ts` completas.
 - **Aritmética financiera exacta:** Manejo de montos mediante el objeto de valor `Amount` (con respaldo de `big.js`), previniendo errores de redondeo de punto flotante IEEE 754 y calculando unidades menores según ISO 4217 (`COP`).
 - **Verificación criptográfica de Webhooks:** Validación de firmas nativas (HMAC-SHA256, SHA-256) con comparación en tiempo constante (`crypto.timingSafeEqual`) y **protección contra ataques de repetición (*anti-replay attacks*)** con ventana de tolerancia temporal configurable.
 - **Gestión de fallos y resiliencia:** Política de reintentos automáticos con retroceso exponencial (*exponential backoff*) y fluctuación (*jitter*) ante fallos de red transitorios, aislando errores permanentes de negocio.
 - **Seguridad y privacidad por diseño (RF-08):** Sanitización automática de llaves privadas, tokens `Bearer` y secretos en mensajes de error y registros para evitar filtraciones en logs de producción.
-- **Tokenización segura en navegador (`kit-pagos-colombia/browser`):** Módulo frontend liviano (unos 13 KB sin minificar, 3,5 KB con gzip) sin dependencias de Node.js para tokenizar tarjetas directamente contra la pasarela respetando PCI DSS.
+- **Tokenización segura en navegador (`kit-pagos-colombia/browser`):** Módulo frontend liviano (unos 14 KB sin minificar, 3,6 KB con gzip) sin dependencias de Node.js para tokenizar tarjetas directamente contra la pasarela respetando PCI DSS.
 
 ---
 
@@ -35,14 +35,14 @@ Diseñado bajo los principios de **Arquitectura Hexagonal (Ports & Adapters)** y
 > de su flujo **asíncrono** (`/card-async`, preautorización y captura), y un cobro del flujo
 > síncrono no queda registrado ahí: responde `CAS004 "No existe la transacción"`. El SDK la
 > intenta y, cuando contesta eso, lanza `UNSUPPORTED_OPERATION` explicándolo, en vez de
-> acusar a tus credenciales. No te quedás sin el dato: el estado ya viene resuelto en la
+> acusar a sus credenciales. No se queda sin el dato: el estado ya viene resuelto en la
 > respuesta de `createPayment()`, y los cambios posteriores llegan por webhook.
 
 ---
 
 ## Instalación
 
-Instala el paquete en tu proyecto con tu gestor de paquetes preferido:
+Instale el paquete en su proyecto con su gestor de paquetes preferido:
 
 ```bash
 npm install kit-pagos-colombia
@@ -62,7 +62,7 @@ pnpm add kit-pagos-colombia
 
 ### 1. Inicializar el SDK
 
-Configura las credenciales de tus pasarelas e indica cuál es la pasarela activa:
+Configure las credenciales de sus pasarelas e indique cuál es la pasarela activa:
 
 ```typescript
 import { KitPagos, Gateway } from "kit-pagos-colombia";
@@ -73,8 +73,8 @@ const sdk = new KitPagos({
     [Gateway.WOMPI]: {
       publicKey: process.env.WOMPI_PUBLIC_KEY!,
       privateKey: process.env.WOMPI_PRIVATE_KEY!,
-      integritySecret: process.env.WOMPI_INTEGRITY_SECRET, // Firma los cobros que creás
-      webhookSecret: process.env.WOMPI_EVENTS_SECRET,      // Verifica los webhooks que recibís
+      integritySecret: process.env.WOMPI_INTEGRITY_SECRET, // Firma los cobros que crea
+      webhookSecret: process.env.WOMPI_EVENTS_SECRET,      // Verifica los webhooks que recibe
     },
     [Gateway.MERCADOPAGO]: {
       publicKey: process.env.MP_PUBLIC_KEY!,
@@ -90,23 +90,32 @@ const sdk = new KitPagos({
       publicKey: process.env.RAPYD_ACCESS_KEY!,
       privateKey: process.env.RAPYD_SECRET_KEY!,
       // Rapyd es la única que firma sus webhooks con la misma llave de la API,
-      // así que acá `webhookSecret` no hace falta.
+      // así que aquí `webhookSecret` no hace falta.
     },
   },
   maxRetries: 3,                 // Reintentos automáticos ante fallos transitorios
+  timeoutMs: 30_000,             // Límite de cada petición a la pasarela (por defecto 30 s)
   webhookToleranceSeconds: 300,  // Tolerancia de 5 minutos contra ataques de replay
   environment: "sandbox",        // "simulator" (por defecto), "sandbox" o "production"
 });
 ```
 
-> **Entornos y Resolución Automática de URLs (`environment`).** Puedes especificar el entorno destino mediante la opción `environment: "simulator" | "sandbox" | "production"`. El SDK resuelve automáticamente la URL oficial de cada pasarela desde un catálogo cerrado integrado. Por defecto apunta al simulador oficial desplegado en Render (`https://kit-pagos-colombia.onrender.com/v1/sim/{gateway}`) o puedes configurarlo contra un mock local mediante `baseUrl` si necesitas desarrollo hermético fuera de línea. Si necesitas apuntar a una URL específica o mock propio, el parámetro `baseUrl` sigue disponible como anulación explícita.
+> **Límite de tiempo por petición (`timeoutMs`).** Cada petición HTTP que el SDK hace a la
+> pasarela se corta a los `timeoutMs` milisegundos (30 000 por omisión), incluida la espera del
+> cuerpo de la respuesta, y la operación falla con `GATEWAY_TIMEOUT`. Sin este límite, una
+> pasarela que acepta la conexión y no responde dejaría la petición abierta indefinidamente.
+> El valor debe ser un entero entre 1 y 2 147 483 647; fuera de ese rango, el constructor de
+> `KitPagos` lanza `INVALID_REQUEST`. El límite es **por intento**: una consulta que se
+> reintenta puede tardar hasta `(maxRetries + 1) × timeoutMs`, más las pausas entre intentos.
+
+> **Entornos y Resolución Automática de URLs (`environment`).** Puede especificar el entorno destino mediante la opción `environment: "simulator" | "sandbox" | "production"`. El SDK resuelve automáticamente la URL oficial de cada pasarela desde un catálogo cerrado integrado. Por defecto el ambiente es `simulator` y apunta al simulador local (`http://localhost:3000/v1/sim/{gateway}`); para usar el simulador desplegado en Render, indíquelo con `baseUrl` (ver «Simulador Integrado y en la Nube» más abajo). Si necesita apuntar a una URL específica o mock propio, el parámetro `baseUrl` sigue disponible como anulación explícita.
 
 > **`webhookSecret` no es la llave de API.** En Wompi, Mercado Pago y Kushki el secreto que
-> firma los webhooks es un valor distinto, que se saca de otra parte del panel. Si lo omitís,
+> firma los webhooks es un valor distinto, que se saca de otra parte del panel. Si lo omite,
 > el SDK cae a `privateKey` por compatibilidad y **la verificación de webhooks reales de esas
 > tres va a fallar**, con un error de firma inválida que parece un ataque y es configuración.
 > En Wompi, además, `integritySecret` y `webhookSecret` son dos secretos distintos: el primero
-> firma lo que mandás, el segundo verifica lo que te llega.
+> firma lo que envía, el segundo verifica lo que le llega.
 
 ---
 
@@ -125,13 +134,13 @@ async function cobrarConTarjeta() {
       fullName: "Jaime Pavlich",
     }),
     // El token lo emite la tokenización de la pasarela desde el navegador, y el SDK lo
-    // trata como cadena opaca: el número de la tarjeta nunca llega a tu servidor, que es
-    // lo que te mantiene fuera del alcance de PCI DSS.
+    // trata como cadena opaca: el número de la tarjeta nunca llega a su servidor, que es
+    // lo que lo mantiene fuera del alcance de PCI DSS.
     paymentMethod: PaymentMethod.card("tok_test_card_12345", { installments: 1 }),
   });
 
   // El resultado es una unión discriminada por `outcome`: el campo `transaction` no
-  // existe hasta que descartás el caso de redirección, así que olvidarla no compila.
+  // existe hasta que se descarta el caso de redirección, así que olvidarla no compila.
   if (result.outcome === "REDIRECT_REQUIRED") {
     // Si la pasarela requiere autenticación 3D Secure / OTP o es Hosted Checkout (Rapyd):
     console.log(`Redirigir a verificación/3DS: ${result.redirect.redirectUrl}`);
@@ -144,14 +153,14 @@ async function cobrarConTarjeta() {
 }
 ```
 
-> Con tarjeta también podés recibir `REDIRECT_REQUIRED`: Rapyd cobra en su página alojada, y
-> cualquiera de las cuatro puede pedir autenticación 3DS. Tratá las dos ramas siempre.
+> Con tarjeta también puede recibir `REDIRECT_REQUIRED`: Rapyd cobra en su página alojada, y
+> cualquiera de las cuatro puede pedir autenticación 3DS. Trate siempre las dos ramas.
 
 #### 2.1 Tokenización en el Navegador (`kit-pagos-colombia/browser`)
 
 Para cumplir con **PCI DSS**, los datos sensibles de la tarjeta (número PAN, CVC, fecha de expiración) **nunca deben entrar al backend del comercio ni al SDK de servidor**.
 
-El paquete exporta un punto de entrada independiente y liviano para el frontend (`kit-pagos-colombia/browser`, unos 13 KB sin minificar y 3,5 KB con gzip, sin módulos de Node.js):
+El paquete exporta un punto de entrada independiente y liviano para el frontend (`kit-pagos-colombia/browser`, unos 14 KB sin minificar y 3,6 KB con gzip, sin módulos de Node.js):
 
 ```typescript
 import { KitPagosBrowser, Gateway } from "kit-pagos-colombia/browser";
@@ -174,6 +183,7 @@ async function tokenizarTarjetaEnNavegador() {
     publicKey: "pub_prod_1234567890", // O pub_test_... para sandbox
     environment: "sandbox",          // "sandbox" | "production" | "simulator"
     card: datosFormulario,
+    timeoutMs: 15_000,               // Opcional: límite de la petición (por defecto 30 s)
   });
 
   // 2. Tokenización contra Mercado Pago (exactamente con los mismos datos de entrada):
@@ -184,13 +194,34 @@ async function tokenizarTarjetaEnNavegador() {
     card: datosFormulario,
   });
 
-  // El token resultante se envía a TU backend para llamar a PaymentMethod.card()
+  // El token resultante se envía a SU backend para llamar a PaymentMethod.card()
   console.log(`Token Wompi: ${wompiResult.token}`);
   console.log(`Token Mercado Pago: ${mpResult.token}`);
 }
 ```
 
-> **PCI DSS:** Al usar `KitPagosBrowser`, el número de tarjeta viaja exclusivamente entre el navegador del pagador y los servidores de la pasarela. Tu backend solo recibe y almacena el token opaco `tok_...`. El SDK rechaza activamente pasarelas que no soportan tokenización inline en frontend (como Kushki y Rapyd) con `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones.
+> **Límite de tiempo de la tokenización (`timeoutMs`).** La petición a la pasarela se corta a
+> los `timeoutMs` milisegundos (30 000 por omisión), incluida la lectura de la respuesta, y en
+> ese caso `tokenizeCard()` lanza `KitPagosError` con `GATEWAY_TIMEOUT`. Acepta un entero entre
+> 1 y 2 147 483 647, igual que `timeoutMs` del SDK de servidor; cualquier otro valor lanza
+> `INVALID_REQUEST` antes de enviar la tarjeta. Usa `AbortSignal.timeout`, que el navegador del
+> pagador tiene que soportar.
+
+> **PCI DSS:** Al usar `KitPagosBrowser`, el número de tarjeta viaja exclusivamente entre el navegador del pagador y los servidores de la pasarela. Su backend solo recibe y almacena el token opaco `tok_...`. El SDK rechaza activamente pasarelas que no soportan tokenización inline en frontend (como Kushki y Rapyd) con `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones.
+
+> **Compatibilidad de `kit-pagos-colombia/browser` fuera del navegador.** TypeScript resuelve
+> sus tipos con `moduleResolution` `bundler`, `node16` y `node10`. El archivo es un módulo ES
+> y el paquete no declara `"type"`, porque la raíz `kit-pagos-colombia` es CommonJS. Medido el
+> 6 de octubre de 2026 con el paquete instalado desde su tarball: en Node 20.19.0, 20.20.2 y
+> 22.22.3 se carga tanto con `import` como con `require`; en Node 20.18.0 fallan los dos con
+> `SyntaxError`. Quien lo use desde Node (por ejemplo, en renderizado del lado del servidor)
+> necesita Node 20.19 o superior, y por eso `package.json` declara `"engines": { "node":
+> ">=20.19.0" }`: con una versión anterior, npm solo lo advierte al instalar, salvo que quien
+> instala active `engine-strict`
+> ([documentación de npm](https://docs.npmjs.com/cli/v11/configuring-npm/package-json#engines)).
+> Cargado desde una ruta fuera de `node_modules`, como un
+> enlace `file:`, `import` emite la advertencia `MODULE_TYPELESS_PACKAGE_JSON`; instalado en
+> `node_modules`, no.
 
 ---
 
@@ -215,7 +246,7 @@ async function pagarConPSE() {
       email: "comprador@banco.com",
       fullName: "Jaime Pavlich",
       // PSE exige el documento del pagador en las cuatro pasarelas. Si falta, el SDK
-      // corta antes de la llamada de red en vez de traducirte un HTTP 400.
+      // corta antes de la llamada de red en vez de traducirle un HTTP 400.
       documentType: "CC",
       documentNumber: "1099888777",
     }),
@@ -227,9 +258,9 @@ async function pagarConPSE() {
   });
 
   if (result.outcome === "REDIRECT_REQUIRED") {
-    // Redirige al pagador a la URL de su banco
+    // Redirija al pagador a la URL de su banco
     console.log(`Redirigir a: ${result.redirect.redirectUrl}`);
-    // Guardá este identificador: es con lo que consultás el pago si el pagador no vuelve.
+    // Guarde este identificador: es con lo que se consulta el pago si el pagador no vuelve.
     console.log(`ID Pasarela: ${result.redirect.gatewayTransactionId.value}`);
   }
 }
@@ -237,7 +268,14 @@ async function pagarConPSE() {
 
 > Los `bankCode` salen de `sdk.getPseBanks()` y **solo valen en la pasarela que los dio**:
 > cambiar de pasarela obliga a volver a pedir la lista. Es la consecuencia de que cada una
-> identifique los bancos a su manera; lo que el SDK garantiza es que no tengas que saber cómo.
+> identifique los bancos a su manera; lo que el SDK garantiza es que usted no tenga que saber cómo.
+
+> Un PSE también puede volver como `TRANSACTION`, y por eso conviene tratar las dos ramas. Pasa
+> cuando el pago ya tiene desenlace al crearlo: en el sandbox de Wompi la URL del banco llega en
+> la misma consulta que `APPROVED`, `DECLINED` o `ERROR`, y Mercado Pago responde `402` cuando la
+> orden se crea con el pago fallido. En los dos casos `createPayment()` devuelve la transacción
+> normalizada (en Mercado Pago, `DECLINED` con el identificador de la orden) en vez de una
+> redirección hacia un pago que ya terminó.
 
 ---
 
@@ -256,6 +294,31 @@ async function verificarEstado(transactionId: string) {
   }
 }
 ```
+
+`getPaymentStatus()` y `getPseBanks()` se reintentan solos ante fallos transitorios
+(`CONNECTION_FAILED`, `GATEWAY_TIMEOUT`, `GATEWAY_SERVER_ERROR`, `RATE_LIMIT_EXCEEDED`), hasta
+`maxRetries` veces (3 por omisión) con retroceso exponencial. Si el fallo persiste en todos los
+intentos, la operación termina en `MAX_RETRIES_EXCEEDED`, con el último error en `cause`:
+
+```typescript
+async function consultarConDiagnostico(transactionId: string) {
+  try {
+    return await sdk.getPaymentStatus(transactionId);
+  } catch (error) {
+    if (error instanceof KitPagosError && error.code === KitPagosErrorCode.MAX_RETRIES_EXCEEDED) {
+      // El último intento fallido, con su propio código (por ejemplo, GATEWAY_TIMEOUT).
+      const ultimo = error.cause instanceof KitPagosError ? error.cause.code : undefined;
+      console.error(`La pasarela no respondió tras varios intentos. Último error: ${ultimo}`);
+    }
+    throw error;
+  }
+}
+```
+
+Un error que no es transitorio, como `RESOURCE_NOT_FOUND` o `INVALID_CREDENTIALS`, no se
+reintenta y llega con su propio código en el primer intento. Con `maxRetries: 0` no hay
+reintentos, y el error transitorio llega también con su propio código, no como
+`MAX_RETRIES_EXCEEDED`.
 
 ---
 
@@ -291,9 +354,14 @@ app.post("/webhook", (req, res) => {
 });
 ```
 
-**Webhooks de una pasarela que no es la activa.** Durante una migración cobrás por la pasarela
-nueva y seguís recibiendo webhooks de la vieja por semanas: pagos ya iniciados, conciliaciones,
-reembolsos. Pasale la pasarela emisora y no necesitás un segundo `KitPagos`; alcanza con que
+**Mercado Pago siempre reporta `PENDING`.** `validateWebhook()` de Mercado Pago devuelve siempre
+`newStatus: "PENDING"`: la firma no cubre el cuerpo de la notificación, así que el SDK no confía en
+ningún estado que venga en él. Consulte el estado real con
+`getPaymentStatus(event.gatewayTransactionId)`.
+
+**Webhooks de una pasarela que no es la activa.** Durante una migración usted cobra por la pasarela
+nueva y sigue recibiendo webhooks de la vieja por semanas: pagos ya iniciados, conciliaciones,
+reembolsos. Indique la pasarela emisora y no necesitará un segundo `KitPagos`; basta con que
 esté en `credentials`, no hace falta que esté activa:
 
 ```typescript
@@ -310,8 +378,8 @@ app.post("/webhooks/:pasarela", (req, res) => {
 });
 ```
 
-> Si tu servidor tiene el reloj desfasado, la protección anti-replay va a rechazar webhooks
-> legítimos con `WEBHOOK_SIGNATURE_INVALID`. Podés ampliar la ventana con `toleranceSeconds`,
+> Si su servidor tiene el reloj desfasado, la protección anti-replay va a rechazar webhooks
+> legítimos con `WEBHOOK_SIGNATURE_INVALID`. Puede ampliar la ventana con `toleranceSeconds`,
 > o desactivarla con `0`, pero lo correcto es sincronizar el reloj.
 
 ---
@@ -349,28 +417,33 @@ async function cobrarConDiagnostico(request: CreatePaymentRequest) {
 }
 ```
 
+> **`createPayment()` no se reintenta**, ni siquiera ante `GATEWAY_TIMEOUT`. Que la respuesta
+> no haya llegado a tiempo no prueba que la pasarela no haya creado el cobro, y repetirlo podría
+> cobrar dos veces. Antes de volver a cobrar, confirme el estado con `getPaymentStatus()` o
+> espere el webhook.
+
 ---
 
 ## Catálogo de Códigos de Error (`KitPagosErrorCode`)
 
 - `INVALID_CREDENTIALS`: Fallo de autenticación HTTP 401/403.
 - `CONNECTION_FAILED`: Imposibilidad de conectar con el servidor de la pasarela.
-- `GATEWAY_TIMEOUT`: Agotamiento del tiempo de espera de la petición.
+- `GATEWAY_TIMEOUT`: La pasarela no respondió dentro de `timeoutMs`, o respondió HTTP 408.
 - `RATE_LIMIT_EXCEEDED`: Límite de tasa de solicitudes superado (HTTP 429).
-- `INVALID_REQUEST`: Parámetros de cobro malformados o rechazados por validación (HTTP 400/422).
+- `INVALID_REQUEST`: Parámetros de cobro malformados o rechazados por validación (HTTP 400/409/422).
 - `RESOURCE_NOT_FOUND`: Transacción u orden no encontrada (HTTP 404).
 - `GATEWAY_SERVER_ERROR`: Error interno en los servidores de la pasarela (HTTP 5xx).
 - `MALFORMED_RESPONSE`: Respuesta o webhook no interpretable como JSON válido.
 - `WEBHOOK_SIGNATURE_INVALID`: Firma digital de webhook inválida o timestamp caducado.
 - `UNSUPPORTED_OPERATION`: Método o flujo no soportado por la pasarela seleccionada (por ejemplo, consultar un cobro con tarjeta en Kushki).
-- `MAX_RETRIES_EXCEEDED`: Se agotaron los reintentos configurados sin obtener respuesta.
+- `MAX_RETRIES_EXCEEDED`: Un fallo transitorio persistió en todos los intentos de `getPaymentStatus()` o `getPseBanks()`. El último error viaja en `cause`.
 - `UNKNOWN_ERROR`: Error genérico no tipificado.
 
 ---
 
 ## 🚀 Despliegue a Producción y Consideraciones Reales
 
-Si vas a utilizar este SDK en un entorno de producción para procesar pagos reales con dinero de verdad, ten en cuenta las siguientes consideraciones de arquitectura y normativa financiera:
+Si va a utilizar este SDK en un entorno de producción para procesar pagos reales con dinero de verdad, tenga en cuenta las siguientes consideraciones de arquitectura y normativa financiera:
 
 ### 1. Resolución de Entornos y URLs Oficiales
 
@@ -425,13 +498,13 @@ Por regulaciones bancarias internacionales (PCI-DSS) y de la Superintendencia Fi
 Por esta razón, el SDK opera como un backend seguro que consume **tokens**:
 1. **En el Navegador (Frontend):** El usuario ingresa su tarjeta en un formulario web que utiliza la librería de tokenización oficial de la pasarela activa (ej. Wompi Widget/JS, Mercado Pago CardForm/SDK, Kushki.js o Rapyd Collect).
 2. **Generación del Token:** La pasarela valida la tarjeta directamente desde el navegador y devuelve un token temporal (ej. `tok_test_card_12345`).
-3. **Procesamiento en Backend:** Tu frontend envía ese token a tu servidor Node.js, donde `KitPagos` ejecuta el cobro de forma segura mediante `PaymentMethod.card(token, { installments })`.
+3. **Procesamiento en Backend:** Su frontend envía ese token a su servidor Node.js, donde `KitPagos` ejecuta el cobro de forma segura mediante `PaymentMethod.card(token, { installments })`.
 
 ---
 
 ## Licencia
 
-Este proyecto está bajo la Licencia [Apache 2.0](LICENSE). Puedes usarlo, modificarlo y distribuirlo libremente en proyectos comerciales y de código abierto.
+Este proyecto está bajo la Licencia [Apache 2.0](LICENSE). Puede usarlo, modificarlo y distribuirlo libremente en proyectos comerciales y de código abierto.
 
 ---
 

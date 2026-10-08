@@ -40,7 +40,7 @@ describe("assertSupportedPaymentMethod", () => {
    */
   it("should reject an unsupported method as UNSUPPORTED_OPERATION", () => {
     try {
-      assertSupportedPaymentMethod(metodoQueElTipoNoAdmite(), Gateway.WOMPI, ["CARD", "PSE"]);
+      assertSupportedPaymentMethod(methodNotAcceptedByType(), Gateway.WOMPI, ["CARD", "PSE"]);
       fail("debía lanzar");
     } catch (error) {
       expect(error).toBeInstanceOf(KitPagosError);
@@ -74,7 +74,7 @@ describe("assertSupportedPaymentMethod", () => {
  * falle **antes** de la red, porque un cobro que no debe ocurrir no debe llegar
  * a salir.
  */
-describe("pedir un método que la pasarela no implementa", () => {
+describe("requesting a method the gateway does not implement", () => {
   const pseRequest: CreatePaymentRequest = {
     amount: new Amount("150000.00"),
     currency: new Currency("COP"),
@@ -139,7 +139,7 @@ describe("pedir un método que la pasarela no implementa", () => {
     const mockFetch = jest.fn();
     global.fetch = mockFetch;
 
-    const conCodigoAjeno: CreatePaymentRequest = {
+    const withForeignCode: CreatePaymentRequest = {
       ...pseRequest,
       payer: new Payer({
         email: "cliente@example.com",
@@ -154,7 +154,7 @@ describe("pedir un método que la pasarela no implementa", () => {
     };
 
     await expect(
-      new RapydAdapter().createPayment(conCodigoAjeno),
+      new RapydAdapter().createPayment(withForeignCode),
     ).rejects.toMatchObject({ code: KitPagosErrorCode.INVALID_REQUEST });
 
     expect(mockFetch).not.toHaveBeenCalled();
@@ -223,7 +223,7 @@ describe("pedir un método que la pasarela no implementa", () => {
     global.fetch = mockFetch;
 
     await expect(
-      build().createPayment({ ...pseRequest, paymentMethod: metodoQueElTipoNoAdmite() }),
+      build().createPayment({ ...pseRequest, paymentMethod: methodNotAcceptedByType() }),
     ).rejects.toMatchObject({ code: KitPagosErrorCode.UNSUPPORTED_OPERATION });
 
     expect(mockFetch).not.toHaveBeenCalled();
@@ -238,6 +238,6 @@ describe("pedir un método que la pasarela no implementa", () => {
  * escribir este caso, porque el compilador lo rechaza, y entonces la guarda de los
  * adaptadores quedaría sin ninguna prueba que la ejercite.
  */
-function metodoQueElTipoNoAdmite(): PaymentMethod {
+function methodNotAcceptedByType(): PaymentMethod {
   return { type: "CASH" } as unknown as PaymentMethod;
 }

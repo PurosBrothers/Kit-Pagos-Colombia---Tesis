@@ -68,17 +68,21 @@ export class GatewayMockFactory {
 
   /**
    * Construye la respuesta de un pago rechazado.
+   *
+   * @param statusDetail El motivo del rechazo. Lo elige el nombre del titular de la tarjeta
+   *   de prueba (issue #122); sin él, el rechazo genérico de siempre.
    */
   buildRejectedResponse(
     requestBody: MercadoPagoCreatePaymentRequestBody,
     customId?: number | string,
+    statusDetail = "cc_rejected_other_reason",
   ): MercadoPagoPaymentResponse {
     const now = new Date().toISOString();
 
     return {
       id: customId ?? this.generateId(),
       status: "rejected",
-      status_detail: "cc_rejected_other_reason",
+      status_detail: statusDetail,
       transaction_amount: requestBody.transaction_amount,
       currency_id: "COP",
       description: requestBody.description,
@@ -97,17 +101,21 @@ export class GatewayMockFactory {
    * línea 70). Nivel 3 para el `status`: la tabla oficial de resultados de pago lo empareja
    * con `in_process` (https://www.mercadopago.com.co/developers/en/docs/checkout-api-payments/response-handling/collection-results,
    * consultada el 5 de octubre de 2026), y la medición no registró el campo `status`.
+   *
+   * @param statusDetail `pending_contingency` cuando lo pide el titular `CONT` (issue #122,
+   *   nivel 3: `docs/testing-data/mercado-pago.md` y la misma tabla oficial).
    */
   buildInProcessResponse(
     requestBody: MercadoPagoCreatePaymentRequestBody,
     customId?: number | string,
+    statusDetail = "pending_review_manual",
   ): MercadoPagoPaymentResponse {
     const now = new Date().toISOString();
 
     return {
       id: customId ?? this.generateId(),
       status: "in_process",
-      status_detail: "pending_review_manual",
+      status_detail: statusDetail,
       transaction_amount: requestBody.transaction_amount,
       currency_id: "COP",
       description: requestBody.description,
@@ -191,7 +199,7 @@ export class GatewayMockFactory {
    *
    * Reproduce el caso que la API real devuelve con HTTP 201: `action_required` /
    * `waiting_transfer` y la URL del banco ya presente en la creación. A
-   * diferencia de Wompi, acá no hay nada que sondear (ver el punto 43 del
+   * diferencia de Wompi, aquí no hay nada que sondear (ver el punto 43 del
    * `architecture-log.md` para la comparación).
    */
   buildPendingOrderResponse(
@@ -235,7 +243,29 @@ export class GatewayMockFactory {
   }
 
   /**
-   * Parte común de las dos respuestas de orden.
+   * Construye la orden de PSE cuyo pago falló, la que la API real devuelve en `data` del `402`.
+   *
+   * Nivel 1 — medido el 7 de octubre de 2026 (`docs/testing-data/mercado-pago.md`, «El `402`
+   * de una orden de PSE que falla»): la orden queda en `failed / failed` con
+   * `total_paid_amount: "0"`, y su pago en `failed / processing_error`, sin `redirect_url`.
+   */
+  buildFailedOrderResponse(
+    requestBody: MercadoPagoCreateOrderRequestBody,
+  ): MercadoPagoOrderResponse {
+    return this.buildOrder(requestBody, {
+      orderId: this.generateOrderId("ORD"),
+      paymentId: this.generateOrderId("PAY"),
+      status: "failed",
+      statusDetail: "failed",
+      paymentStatusDetail: "processing_error",
+      totalPaidAmount: "0",
+      financialInstitution:
+        requestBody.transactions?.payments?.[0]?.payment_method?.financial_institution,
+    });
+  }
+
+  /**
+   * Parte común de las respuestas de orden.
    *
    * Existe para que los campos que la API real devuelve igual en los dos casos
    * (montos, divisa, país, fechas, eco de la URL de retorno) se escriban una sola
@@ -248,6 +278,9 @@ export class GatewayMockFactory {
       paymentId: string;
       status: MercadoPagoOrderStatus;
       statusDetail: string;
+      /** El del pago, cuando no coincide con el de la orden (`failed` frente a `processing_error`). */
+      paymentStatusDetail?: string;
+      totalPaidAmount?: string;
       redirectUrl?: string;
       financialInstitution?: string;
     },
@@ -261,7 +294,7 @@ export class GatewayMockFactory {
       processing_mode: requestBody.processing_mode ?? "automatic",
       external_reference: requestBody.external_reference,
       total_amount: total,
-      total_paid_amount: total,
+      total_paid_amount: attributes.totalPaidAmount ?? total,
       country_code: "COL",
       status: attributes.status,
       status_detail: attributes.statusDetail,
@@ -277,7 +310,7 @@ export class GatewayMockFactory {
             amount: total,
             reference_id: Math.random().toString(36).slice(2, 12),
             status: attributes.status,
-            status_detail: attributes.statusDetail,
+            status_detail: attributes.paymentStatusDetail ?? attributes.statusDetail,
             payment_method: {
               id: "pse",
               type: "bank_transfer",

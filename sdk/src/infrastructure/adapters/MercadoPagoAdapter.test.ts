@@ -1,3 +1,4 @@
+import { jsonErrorResponse } from "../../test-support/http-response";
 import * as crypto from "crypto";
 import { MercadoPagoAdapter } from "./MercadoPagoAdapter";
 import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
@@ -46,7 +47,7 @@ describe("MercadoPagoAdapter", () => {
   });
 
   describe("createPayment()", () => {
-    it("crea un pago exitosamente enviando transaction_amount en pesos", async () => {
+    it("creates a payment successfully sending transaction_amount in pesos", async () => {
       const mockFetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 201,
@@ -75,6 +76,7 @@ describe("MercadoPagoAdapter", () => {
             installments: 1,
             payer: { email: "cliente.mp@example.com" },
           }),
+          signal: expect.any(AbortSignal),
         }
       );
 
@@ -84,7 +86,7 @@ describe("MercadoPagoAdapter", () => {
       expect(transaction.amount.getValue()).toBe("50000.00");
     });
 
-    it("autentica con Bearer token usando privateKey de las credenciales", async () => {
+    it("authenticates with a Bearer token using the credentials privateKey", async () => {
       const credentials = {
         publicKey: "APP_USR_pub_123",
         privateKey: "APP_USR_priv_secret_456",
@@ -118,7 +120,7 @@ describe("MercadoPagoAdapter", () => {
      * Lo encontraron las pruebas contra sandbox; las mediciones a mano mandaban el header sin
      * pensarlo y el simulador no lo pedía, así que el SDK no podía cobrar por ningún método.
      */
-    it("manda una llave de idempotencia en cada creación", async () => {
+    it("sends an idempotency key on every creation", async () => {
       const mockFetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 201,
@@ -139,7 +141,7 @@ describe("MercadoPagoAdapter", () => {
      * segundo intento, y un cobro rechazado quedaría incobrable: reintentar con otra tarjeta
      * sobre la misma orden repetiría el rechazo viejo.
      */
-    it("usa una llave distinta en cada intento del mismo pedido", async () => {
+    it("uses a different key on each attempt of the same order", async () => {
       const mockFetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 201,
@@ -151,13 +153,13 @@ describe("MercadoPagoAdapter", () => {
       await adapter.createPayment(validRequest);
       await adapter.createPayment(validRequest);
 
-      const [primera, segunda] = mockFetch.mock.calls.map(
+      const [firstCall, secondCall] = mockFetch.mock.calls.map(
         (call) => call[1].headers["X-Idempotency-Key"],
       );
-      expect(primera).not.toBe(segunda);
+      expect(firstCall).not.toBe(secondCall);
     });
 
-    it("devuelve redirectRequired cuando el pago con tarjeta exige autenticación 3DS", async () => {
+    it("returns redirectRequired when the card payment requires 3DS authentication", async () => {
       const response3ds = {
         id: 987654321,
         status: "pending",
@@ -189,7 +191,7 @@ describe("MercadoPagoAdapter", () => {
     });
 
     /** Una consulta no crea nada, así que no necesita llave. */
-    it("no manda llave de idempotencia al consultar", async () => {
+    it("does not send an idempotency key when querying", async () => {
       const mockFetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 200,
@@ -204,7 +206,7 @@ describe("MercadoPagoAdapter", () => {
       ).toBeUndefined();
     });
 
-    it("traduce fallos de red a KitPagosError(CONNECTION_FAILED)", async () => {
+    it("maps network failures to KitPagosError(CONNECTION_FAILED)", async () => {
       global.fetch = jest.fn().mockRejectedValue(new Error("fetch failed"));
 
       const adapter = new MercadoPagoAdapter();
@@ -219,12 +221,8 @@ describe("MercadoPagoAdapter", () => {
       }
     });
 
-    it("traduce errores HTTP no exitosos a KitPagosError", async () => {
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: false,
-        status: 401,
-        json: async () => ({ message: "Invalid credentials" }),
-      });
+    it("maps unsuccessful HTTP errors to KitPagosError", async () => {
+      global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(401, { message: "Invalid credentials" }));
 
       const adapter = new MercadoPagoAdapter();
       try {
@@ -236,7 +234,7 @@ describe("MercadoPagoAdapter", () => {
       }
     });
 
-    it("traduce respuesta HTTP no exitosa que devuelva texto en vez de JSON", async () => {
+    it("maps an unsuccessful HTTP response that returns text instead of JSON", async () => {
       global.fetch = jest.fn().mockResolvedValue({
         ok: false,
         status: 500,
@@ -255,7 +253,7 @@ describe("MercadoPagoAdapter", () => {
       }
     });
 
-    it("traduce respuesta con JSON malformado a MALFORMED_RESPONSE", async () => {
+    it("maps a response with malformed JSON to MALFORMED_RESPONSE", async () => {
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 200,
@@ -275,7 +273,7 @@ describe("MercadoPagoAdapter", () => {
   });
 
   describe("getStatus()", () => {
-    it("consulta exitosamente el estado de un pago y retorna la Transaction", async () => {
+    it("queries a payment status successfully and returns the Transaction", async () => {
       const mockFetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 200,
@@ -294,7 +292,7 @@ describe("MercadoPagoAdapter", () => {
       expect(transaction.gatewayTransactionId.value).toBe("1234567890");
     });
 
-    it("autentica con Bearer token en getStatus cuando se configuran credenciales", async () => {
+    it("authenticates with a Bearer token in getStatus when credentials are configured", async () => {
       const credentials = {
         publicKey: "APP_USR_pub_123",
         privateKey: "APP_USR_priv_secret_456",
@@ -319,7 +317,7 @@ describe("MercadoPagoAdapter", () => {
       );
     });
 
-    it("traduce fallos de red en getStatus a KitPagosError", async () => {
+    it("maps network failures in getStatus to KitPagosError", async () => {
       global.fetch = jest.fn().mockRejectedValue(new Error("network timeout"));
 
       const adapter = new MercadoPagoAdapter();
@@ -331,12 +329,8 @@ describe("MercadoPagoAdapter", () => {
       }
     });
 
-    it("traduce error HTTP 404 en getStatus a RESOURCE_NOT_FOUND", async () => {
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: false,
-        status: 404,
-        json: async () => ({ message: "Payment not found" }),
-      });
+    it("maps an HTTP 404 in getStatus to RESOURCE_NOT_FOUND", async () => {
+      global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(404, { message: "Payment not found" }));
 
       const adapter = new MercadoPagoAdapter();
       try {
@@ -347,7 +341,7 @@ describe("MercadoPagoAdapter", () => {
       }
     });
 
-    it("traduce error HTTP no exitoso con texto plano en getStatus", async () => {
+    it("maps an unsuccessful HTTP error with plain text in getStatus", async () => {
       global.fetch = jest.fn().mockResolvedValue({
         ok: false,
         status: 502,
@@ -366,7 +360,7 @@ describe("MercadoPagoAdapter", () => {
       }
     });
 
-    it("traduce error de parseo JSON en getStatus a MALFORMED_RESPONSE", async () => {
+    it("maps a JSON parse error in getStatus to MALFORMED_RESPONSE", async () => {
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 200,
@@ -386,7 +380,7 @@ describe("MercadoPagoAdapter", () => {
   });
 
   describe("verifySignature()", () => {
-    it("valida correctamente la firma HMAC-SHA256 de Mercado Pago delegando a WebhookVerifier", () => {
+    it("validates the Mercado Pago HMAC-SHA256 signature correctly by delegating to WebhookVerifier", () => {
       const adapter = new MercadoPagoAdapter();
       const secret = "test_mp_secret_key";
       const dataId = "1234567890";
@@ -519,7 +513,7 @@ describe("MercadoPagoAdapter PSE", () => {
 
   /**
    * A diferencia de Wompi, que necesita consultar hasta que la URL aparezca
-   * (punto 43), acá la redirección viene en la creación: una sola llamada.
+   * (punto 43), aquí la redirección viene en la creación: una sola llamada.
    */
   it("should not poll, because the URL arrives with the creation", async () => {
     const mockFetch = mockCreatedOrder();
@@ -597,6 +591,103 @@ describe("MercadoPagoAdapter PSE", () => {
       expect(transaction.amount.getValue()).toBe("150000.00");
       expect(transaction.currency.getCode()).toBe("COP");
       expect(transaction.orderReference.getValue()).toBe("ord-mp-pse-1");
+    });
+  });
+
+  /**
+   * Medido contra la API real el 7 de octubre de 2026
+   * (docs/testing-data/mercado-pago.md, «El `402` de una orden de PSE que falla»), con el
+   * `user_id` y el `application_id` reemplazados igual que en el documento.
+   */
+  describe("an order whose payment failed (402)", () => {
+    const failedOrder = {
+      id: "ORD01M4BB3B5XBNNB1EF1AM53K2MA",
+      type: "online",
+      processing_mode: "automatic",
+      external_reference: "kp122-tu-1791382104",
+      total_amount: "5000",
+      total_paid_amount: "0",
+      country_code: "COL",
+      user_id: "<user_id-cuenta>",
+      status: "failed",
+      status_detail: "failed",
+      capture_mode: "automatic_async",
+      currency: "COP",
+      created_date: "2026-10-07T14:08:25.288Z",
+      last_updated_date: "2026-10-07T14:08:25.849Z",
+      integration_data: { application_id: "<application_id>" },
+      payer: { entity_type: "individual" },
+      config: { online: { callback_url: "https://merchant.com/pse/return" } },
+      transactions: {
+        payments: [
+          {
+            id: "PAY01M4BB3B6824R6BDME6MJAWQD5",
+            amount: "5000",
+            reference_id: "000ghe1vp0",
+            status: "failed",
+            status_detail: "processing_error",
+            payment_method: { id: "pse", type: "bank_transfer", financial_institution: "1051" },
+          },
+        ],
+      },
+    };
+
+    const failedOrderBody = {
+      errors: [
+        {
+          code: "failed",
+          message: "The following transactions failed",
+          details: ["PAY01M4BB3B6824R6BDME6MJAWQD5: processing_error"],
+        },
+      ],
+      data: failedOrder,
+    };
+
+    function mockFailure(status: number, body: unknown): void {
+      global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(status, body));
+    }
+
+    it("should return a DECLINED transaction with the order id", async () => {
+      mockFailure(402, failedOrderBody);
+
+      const transaction = expectTransaction(
+        await new MercadoPagoAdapter().createPayment(pseRequest),
+      );
+
+      expect(transaction.getStatus()).toBe("DECLINED");
+      expect(transaction.rawStatus).toBe("failed");
+      expect(transaction.gatewayTransactionId.value).toBe("ORD01M4BB3B5XBNNB1EF1AM53K2MA");
+      expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.MERCADOPAGO);
+      expect(transaction.orderReference.getValue()).toBe("kp122-tu-1791382104");
+      expect(transaction.amount.getValue()).toBe("5000.00");
+    });
+
+    it.each([
+      ["without the order in data", 402, { errors: failedOrderBody.errors }],
+      ["with an order that is not failed", 402, { ...failedOrderBody, data: { ...failedOrder, status: "action_required" } }],
+      ["with an order without id", 402, { ...failedOrderBody, data: { ...failedOrder, id: "" } }],
+      ["with another status", 400, failedOrderBody],
+    ])("should keep throwing for a failure %s", async (_case, status, body) => {
+      mockFailure(status, body);
+
+      await expect(new MercadoPagoAdapter().createPayment(pseRequest)).rejects.toBeInstanceOf(
+        KitPagosError,
+      );
+    });
+
+    /** La consulta medida: la orden suelta, sin `data` y sin `payer`, en `failed / failed`. */
+    it("should normalise the queried failed order as DECLINED", async () => {
+      const { payer: _payer, ...queried } = failedOrder;
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => queried,
+      });
+
+      const transaction = await new MercadoPagoAdapter().getStatus(failedOrder.id);
+
+      expect(transaction.getStatus()).toBe("DECLINED");
+      expect(transaction.rawStatus).toBe("failed");
     });
   });
 });

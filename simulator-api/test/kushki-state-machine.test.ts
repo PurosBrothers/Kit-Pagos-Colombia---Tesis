@@ -22,14 +22,14 @@ import { resetSimulatorState } from "../src/store/GatewayStores";
  * el token de transferencia, sin forma pública de distinguirlos.
  */
 
-function cargo(
-  estado: KushkiChargeResponse["details"]["transactionStatus"],
+function charge(
+  status: KushkiChargeResponse["details"]["transactionStatus"],
 ): KushkiChargeResponse {
   return {
     ticketNumber: "a263b3997a5b446985",
     transactionReference: "adb294b7-a13b-480b-8c63-8a6641b31d8d",
     details: {
-      transactionStatus: estado,
+      transactionStatus: status,
       trackingCode: "ORD-KUSHKI-77",
       subtotalIva0: 35000,
       subtotalIva: 0,
@@ -43,11 +43,11 @@ function cargo(
   };
 }
 
-function transferencia(
-  estado: KushkiTransferStatusResponse["status"],
+function transfer(
+  status: KushkiTransferStatusResponse["status"],
 ): KushkiTransferStatusResponse {
   return {
-    status: estado,
+    status: status,
     token: "16ea5d8beeed4d98948efb09b4d41d9f",
     paymentDescription: "ORD-KUSHKI-PSE-9",
     email: "comprador@example.com",
@@ -70,114 +70,114 @@ function transferencia(
   };
 }
 
-describe("Tabla de cobros con tarjeta de Kushki", () => {
+describe("Kushki card charge table", () => {
   it.each([["APPROVAL"], ["DECLINED"], ["INITIALIZED"]] as const)(
-    "un cargo en %s no vuelve a moverse al consultarse",
-    (estado) => {
+    "a charge in %s does not move again when queried",
+    (status) => {
       // El criterio 1 del issue. `DECLINED` tiene que quedarse en `DECLINED`: si tuviera
       // transición, la consulta lo movería a `APPROVAL` y un cobro rechazado se reportaría
       // como cobrado. `INITIALIZED` tampoco se mueve: un cobro creado pendiente se consulta
       // pendiente, y no hay fuente de cómo termina.
-      const final = cargo(estado);
+      const final = charge(status);
 
       expect(kushkiChargeMachine.transition(final, "query")).toBe(final);
       expect(kushkiChargeMachine.canTransition(final, "query")).toBe(false);
     },
   );
 
-  it("lee y escribe el estado en details y no en la raíz", () => {
+  it("reads and writes the status in details and not at the root", () => {
     // La forma medida contra la API UAT: el estado vive en `details.transactionStatus`, en
     // camelCase, mientras que el `ticketNumber` sí está en la raíz. Si la máquina leyera
     // `transaction_status` en la raíz, el normalizador del SDK no encontraría el estado
     // y el cobro se reportaría sin resolver.
-    expect(kushkiChargeMachine.statusOf(cargo("INITIALIZED"))).toBe("INITIALIZED");
+    expect(kushkiChargeMachine.statusOf(charge("INITIALIZED"))).toBe("INITIALIZED");
   });
 
-  it("no muta el cargo que recibe", () => {
-    const original = cargo("INITIALIZED");
-    const copia = structuredClone(original);
+  it("does not mutate the charge it receives", () => {
+    const original = charge("INITIALIZED");
+    const copy = structuredClone(original);
 
     kushkiChargeMachine.transition(original, "query");
 
-    expect(original).toEqual(copia);
+    expect(original).toEqual(copy);
     expect(original.details.transactionStatus).toBe("INITIALIZED");
   });
 });
 
-describe("Tabla de transferencias de Kushki", () => {
-  it("el token emitido arranca en requestedToken", () => {
+describe("Kushki transfer table", () => {
+  it("the issued token starts at requestedToken", () => {
     // La primera transición no la dispara nada: se queda donde nació. El avance real lo
     // hace `init`, que es lo medido —"pasa a initializedTransaction al iniciarla"—.
-    const emitida = transferencia("requestedToken");
+    const issued = transfer("requestedToken");
 
-    expect(kushkiTransferMachine.transition(emitida, "query")).toBe(emitida);
-    expect(kushkiTransferMachine.canTransition(emitida, "query")).toBe(false);
+    expect(kushkiTransferMachine.transition(issued, "query")).toBe(issued);
+    expect(kushkiTransferMachine.canTransition(issued, "query")).toBe(false);
   });
 
-  it("init lleva requestedToken a initializedTransaction", () => {
-    const iniciada = kushkiTransferMachine.transition(
-      transferencia("requestedToken"),
+  it("init takes requestedToken to initializedTransaction", () => {
+    const initiated = kushkiTransferMachine.transition(
+      transfer("requestedToken"),
       "pay",
     );
 
-    expect(iniciada.status).toBe("initializedTransaction");
-    expect(kushkiTransferMachine.canTransition(transferencia("requestedToken"), "pay")).toBe(
+    expect(initiated.status).toBe("initializedTransaction");
+    expect(kushkiTransferMachine.canTransition(transfer("requestedToken"), "pay")).toBe(
       true,
     );
   });
 
-  it("la consulta cierra la transferencia ya iniciada", () => {
-    const cerrada = kushkiTransferMachine.transition(
-      transferencia("initializedTransaction"),
+  it("the query closes the already initiated transfer", () => {
+    const closed = kushkiTransferMachine.transition(
+      transfer("initializedTransaction"),
       "query",
     );
 
-    expect(cerrada.status).toBe("approvedTransaction");
+    expect(closed.status).toBe("approvedTransaction");
   });
 
-  it("una transferencia iniciada no avanza con una petición que no es consulta", () => {
+  it("an initiated transfer does not advance with a request that is not a query", () => {
     // Transición no permitida: el segundo pago ya ocurrió, es el paso de `init`.
-    const iniciada = transferencia("initializedTransaction");
+    const initiated = transfer("initializedTransaction");
 
-    expect(kushkiTransferMachine.transition(iniciada, "pay")).toBe(iniciada);
+    expect(kushkiTransferMachine.transition(initiated, "pay")).toBe(initiated);
   });
 
   it.each([["approvedTransaction"], ["declinedTransaction"]] as const)(
-    "una transferencia en %s no vuelve a moverse al consultarse",
-    (estado) => {
+    "a transfer in %s does not move again when queried",
+    (status) => {
       // El criterio 1 del issue: una transferencia aprobada se consulta como aprobada.
-      const final = transferencia(estado);
+      const final = transfer(status);
 
       expect(kushkiTransferMachine.transition(final, "query")).toBe(final);
       expect(kushkiTransferMachine.canTransition(final, "query")).toBe(false);
     },
   );
 
-  it("conserva el token, el monto y la referencia del comercio", () => {
-    const cerrada = kushkiTransferMachine.transition(
-      transferencia("initializedTransaction"),
+  it("keeps the token, the amount and the merchant reference", () => {
+    const closed = kushkiTransferMachine.transition(
+      transfer("initializedTransaction"),
       "query",
     );
 
     // El token es el dato con el que se consultó, así que tiene que seguir siendo el mismo.
-    expect(cerrada.token).toBe("16ea5d8beeed4d98948efb09b4d41d9f");
-    expect(cerrada.paymentDescription).toBe("ORD-KUSHKI-PSE-9");
-    expect(cerrada.amount.subtotalIva0).toBe(35000);
-    expect(cerrada.callbackUrl).toBe("https://comercio.example.com/retorno");
-    expect(cerrada.bankId).toBe("007");
+    expect(closed.token).toBe("16ea5d8beeed4d98948efb09b4d41d9f");
+    expect(closed.paymentDescription).toBe("ORD-KUSHKI-PSE-9");
+    expect(closed.amount.subtotalIva0).toBe(35000);
+    expect(closed.callbackUrl).toBe("https://comercio.example.com/retorno");
+    expect(closed.bankId).toBe("007");
   });
 
-  it("no muta la transferencia que recibe", () => {
-    const original = transferencia("initializedTransaction");
-    const copia = structuredClone(original);
+  it("does not mutate the transfer it receives", () => {
+    const original = transfer("initializedTransaction");
+    const copy = structuredClone(original);
 
     kushkiTransferMachine.transition(original, "query");
 
-    expect(original).toEqual(copia);
+    expect(original).toEqual(copy);
     expect(original.status).toBe("initializedTransaction");
   });
 });
-describe("el desenlace registrado por el escenario", () => {
+describe("the outcome registered by the scenario", () => {
   beforeEach(() => {
     resetSimulatorState();
   });
@@ -186,52 +186,52 @@ describe("el desenlace registrado por el escenario", () => {
     resetSimulatorState();
   });
 
-  it("la tabla usa el estado registrado en vez del destino por defecto", () => {
+  it("the table uses the registered status instead of the default target", () => {
     // Es lo que hace alcanzable `declinedTransaction`: sin escenario registrado, la
     // transición iba siempre a `approvedTransaction` y el rechazo no se podía pedir.
     const token = "16ea5d8beeed4d98948efb09b4d41d9f";
 
     rememberScenarioTarget("kushki", "transfer", token, "declinedTransaction");
 
-    const cerrada = kushkiTransferMachine.transition(
-      transferencia("initializedTransaction"),
+    const closed = kushkiTransferMachine.transition(
+      transfer("initializedTransaction"),
       "query",
     );
 
-    expect(cerrada.status).toBe("declinedTransaction");
+    expect(closed.status).toBe("declinedTransaction");
   });
 
-  it("sin escenario registrado la transición va a aprobado", () => {
-    const cerrada = kushkiTransferMachine.transition(
-      transferencia("initializedTransaction"),
+  it("without a registered scenario the transition goes to approved", () => {
+    const closed = kushkiTransferMachine.transition(
+      transfer("initializedTransaction"),
       "query",
     );
 
-    expect(cerrada.status).toBe("approvedTransaction");
+    expect(closed.status).toBe("approvedTransaction");
   });
 
-  it("con el pendiente registrado devuelve la misma transferencia", () => {
+  it("with pending registered it returns the same transfer", () => {
     // El escenario PENDING registra el estado de origen como destino. La misma referencia
     // es lo que le dice a la ruta que no hay nada que guardar.
     const token = "16ea5d8beeed4d98948efb09b4d41d9f";
     rememberScenarioTarget("kushki", "transfer", token, "initializedTransaction");
-    const iniciada = transferencia("initializedTransaction");
+    const initiated = transfer("initializedTransaction");
 
-    expect(kushkiTransferMachine.transition(iniciada, "query")).toBe(iniciada);
+    expect(kushkiTransferMachine.transition(initiated, "query")).toBe(initiated);
   });
 
-  it("falla si el destino registrado no está declarado en la tabla", () => {
+  it("fails if the registered target is not declared in the table", () => {
     // `expiredTransaction` es un estado real de Kushki, pero solo de México: la tabla no
     // lo declara. Caer al destino por defecto lo convertiría en una transferencia aprobada.
     const token = "16ea5d8beeed4d98948efb09b4d41d9f";
     rememberScenarioTarget("kushki", "transfer", token, "expiredTransaction");
 
     expect(() =>
-      kushkiTransferMachine.transition(transferencia("initializedTransaction"), "query"),
+      kushkiTransferMachine.transition(transfer("initializedTransaction"), "query"),
     ).toThrow("'expiredTransaction' registrado para kushki/transfer no está declarado");
   });
 
-  it("el desenlace de una transferencia no aplica a otra", () => {
+  it("the outcome of one transfer does not apply to another", () => {
     // Sin esto, un token registrado como declinado contaminaría el siguiente: las pruebas
     // hardcodean tokens de 32 hexadecimales y es fácil repetir uno.
     rememberScenarioTarget(
@@ -241,11 +241,11 @@ describe("el desenlace registrado por el escenario", () => {
       "declinedTransaction",
     );
 
-    const otra = kushkiTransferMachine.transition(
-      { ...transferencia("initializedTransaction"), token: "f" + "0".repeat(31) },
+    const other = kushkiTransferMachine.transition(
+      { ...transfer("initializedTransaction"), token: "f" + "0".repeat(31) },
       "query",
     );
 
-    expect(otra.status).toBe("approvedTransaction");
+    expect(other.status).toBe("approvedTransaction");
   });
 });

@@ -24,7 +24,7 @@
  * motivaron el script eran todos de tipos.
  *
  * Los bloques comparten un solo archivo, así que se declaran una vez `sdk` y los imports; los
- * bloques del README que los repiten se deduplican acá. Un bloque que no deba compilarse
+ * bloques del README que los repiten se deduplican aquí. Un bloque que no deba compilarse
  * —salida de consola, JSON— se marca en el README como ```json o ```bash y este script lo
  * ignora.
  *
@@ -39,23 +39,23 @@ const sdkRoot = path.resolve(__dirname, "..");
 const readmePath = path.join(sdkRoot, "README.md");
 
 /** Devuelve el contenido de cada bloque ```typescript (o ```ts) del README. */
-function bloquesTypeScript(markdown: string): string[] {
-  const bloques: string[] = [];
-  const patron = /```(?:typescript|ts)\r?\n([\s\S]*?)```/g;
-  let coincidencia: RegExpExecArray | null;
+function typeScriptBlocks(markdown: string): string[] {
+  const blocks: string[] = [];
+  const pattern = /```(?:typescript|ts)\r?\n([\s\S]*?)```/g;
+  let regexMatch: RegExpExecArray | null;
 
-  while ((coincidencia = patron.exec(markdown)) !== null) {
-    bloques.push(coincidencia[1]);
+  while ((regexMatch = pattern.exec(markdown)) !== null) {
+    blocks.push(regexMatch[1]);
   }
 
-  return bloques;
+  return blocks;
 }
 
 /**
  * Junta los bloques en un módulo compilable.
  *
  * El README repite los `import` en cada sección a propósito —quien copia un snippet suelto
- * necesita ver qué importar—, así que acá se recogen los **símbolos** y se emite un solo
+ * necesita ver qué importar—, así que aquí se recogen los **símbolos** y se emite un solo
  * import. Deduplicar por línea de texto no sirve: el mismo símbolo aparece en un import de
  * una línea en una sección y en uno multilínea en otra, y las dos líneas son distintas aunque
  * traigan lo mismo.
@@ -63,58 +63,58 @@ function bloquesTypeScript(markdown: string): string[] {
  * Las declaraciones repetidas de `const sdk` se dejan solo la primera vez, por el mismo
  * motivo por el que están repetidas en el README.
  */
-function armarModulo(bloques: string[]): string {
-  const simbolos = new Set<string>();
-  const simbolosBrowser = new Set<string>();
-  const cuerpos: string[] = [];
-  let yaDeclaroSdk = false;
+function buildModule(blocks: string[]): string {
+  const exportedSymbols = new Set<string>();
+  const browserSymbols = new Set<string>();
+  const blockBodies: string[] = [];
+  let sdkAlreadyDeclared = false;
 
-  for (const bloque of bloques) {
-    const sinImports = bloque
+  for (const block of blocks) {
+    const withoutImports = block
       .replace(
         /import\s*\{([^}]+)\}\s*from\s*["']kit-pagos-colombia\/browser["'];?\r?\n?/g,
-        (_todo, lista: string) => {
-          for (const simbolo of lista.split(",")) {
-            const limpio = simbolo.trim();
-            if (limpio) simbolosBrowser.add(limpio);
+        (_fullMatch, items: string) => {
+          for (const symbolName of items.split(",")) {
+            const cleaned = symbolName.trim();
+            if (cleaned) browserSymbols.add(cleaned);
           }
           return "";
         },
       )
       .replace(
         /import\s*\{([^}]+)\}\s*from\s*["']kit-pagos-colombia["'];?\r?\n?/g,
-        (_todo, lista: string) => {
-          for (const simbolo of lista.split(",")) {
-            const limpio = simbolo.trim();
-            if (limpio) simbolos.add(limpio);
+        (_fullMatch, items: string) => {
+          for (const symbolName of items.split(",")) {
+            const cleaned = symbolName.trim();
+            if (cleaned) exportedSymbols.add(cleaned);
           }
           return "";
         },
       );
 
-    const lineas: string[] = [];
-    for (const linea of sinImports.split("\n")) {
-      if (linea.startsWith("const sdk = new KitPagos(")) {
-        if (yaDeclaroSdk) break;
-        yaDeclaroSdk = true;
+    const lines: string[] = [];
+    for (const lineText of withoutImports.split("\n")) {
+      if (lineText.startsWith("const sdk = new KitPagos(")) {
+        if (sdkAlreadyDeclared) break;
+        sdkAlreadyDeclared = true;
       }
-      lineas.push(linea);
+      lines.push(lineText);
     }
 
-    cuerpos.push(lineas.join("\n"));
+    blockBodies.push(lines.join("\n"));
   }
 
   // Si un símbolo se importó tanto del root como de /browser (ej. Gateway reexportado),
   // se aliasa en el browser para no colisionar en el archivo único generado,
   // validando que el módulo /browser efectivamente lo exporta.
-  const simbolosBrowserFormateados = [...simbolosBrowser].map((s) =>
-    simbolos.has(s) ? `${s} as _browser_${s}` : s,
+  const formattedBrowserSymbols = [...browserSymbols].map((s) =>
+    exportedSymbols.has(s) ? `${s} as _browser_${s}` : s,
   );
 
-  const importsRoot = simbolos.size > 0 ? `import { ${[...simbolos].join(", ")} } from "kit-pagos-colombia";` : "";
+  const importsRoot = exportedSymbols.size > 0 ? `import { ${[...exportedSymbols].join(", ")} } from "kit-pagos-colombia";` : "";
   const importsBrowser =
-    simbolosBrowserFormateados.length > 0
-      ? `import { ${simbolosBrowserFormateados.join(", ")} } from "kit-pagos-colombia/browser";`
+    formattedBrowserSymbols.length > 0
+      ? `import { ${formattedBrowserSymbols.join(", ")} } from "kit-pagos-colombia/browser";`
       : "";
 
   return [
@@ -125,15 +125,15 @@ function armarModulo(bloques: string[]): string {
     "declare const app: { post(ruta: string, manejador: (req: any, res: any) => void): void };",
     importsRoot,
     importsBrowser,
-    ...cuerpos,
+    ...blockBodies,
   ].filter(Boolean).join("\n\n");
 }
 
 function main(): void {
   const markdown = fs.readFileSync(readmePath, "utf8");
-  const bloques = bloquesTypeScript(markdown);
+  const blocks = typeScriptBlocks(markdown);
 
-  if (bloques.length === 0) {
+  if (blocks.length === 0) {
     console.error("No se encontró ningún bloque ```typescript en el README.");
     process.exit(1);
   }
@@ -144,9 +144,9 @@ function main(): void {
     process.exit(1);
   }
 
-  const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), "kit-pagos-readme-"));
-  const archivo = path.join(carpeta, "readme-snippets.ts");
-  fs.writeFileSync(archivo, armarModulo(bloques));
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "kit-pagos-readme-"));
+  const filePath = path.join(folder, "readme-snippets.ts");
+  fs.writeFileSync(filePath, buildModule(blocks));
 
   /*
    * `paths` solo se puede declarar en un tsconfig, no como bandera, así que se escribe uno
@@ -154,7 +154,7 @@ function main(): void {
    * compilar contra los tipos que se publican, no contra `src/`, porque es lo único que ve
    * quien instala el paquete.
    */
-  const configPath = path.join(carpeta, "tsconfig.json");
+  const configPath = path.join(folder, "tsconfig.json");
   fs.writeFileSync(
     configPath,
     JSON.stringify(
@@ -179,7 +179,7 @@ function main(): void {
             "kit-pagos-colombia/browser": [path.join(sdkRoot, "dist", "browser", "index.d.ts")],
           },
         },
-        files: [archivo],
+        files: [filePath],
       },
       null,
       2,
@@ -193,7 +193,7 @@ function main(): void {
       ["-p", configPath],
       { stdio: "inherit", shell: process.platform === "win32" },
     );
-    console.log(`Los ${bloques.length} ejemplos de TypeScript del README compilan.`);
+    console.log(`Los ${blocks.length} ejemplos de TypeScript del README compilan.`);
   } catch {
     console.error(
       "\nEl README no compila contra el SDK publicado. Los tipos de arriba son los que " +
@@ -201,7 +201,7 @@ function main(): void {
     );
     process.exit(1);
   } finally {
-    fs.rmSync(carpeta, { recursive: true, force: true });
+    fs.rmSync(folder, { recursive: true, force: true });
   }
 }
 

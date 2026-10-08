@@ -19,6 +19,8 @@
  */
 export interface WompiPaymentMethod {
   type: string;
+  /** El token de `POST /tokens/cards`, en un cobro con tarjeta (`buildCardFieldsFor` del SDK). */
+  token?: string;
   user_type?: number;
   user_legal_id?: string;
   user_legal_id_type?: string;

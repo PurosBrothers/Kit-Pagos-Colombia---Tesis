@@ -115,7 +115,7 @@ async function main(): Promise<void> {
    * generó un salt aleatorio, tomó el timestamp Unix, serializó el cuerpo una
    * sola vez, calculó la firma HMAC-SHA256 sobre método, path, salt, timestamp y
    * las dos llaves, y mandó los cuatro headers que Rapyd exige. Nada de eso se
-   * ve acá, y por eso el mismo código sirve para las cuatro pasarelas.
+   * ve aquí, y por eso el mismo código sirve para las cuatro pasarelas.
    */
   console.log("Creando el pago...");
   const result = await kitPagos.createPayment(request);
@@ -147,7 +147,7 @@ async function main(): Promise<void> {
   /**
    * Paso 4: el pagador paga.
    *
-   * En una aplicación real acá se responde un redirect HTTP y este paso lo hace una
+   * En una aplicación real aquí se responde un redirect HTTP y este paso lo hace una
    * persona en el navegador. Contra el simulador se representa visitando la URL, que es
    * el único punto donde el cobro se concreta: una página creada y no visitada se queda
    * en `NEW` para siempre, igual que contra el sandbox real.
@@ -200,7 +200,7 @@ main().catch((error: unknown) => {
     error.code === KitPagosErrorCode.CONNECTION_FAILED
   ) {
     console.error("\nNo se pudo conectar con la API de Simulación.");
-    console.error("Asegúrate de haberla iniciado en otra terminal:\n");
+    console.error("Asegúrese de haberla iniciado en otra terminal:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }

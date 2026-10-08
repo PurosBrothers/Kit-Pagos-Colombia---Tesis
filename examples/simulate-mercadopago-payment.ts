@@ -24,7 +24,7 @@ import {
  * Raíz del mock de Mercado Pago en la API de Simulación local.
  *
  * Es la raíz y no el endpoint de pagos desde el issue #64: PSE se cobra por la
- * Orders API, así que el adaptador necesita colgar dos rutas de acá.
+ * Orders API, así que el adaptador necesita colgar dos rutas de aquí.
  */
 const SIMULATOR_MERCADOPAGO_URL = "http://localhost:3000/v1/sim/mercadopago";
 
@@ -68,7 +68,7 @@ async function main(): Promise<void> {
     /**
      * El token de la tarjeta, que el comercio obtiene de la tokenización de Mercado
      * Pago (`POST /v1/card_tokens`) desde el navegador. El SDK lo trata como una
-     * cadena opaca: el número de la tarjeta nunca llega hasta acá.
+     * cadena opaca: el número de la tarjeta nunca llega hasta aquí.
      *
      * Las cuotas no son un adorno en Mercado Pago: es la única de las cuatro
      * pasarelas que las exige siempre, y omitirlas responde `400 Invalid
@@ -95,7 +95,7 @@ async function main(): Promise<void> {
   // createPayment() devuelve o una transacción o una redirección pendiente, y el
   // compilador obliga a distinguirlas: `result.transaction` no existe hasta haber
   // descartado la redirección. El flujo de tarjeta de Checkout API resuelve en la
-  // respuesta, así que acá esta rama no se alcanza; sí se alcanza con Checkout Pro.
+  // respuesta, así que aquí esta rama no se alcanza; sí se alcanza con Checkout Pro.
   if (result.outcome === "REDIRECT_REQUIRED") {
     console.log(`El pago requiere redirigir a: ${result.redirect.redirectUrl}`);
     return;
@@ -138,7 +138,7 @@ main().catch((error: unknown) => {
     error.code === KitPagosErrorCode.CONNECTION_FAILED
   ) {
     console.error("\n❌ No se pudo conectar con la API de Simulación.");
-    console.error("Asegúrate de haberla iniciado en otra terminal:\n");
+    console.error("Asegúrese de haberla iniciado en otra terminal:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }

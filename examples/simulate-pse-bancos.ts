@@ -9,7 +9,7 @@
  * Wompi, `"1051"` en Mercado Pago), y para armar el selector de verdad había que
  * hablarle directo a la pasarela, perdiendo justo lo que el SDK promete.
  *
- * Lo que se ve acá es que el mismo `getPseBanks()` funciona en las cuatro **aunque
+ * Lo que se ve aquí es que el mismo `getPseBanks()` funciona en las cuatro **aunque
  * ninguna publique la lista igual**:
  *
  * | Pasarela     | Dónde está la lista                                        |
@@ -200,7 +200,7 @@ main().catch((error: unknown) => {
     error.code === KitPagosErrorCode.CONNECTION_FAILED
   ) {
     console.error("\nNo se pudo conectar con la API de Simulación.");
-    console.error("Levantala en otra terminal y volvé a correr el ejemplo:\n");
+    console.error("Levántela en otra terminal y vuelva a ejecutar el ejemplo:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }

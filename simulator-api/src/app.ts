@@ -9,17 +9,29 @@ import { createAuthHook, AuthHookOptions } from "./auth/authHook";
 import {
   ClientCredentialsRequiredError,
   CredentialResolver,
+  loadServerEnv,
   MissingCredentialsError,
 } from "./auth/CredentialResolver";
+import { webhookTriggerRoute } from "./routes/webhooks";
+import { startAutoEmission } from "./webhooks/autoEmission";
+import { SignatureGenerator } from "./webhooks/SignatureGenerator";
+import {
+  WebhookDispatchConfig,
+  WebhookDispatcher,
+  webhookConfigFromEnv,
+} from "./webhooks/webhookDispatch";
 import { KitPagosProvider } from "./services/KitPagosProvider";
 import { kitPagosApi } from "./kit-pagos-api";
 import { toKitPagosErrorResponse } from "./kit-pagos-api/errors/kitPagosErrorResponse";
+import { parsePublicOrigin } from "./store/BankRedirectOrigins";
 import { registerOpenApi } from "./kit-pagos-api/openapi/register";
 
 declare module "fastify" {
   interface FastifyInstance {
     credentialResolver: CredentialResolver;
     kitPagosProvider: KitPagosProvider;
+    /** `SIMULATOR_PUBLIC_ORIGIN` ya validado, o `undefined` si no está configurado. */
+    publicOrigin: string | undefined;
   }
 }
 
@@ -28,6 +40,18 @@ export interface BuildAppOptions {
   authOptions?: AuthHookOptions;
   credentialResolver?: CredentialResolver;
   kitPagosProvider?: KitPagosProvider;
+  /**
+   * Salida de webhooks. Sin esta opción se lee de `SIMULATOR_WEBHOOK_*`; con ella, lo que
+   * traiga reemplaza esos valores, y `{}` es «sin destino ni emisión automática».
+   */
+  webhooks?: Partial<WebhookDispatchConfig>;
+  /** Reemplaza `SIMULATOR_PUBLIC_ORIGIN`; `null` es «sin origen configurado». */
+  publicOrigin?: string | null;
+}
+
+function webhookConfig(override?: Partial<WebhookDispatchConfig>): WebhookDispatchConfig {
+  const fromEnv = webhookConfigFromEnv(override === undefined ? loadServerEnv() : {});
+  return { ...fromEnv, ...override };
 }
 
 /**
@@ -40,6 +64,13 @@ export interface BuildAppOptions {
  */
 export function buildApp(options?: BuildAppOptions): FastifyInstance {
   const loggerConfig = options?.logger ?? false;
+  // Antes de crear la app: un destino o un origen inválido detiene el arranque.
+  const dispatcher = new WebhookDispatcher(webhookConfig(options?.webhooks));
+  const publicOrigin = parsePublicOrigin(
+    options?.publicOrigin === undefined
+      ? loadServerEnv().SIMULATOR_PUBLIC_ORIGIN
+      : options.publicOrigin ?? undefined,
+  );
 
   const app = Fastify({
     logger: loggerConfig,
@@ -86,6 +117,7 @@ export function buildApp(options?: BuildAppOptions): FastifyInstance {
 
   app.decorate("credentialResolver", credentialResolver);
   app.decorate("kitPagosProvider", kitPagosProvider);
+  app.decorate("publicOrigin", publicOrigin);
 
   // Hook de autenticación Bearer de la API REST
   app.addHook("onRequest", createAuthHook(options?.authOptions));
@@ -125,6 +157,12 @@ export function buildApp(options?: BuildAppOptions): FastifyInstance {
   app.register(mercadopagoRoutes);
   app.register(rapydRoutes);
   app.register(kushkiRoutes);
+
+  const generator = new SignatureGenerator((gateway) => credentialResolver.getServerCredentials(gateway));
+  app.register(webhookTriggerRoute, { generator, dispatcher });
+  const stopAutoEmission = startAutoEmission(generator, dispatcher, app.log);
+  app.addHook("onClose", async () => stopAutoEmission());
+
   app.register(kitPagosApi, { prefix: "/v1/api" });
 
   return app;

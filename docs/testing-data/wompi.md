@@ -28,8 +28,10 @@ Para probar la tokenización vía API (`POST /tokens/cards`) o mediante el Widge
 Tres cosas que solo aparecieron al llamar, y que están en el punto 50 del `architecture-log.md`:
 
 1. **El cobro nace `PENDING`, no `APPROVED`.** `POST /transactions` responde `201` con
-   `status: "PENDING"` y `finalized_at: null`, y la transacción pasa a `APPROVED` sola unos
-   cientos de milisegundos después. El resultado **no está en la respuesta de creación**.
+   `status: "PENDING"` y `finalized_at: null`, y la transacción pasa a `APPROVED` sola poco
+   después: unos cientos de milisegundos el 19 de septiembre, y entre 1,2 y 2,8 s en tres
+   transacciones el 6 de octubre (sección 1.3). El resultado **no está en la respuesta de
+   creación**.
 2. **Sin `payment_method` no hay cobro:** `422 UNPROCESSABLE` con
    `"No se especificó método de pago o fuente de pago"`.
 3. **Sin firma de integridad tampoco**, ni con tarjeta ni con PSE: `422` con
@@ -76,6 +78,59 @@ id con la forma del nativo, y da lo mismo enviar `Authorization` o no:
 ```
 
 El mensaje no incluye el identificador consultado.
+
+### 1.3. Tarjeta declinada y llave inválida (6 de octubre de 2026)
+
+> **Medido contra el sandbox real entre las 10:31 y las 10:39 (UTC−5), para el issue #122.**
+
+| Caso | HTTP | Lo observado |
+| --- | --- | --- |
+| Tarjeta `4242 4242 4242 4242` | `201` | Nace `PENDING`; la consulta la muestra `APPROVED`, sin `status_message`, a los 2 072 ms |
+| Tarjeta `4111 1111 1111 1111` | `201` | Nace `PENDING`; la consulta la muestra `DECLINED` con `status_message: "La transacción fue rechazada (Sandbox)"`, a los 2 800 ms |
+| `POST /transactions` con una llave privada inexistente y cuerpo válido | `401` | `{"error":{"type":"INVALID_ACCESS_TOKEN","reason":"Llave no válida"}}` |
+| `POST /transactions` con la llave `garbage` | `401` | `{"error":{"type":"INVALID_ACCESS_TOKEN","reason":"La llave proporcionada no corresponde a este ambiente, se recibió: garbage"}}` |
+| `POST /transactions` con llave inexistente y cuerpo `{}` | `422` | Error de validación del cuerpo; no hubo `401` |
+| `GET /transactions/{id}` con una llave privada inexistente | `403` | `{"error":{"type":"INVALID_ACCESS_TOKEN","reason":"El token no tiene suficientes permisos"}}` |
+| `GET /transactions/{id}` sin `Authorization`, con la llave pública o con la privada | `200` | La transacción completa |
+
+- El token de aceptación es de un solo uso (reusarlo da `422 "El token de aceptación ya fue
+  usado"`), pero un intento rechazado con `401` no lo gasta.
+- Con una llave sin formato de sandbox, el `reason` repite la llave recibida. No se comprobó qué
+  pasa con una llave de producción enviada al sandbox.
+
+**Con una llave pública inexistente**, que es la que el SDK envía en todas las rutas de Wompi
+(`Authorization: Bearer <publicKey>`). Medido el 6 de octubre de 2026 entre las 14:05 y las 14:12
+(UTC−5), con `pub_test_` más 32 caracteres hexadecimales:
+
+| Petición | HTTP | Respuesta |
+| --- | --- | --- |
+| `POST /transactions` (tarjeta, con token, aceptación y firma válidos) | `401` | `{"error":{"type":"INVALID_ACCESS_TOKEN","reason":"Llave no válida"}}` |
+| `GET /transactions/{id existente}` | **`200`** | La transacción completa, igual que con la llave válida o sin `Authorization` |
+| `GET /merchants/{la misma llave}` | `404` | `{"error":{"type":"NOT_FOUND_ERROR","reason":"La entidad solicitada no existe"}}`, también sin `Authorization` |
+| `GET /merchants/foo` | `422` | `{"error":{"type":"INPUT_VALIDATION_ERROR","messages":{"public_key":["Formato inválido"]}}}` |
+| `GET /pse/financial_institutions` | **`200`** | Los tres bancos de prueba; también con una `prv_test_` inexistente |
+| `GET /pse/financial_institutions` sin `Authorization` | `401` | `{"error":{"type":"INVALID_ACCESS_TOKEN","reason":"Se esperaba una llave pública o privada pero no se recibió ninguna"}}` |
+| `GET /pse/financial_institutions` con `foo` o con una `pub_prod_` inexistente | `401` | `"La llave proporcionada no corresponde a este ambiente, se recibió: …"`, con la llave repetida |
+| `POST /tokens/cards` | `404` | `{"error":{"type":"NOT_FOUND","reason":"Comercio con llave pub_test_… no encontrado","code":"MERCHANT_NOT_FOUND"}}` |
+
+Wompi rechaza la llave pública inexistente solo en las rutas que crean algo; en las lecturas
+parece revisar solo el prefijo y el ambiente. Esa es una explicación posible, no medida. La lista
+de bancos no exige una llave pública existente, solo una con forma de sandbox.
+
+### 1.4. Validación del número en `POST /tokens/cards` (6 de octubre de 2026)
+
+> **Medido contra el sandbox real a las 14:00 (UTC−5)**, con la llave pública, `cvc` `123`,
+> vencimiento `12/29` y titular `Prueba Kit`.
+
+| Número enviado | HTTP | Respuesta |
+| --- | --- | --- |
+| `4242424242424242` | `201` | `status: "CREATED"`, id `tok_test_…` |
+| `4242`, o `4242 4242 4242 4242` con espacios | `422` | `{"error":{"type":"INPUT_VALIDATION_ERROR","messages":{"number":["debe coincidir con el patron \"^\\d{12,19}$\""]}}}` |
+| `4242424242424241` (16 dígitos) o 19 dígitos que no pasan Luhn | `422` | `{"error":{"type":"INPUT_VALIDATION_ERROR","messages":{"number":["El número de tarjeta es inválido. Luhn check falló."]}}}` |
+
+Wompi revisa primero el patrón y después el algoritmo de Luhn. El patrón no acepta espacios y
+admite de 12 a 19 dígitos. «patron» va sin tilde, tal como lo devuelve la API, y ninguna respuesta
+trae `reason`. El punto 77 del `architecture-log.md` registró solo el comienzo de este mensaje.
 
 ---
 
@@ -144,6 +199,25 @@ de arriba:
 > `status_message: "Transacción con ERROR en Sandbox"` y con `async_payment_url` presente. El estado
 > se mantiene igual hasta los 41 865 ms, la última consulta. Igual que en los bancos `1` y `2`, la URL
 > y el desenlace aparecen en la misma consulta.
+
+> **Medido de nuevo el 6 de octubre de 2026, entre las 13:57 y las 14:00 (UTC−5), para el issue
+> #122.** Cinco transacciones (banco `1`, tres veces el `2` y el `3`), consultadas durante 20 s con
+> un intervalo efectivo de 0,85 a 1,9 s, unas 90 consultas en total.
+
+| Banco | Desenlace | `status_message` | Primera consulta con `async_payment_url` |
+| --- | --- | --- | --- |
+| `"1"` | `APPROVED` | `null` | La misma que trae `APPROVED`, a los 2 225 ms |
+| `"2"` | `DECLINED` | `"Transacción RECHAZADA en Sandbox"` | La misma que trae `DECLINED`, entre 844 y 5 667 ms |
+| `"3"` | `ERROR` | `"Transacción con ERROR en Sandbox"` | La misma que trae `ERROR`, a los 829 ms |
+
+- **Ninguna consulta mostró `PENDING` con `async_payment_url`.** La URL, el desenlace,
+  `finalized_at` y `status_message` llegaron siempre juntos. Con ese intervalo no se puede
+  descartar una ventana de menos de 100 ms entre la URL y el desenlace.
+- La URL tiene la forma `https://api-sandbox.wompi.co/v1/pse/redirect?ticket_id=<id sin guiones>`.
+- El tiempo hasta el desenlace varió entre 0,2 y 2,8 s; los 4 964 ms del 5 de octubre se deben
+  al intervalo de consulta de entonces, no a un tiempo fijo.
+- Por lo tanto, un SDK que se detiene en cuanto ve la URL, sin mirar el estado, le entrega al
+  comercio una redirección hacia un pago que ya está rechazado.
 
 ### Integración con Widget
 

@@ -5,9 +5,12 @@ import {
 } from "../gateways/mercadopago/types";
 import { RapydCheckout, RapydPayment } from "../gateways/rapyd/types";
 import { WompiTransaction } from "../gateways/wompi/types";
+import { clearBankRedirectOrigins } from "./BankRedirectOrigins";
+import { clearCardTokenOutcomes } from "./CardTokenOutcomes";
 import { clearScenarioMarks } from "./ScenarioMarks";
 import { clearScenarioTargets } from "../state/scenarioTarget";
 import { TransactionStore } from "./TransactionStore";
+import { clearTraceabilityCodes } from "./TransferTraceability";
 
 /**
  * Los almacenes del simulador: uno por pasarela, y en Rapyd uno por recurso.
@@ -72,4 +75,7 @@ export function resetSimulatorState(): void {
   kushkiTransfers.clear();
   clearScenarioMarks();
   clearScenarioTargets();
+  clearCardTokenOutcomes();
+  clearBankRedirectOrigins();
+  clearTraceabilityCodes();
 }

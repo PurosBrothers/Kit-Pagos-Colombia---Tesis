@@ -3,21 +3,21 @@ import { createAuthHook, timingSafeCompare } from "../src/auth/authHook";
 
 describe("authHook", () => {
   describe("timingSafeCompare", () => {
-    it("devuelve true para cadenas exactamente iguales", () => {
+    it("returns true for exactly equal strings", () => {
       expect(timingSafeCompare("secret_token_123", "secret_token_123")).toBe(true);
     });
 
-    it("devuelve false para cadenas de diferente longitud", () => {
+    it("returns false for strings of different length", () => {
       expect(timingSafeCompare("short", "much_longer_token")).toBe(false);
     });
 
-    it("devuelve false para cadenas de igual longitud pero diferente contenido", () => {
+    it("returns false for strings of equal length but different content", () => {
       expect(timingSafeCompare("token_12345", "token_99999")).toBe(false);
     });
   });
 
-  describe("Comportamiento en modo abierto (sin API_AUTH_TOKEN)", () => {
-    it("permite peticiones sin cabecera Authorization y emite una advertencia en el log", async () => {
+  describe("Behavior in open mode (without API_AUTH_TOKEN)", () => {
+    it("allows requests without an Authorization header and logs a warning", async () => {
       const warnSpy = jest.fn();
       const app = Fastify();
 
@@ -42,7 +42,7 @@ describe("authHook", () => {
       await app.close();
     });
 
-    it("cae al alias SIMULATOR_API_AUTH_TOKEN si API_AUTH_TOKEN es cadena vacía", async () => {
+    it("falls back to the SIMULATOR_API_AUTH_TOKEN alias if API_AUTH_TOKEN is an empty string", async () => {
       const originalEnv = { ...process.env };
       process.env.API_AUTH_TOKEN = "   ";
       process.env.SIMULATOR_API_AUTH_TOKEN = "fallback_secret_token";
@@ -71,7 +71,7 @@ describe("authHook", () => {
     });
   });
 
-  describe("Comportamiento con token configurado", () => {
+  describe("Behavior with a configured token", () => {
     const SECRET = "super_secure_api_token_123";
 
     function buildProtectedApp() {
@@ -88,7 +88,7 @@ describe("authHook", () => {
       return app;
     }
 
-    it("permite el paso a rutas exentas (/health) sin cabecera de autorización", async () => {
+    it("lets exempt routes (/health) through without an authorization header", async () => {
       const app = buildProtectedApp();
       const res = await app.inject({ method: "GET", url: "/health" });
 
@@ -97,7 +97,7 @@ describe("authHook", () => {
       await app.close();
     });
 
-    it("responde 401 si no se envía la cabecera Authorization en rutas protegidas", async () => {
+    it("answers 401 if the Authorization header is not sent on protected routes", async () => {
       const app = buildProtectedApp();
       const res = await app.inject({ method: "GET", url: "/protected" });
 
@@ -107,7 +107,7 @@ describe("authHook", () => {
       await app.close();
     });
 
-    it("responde 401 si el esquema no es Bearer", async () => {
+    it("answers 401 if the scheme is not Bearer", async () => {
       const app = buildProtectedApp();
       const res = await app.inject({
         method: "GET",
@@ -120,7 +120,7 @@ describe("authHook", () => {
       await app.close();
     });
 
-    it("responde 401 si el token es incorrecto", async () => {
+    it("answers 401 if the token is wrong", async () => {
       const app = buildProtectedApp();
       const res = await app.inject({
         method: "GET",
@@ -133,7 +133,7 @@ describe("authHook", () => {
       await app.close();
     });
 
-    it("permite el paso con 200 cuando el token Bearer es correcto", async () => {
+    it("lets the request through with 200 when the Bearer token is correct", async () => {
       const app = buildProtectedApp();
       const res = await app.inject({
         method: "GET",
@@ -143,6 +143,49 @@ describe("authHook", () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.json()).toEqual({ secretData: 42 });
+      await app.close();
+    });
+  });
+
+  describe("Protected routes inside an exempt prefix", () => {
+    const SECRET = "super_secure_api_token_123";
+
+    function buildApp() {
+      const app = Fastify();
+      app.addHook("onRequest", createAuthHook({ expectedToken: SECRET }));
+      app.get("/v1/sim/open", async () => ({ ok: true }));
+      app.get("/v1/sim/webhooks/:id", async () => ({ ok: true }));
+      return app;
+    }
+
+    it("decides on the registered route: /v1/sim stays exempt and /v1/sim/webhooks requires the token", async () => {
+      const app = buildApp();
+
+      expect((await app.inject({ method: "GET", url: "/v1/sim/open" })).statusCode).toBe(200);
+      expect((await app.inject({ method: "GET", url: "/v1/sim/webhooks/abc" })).statusCode).toBe(401);
+      expect((await app.inject({ method: "GET", url: "/v1/sim/%77ebhooks/abc" })).statusCode).toBe(401);
+      await app.close();
+    });
+
+    it("without a matched route it normalizes the URL: upper case, double slashes and the trailing one do not exempt it", async () => {
+      const app = buildApp();
+
+      expect((await app.inject({ method: "GET", url: "/V1/SIM//WEBHOOKS/x/y/" })).statusCode).toBe(401);
+      expect((await app.inject({ method: "GET", url: "/v1/sim/nada" })).statusCode).toBe(404);
+      // Una secuencia `%` inválida no rompe el hook; Fastify la rechaza o no la encuentra.
+      expect([400, 404]).toContain((await app.inject({ method: "GET", url: "/v1/sim/%E0%A4%A" })).statusCode);
+      await app.close();
+    });
+
+    it("accepts its own list of protected routes", async () => {
+      const app = Fastify();
+      app.addHook(
+        "onRequest",
+        createAuthHook({ expectedToken: SECRET, exemptPaths: ["/v1/sim"], protectedPaths: ["/v1/sim/open"] }),
+      );
+      app.get("/v1/sim/open", async () => ({ ok: true }));
+
+      expect((await app.inject({ method: "GET", url: "/v1/sim/open" })).statusCode).toBe(401);
       await app.close();
     });
   });

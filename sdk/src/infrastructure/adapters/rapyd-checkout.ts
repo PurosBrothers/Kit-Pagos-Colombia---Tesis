@@ -34,7 +34,7 @@
  * El costo, dicho: en Rapyd el `cardToken` que el comercio haya conseguido **no se usa**,
  * porque su página pide la tarjeta de nuevo. No se rechaza para no obligar al comercio a
  * escribir código distinto por pasarela, que es lo que el SDK existe para evitar; queda
- * documentado acá, en `PaymentMethod.card()` y en el punto 50 del `architecture-log.md`.
+ * documentado aquí, en `PaymentMethod.card()` y en el punto 50 del `architecture-log.md`.
  */
 import type { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
 
@@ -45,7 +45,7 @@ import type { CreatePaymentRequest } from "../../application/ports/PaymentGatewa
  * `checkout_`), y eso permite elegir la ruta de consulta sin adivinar: se midió que un
  * id de checkout en `GET /v1/payments/{id}` responde `400 ERROR_GET_PAYMENT`. Es la misma
  * regla que el adaptador de Mercado Pago aplica con el prefijo `ORD` de sus órdenes, y
- * a diferencia del caso de Kushki acá el prefijo sí está en la respuesta que se midió.
+ * a diferencia del caso de Kushki aquí el prefijo sí está en la respuesta que se midió.
  */
 const CHECKOUT_ID_PREFIX = "checkout_";
 

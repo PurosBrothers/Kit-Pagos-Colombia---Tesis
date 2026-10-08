@@ -46,7 +46,12 @@ import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { GatewayTransactionId } from "../../domain/value-objects/GatewayTransactionId";
-import type { PendingRedirect } from "../../domain/value-objects/PaymentResult";
+import {
+  redirectRequired,
+  transactionResult,
+  type PaymentResult,
+} from "../../domain/value-objects/PaymentResult";
+import type { Transaction } from "../../domain/entities/Transaction";
 import type { PayerKind, PaymentMethod } from "../../domain/value-objects/PaymentMethod";
 import type { Payer } from "../../domain/value-objects/Payer";
 import { describePseBank, type PseBank } from "../../domain/value-objects/PseBank";
@@ -62,7 +67,7 @@ import {
  * devuelve en el mensaje de validación cuando se omite el campo ("Debe ser uno
  * de estos: RC, TI, CC, TE, CE, NIT, PP, DNI, PPT, PA").
  *
- * Vive acá y no en `Payer` porque es un conjunto con alcance de pasarela.
+ * Vive aquí y no en `Payer` porque es un conjunto con alcance de pasarela.
  * `Payer.documentType` es un string libre a propósito: el mismo pagador puede
  * ser válido para una pasarela e inválido para otra, y meter la lista de Wompi
  * en el dominio le daría a una pasarela poder de veto sobre las otras tres.
@@ -350,11 +355,11 @@ export function requiresRedirect(rawResponse: unknown, paymentMethodType?: strin
  *
  * Por lo mismo que el token de tarjeta y los datos de PSE: un 422 de Wompi dice que falta un
  * campo del cuerpo, no qué configurar ni de dónde sacarlo, y el nombre del campo (`signature`)
- * no se parece al del ajuste que falta (`integritySecret`). Acá sí se puede decir las dos
+ * no se parece al del ajuste que falta (`integritySecret`). Aquí sí se puede decir las dos
  * cosas, y encima gratis: la guarda del secreto corre **antes** de pedir el token de
  * aceptación, así que un comercio mal configurado no paga ni una llamada HTTP.
  *
- * Consultar el estado no pasa por acá, porque esa llamada no lleva firma. Por eso
+ * Consultar el estado no pasa por aquí, porque esa llamada no lleva firma. Por eso
  * `integritySecret` sigue siendo opcional en el tipo: quien solo consulte no lo necesita.
  */
 export function assertIntegritySecret(
@@ -383,7 +388,7 @@ export function assertIntegritySecret(
  * porque sea otro requisito: las dos son el mismo, y la explicación de por qué está en
  * `assertIntegritySecret()`.
  *
- * El código es `MALFORMED_RESPONSE` y no `INVALID_CREDENTIALS` porque acá el comercio sí
+ * El código es `MALFORMED_RESPONSE` y no `INVALID_CREDENTIALS` porque aquí el comercio sí
  * configuró algo: lo que falló es que `GET /merchants/{llave pública}` no trajo el token
  * donde debía. La causa típica sigue siendo de credenciales —una llave pública de otro
  * comercio o de otro ambiente— y por eso el mensaje manda a revisarlas, pero el hecho
@@ -408,6 +413,33 @@ export function assertAcceptanceToken(
   );
 }
 
+/**
+ * Corrige la clasificación del 404 de `GET /merchants/{llave pública}`.
+ *
+ * Esa ruta no es la búsqueda de un recurso del comercio: busca el comercio por su llave
+ * pública, y con una llave de forma válida pero inexistente responde `404 NOT_FOUND_ERROR
+ * "La entidad solicitada no existe"`, también sin `Authorization`. Una llave con formato
+ * inválido da 422 y se deja como INVALID_REQUEST. Medido el 6 de octubre de 2026,
+ * docs/testing-data/wompi.md §1.3. Por status, `ErrorHandler` lo deja en RESOURCE_NOT_FOUND
+ * y el comercio buscaría una transacción que nunca existió.
+ *
+ * Solo aplica a esta llamada: el mismo 404 en `GET /transactions/{id}` sí es «no existe».
+ * El mensaje nombra la llave sin repetirla, porque los mensajes de error terminan en logs.
+ */
+export function reclassifyWompiMerchantLookupError(error: unknown): unknown {
+  if (!(error instanceof KitPagosError) || error.code !== KitPagosErrorCode.RESOURCE_NOT_FOUND) {
+    return error;
+  }
+  return new KitPagosError(
+    KitPagosErrorCode.INVALID_CREDENTIALS,
+    Gateway.WOMPI,
+    error.originalPayload,
+    "Wompi no reconoce la llave pública configurada: GET /merchants/{llave pública} " +
+      "respondió 404. Revisa que la llave pública exista y sea del mismo ambiente que la " +
+      "privada.",
+  );
+}
+
 export function extractAcceptanceToken(rawResponse: unknown): string | undefined {
   const data = readObject(rawResponse, "data");
   const presigned = readObject(data, "presigned_acceptance");
@@ -419,7 +451,33 @@ const defaultSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Consulta la transacción hasta que aparezca la URL de redirección.
+ * Si la transacción ya tiene desenlace y no queda nada a qué redirigir.
+ *
+ * Todo estado distinto de `PENDING` es final en Wompi (`APPROVED`, `DECLINED`, `VOIDED`,
+ * `ERROR`). El estado vacío no cuenta como final: es una respuesta que todavía no dice nada,
+ * y se sigue consultando como si estuviera pendiente.
+ */
+function isSettled(snapshot: WompiRedirectSnapshot): boolean {
+  return snapshot.status !== "" && snapshot.status !== "PENDING";
+}
+
+/**
+ * Si la consulta ya permite decidir: o redirige, o trae el desenlace.
+ *
+ * Solo `PENDING` con URL es una redirección. Medido el 6 de octubre de 2026
+ * (`docs/testing-data/wompi.md`, sección 3): en el sandbox ninguna de unas 90 consultas
+ * mostró `PENDING` con `async_payment_url`; la URL llegó siempre junto con `APPROVED`,
+ * `DECLINED` o `ERROR`. Detenerse al ver la URL, sin mirar el estado, le entregaba al
+ * comercio una redirección hacia un pago ya rechazado. Que en producción llegue `PENDING`
+ * con URL **no está medido**: es el caso que reproduce la API de Simulación, y se trata
+ * como redirección porque es el único en que redirigir tiene sentido.
+ */
+function isDecided(snapshot: WompiRedirectSnapshot): boolean {
+  return isSettled(snapshot) || Boolean(snapshot.redirectUrl);
+}
+
+/**
+ * Consulta la transacción hasta que redirija o tenga desenlace, y devuelve esa respuesta.
  *
  * ## Por qué no usa RetryHandler
  *
@@ -432,22 +490,23 @@ const defaultSleep = (ms: number): Promise<void> =>
  *
  * ## Por qué lanza en vez de devolver algo
  *
- * Si se agota el límite, la alternativa sería devolver la transacción en
- * `PENDING` sin URL. Eso reproduce exactamente el defecto que `PaymentResult`
+ * Si se agota el límite sin URL ni desenlace, la alternativa sería devolver la
+ * transacción en `PENDING` sin URL. Eso reproduce exactamente el defecto que `PaymentResult`
  * existe para impedir: el comercio recibe algo que parece válido, no redirige
  * nunca, y el pago se queda colgado hasta expirar. Por eso lanza, y el error
  * lleva el `gatewayTransactionId`: el pago **ya existe** en la pasarela, y
  * perder su identificador sería peor que el defecto original, porque volvería
  * irrastreable un cobro real.
  *
- * Recibe el lector por parámetro en vez de hacer el `fetch` acá para que las
- * pruebas puedan agotar el límite sin red y sin esperar tiempo real.
+ * Recibe el lector por parámetro en vez de hacer el `fetch` aquí para que las
+ * pruebas puedan agotar el límite sin red y sin esperar tiempo real. Devuelve la
+ * respuesta nativa y no solo el estado porque un desenlace se normaliza entero.
  */
 export async function pollForRedirectUrl(
   gatewayTransactionId: string,
-  readSnapshot: () => Promise<WompiRedirectSnapshot>,
+  readRaw: () => Promise<unknown>,
   options: RedirectPollOptions = {},
-): Promise<WompiRedirectSnapshot & { redirectUrl: string }> {
+): Promise<unknown> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_REDIRECT_TIMEOUT_MS;
   const intervalMs = options.intervalMs ?? DEFAULT_REDIRECT_INTERVAL_MS;
   const sleep = options.sleep ?? defaultSleep;
@@ -456,9 +515,10 @@ export async function pollForRedirectUrl(
   const deadline = now() + timeoutMs;
 
   for (;;) {
-    const snapshot = await readSnapshot();
-    if (snapshot.redirectUrl) {
-      return { ...snapshot, redirectUrl: snapshot.redirectUrl };
+    const rawResponse = await readRaw();
+    const snapshot = extractRedirectSnapshot(rawResponse);
+    if (isDecided(snapshot)) {
+      return rawResponse;
     }
     if (now() >= deadline) {
       throw new KitPagosError(
@@ -480,7 +540,7 @@ export async function pollForRedirectUrl(
  * Existe como función de módulo y no como método privado del adaptador por el
  * CBO: el script de métricas cuenta los tipos que aparecen en **firmas de
  * métodos**, así que un método privado que devolviera `WompiPseFields` le sumaba
- * acoplamiento a una clase que ya estaba en 5 de 5. Acá el tipo no le cuesta
+ * acoplamiento a una clase que ya estaba en 5 de 5. Aquí el tipo no le cuesta
  * nada a nadie. Es el mismo criterio del punto 34.
  */
 export function buildPseFieldsFor(
@@ -522,11 +582,15 @@ export function buildCardFieldsFor(
 }
 
 /**
- * Convierte la respuesta de creación de un PSE en una redirección pendiente,
- * consultando si hace falta.
+ * Convierte la respuesta de creación de un PSE (o de una tarjeta con 3DS) en el
+ * resultado del pago, consultando si hace falta.
  *
- * Recibe el lector por parámetro y no hace HTTP: así el adaptador le pasa su
- * propia función de petición, con sus headers y su manejo de errores, y esta
+ * Termina de una de dos formas: una redirección pendiente, si la transacción está en
+ * `PENDING` con URL, o la transacción normalizada, si ya tiene desenlace, con URL o sin
+ * ella. Ver `isDecided()` para lo medido.
+ *
+ * Recibe el lector y el normalizador por parámetro y no hace HTTP: así el adaptador le
+ * pasa su propia función de petición, con sus headers y su manejo de errores, y esta
  * función sigue siendo probable sin red.
  *
  * El caso en que la URL ya viene en la creación no se da hoy contra Wompi, pero
@@ -536,24 +600,25 @@ export function buildCardFieldsFor(
 export async function resolvePendingRedirect(
   rawResponse: unknown,
   readRaw: (gatewayTransactionId: string) => Promise<unknown>,
+  normalize: (rawResponse: unknown) => Transaction,
   options?: RedirectPollOptions,
-): Promise<PendingRedirect> {
+): Promise<PaymentResult> {
   const id = extractTransactionId(rawResponse);
-  const created = extractRedirectSnapshot(rawResponse);
 
-  const resolved = created.redirectUrl
-    ? { ...created, redirectUrl: created.redirectUrl }
-    : await pollForRedirectUrl(
-        id,
-        async () => extractRedirectSnapshot(await readRaw(id)),
-        options,
-      );
+  const decided = isDecided(extractRedirectSnapshot(rawResponse))
+    ? rawResponse
+    : await pollForRedirectUrl(id, () => readRaw(id), options);
+  const snapshot = extractRedirectSnapshot(decided);
 
-  return {
-    redirectUrl: resolved.redirectUrl,
-    gatewayTransactionId: new GatewayTransactionId(id, Gateway.WOMPI),
-    rawStatus: resolved.status,
-  };
+  if (!isSettled(snapshot) && snapshot.redirectUrl) {
+    return redirectRequired({
+      redirectUrl: snapshot.redirectUrl,
+      gatewayTransactionId: new GatewayTransactionId(id, Gateway.WOMPI),
+      rawStatus: snapshot.status,
+    });
+  }
+
+  return transactionResult(normalize(decided));
 }
 
 /**

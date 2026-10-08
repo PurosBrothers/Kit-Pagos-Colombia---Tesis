@@ -7,9 +7,9 @@ import {
   REDACTED_TEXT,
 } from "../src/logger/redactSerializer";
 
-describe("Redacción de secretos en logs", () => {
+describe("Secret redaction in logs", () => {
   describe("sanitizeHeaders", () => {
-    it("censura todas las cabeceras sensibles independientemente de mayúsculas/minúsculas", () => {
+    it("censors every sensitive header regardless of upper or lower case", () => {
       const headers = {
         "content-type": "application/json",
         "authorization": "Bearer super_secret_token",
@@ -35,7 +35,7 @@ describe("Redacción de secretos en logs", () => {
   });
 
   describe("redactReqSerializer", () => {
-    it("serializa la petición con las cabeceras censuradas", () => {
+    it("serializes the request with the censored headers", () => {
       const mockReq = {
         method: "POST",
         url: "/v1/charges",
@@ -57,8 +57,8 @@ describe("Redacción de secretos en logs", () => {
     });
   });
 
-  describe("Captura de logs en Fastify en tiempo de ejecución", () => {
-    it("garantiza que ninguna credencial ni token se escriba en el stream del logger", async () => {
+  describe("Log capture in Fastify at runtime", () => {
+    it("guarantees that no credential or token is written to the logger stream", async () => {
       let logBuffer = "";
       const customStream = new Writable({
         write(chunk, _encoding, callback) {

@@ -23,22 +23,28 @@
  *    to sandbox environment". Hace falta el token `APP_USR-`.
  *
  * 3. **Y un usuario de prueba como pagador rompe el pago**, que es lo contrario
- *    de lo que ese mismo mensaje aconseja. Con un email
- *    `test_user_...@testuser.com` la orden se crea pero el pago interno queda en
- *    `failed / processing_error` (HTTP 402), medido con dos bancos distintos.
+ *    de lo que ese mismo mensaje aconseja. Con el email de un usuario creado por
+ *    `POST /users/test_user` la creación responde `402`, y lo mismo con un banco que
+ *    no existe (`9999`). Medido de nuevo el 7 de octubre de 2026
+ *    (`docs/testing-data/mercado-pago.md`, «El `402` de una orden de PSE que falla»):
+ *    el cuerpo trae el sobre `errors[]` (`details: ["<id del pago>: processing_error"]`)
+ *    **y la orden entera en `data`**, en `failed / failed`, con su pago en
+ *    `failed / processing_error` y sin `redirect_url`. La orden existe: `GET
+ *    /v1/orders/{id}` responde `200` con el mismo estado. Por eso el SDK no trata ese
+ *    `402` como un error sino como un pago `DECLINED` (ver `acceptFailedOrder()`).
  *    Con un email corriente responde 201 y entrega la redirección. Es una
  *    contradicción de la propia pasarela y conviene tenerla escrita, porque el
  *    síntoma no dice nada sobre la causa.
  *
  * 4. **La URL de redirección viene en la respuesta de creación**, en
  *    `transactions.payments[0].payment_method.redirect_url`. A diferencia de
- *    Wompi (punto 43), acá no hace falta sondear: Mercado Pago sí es un flujo de
+ *    Wompi (punto 43), aquí no hace falta sondear: Mercado Pago sí es un flujo de
  *    una sola llamada antes de redirigir.
  *
  * 5. **`total_amount` no admite decimales.** `"2000"` responde 201 y `"2000.00"`
  *    responde `400 Invalid value for property`. Importa porque `Amount.getValue()`
  *    conserva la escala con la que el comercio escribió el monto, así que un
- *    `"2000.00"` perfectamente válido en el dominio es inválido acá. De ahí
+ *    `"2000.00"` perfectamente válido en el dominio es inválido aquí. De ahí
  *    `toWholePesos()`.
  *
  * 6. **Un banco inexistente no se detecta al crear.** El código `"9999"` pasa la
@@ -64,14 +70,20 @@
  * Por lo mismo que `wompi-pse.ts` y `payment-method-support.ts`: el
  * `MercadoPagoAdapter` ya estaba en CBO 5 de 5, y el script de métricas cuenta
  * los tipos que aparecen en firmas de métodos. Un método privado que devolviera
- * el payload o la redirección le sumaría acoplamiento sin agregar lógica. Acá no
+ * el payload o la redirección le sumaría acoplamiento sin agregar lógica. Aquí no
  * le cuesta nada a nadie (`architecture-log.md`, punto 34).
  */
 import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { GatewayTransactionId } from "../../domain/value-objects/GatewayTransactionId";
-import type { PendingRedirect } from "../../domain/value-objects/PaymentResult";
+import {
+  redirectRequired,
+  transactionResult,
+  type PaymentResult,
+  type PendingRedirect,
+} from "../../domain/value-objects/PaymentResult";
+import type { Transaction } from "../../domain/entities/Transaction";
 import type { PayerKind } from "../../domain/value-objects/PaymentMethod";
 import type { Amount } from "../../domain/value-objects/Amount";
 import type { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
@@ -119,7 +131,7 @@ export function toWholePesos(amount: Amount): string {
 /**
  * Campos que Mercado Pago exige para PSE y que el dominio deja opcionales.
  *
- * Se valida acá y no en `Payer` porque son requisitos de una sola pasarela:
+ * Se valida aquí y no en `Payer` porque son requisitos de una sola pasarela:
  * meterlos en el objeto de valor obligaría a un comercio que cobra con tarjeta
  * por Wompi a informar la dirección del pagador. Es el mismo criterio con el que
  * los tipos de documento de Wompi viven en `wompi-pse.ts`.
@@ -143,7 +155,7 @@ export function assertPseRequirements(request: CreatePaymentRequest): void {
   if (!payer.address) missing.push("payer.address");
   if (!request.ipAddress) missing.push("ipAddress");
   // Mercado Pago rechaza la orden sin `config.online.callback_url`, de modo que
-  // acá ReturnUrlConfig no es opcional como sí lo es en Wompi.
+  // aquí ReturnUrlConfig no es opcional como sí lo es en Wompi.
   if (!request.returnUrlConfig?.resolveFor("PENDING")) {
     missing.push("returnUrlConfig con una URL aplicable a PENDING");
   }
@@ -286,6 +298,52 @@ export function extractOrderRedirect(rawResponse: unknown): PendingRedirect {
   };
 }
 
+/** HTTP con el que la Orders API responde una orden creada cuyo pago falló. */
+const FAILED_ORDER_HTTP_STATUS = 402;
+
+/**
+ * Si el cuerpo trae una orden que existe y quedó en `failed`, que es la forma medida del
+ * `402` (punto 3 del encabezado).
+ */
+function isFailedOrderBody(body: unknown): boolean {
+  const order = readObject(body, "data");
+  return typeof order?.id === "string" && order.id.length > 0 && order.status === "failed";
+}
+
+/**
+ * Devuelve el cuerpo de un `402` que trae una orden fallida, y lanza el error en
+ * cualquier otro caso.
+ *
+ * Ese `402` no es un fallo de la petición: la orden se creó y su pago se rechazó, y un
+ * error haría que el comercio perdiera el identificador de una orden que sí existe. En el
+ * issue #122 se decidió tratarlo como un pago `DECLINED`, sin agregar códigos a
+ * `KitPagosErrorCode`.
+ * Se exigen el status **y** la forma: un `402` sin la orden en `data` sigue siendo error,
+ * porque no hay nada que normalizar. El cuerpo se toma del `originalPayload` del error,
+ * que ya pasó por la limpieza de credenciales de `httpFailure()`.
+ */
+export function acceptFailedOrder(httpStatus: number, failure: KitPagosError): unknown {
+  if (httpStatus === FAILED_ORDER_HTTP_STATUS && isFailedOrderBody(failure.originalPayload)) {
+    return failure.originalPayload;
+  }
+  throw failure;
+}
+
+/**
+ * El resultado de crear una orden de PSE: la orden fallida normalizada, o la redirección.
+ *
+ * El normalizador lee la orden de `data`, así que recibe el cuerpo del `402` tal cual.
+ */
+export function resolveOrderOutcome(
+  rawResponse: unknown,
+  normalize: (rawResponse: unknown) => Transaction,
+): PaymentResult {
+  if (isFailedOrderBody(rawResponse)) {
+    return transactionResult(normalize(rawResponse));
+  }
+  return redirectRequired(extractOrderRedirect(rawResponse));
+}
+
 /**
  * Extrae la redirección de 3D Secure o autenticación externa de un cobro con tarjeta en Mercado Pago.
  * Mercado Pago entrega la URL del desafío en `point_of_interaction.transaction_data.ticket_url`
@@ -373,7 +431,7 @@ export function parseMercadoPagoPseBanks(rawResponse: unknown): PseBank[] {
   return institutions.flatMap((entry) => {
     const bank = entry as Record<string, unknown>;
     // El identificador llega numérico en unas entradas y como texto en otras, y
-    // `PaymentMethod.pse()` lo recibe como string: se normaliza acá, que es donde
+    // `PaymentMethod.pse()` lo recibe como string: se normaliza aquí, que es donde
     // se conoce la forma nativa, y no en el dominio.
     const rawId = bank.id;
     const code =

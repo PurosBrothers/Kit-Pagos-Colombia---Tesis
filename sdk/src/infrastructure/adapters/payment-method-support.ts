@@ -23,7 +23,7 @@
  * Porque qué métodos soporta cada pasarela es conocimiento de infraestructura.
  * Si la fachada tuviera la tabla de capacidades, el dominio y la aplicación
  * tendrían que saber qué sabe hacer cada proveedor, que es exactamente lo que la
- * Arquitectura Hexagonal separa. Acá cada adaptador **declara** lo que soporta y
+ * Arquitectura Hexagonal separa. Aquí cada adaptador **declara** lo que soporta y
  * la verificación en sí vive en un solo lugar.
  *
  * Es una función de módulo por lo mismo que `payload-utils.ts` y
@@ -88,7 +88,7 @@ export function assertSupportedPaymentMethod(
  *
  * Se valida antes de armar el payload, y no se deja que la pasarela conteste, por lo
  * mismo que en PSE: un HTTP 400 de la pasarela no dice qué falta ni de dónde sacarlo,
- * y acá sí se puede decir. `INVALID_REQUEST` y no `UNSUPPORTED_OPERATION` porque la
+ * y aquí sí se puede decir. `INVALID_REQUEST` y no `UNSUPPORTED_OPERATION` porque la
  * pasarela sí sabe cobrar con tarjeta: lo que falta es un dato del comercio.
  */
 export function requireCardToken(

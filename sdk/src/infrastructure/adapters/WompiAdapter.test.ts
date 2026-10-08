@@ -1,3 +1,4 @@
+import { jsonErrorResponse } from "../../test-support/http-response";
 import * as crypto from "crypto";
 import { WompiAdapter } from "./WompiAdapter";
 import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
@@ -45,7 +46,7 @@ describe("WompiAdapter", () => {
   /**
    * Doble de `fetch` que responde un cuerpo por llamada, en orden.
    *
-   * Estaba dentro del `describe` de PSE y subió acá cuando el cobro con tarjeta también
+   * Estaba dentro del `describe` de PSE y subió aquí cuando el cobro con tarjeta también
    * pasó a ser de dos llamadas: el token de aceptación primero y la transacción después.
    */
   function mockResponses(...bodies: unknown[]) {
@@ -94,6 +95,7 @@ describe("WompiAdapter", () => {
               installments: 1,
             },
           }),
+          signal: expect.any(AbortSignal),
         },
       );
 
@@ -231,11 +233,7 @@ describe("WompiAdapter", () => {
 
     it("should throw KitPagosError(GATEWAY_SERVER_ERROR) when HTTP status is not ok", async () => {
       const errorPayload = { error: "Simulated scenario error" };
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-        json: async () => errorPayload,
-      });
+      global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(500, errorPayload));
 
       const adapter = new WompiAdapter();
 
@@ -347,17 +345,15 @@ describe("WompiAdapter", () => {
     });
 
     it("throws KitPagosError(RESOURCE_NOT_FOUND) when the id does not exist in the simulator", async () => {
+      // Lo que responden Wompi y el simulador, medido el 5 de octubre de 2026
+      // (docs/testing-data/wompi.md §1.2): el mensaje no incluye el id consultado.
       const notFoundPayload = {
         error: {
-          type: "NOT_FOUND",
-          reason: "Transaction with id 'non-existent-id' does not exist",
+          type: "NOT_FOUND_ERROR",
+          reason: "La entidad solicitada no existe",
         },
       };
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: false,
-        status: 404,
-        json: async () => notFoundPayload,
-      });
+      global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(404, notFoundPayload));
 
       const adapter = new WompiAdapter();
 
@@ -446,12 +442,12 @@ describe("WompiAdapter", () => {
   });
 
   /**
-   * PSE (issue #64). Lo que se verifica acá es que el adaptador respete el orden
+   * PSE (issue #64). Lo que se verifica aquí es que el adaptador respete el orden
    * real medido contra el sandbox: la creación no trae la URL de redirección, así
    * que hay que consultar hasta que aparezca, y el resultado debe ser
    * REDIRECT_REQUIRED y no una transacción.
    */
-  describe("createPayment() con tarjeta", () => {
+  describe("createPayment() with card", () => {
     function mockCreated() {
       const mockFetch = jest.fn().mockResolvedValue({
         ok: true,
@@ -503,7 +499,7 @@ describe("WompiAdapter", () => {
     });
 
     /**
-     * Falla acá y no en la pasarela. Es una llamada de red que se ahorra, y sobre todo un
+     * Falla aquí y no en la pasarela. Es una llamada de red que se ahorra, y sobre todo un
      * mensaje que dice qué falta y dónde conseguirlo, en vez del 422 en castellano de
      * Wompi sobre un campo que el comercio no escribió.
      */
@@ -565,7 +561,7 @@ describe("WompiAdapter", () => {
     });
   });
 
-  describe("createPayment() con PSE", () => {
+  describe("createPayment() with PSE", () => {
     const pseRequest: CreatePaymentRequest = {
       amount: new Amount("150000"),
       currency: new Currency("COP"),
@@ -655,8 +651,8 @@ describe("WompiAdapter", () => {
      * transacción incompleta y dejaba que Wompi contestara, con un mensaje que nombra el
      * campo del cuerpo (`signature`) y no el ajuste que falta (`integritySecret`).
      */
-    describe("guarda de lo que Wompi exige para crear", () => {
-      it("exige el secreto de integridad y no gasta ni una llamada", async () => {
+    describe("guard on what Wompi requires to create", () => {
+      it("requires the integrity secret and does not spend a single call", async () => {
         const mockFetch = jest.fn();
         global.fetch = mockFetch;
 
@@ -672,7 +668,7 @@ describe("WompiAdapter", () => {
         expect(mockFetch).not.toHaveBeenCalled();
       });
 
-      it("nombra el ajuste que falta y lo distingue del secreto de eventos", async () => {
+      it("names the missing setting and tells it apart from the events secret", async () => {
         // El 422 de Wompi habla de `signature`, que no se parece a `integritySecret`, y
         // Wompi entrega los dos secretos juntos en el panel. El mensaje tiene que decir
         // cuál de los dos es, o manda a revisar el que está bien.
@@ -691,10 +687,12 @@ describe("WompiAdapter", () => {
         }
       });
 
-      it("falla con un diagnóstico propio si el token de aceptación no viene en la respuesta", async () => {
-        // Si la llave pública es de otro comercio o de otro ambiente, `merchants` responde
-        // 200 sin `presigned_acceptance`. Mandar la transacción igual da un 422 que habla
-        // de un campo que el comercio nunca escribió.
+      it("fails with its own diagnosis if the acceptance token is not in the response", async () => {
+        // Caso defensivo, sin medición: un 200 de `merchants` sin `presigned_acceptance`.
+        // Con una llave pública inexistente, lo medido es un 404, no este 200 (6 de octubre
+        // de 2026, docs/testing-data/wompi.md §1.3); lo cubren las pruebas siguientes. Si
+        // alguna vez llega el 200 sin token, mandar la transacción igual daría un 422 que
+        // habla de un campo que el comercio nunca escribió.
         const mockFetch = mockResponses({ data: {} });
 
         await expect(
@@ -710,7 +708,63 @@ describe("WompiAdapter", () => {
         expect(mockFetch.mock.calls[0][0]).toContain("/merchants/");
       });
 
-      it("no exige nada cuando no hay credenciales, para seguir sirviendo contra el simulador", async () => {
+      /**
+       * Respuestas de `GET /merchants/{llave}` medidas el 6 de octubre de 2026,
+       * docs/testing-data/wompi.md §1.3: una llave con forma válida pero inexistente da
+       * 404, y una con formato inválido da 422.
+       */
+      describe("when Wompi does not recognize the public key", () => {
+        const fakePublicKey = "pub_test_0123456789abcdef0123456789abcdef";
+        const notFoundBody = {
+          error: { type: "NOT_FOUND_ERROR", reason: "La entidad solicitada no existe" },
+        };
+        const invalidFormatBody = {
+          error: {
+            type: "INPUT_VALIDATION_ERROR",
+            messages: { public_key: ["Formato inválido"] },
+          },
+        };
+        const adapter = () =>
+          new WompiAdapter(undefined, {
+            publicKey: fakePublicKey,
+            privateKey: "prv_test_1",
+            integritySecret: "int_test_1",
+          });
+
+        it.each([
+          ["tarjeta", validRequest],
+          ["PSE", pseRequest],
+        ])(
+          "with %s, the acceptance token 404 is INVALID_CREDENTIALS and does not print the key",
+          async (_methodName, request) => {
+            const mockFetch = jest.fn().mockResolvedValue(jsonErrorResponse(404, notFoundBody));
+            global.fetch = mockFetch;
+
+            const error = await adapter().createPayment(request).catch((e: unknown) => e);
+
+            expect(error).toBeInstanceOf(KitPagosError);
+            const sdkError = error as KitPagosError;
+            expect(sdkError.code).toBe(KitPagosErrorCode.INVALID_CREDENTIALS);
+            expect(sdkError.gateway).toBe(Gateway.WOMPI);
+            expect(sdkError.originalPayload).toEqual(notFoundBody);
+            expect(sdkError.message).toContain("llave pública");
+            expect(sdkError.message).not.toContain(fakePublicKey);
+            expect(mockFetch).toHaveBeenCalledTimes(1);
+            expect(mockFetch.mock.calls[0][0]).toContain("/merchants/");
+          },
+        );
+
+        it("the 422 of a key with an invalid format is still INVALID_REQUEST", async () => {
+          global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(422, invalidFormatBody));
+
+          const error = await adapter().createPayment(validRequest).catch((e: unknown) => e);
+
+          expect((error as KitPagosError).code).toBe(KitPagosErrorCode.INVALID_REQUEST);
+          expect((error as KitPagosError).originalPayload).toEqual(invalidFormatBody);
+        });
+      });
+
+      it("requires nothing when there are no credentials, so it keeps working against the simulator", async () => {
         // La API de Simulación no valida firmas, y el SDK tiene que poder usarse sin
         // configurar nada. El interruptor de la guarda es haber configurado credenciales:
         // si las hay, se le está hablando a Wompi de verdad y va a hacer falta todo.
@@ -723,7 +777,7 @@ describe("WompiAdapter", () => {
         expect(mockFetch).toHaveBeenCalledTimes(1);
       });
 
-      it("no exige el secreto para consultar, porque esa llamada no lleva firma", async () => {
+      it("does not require the secret to query, because that call is not signed", async () => {
         // Por eso `integritySecret` sigue siendo opcional en el tipo: un comercio que solo
         // consulte estados en Wompi no tiene por qué configurarlo.
         mockResponses(approvedWompiMockResponse);

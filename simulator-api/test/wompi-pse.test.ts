@@ -1,4 +1,5 @@
 import { buildApp } from "../src/app";
+import { wompiTransactions } from "../src/store/GatewayStores";
 
 /**
  * El orden del flujo de PSE (issue #64).
@@ -7,9 +8,9 @@ import { buildApp } from "../src/app";
  * El sandbox de Wompi publica la URL de redirección en el mismo instante en que
  * resuelve el pago (medido: 1075 ms junto con APPROVED, 1650 ms junto con
  * DECLINED), así que contra el sandbox real **no hay forma de verificar que
- * exista una ventana en la que el pagador deba ser redirigido**. Acá sí.
+ * exista una ventana en la que el pagador deba ser redirigido**. Aquí sí.
  */
-describe("PSE en el simulador de Wompi", () => {
+describe("PSE in the Wompi simulator", () => {
   const psePayload = {
     amount_in_cents: 15000000,
     currency: "COP",
@@ -47,7 +48,7 @@ describe("PSE en el simulador de Wompi", () => {
       .then((response) => response.json().data);
   }
 
-  it("queda PENDING y sin URL de redirección al crear, igual que Wompi real", async () => {
+  it("stays PENDING and without a redirect URL on creation, like the real Wompi", async () => {
     const app = buildApp();
 
     const created = await createPse(app);
@@ -63,19 +64,88 @@ describe("PSE en el simulador de Wompi", () => {
    * disponible y el pago todavía no se resolvió. Sin ella, un comercio no tendría
    * a dónde mandar al pagador.
    */
-  it("publica la URL de redirección todavía en PENDING en la primera consulta", async () => {
+  it("publishes the redirect URL while still PENDING on the first query", async () => {
     const app = buildApp();
 
     const created = await createPse(app);
     const firstRead = await readTransaction(app, created.id);
 
     expect(firstRead.status).toBe("PENDING");
-    expect(firstRead.payment_method.extra.async_payment_url).toContain(created.id);
+    expect(firstRead.payment_method.extra.async_payment_url).toContain(created.id.replace(/-/g, ""));
 
     await app.close();
   });
 
-  it("resuelve el pago en la segunda consulta, como si el pagador ya hubiera pagado", async () => {
+  /**
+   * Medido el 6 de octubre de 2026 (`docs/testing-data/wompi.md`, sección 3): la URL es
+   * `…/v1/pse/redirect?ticket_id=<id sin guiones>`. El host sale de la petición que creó el
+   * PSE y no de la consulta, que aquí llega con el `Host` por omisión de `inject`.
+   */
+  it("builds the bank URL from the creating request's host, with the ticket id without dashes", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/transactions",
+      headers: { host: "simulator.example.com:8443" },
+      payload: psePayload,
+    });
+    const created = response.json().data;
+    const firstRead = await readTransaction(app, created.id);
+
+    expect(created.id).toContain("-");
+    expect(firstRead.payment_method.extra.async_payment_url).toBe(
+      `http://simulator.example.com:8443/v1/sim/wompi/pse/redirect?ticket_id=${created.id.replace(/-/g, "")}`,
+    );
+
+    await app.close();
+  });
+
+  it("publishes the bank URL and the terms permalink on SIMULATOR_PUBLIC_ORIGIN when it is configured", async () => {
+    // El host de la petición es el del balanceador; el origen configurado es el público.
+    const app = buildApp({ publicOrigin: "https://kit-pagos-colombia.onrender.com" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sim/wompi/transactions",
+      headers: { host: "10.0.0.7:10000" },
+      payload: psePayload,
+    });
+    const created = response.json().data;
+    const firstRead = await readTransaction(app, created.id);
+    const merchant = await app.inject({
+      method: "GET",
+      url: "/v1/sim/wompi/merchants/pub_test_x",
+      headers: { host: "10.0.0.7:10000" },
+    });
+
+    expect(firstRead.payment_method.extra.async_payment_url).toBe(
+      `https://kit-pagos-colombia.onrender.com/v1/sim/wompi/pse/redirect?ticket_id=${created.id.replace(/-/g, "")}`,
+    );
+    expect(merchant.json().data.presigned_acceptance.permalink).toBe(
+      "https://kit-pagos-colombia.onrender.com/v1/sim/wompi/terms",
+    );
+
+    await app.close();
+  });
+
+  it("serves the bank redirect it publishes, as a page that says it is simulated and moves nothing", async () => {
+    const app = buildApp();
+
+    const created = await createPse(app);
+    const bankUrl = new URL((await readTransaction(app, created.id)).payment_method.extra.async_payment_url);
+    const page = await app.inject({ method: "GET", url: `${bankUrl.pathname}${bankUrl.search}` });
+
+    expect(page.statusCode).toBe(200);
+    expect(page.headers["content-type"]).toContain("text/html");
+    expect(page.body).toContain("Redirección simulada al banco");
+    expect(page.body).not.toContain(bankUrl.searchParams.get("ticket_id"));
+    expect(wompiTransactions.findById(created.id)?.status).toBe("PENDING");
+
+    await app.close();
+  });
+
+  it("resolves the payment on the second query, as if the payer had already paid", async () => {
     const app = buildApp();
 
     const created = await createPse(app);
@@ -84,7 +154,7 @@ describe("PSE en el simulador de Wompi", () => {
 
     expect(secondRead.status).toBe("APPROVED");
     // La URL sigue presente: Wompi no la borra al resolver.
-    expect(secondRead.payment_method.extra.async_payment_url).toContain(created.id);
+    expect(secondRead.payment_method.extra.async_payment_url).toContain(created.id.replace(/-/g, ""));
 
     await app.close();
   });
@@ -93,7 +163,7 @@ describe("PSE en el simulador de Wompi", () => {
    * Mismos códigos de banco que el sandbox, para que una prueba pueda elegir el
    * desenlace en vez de depender del azar.
    */
-  it("declina con el banco 2 y da error con el banco 3", async () => {
+  it("declines with bank 2 and errors with bank 3", async () => {
     const app = buildApp();
 
     const declined = await createPse(app, "2");
@@ -107,7 +177,7 @@ describe("PSE en el simulador de Wompi", () => {
     await app.close();
   });
 
-  it("refleja la URL de retorno del comercio tal como se envió", async () => {
+  it("reflects the merchant's return URL as it was sent", async () => {
     const app = buildApp();
 
     const created = await createPse(app);
@@ -117,7 +187,7 @@ describe("PSE en el simulador de Wompi", () => {
     await app.close();
   });
 
-  it("resuelve la tarjeta en la primera consulta, sin publicar URL de banco", async () => {
+  it("resolves the card on the first query, without publishing a bank URL", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -136,20 +206,20 @@ describe("PSE en el simulador de Wompi", () => {
     // que redirigir, así que la primera consulta ya la resuelve.
     expect(response.json().data.status).toBe("PENDING");
 
-    const consultada = await app.inject({
+    const queried = await app.inject({
       method: "GET",
       url: `/v1/sim/wompi/transactions/${response.json().data.id}`,
     });
 
-    expect(consultada.json().data.status).toBe("APPROVED");
-    expect(consultada.json().data.payment_method?.extra?.async_payment_url).toBeUndefined();
+    expect(queried.json().data.status).toBe("APPROVED");
+    expect(queried.json().data.payment_method?.extra?.async_payment_url).toBeUndefined();
 
     await app.close();
   });
 });
 
 describe("GET /v1/sim/wompi/merchants/:publicKey", () => {
-  it("entrega un acceptance_token para que el SDK pueda crear transacciones", async () => {
+  it("delivers an acceptance_token so the SDK can create transactions", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -168,7 +238,7 @@ describe("GET /v1/sim/wompi/merchants/:publicKey", () => {
    * fue usado". El mock devuelve uno distinto en cada llamada para que un SDK
    * que lo cachee no pase las pruebas por accidente.
    */
-  it("entrega un token distinto en cada llamada", async () => {
+  it("delivers a different token on every call", async () => {
     const app = buildApp();
 
     const read = async () =>
@@ -177,6 +247,40 @@ describe("GET /v1/sim/wompi/merchants/:publicKey", () => {
       ).json().data.presigned_acceptance.acceptance_token;
 
     expect(await read()).not.toBe(await read());
+
+    await app.close();
+  });
+
+  it("builds the terms permalink from the request's host", async () => {
+    const app = buildApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/sim/wompi/merchants/pub_test_x",
+      headers: { host: "simulator.example.com:8443" },
+    });
+
+    expect(response.json().data.presigned_acceptance.permalink).toBe(
+      "http://simulator.example.com:8443/v1/sim/wompi/terms",
+    );
+
+    await app.close();
+  });
+
+  it("serves the terms page its permalink points to, as a page that says it is simulated", async () => {
+    // Con el token de la API configurado y sin `Authorization`: la abre el navegador del
+    // pagador, que no tiene ese token, y `/v1/sim` está exento en `authHook`.
+    const app = buildApp({ authOptions: { expectedToken: "api-token-de-prueba" } });
+
+    const merchant = await app.inject({ method: "GET", url: "/v1/sim/wompi/merchants/pub_test_x" });
+    const { permalink } = merchant.json().data.presigned_acceptance;
+
+    const page = await app.inject({ method: "GET", url: new URL(permalink).pathname });
+
+    expect(page.statusCode).toBe(200);
+    expect(page.headers["content-type"]).toContain("text/html");
+    expect(page.body).toContain("API de Simulación");
+    expect(page.body).toContain("no son los términos de Wompi");
 
     await app.close();
   });

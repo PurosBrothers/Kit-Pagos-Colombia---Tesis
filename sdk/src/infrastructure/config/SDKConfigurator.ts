@@ -4,6 +4,7 @@ import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import { Environment, parseEnvironment } from "../../domain/value-objects/Environment";
 import { resolveGatewayCatalogUrl } from "./gateway-urls";
+import { DEFAULT_REQUEST_TIMEOUT_MS, resolveRequestTimeoutMs } from "./request-timeout";
 
 export interface SDKOptions {
   gateway: Gateway;
@@ -30,6 +31,15 @@ export interface SDKOptions {
    * Por defecto: 300 segundos (5 minutos). Configurar 0 desactiva la validación.
    */
   webhookToleranceSeconds?: number;
+  /**
+   * Límite en milisegundos de **cada** petición HTTP a la pasarela, incluida la espera del
+   * cuerpo. Al vencerse, la operación falla con `GATEWAY_TIMEOUT`. Por defecto: 30 000.
+   *
+   * Se aplica por intento: una consulta que `RetryHandler` reintenta puede tardar hasta
+   * `(maxRetries + 1) × timeoutMs` más las pausas entre intentos. Debe ser un entero entre
+   * 1 y 2 147 483 647; fuera de ese rango, `configure()` lanza `INVALID_REQUEST`.
+   */
+  timeoutMs?: number;
 }
 
 export class SdkConfigurator {
@@ -39,6 +49,7 @@ export class SdkConfigurator {
   private baseUrl?: string | Partial<Record<Gateway, string>>;
   private maxRetries?: number;
   private webhookToleranceSeconds?: number;
+  private timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS;
 
   configure(options: SDKOptions): void {
     const gateway = options.gateway;
@@ -51,6 +62,7 @@ export class SdkConfigurator {
         "Both gateway and credentials must be configured"
       );
     }
+    this.timeoutMs = resolveRequestTimeoutMs(options.timeoutMs, gateway);
     this.activeGateway = gateway;
     this.environment = options.environment !== undefined
       ? parseEnvironment(options.environment, gateway)
@@ -106,6 +118,10 @@ export class SdkConfigurator {
 
   getWebhookToleranceSeconds(): number | undefined {
     return this.webhookToleranceSeconds;
+  }
+
+  getTimeoutMs(): number {
+    return this.timeoutMs;
   }
 
   getCredentials(gateway: Gateway): Credentials {

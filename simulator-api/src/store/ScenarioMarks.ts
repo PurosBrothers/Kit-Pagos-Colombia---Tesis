@@ -10,11 +10,16 @@
  * verificar, y un cobro y un contador de reintentos compartían un tipo que no describe
  * ninguno de los dos. Un almacén por pasarela con su tipo propio elimina esa conversión.
  *
+ * Desde el issue #122 guarda también las fallas pedidas para la consulta de un cobro, que
+ * son de la misma clase: no aparecen en ninguna respuesta y no son estado del cobro.
+ *
  * Lo que vive aquí **no es estado de máquina**: no es un cobro, no lo consulta el SDK y no
  * aparece en ninguna respuesta. Es contabilidad interna del simulador sobre cuántas
  * veces se pidió un comportamiento, y por eso se separa del registro que las máquinas de
  * estados van a leer y escribir.
  */
+import type { QueryFailure } from "../scenarios/scenarioFromRequest";
+
 const duplicateMarks = new Set<string>();
 
 const flappingAttempts = new Map<string, number>();
@@ -64,8 +69,41 @@ export function clearFlappingAttempts(): void {
   flappingAttempts.clear();
 }
 
+/**
+ * Las fallas que la creación pidió para la consulta posterior (issue #122), por cobro.
+ *
+ * La clave es pasarela, recurso e identificador nativo, igual que en `scenarioTarget.ts`,
+ * porque Kushki emite tokens de transferencia y tickets de tarjeta que no se distinguen por
+ * el valor (punto 48).
+ */
+const queryFailures = new Map<string, QueryFailure>();
+
+function queryKey(gateway: string, resource: string, id: string): string {
+  return `${gateway}:${resource}:${id}`;
+}
+
+/** Registra que las consultas de este cobro deben fallar de esta manera. */
+export function rememberQueryFailure(
+  gateway: string,
+  resource: string,
+  id: string,
+  failure: QueryFailure,
+): void {
+  queryFailures.set(queryKey(gateway, resource, id), failure);
+}
+
+/** La falla registrada para las consultas de este cobro, o `undefined`. */
+export function queryFailureFor(
+  gateway: string,
+  resource: string,
+  id: string,
+): QueryFailure | undefined {
+  return queryFailures.get(queryKey(gateway, resource, id));
+}
+
 /** Borra todas las marcas auxiliares de los escenarios. */
 export function clearScenarioMarks(): void {
   clearDuplicateMarks();
   clearFlappingAttempts();
+  queryFailures.clear();
 }

@@ -12,7 +12,7 @@ import { resetSimulatorState } from "../src/store/GatewayStores";
  *    se comportan como reintentables bajo una política de reintentos con backoff.
  * 3. Los rechazos de negocio (DECLINED) NO se reintentan (ejecución única y definitiva).
  */
-describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => {
+describe("Failure and Resilience Scenario Integration (Issue #65)", () => {
   beforeEach(() => {
     resetSimulatorState();
   });
@@ -21,7 +21,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
     resetSimulatorState();
   });
 
-  describe("1. Matriz de Escenarios Mandatorios por Pasarela", () => {
+  describe("1. Mandatory Scenario Matrix per Gateway", () => {
     // ── Wompi ──
     describe("Wompi", () => {
       const wompiBody = {
@@ -32,7 +32,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         payment_method: { type: "CARD", token: "tok_wompi_65" },
       };
 
-      it("Rechazo de negocio (DECLINED) retorna HTTP 201 con status DECLINED", async () => {
+      it("Business rejection (DECLINED) returns HTTP 201 with status DECLINED", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -46,7 +46,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         await app.close();
       });
 
-      it("Timeout retorna HTTP 504 con payload nativo de timeout", async () => {
+      it("Timeout returns HTTP 504 with a native timeout payload", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -60,7 +60,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         await app.close();
       });
 
-      it("Error de red retorna HTTP 500", async () => {
+      it("Network error returns HTTP 500", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -73,7 +73,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         await app.close();
       });
 
-      it("Expiración retorna HTTP 201 con status VOIDED y se persiste en store", async () => {
+      it("Expiration returns HTTP 201 with status VOIDED and is persisted in the store", async () => {
         const app = buildApp();
         const postRes = await app.inject({
           method: "POST",
@@ -107,7 +107,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         payer: { email: "test@mercadopago.com" },
       };
 
-      it("Rechazo de negocio (REJECTED) retorna HTTP 201 con status rejected", async () => {
+      it("Business rejection (REJECTED) returns HTTP 201 with status rejected", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -124,7 +124,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         await app.close();
       });
 
-      it("Timeout retorna HTTP 504 con payload nativo", async () => {
+      it("Timeout returns HTTP 504 with a native payload", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -141,7 +141,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         await app.close();
       });
 
-      it("Error de red retorna HTTP 500", async () => {
+      it("Network error returns HTTP 500", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -157,7 +157,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         await app.close();
       });
 
-      it("Expiración retorna HTTP 201 con status cancelled y status_detail expired", async () => {
+      it("Expiration returns HTTP 201 with status cancelled and status_detail expired", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -185,7 +185,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         receipt_email: "test@rapyd.net",
       };
 
-      it("Rechazo de negocio (DECLINED) retorna HTTP 201 con status ERR y paid false", async () => {
+      it("Business rejection (DECLINED) returns HTTP 201 with status ERR and paid false", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -201,7 +201,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         await app.close();
       });
 
-      it("Timeout retorna HTTP 504", async () => {
+      it("Timeout returns HTTP 504", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -215,7 +215,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         await app.close();
       });
 
-      it("Error de red retorna HTTP 500", async () => {
+      it("Network error returns HTTP 500", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -228,7 +228,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         await app.close();
       });
 
-      it("Expiración retorna HTTP 201 con status EXP y paid false", async () => {
+      it("Expiration returns HTTP 201 with status EXP and paid false", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -257,7 +257,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         },
       };
 
-      it("Rechazo de negocio (DECLINED) retorna HTTP 201 con transactionStatus DECLINED", async () => {
+      it("Business rejection (DECLINED) returns HTTP 201 with transactionStatus DECLINED", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -271,7 +271,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         await app.close();
       });
 
-      it("Timeout retorna HTTP 504 con código nativo K504", async () => {
+      it("Timeout returns HTTP 504 with the native code K504", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -285,7 +285,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         await app.close();
       });
 
-      it("Error de red retorna HTTP 500", async () => {
+      it("Network error returns HTTP 500", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -298,7 +298,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
         await app.close();
       });
 
-      it("Expiración retorna HTTP 201 con texto Transacción expirada", async () => {
+      it("Expiration returns HTTP 201 with the text Transacción expirada", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -315,7 +315,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
     });
   });
 
-  describe("2. Demostración de Política de Reintentos vs Rechazo de Negocio", () => {
+  describe("2. Retry Policy vs Business Rejection Demonstration", () => {
     /**
      * Política de reintento simulada:
      * - Errores 5xx, 504, 429 son transitorios -> se reintentan hasta 3 veces.
@@ -341,7 +341,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
       }
     }
 
-    it("Demuestra que el error de red (NETWORK_ERROR) agota los reintentos", async () => {
+    it("Shows that the network error (NETWORK_ERROR) exhausts the retries", async () => {
       const app = buildApp();
       const wompiBody = {
         amount_in_cents: 1000000,
@@ -367,7 +367,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
       await app.close();
     });
 
-    it("Demuestra que el rechazo de negocio (DECLINED) NO se reintenta (1 solo intento)", async () => {
+    it("Shows that the business rejection (DECLINED) is NOT retried (a single attempt)", async () => {
       const app = buildApp();
       const wompiBody = {
         amount_in_cents: 1000000,
@@ -394,7 +394,7 @@ describe("Integración de Escenarios de Fallo y Resiliencia (Issue #65)", () => 
       await app.close();
     });
 
-    it("Demuestra auto-recuperación (FLAPPING): falla en los primeros intentos y resuelve en el siguiente", async () => {
+    it("Shows self-recovery (FLAPPING): fails on the first attempts and resolves on the next one", async () => {
       const app = buildApp();
       const wompiBody = {
         amount_in_cents: 1000000,

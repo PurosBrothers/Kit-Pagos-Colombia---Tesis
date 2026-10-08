@@ -93,6 +93,37 @@ Dos llamadas: `POST /v1/card_tokens?public_key=...` con los datos de la tarjeta,
 }
 ```
 
+### 1.2. Titulares de prueba y token inválido (6 de octubre de 2026)
+
+> **Medido contra el sandbox real entre las 10:31 y las 10:39 (UTC−5), para el issue #122.**
+> Cobro de 5 000 COP en una cuota con la tarjeta Mastercard `5254 1336 7440 3564`, 11/2030,
+> documento CC `123456789`.
+
+| Caso | HTTP | Lo observado |
+| --- | --- | --- |
+| Titular `OTHE` | `201` | `status: "rejected"`, `status_detail: "cc_rejected_high_risk"` |
+| Titular `CONT` | `201` | `status: "rejected"`, `status_detail: "cc_rejected_high_risk"` |
+| Titular `APRO` | `201` | `status: "rejected"`, `status_detail: "cc_rejected_high_risk"` |
+| `POST /v1/payments` con un access token inexistente de forma `APP_USR-` | `401` | `{"code":"unauthorized","message":"user not found"}` |
+| `POST /v1/payments` con el token `garbage` | `401` | `{"code":"unauthorized","message":"authorization value not present"}` |
+| `GET /v1/payments/{id}` con un access token inexistente | `401` | `{"code":"unauthorized","message":"invalid access token"}` |
+| `GET /v1/payments/{id}` con `garbage` o sin header | `401` | `{"message":"Must provide your access_token to proceed","error":"unauthorized","status":401,"cause":[{"code":5,...}]}` |
+
+Medido el mismo día entre las 14:05 y las 14:12, con un access token inexistente de la misma
+forma que el real:
+
+| Petición | HTTP | Respuesta |
+| --- | --- | --- |
+| `POST /v1/orders` (PSE, cuerpo como el que arma el SDK) | `401` | `{"code":"unauthorized","message":"invalid access token"}` |
+| `GET /v1/orders/{id existente}` | `401` | `{"code":"unauthorized","message":"invalid access token"}` |
+| `GET /v1/payment_methods` | `401` | `{"message":"invalid_token","error":"not_found","status":401,"cause":[]}` |
+| `GET /v1/payment_methods` sin `Authorization` | `401` | `{"message":"neither a public key or caller id were provided","error":"unauthorized_scopes","status":401,"cause":[]}` |
+
+La cuenta de prueba no aplica la tabla de titulares de la sección anterior: los tres nombres
+dieron el mismo rechazo, como ya había pasado con `APRO` el 19 de septiembre. Mercado Pago no
+informa la causa; un antifraude a nivel de cuenta es una explicación posible, no medida. La
+tabla de titulares queda como documentación oficial sin confirmar en esta cuenta.
+
 ---
 
 ## 2. PSE (Pagos Seguros en Línea)
@@ -101,7 +132,7 @@ Dos llamadas: `POST /v1/card_tokens?public_key=...` con los datos de la tarjeta,
 >
 > Lo que sigue en esta sección es correcto en cuanto a la forma del payload y a la
 > ubicación de la URL de redirección. Pero al implementarlo aparecieron cuatro
-> cosas que no están dichas acá y que hacen fallar la integración si uno sigue el
+> cosas que no están dichas aquí y que hacen fallar la integración si uno sigue el
 > paso a paso literalmente. El razonamiento completo está en el punto 45 del
 > `architecture-log.md` y en `sdk/src/infrastructure/adapters/mercadopago-pse.ts`.
 >
@@ -138,13 +169,86 @@ Dos llamadas: `POST /v1/card_tokens?public_key=...` con los datos de la tarjeta,
 > `1001` Banco de Bogotá, `1007` Bancolombia, `1013` BBVA, `1051` Davivienda y el
 > resto, junto con `min_allowed_amount: 1600` y `max_allowed_amount: 340000000`.
 > Un código inexistente **no** se rechaza al crear: pasa la validación y el pago
-> muere después en `processing_error`.
+> muere después en `processing_error`. La orden sí se crea, pero la respuesta a
+> `POST /v1/orders` ya es ese `402` (medido el 7 de octubre de 2026, en la sección
+> que sigue).
 >
 > Son **47 entidades**, contadas contra la API real el 18 de septiembre de 2026 — el
 > mismo número que devuelve Rapyd, porque las dos leen el registro de ACH Colombia.
 > El SDK las expone con `kitPagos.getPseBanks()`, que filtra esa entrada del
 > catálogo; el comercio no tiene que conocer que la lista viene anidada dentro de
 > todos los métodos de pago del país.
+
+### El `402` de una orden de PSE que falla (7 de octubre de 2026)
+
+> **Medido contra la API real entre las 09:07 y las 09:09 (UTC−5), para el issue #122.** Las
+> peticiones usaron el token `APP_USR-`, las cabeceras de `MercadoPagoAdapter.ts` y el cuerpo de
+> `buildPseOrderPayload`, con `total_amount` en `"5000"`. Entre un caso y otro cambió una sola
+> cosa.
+
+| Caso | Respuesta |
+| --- | --- |
+| Control: email `comprador@example.com`, banco `1051` | `201`, orden en `action_required / waiting_transfer`, pago con `redirect_url` |
+| El mismo cuerpo con el email de un usuario creado por `POST /users/test_user` | `402`, cuerpo de abajo |
+| El control con el banco `9999`, que no existe | `402` con la misma forma; el pago trae `financial_institution: "9999"` |
+| `GET /v1/orders/{id}` de la orden del `402`, dos veces con 6 s de diferencia | `200` las dos veces, con la orden suelta en `failed / failed` y el mismo `last_updated_date` |
+
+El cuerpo del `402`, con el `user_id` y el `application_id` de la cuenta reemplazados:
+
+```json
+{
+  "errors": [
+    {
+      "code": "failed",
+      "message": "The following transactions failed",
+      "details": ["PAY01M4BB3B6824R6BDME6MJAWQD5: processing_error"]
+    }
+  ],
+  "data": {
+    "id": "ORD01M4BB3B5XBNNB1EF1AM53K2MA",
+    "type": "online",
+    "processing_mode": "automatic",
+    "external_reference": "kp122-tu-1791382104",
+    "total_amount": "5000",
+    "total_paid_amount": "0",
+    "country_code": "COL",
+    "user_id": "<user_id-cuenta>",
+    "status": "failed",
+    "status_detail": "failed",
+    "capture_mode": "automatic_async",
+    "currency": "COP",
+    "created_date": "2026-10-07T14:08:25.288Z",
+    "last_updated_date": "2026-10-07T14:08:25.849Z",
+    "integration_data": { "application_id": "<application_id>" },
+    "payer": { "entity_type": "individual" },
+    "config": { "online": { "callback_url": "https://merchant.com/pse/return" } },
+    "transactions": {
+      "payments": [
+        {
+          "id": "PAY01M4BB3B6824R6BDME6MJAWQD5",
+          "amount": "5000",
+          "reference_id": "000ghe1vp0",
+          "status": "failed",
+          "status_detail": "processing_error",
+          "payment_method": { "id": "pse", "type": "bank_transfer", "financial_institution": "1051" }
+        }
+      ]
+    }
+  }
+}
+```
+
+Lo medido:
+
+- El `402` trae dos cosas a la vez: el sobre `errors[]`, con `details` en el formato
+  `"<id del pago>: <status_detail>"`, y la orden entera en `data`.
+- La orden **sí existe**: la consulta responde `200` con el mismo estado. En la consulta la orden
+  llega sin el sobre `data` y sin la llave `payer`.
+- `total_paid_amount` es `"0"` (en el control es `"5000"`) y el pago no trae `redirect_url`.
+
+Sin medir: si otras causas de rechazo llegan con esta misma forma (un monto bajo el mínimo responde
+`422`, según el punto 45 del `architecture-log.md`), si el estado `failed` es definitivo pasados
+más de 6 segundos y qué responde un reenvío de la misma `X-Idempotency-Key` después del `402`.
 
 ### Paso a paso de implementación en Sandbox (Orders API)
 

@@ -30,7 +30,7 @@ describe("WompiTokenizer", () => {
     } as unknown as Response;
   };
 
-  it("tokeniza una tarjeta exitosamente en sandbox por defecto", async () => {
+  it("tokenizes a card successfully in sandbox by default", async () => {
     let capturedUrl = "";
     let capturedOptions: RequestInit | undefined;
 
@@ -70,7 +70,7 @@ describe("WompiTokenizer", () => {
     });
   });
 
-  it("utiliza la URL de production cuando se configura dicho entorno", async () => {
+  it("uses the production URL when that environment is configured", async () => {
     let capturedUrl = "";
     const mockFetch = jest.fn(async (url: string | URL | Request) => {
       capturedUrl = String(url);
@@ -90,7 +90,7 @@ describe("WompiTokenizer", () => {
     expect(capturedUrl).toBe("https://production.wompi.co/v1/tokens/cards");
   });
 
-  it("utiliza la URL del simulador local cuando se configura environment: simulator", async () => {
+  it("uses the local simulator URL when environment: simulator is configured", async () => {
     let capturedUrl = "";
     const mockFetch = jest.fn(async (url: string | URL | Request) => {
       capturedUrl = String(url);
@@ -111,7 +111,7 @@ describe("WompiTokenizer", () => {
   });
 
   it.each(["prod", "constructor", "toString", "__proto__"])(
-    "rechaza el ambiente '%s' sin llamar a fetch: no cae en sandbox ni arma una URL relativa",
+    "rejects the '%s' environment without calling fetch: does not fall back to sandbox or build a relative URL",
     async (environment) => {
       const mockFetch = jest.fn();
 
@@ -136,7 +136,7 @@ describe("WompiTokenizer", () => {
     },
   );
 
-  it("ignora una URL colada desde JavaScript: el host sale solo del catálogo", async () => {
+  it("ignores a URL smuggled in from JavaScript: the host comes only from the catalog", async () => {
     let capturedUrl = "";
     const mockFetch = jest.fn(async (url: string | URL | Request) => {
       capturedUrl = String(url);
@@ -157,7 +157,7 @@ describe("WompiTokenizer", () => {
     expect(capturedUrl).toBe("https://sandbox.wompi.co/v1/tokens/cards");
   });
 
-  it("falla si faltan campos obligatorios en card", async () => {
+  it("fails if required card fields are missing", async () => {
     const incompleteCard = { ...validCard, cvc: "" };
 
     await expect(
@@ -180,7 +180,7 @@ describe("WompiTokenizer", () => {
     });
   });
 
-  it("falla si la clave pública está vacía", async () => {
+  it("fails if the public key is empty", async () => {
     await expect(
       WompiTokenizer.tokenize({
         gateway: Gateway.WOMPI,
@@ -193,7 +193,7 @@ describe("WompiTokenizer", () => {
     });
   });
 
-  it("lanza CONNECTION_FAILED cuando fetch lanza un error de red", async () => {
+  it("throws CONNECTION_FAILED when fetch throws a network error", async () => {
     const mockFetch = jest.fn(async () => {
       throw new Error("Failed to fetch / Network disconnected");
     });
@@ -221,7 +221,7 @@ describe("WompiTokenizer", () => {
       text: async () => (typeof body === "string" ? body : JSON.stringify(body)),
     })) as unknown as typeof fetch;
 
-  it("lanza INVALID_CREDENTIALS ante la llave inexistente, que Wompi responde 404 MERCHANT_NOT_FOUND (medido 2026-10-03)", async () => {
+  it("throws INVALID_CREDENTIALS for a nonexistent key, which Wompi answers with 404 MERCHANT_NOT_FOUND (measured 2026-10-03)", async () => {
     const mockFetch = errorResponse(404, {
       error: {
         type: "NOT_FOUND",
@@ -241,7 +241,7 @@ describe("WompiTokenizer", () => {
     });
   });
 
-  it("nombra el campo que falló ante el 422 de número inválido, que no trae reason (medido 2026-10-03)", async () => {
+  it("names the failing field on the invalid-number 422, which has no reason (measured 2026-10-03)", async () => {
     const mockFetch = errorResponse(422, {
       error: {
         type: "INPUT_VALIDATION_ERROR",
@@ -260,7 +260,7 @@ describe("WompiTokenizer", () => {
     expect((error as KitPagosError).message).toContain("debe coincidir con el patron");
   });
 
-  it("lanza GATEWAY_SERVER_ERROR ante un 5xx, aunque el cuerpo no sea JSON", async () => {
+  it("throws GATEWAY_SERVER_ERROR on a 5xx, even if the body is not JSON", async () => {
     await expect(
       WompiTokenizer.tokenize(
         { gateway: Gateway.WOMPI, publicKey: "pub_test_123", card: validCard },
@@ -272,7 +272,7 @@ describe("WompiTokenizer", () => {
     });
   });
 
-  it("lanza RATE_LIMIT_EXCEEDED ante un 429", async () => {
+  it("throws RATE_LIMIT_EXCEEDED on a 429", async () => {
     await expect(
       WompiTokenizer.tokenize(
         { gateway: Gateway.WOMPI, publicKey: "pub_test_123", card: validCard },
@@ -281,7 +281,7 @@ describe("WompiTokenizer", () => {
     ).rejects.toMatchObject({ code: KitPagosErrorCode.RATE_LIMIT_EXCEEDED });
   });
 
-  it("lanza INVALID_CREDENTIALS ante un 401 genérico", async () => {
+  it("throws INVALID_CREDENTIALS on a generic 401", async () => {
     const mockFetch = errorResponse(401, { error: { type: "UNAUTHORIZED" } });
 
     await expect(
@@ -299,7 +299,7 @@ describe("WompiTokenizer", () => {
     });
   });
 
-  it("lanza MALFORMED_RESPONSE si la respuesta fue ok pero no incluye data.id", async () => {
+  it("throws MALFORMED_RESPONSE if the response was ok but has no data.id", async () => {
     const mockFetch = jest.fn(async () => {
       return {
         ok: true,

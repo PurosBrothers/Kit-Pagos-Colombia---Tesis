@@ -171,13 +171,16 @@ export class GatewayMockFactory {
    * Wompi lo entrega firmado y de un solo uso; el mock no lo valida, pero sí
    * devuelve uno distinto en cada llamada para que un SDK que lo reutilizara no
    * pase las pruebas por accidente.
+   *
+   * `origin` es el `protocolo://host` de la petición (`requestOrigin()`), para que el
+   * `permalink` no apunte a `localhost:3000` cuando el simulador está desplegado.
    */
-  buildMerchantResponse(): WompiMerchantResponse {
+  buildMerchantResponse(origin: string): WompiMerchantResponse {
     return {
       data: {
         presigned_acceptance: {
           acceptance_token: `sim_acceptance_${randomUUID()}`,
-          permalink: "http://localhost:3000/v1/sim/wompi/terms",
+          permalink: `${origin}/v1/sim/wompi/terms`,
         },
       },
     };

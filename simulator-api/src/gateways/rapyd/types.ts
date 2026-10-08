@@ -67,7 +67,7 @@ export interface RapydPayment {
   status: RapydPaymentStatus;
   /** Refleja el monto recibido, en unidad mayor. */
   amount: string | number;
-  /** Ojo: en la respuesta es `currency_code`, no `currency`. */
+  /** En la respuesta es `currency_code`, no `currency`. */
   currency_code: string;
   merchant_reference_id: string;
   /**

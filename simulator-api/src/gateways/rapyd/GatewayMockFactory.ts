@@ -36,7 +36,7 @@ export const RAPYD_CARD_DECLINE = {
  *
  * Alcance de este issue: solo el escenario aprobado, igual que el mock de Wompi
  * en su momento. Los escenarios de rechazo, expiracion, timeout y error de red
- * para las cuatro pasarelas son el issue #65, y agregarlos aca despues no
+ * para las cuatro pasarelas son el issue #65, y agregarlos aquí despues no
  * cambia nada de lo que ya existe.
  */
 export class GatewayMockFactory {
@@ -208,15 +208,20 @@ export class GatewayMockFactory {
    * Nace `NEW` y con el pago en `null`: **no es una simplificación**, es lo que devuelve
    * Rapyd, porque en este punto nadie pagó todavía. El comercio recibe una URL y una
    * redirección, igual que en PSE.
+   *
+   * `origin` es el `protocolo://host` de la petición que crea la página (`requestOrigin()`):
+   * la URL apunta a la página `/pagar` del propio simulador, y con el host fijo en
+   * `localhost:3000` el simulador desplegado mandaba al pagador a su propia máquina.
    */
   buildCheckoutCreatedResponse(
     requestBody: RapydCreateCheckoutRequestBody,
+    origin: string,
   ): RapydCheckoutResponse {
     const id = `checkout_${randomBytes(16).toString("hex")}`;
     const checkout: RapydCheckout = {
       id,
       status: "NEW",
-      redirect_url: `http://localhost:3000/v1/sim/rapyd/checkout/${id}/pagar`,
+      redirect_url: `${origin}/v1/sim/rapyd/checkout/${id}/pagar`,
       payment: {
         id: null,
         status: null,

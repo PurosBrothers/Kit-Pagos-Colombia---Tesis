@@ -1,4 +1,9 @@
-import { CARD_CHARGE_PATH, buildCardChargePayload } from "./kushki-charge";
+import {
+  CARD_CHARGE_PATH,
+  buildCardChargePayload,
+  reclassifyKushkiCredentialError,
+} from "./kushki-charge";
+import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
 import { Amount } from "../../domain/value-objects/Amount";
 import { Currency } from "../../domain/value-objects/Currency";
@@ -22,26 +27,26 @@ describe("kushki-charge", () => {
    * api-uat.kushkipagos.com, lo mismo que una ruta inventada, así que el cobro con
    * tarjeta nunca habría funcionado fuera del simulador.
    */
-  it("cobra en la ruta que existe de verdad", () => {
+  it("charges on the route that really exists", () => {
     expect(CARD_CHARGE_PATH).toBe("/card/v1/charges");
   });
 
-  it("manda el token del comercio y no un literal", () => {
+  it("sends the merchant token and not a literal", () => {
     const payload = buildCardChargePayload(baseRequest);
 
     expect(payload.token).toBe("kushki-card-token-abc");
     expect(JSON.stringify(payload)).not.toContain("simulated-token");
   });
 
-  it("pide fullResponse, porque sin él la respuesta no alcanza para una Transaction", () => {
+  it("asks for fullResponse, because without it the response is not enough for a Transaction", () => {
     expect(buildCardChargePayload(baseRequest).fullResponse).toBe(true);
   });
 
-  it("conserva la referencia del comercio en trackingCode", () => {
+  it("keeps the merchant reference in trackingCode", () => {
     expect(buildCardChargePayload(baseRequest).trackingCode).toBe("ord-12345");
   });
 
-  it("manda el desglose de monto que Kushki exige", () => {
+  it("sends the amount breakdown Kushki requires", () => {
     expect(buildCardChargePayload(baseRequest).amount).toEqual({
       subtotalIva0: 50000,
       subtotalIva: 0,
@@ -51,13 +56,13 @@ describe("kushki-charge", () => {
     });
   });
 
-  describe("cuotas", () => {
-    it("no manda months cuando es un pago de una sola cuota", () => {
+  describe("installments", () => {
+    it("does not send months for a single-installment payment", () => {
       expect(buildCardChargePayload(baseRequest).months).toBeUndefined();
     });
 
     /** Kushki llama `months` a las cuotas. Se midió que las acepta y las devuelve. */
-    it("traduce las cuotas a months cuando hay más de una", () => {
+    it("maps installments to months when there is more than one", () => {
       const payload = buildCardChargePayload({
         ...baseRequest,
         paymentMethod: PaymentMethod.card("kushki-card-token-abc", {
@@ -69,8 +74,8 @@ describe("kushki-charge", () => {
     });
   });
 
-  describe("sin token", () => {
-    it("falla con INVALID_REQUEST y dice dónde tokenizar", () => {
+  describe("without token", () => {
+    it("fails with INVALID_REQUEST and says where to tokenize", () => {
       try {
         buildCardChargePayload({ ...baseRequest, paymentMethod: undefined });
         fail("debía lanzar");
@@ -84,6 +89,32 @@ describe("kushki-charge", () => {
         expect(kitPagosError.gateway).toBe(Gateway.KUSHKI);
         expect(kitPagosError.message).toContain("POST /card/v1/tokens");
       }
+    });
+  });
+
+  describe("reclassifyKushkiCredentialError()", () => {
+    const k004 = { message: "ID de comercio o credencial no válido", code: "K004" };
+
+    it("turns the INVALID_REQUEST with K004 into INVALID_CREDENTIALS", () => {
+      const result = reclassifyKushkiCredentialError(
+        new KitPagosError(KitPagosErrorCode.INVALID_REQUEST, Gateway.KUSHKI, k004, "HTTP 400"),
+      );
+
+      expect(result.code).toBe(KitPagosErrorCode.INVALID_CREDENTIALS);
+      expect(result.gateway).toBe(Gateway.KUSHKI);
+      expect(result.originalPayload).toBe(k004);
+      expect(result.message).toContain("K004");
+    });
+
+    it.each([
+      ["otro código de Kushki", KitPagosErrorCode.INVALID_REQUEST, { code: "K001" }],
+      ["un cuerpo de texto", KitPagosErrorCode.INVALID_REQUEST, "Bad Request"],
+      ["un cuerpo nulo", KitPagosErrorCode.INVALID_REQUEST, null],
+      ["K004 con otro status", KitPagosErrorCode.GATEWAY_SERVER_ERROR, k004],
+    ])("leaves the error with %s untouched", (_scenario, code, payload) => {
+      const original = new KitPagosError(code, Gateway.KUSHKI, payload, "fallo");
+
+      expect(reclassifyKushkiCredentialError(original)).toBe(original);
     });
   });
 });
