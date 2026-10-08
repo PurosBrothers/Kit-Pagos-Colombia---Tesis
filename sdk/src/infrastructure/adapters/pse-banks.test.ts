@@ -20,12 +20,12 @@ import { PseBankCode } from "../../domain/value-objects/PseBankCode";
  * `{ code, name }`, y el comercio que ya tenía su selector armado descubre el cambio
  * en producción.
  *
- * Las cuatro respuestas de acá son las formas nativas reales, **las cuatro medidas**
+ * Las cuatro respuestas de aquí son las formas nativas reales, **las cuatro medidas**
  * contra las APIs de sandbox el 18 de septiembre de 2026. La de Kushki se midió al
  * final, cuando aparecieron las credenciales de API, y midiéndola apareció algo que
  * la referencia no menciona: su lista encabeza con un elemento que no es un banco.
  */
-describe("la lista de bancos de PSE, en las cuatro pasarelas", () => {
+describe("the PSE bank list, across the four gateways", () => {
   const originalFetch = global.fetch;
 
   afterAll(() => {
@@ -49,17 +49,17 @@ describe("la lista de bancos de PSE, en las cuatro pasarelas", () => {
    * mezcla con los otros 50 métodos de Colombia.
    */
   const gateways: readonly {
-    nombre: string;
+    gatewayName: string;
     build: (baseUrl: string) => PaymentGatewayPort;
-    respuesta: unknown;
-    ruta: string;
-    esperado: readonly PseBank[];
+    nativeResponse: unknown;
+    nativePath: string;
+    expected: readonly PseBank[];
   }[] = [
     {
-      nombre: "Wompi",
+      gatewayName: "Wompi",
       build: (baseUrl) => new WompiAdapter(baseUrl),
-      ruta: "https://api.example.com/pse/financial_institutions",
-      respuesta: {
+      nativePath: "https://api.example.com/pse/financial_institutions",
+      nativeResponse: {
         data: [
           {
             financial_institution_code: "1",
@@ -72,16 +72,16 @@ describe("la lista de bancos de PSE, en las cuatro pasarelas", () => {
         ],
         meta: {},
       },
-      esperado: [
+      expected: [
         { code: "1", name: "Banco que aprueba" },
         { code: "2", name: "Banco que declina" },
       ],
     },
     {
-      nombre: "Mercado Pago",
+      gatewayName: "Mercado Pago",
       build: (baseUrl) => new MercadoPagoAdapter(baseUrl),
-      ruta: "https://api.example.com/payment_methods",
-      respuesta: [
+      nativePath: "https://api.example.com/payment_methods",
+      nativeResponse: [
         { id: "master", name: "Mastercard", payment_type_id: "credit_card" },
         {
           id: "pse",
@@ -93,67 +93,67 @@ describe("la lista de bancos de PSE, en las cuatro pasarelas", () => {
           ],
         },
       ],
-      esperado: [
+      expected: [
         { code: "1007", name: "Bancolombia", achCode: PseBankCode.BANCOLOMBIA },
         { code: "1051", name: "Davivienda", achCode: PseBankCode.DAVIVIENDA },
       ],
     },
     {
-      nombre: "Rapyd",
+      gatewayName: "Rapyd",
       build: (baseUrl) => new RapydAdapter(baseUrl),
-      ruta: "https://api.example.com/payment_methods/country?country=CO",
-      respuesta: {
+      nativePath: "https://api.example.com/payment_methods/country?country=CO",
+      nativeResponse: {
         status: { status: "SUCCESS" },
         data: [
           { type: "co_pse_bancolombia_bank", name: "Bancolombia" },
           { type: "co_visa_card", name: "Visa" },
         ],
       },
-      esperado: [
+      expected: [
         { code: "co_pse_bancolombia_bank", name: "Bancolombia", achCode: PseBankCode.BANCOLOMBIA },
       ],
     },
     {
-      nombre: "Kushki",
+      gatewayName: "Kushki",
       build: (baseUrl) => new KushkiAdapter(baseUrl),
-      ruta: "https://api.example.com/transfer/v1/bankList",
+      nativePath: "https://api.example.com/transfer/v1/bankList",
       /*
        * El primer elemento es el que devuelve la API real, y no es un banco: es el
-       * texto de relleno de un `<select>`. Está acá porque la respuesta nativa lo
+       * texto de relleno de un `<select>`. Está aquí porque la respuesta nativa lo
        * trae, y es lo que hace que esta prueba verifique algo: sin él, que las cuatro
        * listas sean "solo bancos" sería cierto por casualidad.
        */
-      respuesta: [
+      nativeResponse: [
         { code: "0", name: "A continuación seleccione su banco" },
         { code: "001", name: "Bancolombia" },
         { code: "007", name: "Davivienda" },
       ],
-      esperado: [
+      expected: [
         { code: "001", name: "Bancolombia" },
         { code: "007", name: "Davivienda" },
       ],
     },
   ];
 
-  it.each(gateways.map((g) => [g.nombre, g] as const))(
-    "%s devuelve la forma unificada desde su forma nativa",
-    async (_nombre, gateway) => {
-      mockJson(gateway.respuesta);
+  it.each(gateways.map((g) => [g.gatewayName, g] as const))(
+    "%s returns the unified shape from its native shape",
+    async (_gatewayName, gateway) => {
+      mockJson(gateway.nativeResponse);
 
       const banks = await gateway.build("https://api.example.com").getPseBanks();
 
-      expect(banks).toEqual(gateway.esperado);
+      expect(banks).toEqual(gateway.expected);
     },
   );
 
-  it.each(gateways.map((g) => [g.nombre, g] as const))(
-    "%s pide la lista en su ruta nativa",
-    async (_nombre, gateway) => {
-      const mockFetch = mockJson(gateway.respuesta);
+  it.each(gateways.map((g) => [g.gatewayName, g] as const))(
+    "%s requests the list on its native route",
+    async (_gatewayName, gateway) => {
+      const mockFetch = mockJson(gateway.nativeResponse);
 
       await gateway.build("https://api.example.com").getPseBanks();
 
-      expect(mockFetch.mock.calls[0][0]).toBe(gateway.ruta);
+      expect(mockFetch.mock.calls[0][0]).toBe(gateway.nativePath);
     },
   );
 
@@ -163,10 +163,10 @@ describe("la lista de bancos de PSE, en las cuatro pasarelas", () => {
    * sea aceptable en vez de una fuga de la abstracción — el comercio nunca lo
    * interpreta, solo lo devuelve.
    */
-  it.each(gateways.map((g) => [g.nombre, g] as const))(
-    "los códigos de %s se pueden usar directamente en PaymentMethod.pse()",
-    async (_nombre, gateway) => {
-      mockJson(gateway.respuesta);
+  it.each(gateways.map((g) => [g.gatewayName, g] as const))(
+    "%s codes can be used directly in PaymentMethod.pse()",
+    async (_gatewayName, gateway) => {
+      mockJson(gateway.nativeResponse);
 
       const banks = await gateway.build("https://api.example.com").getPseBanks();
 
@@ -182,10 +182,10 @@ describe("la lista de bancos de PSE, en las cuatro pasarelas", () => {
    * al elegirla, y el pagador se entera en el peor momento. Las cuatro descartan esas
    * entradas en vez de pasarlas al selector del comercio.
    */
-  it.each(gateways.map((g) => [g.nombre, g] as const))(
-    "%s nunca devuelve un banco sin código",
-    async (_nombre, gateway) => {
-      mockJson(gateway.respuesta);
+  it.each(gateways.map((g) => [g.gatewayName, g] as const))(
+    "%s never returns a bank without a code",
+    async (_gatewayName, gateway) => {
+      mockJson(gateway.nativeResponse);
 
       const banks = await gateway.build("https://api.example.com").getPseBanks();
 

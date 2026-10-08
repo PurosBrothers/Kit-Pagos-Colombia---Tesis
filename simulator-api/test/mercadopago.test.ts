@@ -18,7 +18,7 @@ describe("Mercado Pago Simulation Routes", () => {
   };
 
   describe("POST /v1/sim/mercadopago/payments", () => {
-    it("crea un pago APROBADO reflejando transaction_amount, description y payer (sin header de escenario)", async () => {
+    it("creates an APPROVED payment reflecting transaction_amount, description and payer (no scenario header)", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -44,7 +44,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("crea un pago APROBADO cuando el header x-simulate-scenario es APPROVED explícito", async () => {
+    it("creates an APPROVED payment when the x-simulate-scenario header is an explicit APPROVED", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -64,7 +64,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("crea un pago RECHAZADO cuando el header x-simulate-scenario es REJECTED", async () => {
+    it("creates a REJECTED payment when the x-simulate-scenario header is REJECTED", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -86,7 +86,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("rechaza un cobro sin token, con el mensaje de la API real", async () => {
+    it("rejects a charge without a token, with the real API's message", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -104,7 +104,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("rechaza un cobro sin cuotas, aunque sean una", async () => {
+    it("rejects a charge without installments, even if it is one", async () => {
       // Mercado Pago es la única de las cuatro que exige las cuotas siempre. Es la razón
       // de que `installments` viva en el dominio del SDK y no en un solo adaptador.
       const app = buildApp();
@@ -127,7 +127,7 @@ describe("Mercado Pago Simulation Routes", () => {
      * nada sin llave de idempotencia, y el SDK no la mandaba. Duró invisible porque este
      * mock la aceptaba ausente y porque las mediciones a mano la mandaban sin pensarlo.
      */
-    it("rechaza un cobro sin llave de idempotencia", async () => {
+    it("rejects a charge without an idempotency key", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -146,7 +146,7 @@ describe("Mercado Pago Simulation Routes", () => {
      * La llave se revisa antes que el cuerpo, como en la API real: un cobro sin llave y sin
      * token se queja de la llave, no del token.
      */
-    it("revisa la llave de idempotencia antes que el token", async () => {
+    it("checks the idempotency key before the token", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -161,7 +161,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("crea un pago EXPIRED cuando el header es EXPIRED", async () => {
+    it("creates an EXPIRED payment when the header is EXPIRED", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -182,7 +182,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("responde 504 Gateway Timeout cuando el escenario es TIMEOUT", async () => {
+    it("answers 504 Gateway Timeout when the scenario is TIMEOUT", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -201,7 +201,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("simula NETWORK_ERROR respondiendo con error 500", async () => {
+    it("simulates NETWORK_ERROR by answering with a 500 error", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -219,7 +219,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("responde 429 Too Many Requests cuando el escenario es RATE_LIMIT", async () => {
+    it("answers 429 Too Many Requests when the scenario is RATE_LIMIT", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -238,7 +238,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("responde 500 cuando el escenario es SERVER_ERROR", async () => {
+    it("answers 500 when the scenario is SERVER_ERROR", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -257,7 +257,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("responde con flapping (503 en intentos iniciales, éxito en el siguiente)", async () => {
+    it("answers with flapping (503 on the first attempts, success on the next one)", async () => {
       const app = buildApp();
       const flapBody = { ...validRequestBody, external_reference: "mp-flap-1" };
 
@@ -298,7 +298,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("detecta pagos duplicados cuando el escenario es DUPLICATE_PAYMENT", async () => {
+    it("detects duplicate payments when the scenario is DUPLICATE_PAYMENT", async () => {
       const app = buildApp();
       const dupBody = { ...validRequestBody, external_reference: "mp-dup-1" };
 
@@ -328,7 +328,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("responde 501 ante un escenario no soportado", async () => {
+    it("answers 501 for an unsupported scenario", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -357,17 +357,17 @@ describe("Mercado Pago Simulation Routes", () => {
    * comportamiento correcto.
    */
   describe("GET /v1/sim/mercadopago/payments/:id", () => {
-    it("consulta un pago creado y devuelve el mismo id, estado y monto", async () => {
+    it("queries a created payment and returns the same id, status and amount", async () => {
       const app = buildApp();
 
-      const creado = await app.inject({
+      const created = await app.inject({
         method: "POST",
         url: "/v1/sim/mercadopago/payments",
         headers: { "x-idempotency-key": "consulta-aprobado" },
         payload: validRequestBody,
       });
 
-      const { id } = creado.json();
+      const { id } = created.json();
 
       const response = await app.inject({
         method: "GET",
@@ -388,10 +388,10 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("devuelve rejected para un pago creado como rechazado", async () => {
+    it("returns rejected for a payment created as rejected", async () => {
       const app = buildApp();
 
-      const creado = await app.inject({
+      const created = await app.inject({
         method: "POST",
         url: "/v1/sim/mercadopago/payments",
         headers: {
@@ -401,7 +401,7 @@ describe("Mercado Pago Simulation Routes", () => {
         payload: validRequestBody,
       });
 
-      const { id } = creado.json();
+      const { id } = created.json();
 
       const response = await app.inject({
         method: "GET",
@@ -416,13 +416,13 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("no cambia el estado aunque la consulta pida lo contrario", async () => {
+    it("does not change the status even if the query asks for the opposite", async () => {
       // Criterio 1 del issue: el desenlace lo fija la creación. Una cabecera en la consulta
       // podría reportar como cobrado un pago que el comercio pidió declinado, y el mismo
       // cobro sería aprobado y declinado según quién preguntara.
       const app = buildApp();
 
-      const creado = await app.inject({
+      const created = await app.inject({
         method: "POST",
         url: "/v1/sim/mercadopago/payments",
         headers: {
@@ -432,7 +432,7 @@ describe("Mercado Pago Simulation Routes", () => {
         payload: validRequestBody,
       });
 
-      const { id } = creado.json();
+      const { id } = created.json();
 
       const response = await app.inject({
         method: "GET",
@@ -445,7 +445,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("responde 404 si el pago no existe, sin importar la cabecera", async () => {
+    it("answers 404 if the payment does not exist, regardless of the header", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -478,7 +478,7 @@ describe("Mercado Pago Simulation Routes", () => {
       },
     };
 
-    it("responde 401 si no se envía llave pública en query", async () => {
+    it("answers 401 if no public key is sent in the query", async () => {
       const app = buildApp();
       const response = await app.inject({
         method: "POST",
@@ -494,7 +494,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("responde 400 unexpected_processing si se envía llave en Authorization: Bearer en vez de la query", async () => {
+    it("answers 400 unexpected_processing if the key is sent in Authorization: Bearer instead of the query", async () => {
       const app = buildApp();
       const response = await app.inject({
         method: "POST",
@@ -510,7 +510,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("responde 500 internal_error si la clave pública es inexistente", async () => {
+    it("answers 500 internal_error if the public key does not exist", async () => {
       const app = buildApp();
       const response = await app.inject({
         method: "POST",
@@ -525,7 +525,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("emite 201 incluso sin identificación, con número corto o sin security_code (medido contra API real)", async () => {
+    it("issues 201 even without identification, with a short number or without security_code (measured against the real API)", async () => {
       const app = buildApp();
       const response = await app.inject({
         method: "POST",
@@ -548,7 +548,7 @@ describe("Mercado Pago Simulation Routes", () => {
     it.each([
       ["4013540682746260", true],
       ["4013540682746261", false],
-    ])("luhn_validation de %s es %s: aplica Luhn, no la longitud (medido contra API real)", async (cardNumber, expected) => {
+    ])("luhn_validation of %s is %s: it applies Luhn, not the length (measured against the real API)", async (cardNumber, expected) => {
       const app = buildApp();
       const response = await app.inject({
         method: "POST",
@@ -636,7 +636,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("responde 201 y emite un token de tarjeta con public_key en query param", async () => {
+    it("answers 201 and issues a card token with public_key in the query param", async () => {
       const app = buildApp();
       const response = await app.inject({
         method: "POST",
@@ -657,7 +657,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("responde según escenarios del motor de simulación (TIMEOUT, RATE_LIMIT, SERVER_ERROR)", async () => {
+    it("answers according to the simulation engine scenarios (TIMEOUT, RATE_LIMIT, SERVER_ERROR)", async () => {
       const app = buildApp();
 
       const timeoutRes = await app.inject({
@@ -687,7 +687,7 @@ describe("Mercado Pago Simulation Routes", () => {
       await app.close();
     });
 
-    it("completa un cobro con tarjeta de Mercado Pago de punta a punta: mock de tokens y POST /v1/api/payments", async () => {
+    it("completes a Mercado Pago card charge end to end: token mock and POST /v1/api/payments", async () => {
       const testEnv: Record<string, string | undefined> = {
         MERCADOPAGO_PUBLIC_KEY: "TEST-mp-public-key",
         MERCADOPAGO_ACCESS_TOKEN: "APP_USR-test-mp-token",

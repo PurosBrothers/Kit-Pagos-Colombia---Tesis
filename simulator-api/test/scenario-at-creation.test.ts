@@ -22,7 +22,7 @@ import {
 
 const H = (s: string) => ({ "x-simulator-scenario": s });
 
-const ORDEN_MP = {
+const MP_ORDER = {
   type: "online",
   total_amount: "10000",
   external_reference: "ORD-ESCENARIO-MPO",
@@ -49,7 +49,7 @@ const PSE_RAPYD = {
   payment_method: { type: "co_pse_bancolombia_bank" },
 };
 
-const INICIO_KUSHKI = {
+const KUSHKI_INIT = {
   subtotalIva0: 10000,
   subtotalIva: 0,
   iva: 0,
@@ -65,7 +65,7 @@ const CHECKOUT_RAPYD = {
   payment_method_type_categories: ["card"],
 };
 
-const TARJETA_WOMPI = {
+const WOMPI_CARD = {
   amount_in_cents: 1000000,
   currency: "COP",
   reference: "ORD-ESCENARIO-W",
@@ -89,7 +89,7 @@ const PSE_WOMPI = {
   },
 };
 
-const PAGO_MP = {
+const MP_PAYMENT = {
   transaction_amount: 10000,
   description: "ORD-ESCENARIO-MP",
   external_reference: "ORD-ESCENARIO-MP",
@@ -98,10 +98,10 @@ const PAGO_MP = {
   payer: { email: "comprador@example.com" },
 };
 
-const CARGO_KUSHKI = {
+const KUSHKI_CHARGE = {
   token: "tok_kushki_escenario",
   trackingCode: "ORD-ESCENARIO-K",
-  amount: INICIO_KUSHKI,
+  amount: KUSHKI_INIT,
   contactDetails: { email: "comprador@example.com" },
 };
 
@@ -111,12 +111,12 @@ const TOKEN_KUSHKI = {
   callbackUrl: "https://comercio.example.com/retorno",
   paymentDescription: "ORD-ESCENARIO-KPSE",
   email: "comprador@example.com",
-  amount: INICIO_KUSHKI,
+  amount: KUSHKI_INIT,
 };
 
 type App = ReturnType<typeof buildApp>;
 
-const conEscenario = (escenario: string) => (escenario === "" ? {} : H(escenario));
+const withScenario = (scenario: string) => (scenario === "" ? {} : H(scenario));
 
 /**
  * Un recurso cobrable, con lo que hay que hacer para crearlo y para consultarlo.
@@ -130,65 +130,65 @@ const conEscenario = (escenario: string) => (escenario === "" ? {} : H(escenario
  * entrega al comercio una orden que no puede conciliar. `monto` y `referencia` son los
  * que el recurso envió al crearse.
  */
-interface Consulta {
+interface QueryResult {
   status: string;
-  monto: unknown;
-  referencia: unknown;
+  amount: unknown;
+  reference: unknown;
 }
 
-interface Recurso {
-  crear: (app: App, escenario: string) => Promise<string>;
-  consultar: (app: App, id: string) => Promise<Consulta>;
-  monto: unknown;
-  referencia: string;
+interface Resource {
+  create: (app: App, scenario: string) => Promise<string>;
+  queryStatus: (app: App, id: string) => Promise<QueryResult>;
+  amount: unknown;
+  reference: string;
 }
 
-const consultarWompi = async (app: App, id: string): Promise<Consulta> => {
+const queryWompi = async (app: App, id: string): Promise<QueryResult> => {
   const { data } = (
     await app.inject({ method: "GET", url: `/v1/sim/wompi/transactions/${id}` })
   ).json();
 
-  return { status: data.status, monto: data.amount_in_cents, referencia: data.reference };
+  return { status: data.status, amount: data.amount_in_cents, reference: data.reference };
 };
 
-const consultarCheckoutRapyd = async (app: App, id: string): Promise<Consulta> => {
+const queryRapydCheckout = async (app: App, id: string): Promise<QueryResult> => {
   const { data } = (
     await app.inject({ method: "GET", url: `/v1/sim/rapyd/checkout/${id}` })
   ).json();
 
   return {
     status: `${data.status}/${data.payment.status}`,
-    monto: data.payment.amount,
-    referencia: data.payment.merchant_reference_id,
+    amount: data.payment.amount,
+    reference: data.payment.merchant_reference_id,
   };
 };
 
-let llaveMp = 0;
+let mpKey = 0;
 
-const RECURSOS: Record<string, Recurso> = {
-  "Wompi, tarjeta": {
-    crear: async (app, escenario) =>
+const RESOURCES: Record<string, Resource> = {
+  "Wompi, card": {
+    create: async (app, scenario) =>
       (
         await app.inject({
           method: "POST",
           url: "/v1/sim/wompi/transactions",
-          headers: conEscenario(escenario),
-          payload: TARJETA_WOMPI,
+          headers: withScenario(scenario),
+          payload: WOMPI_CARD,
         })
       ).json().data.id,
-    consultar: consultarWompi,
-    monto: TARJETA_WOMPI.amount_in_cents,
-    referencia: TARJETA_WOMPI.reference,
+    queryStatus: queryWompi,
+    amount: WOMPI_CARD.amount_in_cents,
+    reference: WOMPI_CARD.reference,
   },
   "Wompi, PSE": {
-    crear: async (app, escenario) => {
-      const creado = await app.inject({
+    create: async (app, scenario) => {
+      const created = await app.inject({
         method: "POST",
         url: "/v1/sim/wompi/transactions",
-        headers: conEscenario(escenario),
+        headers: withScenario(scenario),
         payload: PSE_WOMPI,
       });
-      const id = creado.json().data.id;
+      const id = created.json().data.id;
 
       // La primera consulta publica la URL del banco: es la que el comercio necesita para
       // redirigir al pagador.
@@ -196,144 +196,146 @@ const RECURSOS: Record<string, Recurso> = {
 
       return id;
     },
-    consultar: consultarWompi,
-    monto: PSE_WOMPI.amount_in_cents,
-    referencia: PSE_WOMPI.reference,
+    queryStatus: queryWompi,
+    amount: PSE_WOMPI.amount_in_cents,
+    reference: PSE_WOMPI.reference,
   },
   "Rapyd, PSE": {
-    crear: async (app, escenario) =>
+    create: async (app, scenario) =>
       (
         await app.inject({
           method: "POST",
           url: "/v1/sim/rapyd/payments",
-          headers: conEscenario(escenario),
+          headers: withScenario(scenario),
           payload: PSE_RAPYD,
         })
       ).json().data.id,
-    consultar: async (app, id) => {
+    queryStatus: async (app, id) => {
       const { data } = (
         await app.inject({ method: "GET", url: `/v1/sim/rapyd/payments/${id}` })
       ).json();
 
-      return { status: data.status, monto: data.amount, referencia: data.merchant_reference_id };
+      return { status: data.status, amount: data.amount, reference: data.merchant_reference_id };
     },
-    monto: PSE_RAPYD.amount,
-    referencia: PSE_RAPYD.merchant_reference_id,
+    amount: PSE_RAPYD.amount,
+    reference: PSE_RAPYD.merchant_reference_id,
   },
-  "Rapyd, página de pago visitada": {
-    crear: async (app, escenario) => {
-      const creado = (
+  "Rapyd, visited payment page": {
+    create: async (app, scenario) => {
+      const created = (
         await app.inject({
           method: "POST",
           url: "/v1/sim/rapyd/checkout",
-          headers: conEscenario(escenario),
+          headers: withScenario(scenario),
           payload: CHECKOUT_RAPYD,
         })
       ).json().data;
 
-      await app.inject({ method: "GET", url: new URL(creado.redirect_url).pathname });
+      await app.inject({ method: "GET", url: new URL(created.redirect_url).pathname });
 
-      return creado.id;
+      return created.id;
     },
-    consultar: consultarCheckoutRapyd,
-    monto: CHECKOUT_RAPYD.amount,
-    referencia: CHECKOUT_RAPYD.merchant_reference_id,
+    queryStatus: queryRapydCheckout,
+    amount: CHECKOUT_RAPYD.amount,
+    reference: CHECKOUT_RAPYD.merchant_reference_id,
   },
-  "Rapyd, página de pago sin visitar": {
-    crear: async (app, escenario) =>
+  "Rapyd, unvisited payment page": {
+    create: async (app, scenario) =>
       (
         await app.inject({
           method: "POST",
           url: "/v1/sim/rapyd/checkout",
-          headers: conEscenario(escenario),
+          headers: withScenario(scenario),
           payload: CHECKOUT_RAPYD,
         })
       ).json().data.id,
-    consultar: consultarCheckoutRapyd,
-    monto: CHECKOUT_RAPYD.amount,
-    referencia: CHECKOUT_RAPYD.merchant_reference_id,
+    queryStatus: queryRapydCheckout,
+    amount: CHECKOUT_RAPYD.amount,
+    reference: CHECKOUT_RAPYD.merchant_reference_id,
   },
-  "Mercado Pago, tarjeta": {
-    crear: async (app, escenario) =>
+  "Mercado Pago, card": {
+    create: async (app, scenario) =>
       String(
         (
           await app.inject({
             method: "POST",
             url: "/v1/sim/mercadopago/payments",
-            headers: { ...conEscenario(escenario), "x-idempotency-key": `mp-${++llaveMp}` },
-            payload: PAGO_MP,
+            headers: { ...withScenario(scenario), "x-idempotency-key": `mp-${++mpKey}` },
+            payload: MP_PAYMENT,
           })
         ).json().id,
       ),
-    consultar: async (app, id) => {
-      const pago = (
+    queryStatus: async (app, id) => {
+      const payment = (
         await app.inject({ method: "GET", url: `/v1/sim/mercadopago/payments/${id}` })
       ).json();
 
       return {
-        status: pago.status,
-        monto: pago.transaction_amount,
-        referencia: pago.external_reference,
+        status: payment.status,
+        amount: payment.transaction_amount,
+        reference: payment.external_reference,
       };
     },
-    monto: PAGO_MP.transaction_amount,
-    referencia: PAGO_MP.external_reference,
+    amount: MP_PAYMENT.transaction_amount,
+    reference: MP_PAYMENT.external_reference,
   },
-  "Mercado Pago, orden de PSE": {
-    crear: async (app, escenario) =>
-      (
-        await app.inject({
-          method: "POST",
-          url: "/v1/sim/mercadopago/orders",
-          headers: { ...conEscenario(escenario), "x-idempotency-key": `mp-${++llaveMp}` },
-          payload: ORDEN_MP,
-        })
-      ).json().id,
-    consultar: async (app, id) => {
-      const orden = (
+  "Mercado Pago, PSE order": {
+    create: async (app, scenario) => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/mercadopago/orders",
+        headers: { ...withScenario(scenario), "x-idempotency-key": `mp-${++mpKey}` },
+        payload: MP_ORDER,
+      });
+
+      // La orden rechazada llega en el `402`, dentro de `data`; las demás, sueltas en el `201`.
+      return response.statusCode === 402 ? response.json().data.id : response.json().id;
+    },
+    queryStatus: async (app, id) => {
+      const order = (
         await app.inject({ method: "GET", url: `/v1/sim/mercadopago/orders/${id}` })
       ).json();
 
       return {
-        status: orden.status,
-        monto: orden.total_amount,
-        referencia: orden.external_reference,
+        status: order.status,
+        amount: order.total_amount,
+        reference: order.external_reference,
       };
     },
-    monto: ORDEN_MP.total_amount,
-    referencia: ORDEN_MP.external_reference,
+    amount: MP_ORDER.total_amount,
+    reference: MP_ORDER.external_reference,
   },
-  "Kushki, tarjeta": {
-    crear: async (app, escenario) =>
+  "Kushki, card": {
+    create: async (app, scenario) =>
       (
         await app.inject({
           method: "POST",
           url: "/v1/sim/kushki/card/v1/charges",
-          headers: conEscenario(escenario),
-          payload: CARGO_KUSHKI,
+          headers: withScenario(scenario),
+          payload: KUSHKI_CHARGE,
         })
       ).json().ticketNumber,
-    consultar: async (app, id) => {
+    queryStatus: async (app, id) => {
       const { details } = (
         await app.inject({ method: "GET", url: `/v1/sim/kushki/charges/${id}` })
       ).json();
 
       return {
         status: details.transactionStatus,
-        monto: details.approvedTransactionAmount,
-        referencia: details.trackingCode,
+        amount: details.approvedTransactionAmount,
+        reference: details.trackingCode,
       };
     },
-    monto: INICIO_KUSHKI.subtotalIva0,
-    referencia: CARGO_KUSHKI.trackingCode,
+    amount: KUSHKI_INIT.subtotalIva0,
+    reference: KUSHKI_CHARGE.trackingCode,
   },
-  "Kushki, transferencia": {
-    crear: async (app, escenario) => {
+  "Kushki, transfer": {
+    create: async (app, scenario) => {
       const { token } = (
         await app.inject({
           method: "POST",
           url: "/v1/sim/kushki/transfer/v1/tokens",
-          headers: conEscenario(escenario),
+          headers: withScenario(scenario),
           payload: TOKEN_KUSHKI,
         })
       ).json();
@@ -341,56 +343,56 @@ const RECURSOS: Record<string, Recurso> = {
       await app.inject({
         method: "POST",
         url: "/v1/sim/kushki/transfer/v1/init",
-        payload: { token, amount: INICIO_KUSHKI },
+        payload: { token, amount: KUSHKI_INIT },
       });
 
       return token;
     },
-    consultar: async (app, id) => {
-      const transferencia = (
+    queryStatus: async (app, id) => {
+      const transfer = (
         await app.inject({ method: "GET", url: `/v1/sim/kushki/transfer/v1/status/${id}` })
       ).json();
 
       return {
-        status: transferencia.status,
-        monto: transferencia.amount.subtotalIva0,
-        referencia: transferencia.paymentDescription,
+        status: transfer.status,
+        amount: transfer.amount.subtotalIva0,
+        reference: transfer.paymentDescription,
       };
     },
-    monto: INICIO_KUSHKI.subtotalIva0,
-    referencia: TOKEN_KUSHKI.paymentDescription,
+    amount: KUSHKI_INIT.subtotalIva0,
+    reference: TOKEN_KUSHKI.paymentDescription,
   },
 };
 
-async function flujoKushki(app: ReturnType<typeof buildApp>, escenario: string) {
-  const emitido = await app.inject({
+async function kushkiFlow(app: ReturnType<typeof buildApp>, scenario: string) {
+  const issued = await app.inject({
     method: "POST",
     url: "/v1/sim/kushki/transfer/v1/tokens",
-    headers: escenario === "" ? {} : H(escenario),
+    headers: scenario === "" ? {} : H(scenario),
     payload: { bankId: "007", callbackUrl: "https://comercio.example.com/retorno" },
   });
 
-  if (emitido.statusCode !== 201) {
-    return { emitido: emitido.statusCode };
+  if (issued.statusCode !== 201) {
+    return { issued: issued.statusCode };
   }
 
-  const { token } = emitido.json();
+  const { token } = issued.json();
 
   await app.inject({
     method: "POST",
     url: "/v1/sim/kushki/transfer/v1/init",
-    payload: { token, amount: INICIO_KUSHKI },
+    payload: { token, amount: KUSHKI_INIT },
   });
 
-  const consulta = await app.inject({
+  const queryResponse = await app.inject({
     method: "GET",
     url: `/v1/sim/kushki/transfer/v1/status/${token}`,
   });
 
-  return { emitido: 201, status: consulta.json().status };
+  return { issued: 201, status: queryResponse.json().status };
 }
 
-describe("el escenario fija el desenlace al crear", () => {
+describe("the scenario fixes the outcome at creation", () => {
   beforeEach(() => {
     resetSimulatorState();
   });
@@ -399,115 +401,114 @@ describe("el escenario fija el desenlace al crear", () => {
     resetSimulatorState();
   });
 
-  describe("Rapyd, pago de PSE", () => {
-    it("un pago creado con DECLINED nace declinado y se consulta declinado", async () => {
+  describe("Rapyd, PSE payment", () => {
+    it("a payment created with DECLINED is born declined and is queried declined", async () => {
       const app = buildApp();
 
-      const creado = await app.inject({
+      const created = await app.inject({
         method: "POST",
         url: "/v1/sim/rapyd/payments",
         headers: H("DECLINED"),
         payload: PSE_RAPYD,
       });
 
-      const id = creado.json().data.id;
+      const id = created.json().data.id;
 
       // Nace en el estado final, no pendiente: un pago declinado no tiene nada que
       // resolver después.
-      expect(creado.json().data.status).toBe("ERR");
+      expect(created.json().data.status).toBe("ERR");
 
-      const consulta = await app.inject({
+      const queryResponse = await app.inject({
         method: "GET",
         url: `/v1/sim/rapyd/payments/${id}`,
       });
 
-      expect(consulta.json().data.status).toBe("ERR");
-      expect(consulta.json().data.paid).toBe(false);
+      expect(queryResponse.json().data.status).toBe("ERR");
+      expect(queryResponse.json().data.paid).toBe(false);
 
       await app.close();
     });
 
-    it("un pago creado con EXPIRED nace expirado", async () => {
+    it("a payment created with EXPIRED is born expired", async () => {
       const app = buildApp();
 
-      const creado = await app.inject({
+      const created = await app.inject({
         method: "POST",
         url: "/v1/sim/rapyd/payments",
         headers: H("EXPIRED"),
         payload: PSE_RAPYD,
       });
 
-      expect(creado.json().data.status).toBe("EXP");
+      expect(created.json().data.status).toBe("EXP");
 
-      const consulta = await app.inject({
+      const queryResponse = await app.inject({
         method: "GET",
-        url: `/v1/sim/rapyd/payments/${creado.json().data.id}`,
+        url: `/v1/sim/rapyd/payments/${created.json().data.id}`,
       });
 
-      expect(consulta.json().data.status).toBe("EXP");
+      expect(queryResponse.json().data.status).toBe("EXP");
 
       await app.close();
     });
 
-    it("sin escenario el pago de PSE se aprueba al consultarlo", async () => {
+    it("without a scenario the PSE payment is approved when queried", async () => {
       const app = buildApp();
 
-      const creado = await app.inject({
+      const created = await app.inject({
         method: "POST",
         url: "/v1/sim/rapyd/payments",
         payload: PSE_RAPYD,
       });
 
-      const id = creado.json().data.id;
-      expect(creado.json().data.status).toBe("ACT");
+      const id = created.json().data.id;
+      expect(created.json().data.status).toBe("ACT");
 
-      const consulta = await app.inject({
+      const queryResponse = await app.inject({
         method: "GET",
         url: `/v1/sim/rapyd/payments/${id}`,
       });
 
-      expect(consulta.json().data.status).toBe("CLO");
-      expect(consulta.json().data.paid).toBe(true);
+      expect(queryResponse.json().data.status).toBe("CLO");
+      expect(queryResponse.json().data.paid).toBe(true);
 
       await app.close();
     });
   });
 
-  describe("Mercado Pago, orden de PSE", () => {
-    it("un PSE rechazado responde 402 con la orden en failed, como la API real", async () => {
+  describe("Mercado Pago, PSE order", () => {
+    it("a declined PSE answers 402 with the order in failed, like the real API", async () => {
       const app = buildApp();
 
-      // No nace una orden: la API real responde 402 y la orden entera queda en `failed`.
-      // Por eso esta ruta no necesita registrar ningún desenlace: no hay consulta que
-      // responder.
-      const respuesta = await app.inject({
+      // La orden nace ya en `failed`: la API real responde 402 con la orden en `data`. No
+      // hace falta registrar un desenlace, porque `failed` no tiene transición de salida.
+      const response = await app.inject({
         method: "POST",
         url: "/v1/sim/mercadopago/orders",
         headers: { ...H("DECLINED"), "x-idempotency-key": "escenario-mp" },
-        payload: ORDEN_MP,
+        payload: MP_ORDER,
       });
 
-      expect(respuesta.statusCode).toBe(402);
-      expect(respuesta.json().errors[0].code).toBe("failed");
+      expect(response.statusCode).toBe(402);
+      expect(response.json().errors[0].code).toBe("failed");
 
       await app.close();
     });
 
-    it("una orden creada con EXPIRED termina expired, no procesada", async () => {
+    it("an order created with EXPIRED ends expired, not processed", async () => {
       const app = buildApp();
 
-      const creado = await app.inject({
+      const created = await app.inject({
         method: "POST",
         url: "/v1/sim/mercadopago/orders",
         headers: { ...H("EXPIRED"), "x-idempotency-key": "escenario-mp-2" },
-        payload: ORDEN_MP,
+        payload: MP_ORDER,
       });
 
-      expect(creado.statusCode).toBe(201);
-      const id = creado.json().id;
-      expect(creado.json().status).toBe("action_required");
+      expect(created.statusCode).toBe(201);
+      const id = created.json().id;
+      expect(created.json().status).toBe("action_required");
 
-      const consulta = await app.inject({
+      const queryResponse = await app.inject({
         method: "GET",
         url: `/v1/sim/mercadopago/orders/${id}`,
       });
@@ -515,73 +516,73 @@ describe("el escenario fija el desenlace al crear", () => {
       // `expired | expired`, el par de la tabla oficial de estados de la orden, que tiene
       // `expired` y `canceled` como estados distintos. Lo que no puede ser es `processed`:
       // un cobro caducado reportado como cobrado.
-      expect(consulta.json().status).toBe("expired");
-      expect(consulta.json().status_detail).toBe("expired");
+      expect(queryResponse.json().status).toBe("expired");
+      expect(queryResponse.json().status_detail).toBe("expired");
 
       await app.close();
     });
 
-    it("acepta las dos cabeceras de escenario", async () => {
+    it("accepts both scenario headers", async () => {
       const app = buildApp();
 
       // `x-simulate-scenario` y `x-simulator-scenario` se reconocen por igual. Antes la ruta de
       // órdenes solo leía la primera, así que mandar la segunda devolvía 201 con una orden
       // en `action_required` en vez del 402.
-      for (const cabecera of ["x-simulator-scenario", "x-simulate-scenario"]) {
+      for (const header of ["x-simulator-scenario", "x-simulate-scenario"]) {
         resetSimulatorState();
 
-        const respuesta = await app.inject({
+        const response = await app.inject({
           method: "POST",
           url: "/v1/sim/mercadopago/orders",
-          headers: { [cabecera]: "DECLINED", "x-idempotency-key": `k-${cabecera}` },
-          payload: ORDEN_MP,
+          headers: { [header]: "DECLINED", "x-idempotency-key": `k-${header}` },
+          payload: MP_ORDER,
         });
 
-        expect(respuesta.statusCode).toBe(402);
+        expect(response.statusCode).toBe(402);
       }
 
       await app.close();
     });
   });
 
-  describe("Kushki, transferencia", () => {
-    it("una transferencia creada con DECLINED termina declinada", async () => {
+  describe("Kushki, transfer", () => {
+    it("a transfer created with DECLINED ends declined", async () => {
       const app = buildApp();
 
       // Antes el token y el `init` ignoraban el escenario: un `DECLINED` devolvía 201 y la
       // consulta sin cabecera respondía `approvedTransaction`. Solo se llegaba a
       // `declinedTransaction` enviando el escenario en la consulta.
-      const resultado = await flujoKushki(app, "DECLINED");
+      const result = await kushkiFlow(app, "DECLINED");
 
-      expect(resultado).toEqual({ emitido: 201, status: "declinedTransaction" });
+      expect(result).toEqual({ issued: 201, status: "declinedTransaction" });
 
       await app.close();
     });
 
-    it("sin escenario la transferencia termina aprobada", async () => {
+    it("without a scenario the transfer ends approved", async () => {
       const app = buildApp();
 
-      const resultado = await flujoKushki(app, "");
+      const result = await kushkiFlow(app, "");
 
-      expect(resultado).toEqual({ emitido: 201, status: "approvedTransaction" });
+      expect(result).toEqual({ issued: 201, status: "approvedTransaction" });
 
       await app.close();
     });
 
-    it("una transferencia con EXPIRED se rechaza con 501 y no deja token", async () => {
+    it("a transfer with EXPIRED is rejected with 501 and leaves no token", async () => {
       const app = buildApp();
 
       // `expiredTransaction` solo aplica a México según la referencia de Kushki. Antes
       // `EXPIRED` no registraba nada y la transferencia terminaba `approvedTransaction`.
-      const resultado = await flujoKushki(app, "EXPIRED");
+      const result = await kushkiFlow(app, "EXPIRED");
 
-      expect(resultado).toEqual({ emitido: 501 });
+      expect(result).toEqual({ issued: 501 });
       expect(kushkiTransfers.size()).toBe(0);
 
       await app.close();
     });
 
-    it("el escenario de la creación manda sobre el de una consulta posterior", async () => {
+    it("the creation scenario prevails over the one of a later query", async () => {
       const app = buildApp();
 
       const { token } = await app
@@ -596,131 +597,131 @@ describe("el escenario fija el desenlace al crear", () => {
       await app.inject({
         method: "POST",
         url: "/v1/sim/kushki/transfer/v1/init",
-        payload: { token, amount: INICIO_KUSHKI },
+        payload: { token, amount: KUSHKI_INIT },
       });
 
       // La consulta pide APPROVED, pero el desenlace ya lo decidió la creación.
-      const consulta = await app.inject({
+      const queryResponse = await app.inject({
         method: "GET",
         url: `/v1/sim/kushki/transfer/v1/status/${token}`,
         headers: H("APPROVED"),
       });
 
-      expect(consulta.json().status).toBe("declinedTransaction");
+      expect(queryResponse.json().status).toBe("declinedTransaction");
 
       await app.close();
     });
   });
 
-  describe("una falla técnica no crea ni muta estado", () => {
-    it("Kushki: un TIMEOUT al emitir el token no deja transferencia", async () => {
+  describe("a technical failure neither creates nor mutates state", () => {
+    it("Kushki: a TIMEOUT when issuing the token leaves no transfer", async () => {
       const app = buildApp();
 
-      const emitido = await app.inject({
+      const issued = await app.inject({
         method: "POST",
         url: "/v1/sim/kushki/transfer/v1/tokens",
         headers: H("TIMEOUT"),
         payload: { bankId: "007", callbackUrl: "https://comercio.example.com/retorno" },
       });
 
-      expect(emitido.statusCode).toBe(504);
+      expect(issued.statusCode).toBe(504);
       expect(kushkiTransfers.size()).toBe(0);
 
       // Un identificador con forma de token que nadie emitió: la consulta responde lo
       // mismo que Kushki ante una transferencia que no existe. Un error no es un cobro en
       // estado de error.
-      const consulta = await app.inject({
+      const queryResponse = await app.inject({
         method: "GET",
         url: "/v1/sim/kushki/transfer/v1/status/a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
       });
 
-      expect(consulta.statusCode).toBe(400);
-      expect(consulta.json().code).toBe("T004");
+      expect(queryResponse.statusCode).toBe(400);
+      expect(queryResponse.json().code).toBe("T004");
 
       await app.close();
     });
 
-    it("Rapyd: un TIMEOUT al crear la página de pago no deja checkout", async () => {
+    it("Rapyd: a TIMEOUT when creating the payment page leaves no checkout", async () => {
       const app = buildApp();
 
       // Antes la ruta de checkout no tenía cadena de fallas técnicas: un TIMEOUT creaba
       // la página con 200 y la guardaba.
-      const respuesta = await app.inject({
+      const response = await app.inject({
         method: "POST",
         url: "/v1/sim/rapyd/checkout",
         headers: H("TIMEOUT"),
         payload: CHECKOUT_RAPYD,
       });
 
-      expect(respuesta.statusCode).toBe(504);
+      expect(response.statusCode).toBe(504);
       expect(rapydCheckouts.size()).toBe(0);
 
       await app.close();
     });
 
-    it("Mercado Pago: un TIMEOUT al crear la orden no deja orden", async () => {
+    it("Mercado Pago: a TIMEOUT when creating the order leaves no order", async () => {
       const app = buildApp();
 
       // Antes solo la ruta de pagos tenía la cadena: un TIMEOUT en `POST /orders`
       // respondía 201 y guardaba la orden.
-      const respuesta = await app.inject({
+      const response = await app.inject({
         method: "POST",
         url: "/v1/sim/mercadopago/orders",
         headers: { ...H("TIMEOUT"), "x-idempotency-key": "escenario-mp-timeout" },
-        payload: ORDEN_MP,
+        payload: MP_ORDER,
       });
 
-      expect(respuesta.statusCode).toBe(504);
+      expect(response.statusCode).toBe(504);
       expect(mercadopagoOrders.size()).toBe(0);
 
       await app.close();
     });
 
-    it("Rapyd: un SERVER_ERROR al crear no deja pago consultable", async () => {
+    it("Rapyd: a SERVER_ERROR when creating leaves no queryable payment", async () => {
       const app = buildApp();
 
-      const respuesta = await app.inject({
+      const response = await app.inject({
         method: "POST",
         url: "/v1/sim/rapyd/payments",
         headers: H("SERVER_ERROR"),
         payload: PSE_RAPYD,
       });
 
-      expect(respuesta.statusCode).toBe(500);
+      expect(response.statusCode).toBe(500);
 
-      const consulta = await app.inject({
+      const queryResponse = await app.inject({
         method: "GET",
         url: "/v1/sim/rapyd/payments/payment_9f8e7d6c5b4a39281706123456789abc",
       });
 
-      expect(consulta.statusCode).toBe(400);
-      expect(consulta.json().status.error_code).toBe("ERROR_GET_PAYMENT");
+      expect(queryResponse.statusCode).toBe(400);
+      expect(queryResponse.json().status.error_code).toBe("ERROR_GET_PAYMENT");
 
       await app.close();
     });
 
-    it("un escenario técnico en la consulta no mueve un cobro ya creado", async () => {
+    it("a technical scenario in the query does not move an already created charge", async () => {
       const app = buildApp();
 
-      const creado = await app.inject({
+      const created = await app.inject({
         method: "POST",
         url: "/v1/sim/rapyd/payments",
         payload: PSE_RAPYD,
       });
 
-      const id = creado.json().data.id;
+      const id = created.json().data.id;
 
       // La consulta pide un 504. El cobro ya existía, así que la consulta lo responde: una
       // falla de transporte al consultar no deshace el cobro. Y el estado sigue el de la
       // creación.
-      const consulta = await app.inject({
+      const queryResponse = await app.inject({
         method: "GET",
         url: `/v1/sim/rapyd/payments/${id}`,
         headers: H("TIMEOUT"),
       });
 
-      expect(consulta.statusCode).toBe(200);
-      expect(consulta.json().data.status).toBe("CLO");
+      expect(queryResponse.statusCode).toBe(200);
+      expect(queryResponse.json().data.status).toBe("CLO");
 
       await app.close();
     });
@@ -734,60 +735,62 @@ describe("el escenario fija el desenlace al crear", () => {
    * segunda consulta es la que importa: es la que detecta una tabla que mueve un estado
    * que debería quedarse.
    *
-   * Lo que falta es a propósito. La orden de Mercado Pago rechazada no nace (la API real
-   * responde `402`, cubierto arriba). La página de Rapyd pendiente no tiene escenario: es la
-   * que nadie visitó, que es lo medido.
+   * La orden de Mercado Pago rechazada sí nace: la creación responde `402` con la orden en
+   * `data`, y la consulta la devuelve en `failed` (medido el 7 de octubre de 2026). Lo que
+   * falta es a propósito: la página de Rapyd pendiente no tiene escenario, es la que nadie
+   * visitó, que es lo medido.
    */
-  describe("criterio 1: el estado de la creación es el de cada consulta", () => {
-    const CASOS: { recurso: string; escenario: string; esperado: string }[] = [
-      { recurso: "Wompi, tarjeta", escenario: "", esperado: "APPROVED" },
-      { recurso: "Wompi, tarjeta", escenario: "DECLINED", esperado: "DECLINED" },
-      { recurso: "Wompi, tarjeta", escenario: "PENDING", esperado: "PENDING" },
-      { recurso: "Wompi, PSE", escenario: "", esperado: "APPROVED" },
-      { recurso: "Wompi, PSE", escenario: "DECLINED", esperado: "DECLINED" },
-      { recurso: "Wompi, PSE", escenario: "PENDING", esperado: "PENDING" },
-      { recurso: "Rapyd, PSE", escenario: "", esperado: "CLO" },
-      { recurso: "Rapyd, PSE", escenario: "DECLINED", esperado: "ERR" },
-      { recurso: "Rapyd, PSE", escenario: "PENDING", esperado: "ACT" },
-      { recurso: "Rapyd, página de pago visitada", escenario: "", esperado: "DON/CLO" },
-      { recurso: "Rapyd, página de pago visitada", escenario: "DECLINED", esperado: "DON/ERR" },
-      { recurso: "Rapyd, página de pago sin visitar", escenario: "", esperado: "NEW/null" },
-      { recurso: "Mercado Pago, tarjeta", escenario: "", esperado: "approved" },
-      { recurso: "Mercado Pago, tarjeta", escenario: "DECLINED", esperado: "rejected" },
-      { recurso: "Mercado Pago, tarjeta", escenario: "PENDING", esperado: "in_process" },
-      { recurso: "Mercado Pago, orden de PSE", escenario: "", esperado: "processed" },
-      { recurso: "Mercado Pago, orden de PSE", escenario: "PENDING", esperado: "action_required" },
-      { recurso: "Kushki, tarjeta", escenario: "", esperado: "APPROVAL" },
-      { recurso: "Kushki, tarjeta", escenario: "DECLINED", esperado: "DECLINED" },
-      { recurso: "Kushki, tarjeta", escenario: "PENDING", esperado: "INITIALIZED" },
-      { recurso: "Kushki, transferencia", escenario: "", esperado: "approvedTransaction" },
-      { recurso: "Kushki, transferencia", escenario: "DECLINED", esperado: "declinedTransaction" },
-      { recurso: "Kushki, transferencia", escenario: "PENDING", esperado: "initializedTransaction" },
+  describe("criterion 1: the creation status is the status of every query", () => {
+    const CASES: { resource: string; scenario: string; expected: string }[] = [
+      { resource: "Wompi, card", scenario: "", expected: "APPROVED" },
+      { resource: "Wompi, card", scenario: "DECLINED", expected: "DECLINED" },
+      { resource: "Wompi, card", scenario: "PENDING", expected: "PENDING" },
+      { resource: "Wompi, PSE", scenario: "", expected: "APPROVED" },
+      { resource: "Wompi, PSE", scenario: "DECLINED", expected: "DECLINED" },
+      { resource: "Wompi, PSE", scenario: "PENDING", expected: "PENDING" },
+      { resource: "Rapyd, PSE", scenario: "", expected: "CLO" },
+      { resource: "Rapyd, PSE", scenario: "DECLINED", expected: "ERR" },
+      { resource: "Rapyd, PSE", scenario: "PENDING", expected: "ACT" },
+      { resource: "Rapyd, visited payment page", scenario: "", expected: "DON/CLO" },
+      { resource: "Rapyd, visited payment page", scenario: "DECLINED", expected: "DON/ERR" },
+      { resource: "Rapyd, unvisited payment page", scenario: "", expected: "NEW/null" },
+      { resource: "Mercado Pago, card", scenario: "", expected: "approved" },
+      { resource: "Mercado Pago, card", scenario: "DECLINED", expected: "rejected" },
+      { resource: "Mercado Pago, card", scenario: "PENDING", expected: "in_process" },
+      { resource: "Mercado Pago, PSE order", scenario: "", expected: "processed" },
+      { resource: "Mercado Pago, PSE order", scenario: "PENDING", expected: "action_required" },
+      { resource: "Mercado Pago, PSE order", scenario: "DECLINED", expected: "failed" },
+      { resource: "Kushki, card", scenario: "", expected: "APPROVAL" },
+      { resource: "Kushki, card", scenario: "DECLINED", expected: "DECLINED" },
+      { resource: "Kushki, card", scenario: "PENDING", expected: "INITIALIZED" },
+      { resource: "Kushki, transfer", scenario: "", expected: "approvedTransaction" },
+      { resource: "Kushki, transfer", scenario: "DECLINED", expected: "declinedTransaction" },
+      { resource: "Kushki, transfer", scenario: "PENDING", expected: "initializedTransaction" },
     ];
 
-    it.each(CASOS)(
-      "$recurso con escenario '$escenario' se consulta $esperado dos veces, con su monto y su referencia",
-      async ({ recurso, escenario, esperado }) => {
+    it.each(CASES)(
+      "$resource with scenario '$scenario' is queried $expected twice, with its amount and its reference",
+      async ({ resource, scenario, expected }) => {
         const app = buildApp();
-        const { crear, consultar, monto, referencia } = RECURSOS[recurso];
+        const { create, queryStatus, amount, reference } = RESOURCES[resource];
 
-        const id = await crear(app, escenario);
-        const primera = await consultar(app, id);
-        const segunda = await consultar(app, id);
+        const id = await create(app, scenario);
+        const first = await queryStatus(app, id);
+        const second = await queryStatus(app, id);
 
-        const creado = { status: esperado, monto, referencia };
-        expect([primera, segunda]).toEqual([creado, creado]);
+        const created = { status: expected, amount, reference };
+        expect([first, second]).toEqual([created, created]);
 
         await app.close();
       },
     );
 
-    it("el pago que nace de una página declinada se consulta declinado en /payments", async () => {
+    it("the payment born from a declined page is queried declined in /payments", async () => {
       // Es la segunda consulta del SDK con tarjeta de Rapyd: primero el checkout, después
       // el pago por su id. Las dos tienen que decir lo mismo, y el `failure_code` es el que
       // hace que el normalizador lo lea como rechazo y no como error.
       const app = buildApp();
-      const creado = (
+      const created = (
         await app.inject({
           method: "POST",
           url: "/v1/sim/rapyd/checkout",
@@ -796,58 +799,58 @@ describe("el escenario fija el desenlace al crear", () => {
         })
       ).json().data;
 
-      const visita = await app.inject({
+      const visit = await app.inject({
         method: "GET",
-        url: new URL(creado.redirect_url).pathname,
+        url: new URL(created.redirect_url).pathname,
       });
 
-      expect(visita.json().paid).toBe(false);
+      expect(visit.json().paid).toBe(false);
 
-      const pago = await app.inject({
+      const payment = await app.inject({
         method: "GET",
-        url: `/v1/sim/rapyd/payments/${visita.json().payment_id}`,
+        url: `/v1/sim/rapyd/payments/${visit.json().payment_id}`,
       });
 
-      expect(pago.json().data.status).toBe("ERR");
-      expect(pago.json().data.paid).toBe(false);
-      expect(pago.json().data.failure_code).toMatch(/^ERROR_PROCESSING_CARD/);
+      expect(payment.json().data.status).toBe("ERR");
+      expect(payment.json().data.paid).toBe(false);
+      expect(payment.json().data.failure_code).toMatch(/^ERROR_PROCESSING_CARD/);
 
       await app.close();
     });
 
     it.each([["PENDING"], ["EXPIRED"]])(
-      "una página de pago de Rapyd con %s responde 501 y no se guarda",
-      async (escenario) => {
+      "a Rapyd payment page with %s answers 501 and is not saved",
+      async (scenario) => {
         // Aceptar el escenario sin aplicarlo dejaría pagar la página igual, que es el defecto
         // de la ronda anterior: el rechazo pedido terminaba en un pago cobrado.
         const app = buildApp();
 
-        const respuesta = await app.inject({
+        const response = await app.inject({
           method: "POST",
           url: "/v1/sim/rapyd/checkout",
-          headers: H(escenario),
+          headers: H(scenario),
           payload: CHECKOUT_RAPYD,
         });
 
-        expect(respuesta.statusCode).toBe(501);
+        expect(response.statusCode).toBe(501);
         expect(rapydCheckouts.size()).toBe(0);
 
         await app.close();
       },
     );
 
-    it("un pago de tarjeta de Rapyd con PENDING responde 501", async () => {
+    it("a Rapyd card payment with PENDING answers 501", async () => {
       // `PENDING` solo existe para PSE en `/payments`: con tarjeta el pago nace cerrado.
       const app = buildApp();
 
-      const respuesta = await app.inject({
+      const response = await app.inject({
         method: "POST",
         url: "/v1/sim/rapyd/payments",
         headers: H("PENDING"),
         payload: { ...PSE_RAPYD, payment_method: { type: "co_visa_card" } },
       });
 
-      expect(respuesta.statusCode).toBe(501);
+      expect(response.statusCode).toBe(501);
 
       await app.close();
     });
@@ -859,32 +862,32 @@ describe("el escenario fija el desenlace al crear", () => {
    * guardar nada. Antes la orden de Mercado Pago y el token de Kushki aceptaban `FOO` o
    * `FLAPPING` con `201` y el cobro terminaba aprobado.
    */
-  describe("un escenario que la creación no sabe producir responde 501", () => {
-    const crearOrden = (app: App, escenario: string) =>
+  describe("a scenario the creation cannot produce answers 501", () => {
+    const createOrder = (app: App, scenario: string) =>
       app.inject({
         method: "POST",
         url: "/v1/sim/mercadopago/orders",
-        headers: { ...H(escenario), "x-idempotency-key": `mp-${++llaveMp}` },
-        payload: ORDEN_MP,
+        headers: { ...H(scenario), "x-idempotency-key": `mp-${++mpKey}` },
+        payload: MP_ORDER,
       });
 
-    const emitirToken = (app: App, escenario: string) =>
+    const issueToken = (app: App, scenario: string) =>
       app.inject({
         method: "POST",
         url: "/v1/sim/kushki/transfer/v1/tokens",
-        headers: H(escenario),
+        headers: H(scenario),
         payload: TOKEN_KUSHKI,
       });
 
     it.each(["FOO", "DUPLICATE_PAYMENT"])(
-      "Mercado Pago: una orden con %s responde 501 y no deja orden",
-      async (escenario) => {
+      "Mercado Pago: an order with %s answers 501 and leaves no order",
+      async (scenario) => {
         const app = buildApp();
 
-        const respuesta = await crearOrden(app, escenario);
+        const response = await createOrder(app, scenario);
 
-        expect(respuesta.statusCode).toBe(501);
-        expect(respuesta.json().error).toContain(escenario);
+        expect(response.statusCode).toBe(501);
+        expect(response.json().error).toContain(scenario);
         expect(mercadopagoOrders.size()).toBe(0);
 
         await app.close();
@@ -892,87 +895,87 @@ describe("el escenario fija el desenlace al crear", () => {
     );
 
     it.each(["FOO", "DUPLICATE_PAYMENT"])(
-      "Kushki: un token de PSE con %s responde 501 y no deja transferencia",
-      async (escenario) => {
+      "Kushki: a PSE token with %s answers 501 and leaves no transfer",
+      async (scenario) => {
         const app = buildApp();
 
-        const respuesta = await emitirToken(app, escenario);
+        const response = await issueToken(app, scenario);
 
-        expect(respuesta.statusCode).toBe(501);
-        expect(respuesta.json().error).toContain(escenario);
+        expect(response.statusCode).toBe(501);
+        expect(response.json().error).toContain(scenario);
         expect(kushkiTransfers.size()).toBe(0);
 
         await app.close();
       },
     );
 
-    it("Mercado Pago: una orden con FLAPPING falla dos veces y después se crea", async () => {
+    it("Mercado Pago: an order with FLAPPING fails twice and is then created", async () => {
       const app = buildApp();
 
-      const primera = await crearOrden(app, "FLAPPING");
-      const segunda = await crearOrden(app, "FLAPPING");
-      expect([primera.statusCode, segunda.statusCode]).toEqual([503, 503]);
+      const first = await createOrder(app, "FLAPPING");
+      const second = await createOrder(app, "FLAPPING");
+      expect([first.statusCode, second.statusCode]).toEqual([503, 503]);
       expect(mercadopagoOrders.size()).toBe(0);
 
-      const tercera = await crearOrden(app, "FLAPPING");
-      expect(tercera.statusCode).toBe(201);
+      const third = await createOrder(app, "FLAPPING");
+      expect(third.statusCode).toBe(201);
 
-      const consulta = await app.inject({
+      const queryResponse = await app.inject({
         method: "GET",
-        url: `/v1/sim/mercadopago/orders/${tercera.json().id}`,
+        url: `/v1/sim/mercadopago/orders/${third.json().id}`,
       });
-      expect(consulta.json().status).toBe("processed");
+      expect(queryResponse.json().status).toBe("processed");
 
       await app.close();
     });
 
-    it("Kushki: un token de PSE con FLAPPING falla dos veces y después se emite", async () => {
+    it("Kushki: a PSE token with FLAPPING fails twice and is then issued", async () => {
       const app = buildApp();
 
-      const primera = await emitirToken(app, "FLAPPING");
-      const segunda = await emitirToken(app, "FLAPPING");
-      expect([primera.statusCode, segunda.statusCode]).toEqual([503, 503]);
+      const first = await issueToken(app, "FLAPPING");
+      const second = await issueToken(app, "FLAPPING");
+      expect([first.statusCode, second.statusCode]).toEqual([503, 503]);
       expect(kushkiTransfers.size()).toBe(0);
 
-      const tercera = await emitirToken(app, "FLAPPING");
-      expect(tercera.statusCode).toBe(201);
-      const { token } = tercera.json();
+      const third = await issueToken(app, "FLAPPING");
+      expect(third.statusCode).toBe(201);
+      const { token } = third.json();
 
       await app.inject({
         method: "POST",
         url: "/v1/sim/kushki/transfer/v1/init",
-        payload: { token, amount: INICIO_KUSHKI },
+        payload: { token, amount: KUSHKI_INIT },
       });
-      const consulta = await app.inject({
+      const queryResponse = await app.inject({
         method: "GET",
         url: `/v1/sim/kushki/transfer/v1/status/${token}`,
       });
-      expect(consulta.json().status).toBe("approvedTransaction");
+      expect(queryResponse.json().status).toBe("approvedTransaction");
 
       await app.close();
     });
   });
 
-  describe("el estado de un cobro no depende de cómo se lo consulta", () => {
-    it("preguntar el mismo cobro dos veces con cabeceras distintas da el mismo estado", async () => {
+  describe("the status of a charge does not depend on how it is queried", () => {
+    it("asking for the same charge twice with different headers gives the same status", async () => {
       const app = buildApp();
 
-      const creado = await app.inject({
+      const created = await app.inject({
         method: "POST",
         url: "/v1/sim/rapyd/payments",
         headers: H("DECLINED"),
         payload: PSE_RAPYD,
       });
 
-      const id = creado.json().data.id;
+      const id = created.json().data.id;
 
-      const conApproved = await app.inject({
+      const withApproved = await app.inject({
         method: "GET",
         url: `/v1/sim/rapyd/payments/${id}`,
         headers: H("APPROVED"),
       });
 
-      const sinCabecera = await app.inject({
+      const withoutHeader = await app.inject({
         method: "GET",
         url: `/v1/sim/rapyd/payments/${id}`,
       });
@@ -980,8 +983,8 @@ describe("el escenario fija el desenlace al crear", () => {
       // Con el simulador anterior la consulta no miraba ni la cabecera ni el pago creado:
       // devolvía `CLO` con `paid: true` y `amount: "0"` para cualquier identificador, así
       // que este pago declinado se reportaba cobrado.
-      expect(conApproved.json().data.status).toBe("ERR");
-      expect(sinCabecera.json().data.status).toBe("ERR");
+      expect(withApproved.json().data.status).toBe("ERR");
+      expect(withoutHeader.json().data.status).toBe("ERR");
 
       await app.close();
     });

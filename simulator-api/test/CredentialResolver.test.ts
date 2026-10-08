@@ -20,7 +20,7 @@ describe("CredentialResolver", () => {
     RAPYD_API_SECRET_KEY: "rapyd_secret_server",
   };
 
-  it("resuelve credenciales desde el perfil del servidor si no se envían cabeceras", () => {
+  it("resolves credentials from the server profile if no headers are sent", () => {
     const resolver = new CredentialResolver(mockServerEnv);
 
     const wompiResult = resolver.resolve(Gateway.WOMPI);
@@ -49,7 +49,7 @@ describe("CredentialResolver", () => {
     expect(rapydResult.credentials.webhookSecret).toBe("rapyd_secret_server");
   });
 
-  it("prioriza las cabeceras del cliente cuando están completas", () => {
+  it("prioritizes the client headers when they are complete", () => {
     const resolver = new CredentialResolver(mockServerEnv);
 
     const headers = {
@@ -83,7 +83,7 @@ describe("CredentialResolver", () => {
     expect(result.credentials.webhookSecret).toBeUndefined();
   });
 
-  it("cae al perfil del servidor si las cabeceras son incompletas", () => {
+  it("falls back to the server profile if the headers are incomplete", () => {
     const resolver = new CredentialResolver(mockServerEnv);
 
     // Solo trae public key pero no private key
@@ -97,7 +97,7 @@ describe("CredentialResolver", () => {
     expect(result.credentials.privateKey).toBe("kushki_private_merchant_server");
   });
 
-  it("lanza MissingCredentialsError si no hay credenciales en cabeceras ni en servidor", () => {
+  it("throws MissingCredentialsError if there are no credentials in the headers or on the server", () => {
     // Entorno vacío
     const resolver = new CredentialResolver({});
 
@@ -107,7 +107,7 @@ describe("CredentialResolver", () => {
     );
   });
 
-  it("el mensaje de error no revela qué otras pasarelas sí están configuradas en el servidor", () => {
+  it("the error message does not reveal which other gateways are configured on the server", () => {
     // Servidor solo tiene credenciales para Wompi, pero se pide Kushki
     const partialServerEnv = {
       WOMPI_PUBLIC_KEY: "pub_wompi",

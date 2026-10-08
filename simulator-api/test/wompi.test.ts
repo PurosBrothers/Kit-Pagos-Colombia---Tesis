@@ -13,7 +13,7 @@ describe("POST /v1/sim/wompi/transactions", () => {
     payment_method: { type: "CARD", token: "tok_test_fake" },
   };
 
-  it("crea el cobro PENDIENTE, reflejando amount_in_cents y reference (sin header de escenario)", async () => {
+  it("creates the PENDING charge, reflecting amount_in_cents and reference (no scenario header)", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -40,7 +40,7 @@ describe("POST /v1/sim/wompi/transactions", () => {
     await app.close();
   });
 
-  it("responde correctamente cuando el escenario APPROVED se envía explícitamente", async () => {
+  it("answers correctly when the APPROVED scenario is sent explicitly", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -56,7 +56,7 @@ describe("POST /v1/sim/wompi/transactions", () => {
     await app.close();
   });
 
-  it("rechaza el cobro sin método de pago, con el 422 que responde Wompi", async () => {
+  it("rejects the charge without a payment method, with the 422 that Wompi answers", async () => {
     // Medido: `POST /transactions` sin `payment_method` responde
     // `422 "No se especificó método de pago o fuente de pago"`. El mock lo aceptaba, y por
     // eso el SDK pudo no mandar nunca el token de tarjeta con la suite en verde.
@@ -74,7 +74,7 @@ describe("POST /v1/sim/wompi/transactions", () => {
     await app.close();
   });
 
-  it("crea un cobro DECLINED cuando el escenario es DECLINED", async () => {
+  it("creates a DECLINED charge when the scenario is DECLINED", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -92,7 +92,7 @@ describe("POST /v1/sim/wompi/transactions", () => {
     await app.close();
   });
 
-  it("crea un cobro VOIDED cuando el escenario es EXPIRED", async () => {
+  it("creates a VOIDED charge when the scenario is EXPIRED", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -109,7 +109,7 @@ describe("POST /v1/sim/wompi/transactions", () => {
     await app.close();
   });
 
-  it("responde 504 Gateway Timeout cuando el escenario es TIMEOUT", async () => {
+  it("answers 504 Gateway Timeout when the scenario is TIMEOUT", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -125,7 +125,7 @@ describe("POST /v1/sim/wompi/transactions", () => {
     await app.close();
   });
 
-  it("simula NETWORK_ERROR respondiendo con error de conexión", async () => {
+  it("simulates NETWORK_ERROR by answering with a connection error", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -140,7 +140,7 @@ describe("POST /v1/sim/wompi/transactions", () => {
     await app.close();
   });
 
-  it("responde 429 Too Many Requests cuando el escenario es RATE_LIMIT", async () => {
+  it("answers 429 Too Many Requests when the scenario is RATE_LIMIT", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -156,7 +156,7 @@ describe("POST /v1/sim/wompi/transactions", () => {
     await app.close();
   });
 
-  it("responde 500 cuando el escenario es SERVER_ERROR", async () => {
+  it("answers 500 when the scenario is SERVER_ERROR", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -172,7 +172,7 @@ describe("POST /v1/sim/wompi/transactions", () => {
     await app.close();
   });
 
-  it("responde con flapping (503 en primer intento, éxito en el segundo)", async () => {
+  it("answers with flapping (503 on the first attempt, success on the second)", async () => {
     const app = buildApp();
     const flapBody = { ...validRequestBody, reference: "wompi-flap-test" };
 
@@ -207,7 +207,7 @@ describe("POST /v1/sim/wompi/transactions", () => {
     await app.close();
   });
 
-  it("detecta pagos duplicados cuando el escenario es DUPLICATE_PAYMENT", async () => {
+  it("detects duplicate payments when the scenario is DUPLICATE_PAYMENT", async () => {
     const app = buildApp();
     const dupBody = { ...validRequestBody, reference: "wompi-dup-1" };
 
@@ -231,7 +231,7 @@ describe("POST /v1/sim/wompi/transactions", () => {
     await app.close();
   });
 
-  it("responde con error explícito ante un escenario no soportado, sin devolver un APPROVED falso", async () => {
+  it("answers with an explicit error for an unsupported scenario, without returning a false APPROVED", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -247,7 +247,7 @@ describe("POST /v1/sim/wompi/transactions", () => {
     await app.close();
   });
 
-  it("no disfraza un fallo inesperado del motor como un escenario no soportado", async () => {
+  it("does not disguise an unexpected engine failure as an unsupported scenario", async () => {
     // Solo UnsupportedScenarioError se traduce a 501. Cualquier otro fallo debe
     // propagarse para que Fastify responda 500, porque un error de programación
     // no es lo mismo que un escenario que todavía no existe.
@@ -290,7 +290,7 @@ describe("GET /v1/sim/wompi/transactions/:id", () => {
     resetSimulatorState();
   });
 
-  it("devuelve 200 con { data: transaction } cuando la transacción fue creada previamente", async () => {
+  it("returns 200 with { data: transaction } when the transaction was created beforehand", async () => {
     const app = buildApp();
 
     // 1. Crear la transacción vía POST para que se guarde en TransactionStore
@@ -320,7 +320,7 @@ describe("GET /v1/sim/wompi/transactions/:id", () => {
     await app.close();
   });
 
-  it("devuelve 404 con la forma nativa de error de Wompi cuando el id no existe", async () => {
+  it("returns 404 with Wompi's native error shape when the id does not exist", async () => {
     const app = buildApp();
     const nonExistentId = "non-existent-wompi-id-999";
 
@@ -348,7 +348,7 @@ describe("POST /v1/sim/wompi/tokens/cards", () => {
     card_holder: "JUAN PEREZ",
   };
 
-  it("crea un token de tarjeta exitosamente con código 201 y formato nativo de Wompi", async () => {
+  it("creates a card token successfully with code 201 and Wompi's native format", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -377,7 +377,7 @@ describe("POST /v1/sim/wompi/tokens/cards", () => {
     await app.close();
   });
 
-  it("rechaza la petición con 401 si falta la cabecera Authorization", async () => {
+  it("rejects the request with 401 if the Authorization header is missing", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -395,7 +395,7 @@ describe("POST /v1/sim/wompi/tokens/cards", () => {
     await app.close();
   });
 
-  it("rechaza la petición con 401 si la cabecera Authorization no tiene clave válida", async () => {
+  it("rejects the request with 401 if the Authorization header has no valid key", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -416,7 +416,7 @@ describe("POST /v1/sim/wompi/tokens/cards", () => {
     await app.close();
   });
 
-  it("rechaza la petición con 422 si faltan campos obligatorios", async () => {
+  it("rejects the request with 422 if required fields are missing", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -443,7 +443,7 @@ describe("POST /v1/sim/wompi/tokens/cards", () => {
     await app.close();
   });
 
-  it("rechaza la petición con 422 si el cvc llega vacío (patrón regex)", async () => {
+  it("rejects the request with 422 if the cvc arrives empty (regex pattern)", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -466,7 +466,7 @@ describe("POST /v1/sim/wompi/tokens/cards", () => {
     await app.close();
   });
 
-  it("rechaza la petición con 422 si el número de tarjeta no es válido", async () => {
+  it("rejects the request with 422 if the card number is not valid", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -490,7 +490,7 @@ describe("POST /v1/sim/wompi/tokens/cards", () => {
     await app.close();
   });
 
-  it("rechaza la petición con 404 MERCHANT_NOT_FOUND ante llave pública inexistente (medido 2026-10-03)", async () => {
+  it("rejects the request with 404 MERCHANT_NOT_FOUND for a nonexistent public key (measured 2026-10-03)", async () => {
     const app = buildApp();
 
     const response = await app.inject({
@@ -510,7 +510,7 @@ describe("POST /v1/sim/wompi/tokens/cards", () => {
     await app.close();
   });
 
-  it("soporta escenarios técnicos como SERVER_ERROR o TIMEOUT", async () => {
+  it("supports technical scenarios such as SERVER_ERROR or TIMEOUT", async () => {
     const app = buildApp();
 
     const serverErrRes = await app.inject({
@@ -538,7 +538,7 @@ describe("POST /v1/sim/wompi/tokens/cards", () => {
     await app.close();
   });
 
-  it("completa un cobro con tarjeta de Wompi de punta a punta: mock de tokens y POST /v1/api/payments", async () => {
+  it("completes a Wompi card charge end to end: token mock and POST /v1/api/payments", async () => {
     const testEnv: Record<string, string | undefined> = {
       WOMPI_PUBLIC_KEY: "pub_test_wompi_key_123",
       WOMPI_PRIVATE_KEY: "prv_test_wompi_key_456",

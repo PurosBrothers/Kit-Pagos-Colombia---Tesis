@@ -1,6 +1,6 @@
 {
   "name": "kit-pagos-colombia",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -11,6 +11,13 @@
     "./browser": {
       "types": "./dist/browser/index.d.ts",
       "default": "./dist/browser/index.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "browser": [
+        "./dist/browser/index.d.ts"
+      ]
     }
   },
   "scripts": {
@@ -44,6 +51,9 @@
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis.git",

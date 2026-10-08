@@ -5,7 +5,45 @@ import { loadServerEnv } from "./CredentialResolver";
 export interface AuthHookOptions {
   expectedToken?: string;
   exemptPaths?: string[];
+  /** Prefijos que exigen el token aunque estén dentro de uno exento. */
+  protectedPaths?: string[];
   logger?: { warn: (msg: string) => void };
+}
+
+/**
+ * `/v1/sim` queda exento porque el SDK le habla sin el token de la API. El trigger de webhooks
+ * no: devuelve el webhook firmado con los secretos del servidor, y abierto sería un oráculo de
+ * firma (decisión de Joan, 6 de octubre de 2026).
+ */
+const DEFAULT_EXEMPT_PATHS = ["/health", "/v1/sim"];
+const DEFAULT_PROTECTED_PATHS = ["/v1/sim/webhooks"];
+
+function underPrefix(path: string, prefix: string): boolean {
+  return path === prefix || path.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`);
+}
+
+/**
+ * La ruta sobre la que se decide la exención.
+ *
+ * Es la ruta registrada que Fastify encontró (`/v1/sim/webhooks/trigger`), no la URL que
+ * llegó: Fastify decodifica `%77ebhooks` y resuelve `/wompi/../`, y una URL así enrutaba al
+ * trigger sin empezar por `/v1/sim/webhooks`. Sin ruta encontrada (un 404) se usa la URL
+ * normalizada —decodificada, en minúsculas, sin barras repetidas ni la final—, que solo puede
+ * decidir quién recibe el 404.
+ */
+function pathForDecision(request: FastifyRequest): string {
+  const routed = request.routeOptions?.url;
+  if (routed !== undefined) {
+    return routed;
+  }
+  const raw = request.url.split("?")[0];
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    // Una secuencia `%` inválida se evalúa tal cual llegó.
+  }
+  return decoded.toLowerCase().replace(/\/{2,}/g, "/").replace(/(.)\/$/, "$1");
 }
 
 /**
@@ -41,7 +79,8 @@ export function createAuthHook(options?: AuthHookOptions) {
       env.SIMULATOR_API_AUTH_TOKEN?.trim() ||
       undefined);
 
-  const exemptPaths = options?.exemptPaths ?? ["/health", "/v1/sim"];
+  const exemptPaths = options?.exemptPaths ?? DEFAULT_EXEMPT_PATHS;
+  const protectedPaths = options?.protectedPaths ?? DEFAULT_PROTECTED_PATHS;
 
   if (!token) {
     if (options?.logger) {
@@ -59,13 +98,11 @@ export function createAuthHook(options?: AuthHookOptions) {
     request: FastifyRequest,
     reply: FastifyReply,
   ): Promise<void> {
-    // Si la ruta está en la lista de excepciones, permitir libre acceso
-    const urlPath = request.url.split("?")[0];
-    const isExempt = exemptPaths.some(
-      (prefix) =>
-        urlPath === prefix ||
-        urlPath.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`),
-    );
+    // Si la ruta está en la lista de excepciones, y no en la de protegidas, permitir libre acceso
+    const path = pathForDecision(request);
+    const isExempt =
+      exemptPaths.some((prefix) => underPrefix(path, prefix)) &&
+      !protectedPaths.some((prefix) => underPrefix(path, prefix));
     if (isExempt) {
       return;
     }

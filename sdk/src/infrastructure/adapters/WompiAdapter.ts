@@ -5,7 +5,6 @@ import {
 import { Transaction } from "../../domain/entities/Transaction";
 import {
   PaymentResult,
-  redirectRequired,
   transactionResult,
 } from "../../domain/value-objects/PaymentResult";
 import {
@@ -15,6 +14,7 @@ import {
   buildPseFieldsFor,
   buildWompiPayload,
   extractAcceptanceToken,
+  reclassifyWompiMerchantLookupError,
   requiresRedirect,
   resolvePendingRedirect,
   parseWompiPseBanks,
@@ -24,8 +24,10 @@ import { Credentials } from "../../domain/value-objects/Credentials";
 import { ResponseNormalizer } from "../../application/services/ResponseNormalizer";
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
+import { httpFailure } from "./http-failure";
 import { assertSupportedPaymentMethod } from "./payment-method-support";
 import type { PseBank } from "../../domain/value-objects/PseBank";
+import { DEFAULT_REQUEST_TIMEOUT_MS, withRequestTimeout } from "../config/request-timeout";
 
 /**
  * Raíz de la API de Wompi en la API de Simulación (issue #27).
@@ -61,7 +63,7 @@ export class WompiAdapter implements PaymentGatewayPort {
   private readonly baseUrl: string;
   private readonly credentials?: Credentials;
   /**
-   * Se construye acá en vez de recibirse por constructor, por la misma razón que
+   * Se construye aquí en vez de recibirse por constructor, por la misma razón que
    * ErrorHandler y que RetryHandler en la fachada (architecture-log.md, punto 35):
    * un colaborador en la firma del constructor cuenta para el CBO, y el umbral de
    * la Definition of Done es 5. No se pierde nada: el normalizador no tiene
@@ -69,20 +71,25 @@ export class WompiAdapter implements PaymentGatewayPort {
    */
   private readonly normalizer = new ResponseNormalizer();
   private readonly webhookVerifier: WebhookVerifier;
+  private readonly timeoutMs: number;
 
   /**
    * Credentials are resolved by SdkConfigurator via GatewayFactory; the
    * adapter never reads them from the environment. They are optional because
    * the simulation API mock endpoint does not authenticate, so the adapter
    * remains instantiable without configuration in tests.
+   *
+   * `timeoutMs` llega ya validado por `SdkConfigurator` (issue #122).
    */
   constructor(
     baseUrl: string = DEFAULT_WOMPI_BASE_URL,
     credentials?: Credentials,
     webhookVerifier: WebhookVerifier = new WebhookVerifier(),
+    timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
   ) {
     this.baseUrl = baseUrl;
     this.credentials = credentials;
+    this.timeoutMs = timeoutMs;
     this.webhookVerifier = webhookVerifier;
   }
 
@@ -101,7 +108,7 @@ export class WompiAdapter implements PaymentGatewayPort {
     assertSupportedPaymentMethod(request.paymentMethod, Gateway.WOMPI, ["CARD", "PSE"]);
 
     // `toMinorUnits()` devuelve una cadena de dígitos y Wompi espera un entero
-    // JSON. La conversión a `number` ocurre acá, en la frontera entre el SDK y el
+    // JSON. La conversión a `number` ocurre aquí, en la frontera entre el SDK y el
     // formato de cable: JSON solo tiene `number` (un IEEE 754 double) y no hay
     // manera de evitarlo. Es segura porque el valor ya es un entero de centavos
     // muy por debajo de Number.MAX_SAFE_INTEGER. Lo que el dominio garantiza es
@@ -146,13 +153,13 @@ export class WompiAdapter implements PaymentGatewayPort {
     );
 
     if (requiresRedirect(rawResponse, request.paymentMethod?.type)) {
-      // La respuesta de PSE o de un cobro con tarjeta con desafío 3DS exige redirección.
-      // Si la URL ya vino en la creación se devuelve de inmediato; si no, se sondea
-      // hasta que aparezca.
-      return redirectRequired(
-        await resolvePendingRedirect(rawResponse, (id) =>
-          this.request(`${this.baseUrl}/transactions/${id}`, "GET"),
-        ),
+      // Un PSE o un cobro con tarjeta con desafío 3DS puede exigir redirección. Se sondea
+      // hasta que la transacción esté en PENDING con URL, o hasta que tenga desenlace, y
+      // en ese caso se devuelve la transacción y no una redirección a un pago resuelto.
+      return resolvePendingRedirect(
+        rawResponse,
+        (id) => this.request(`${this.baseUrl}/transactions/${id}`, "GET"),
+        (raw) => this.normalizer.normalize(raw, Gateway.WOMPI),
       );
     }
 
@@ -209,7 +216,9 @@ export class WompiAdapter implements PaymentGatewayPort {
     const rawResponse = await this.request(
       `${this.baseUrl}/merchants/${this.credentials.publicKey}`,
       "GET",
-    );
+    ).catch((error: unknown) => {
+      throw reclassifyWompiMerchantLookupError(error);
+    });
     return extractAcceptanceToken(rawResponse);
   }
 
@@ -229,31 +238,28 @@ export class WompiAdapter implements PaymentGatewayPort {
       headers["Authorization"] = `Bearer ${this.credentials.publicKey}`;
     }
 
-    let response: Response;
-    try {
-      response = await fetch(url, { method, headers, body });
-    } catch (networkError) {
-      throw new ErrorHandler().handle(networkError, Gateway.WOMPI);
-    }
+    return withRequestTimeout(
+      this.timeoutMs,
+      async (signal) => {
+        let response: Response;
+        try {
+          response = await fetch(url, { method, headers, body, signal });
+        } catch (networkError) {
+          throw new ErrorHandler().handle(networkError, Gateway.WOMPI);
+        }
 
-    if (!response.ok) {
-      let errorBody: unknown;
-      try {
-        errorBody = await response.json();
-      } catch {
-        errorBody = await response.text();
-      }
-      throw new ErrorHandler().handle(
-        { status: response.status, body: errorBody },
-        Gateway.WOMPI,
-      );
-    }
+        if (!response.ok) {
+          throw await httpFailure(response, Gateway.WOMPI, this.credentials);
+        }
 
-    try {
-      return await response.json();
-    } catch (parseError) {
-      throw new ErrorHandler().handle(parseError, Gateway.WOMPI);
-    }
+        try {
+          return await response.json();
+        } catch (parseError) {
+          throw new ErrorHandler().handle(parseError, Gateway.WOMPI);
+        }
+      },
+      (reason) => new ErrorHandler().handle(reason, Gateway.WOMPI),
+    );
   }
 
   /**

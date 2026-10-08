@@ -4,18 +4,17 @@ import {
   WompiCreateTransactionRequestBody,
   WompiTransactionResponse,
 } from "../gateways/wompi/types";
+import { DEFAULT_SCENARIO, headerScenario } from "./scenarioFromRequest";
 
-/** Cabeceras reconocidas para solicitar escenarios de simulación. */
-export const SCENARIO_HEADERS = [
-  "x-simulator-scenario",
-  "x-simulate-scenario",
-] as const;
-
-/** Escenario por defecto cuando no se envía ninguna cabecera de control. */
-export const DEFAULT_SCENARIO = "APPROVED";
+export { DEFAULT_SCENARIO, SCENARIO_HEADERS } from "./scenarioFromRequest";
 
 /**
- * Escenarios estandarizados soportados por la API de Simulación (Issue #65).
+ * Escenarios estandarizados soportados por la API de Simulación (issues #65 y #122).
+ *
+ * `SLOW`, `MALFORMED_JSON`, `MALFORMED_BODY` y `HTML_ERROR` son fallas técnicas
+ * (`technicalFailure.ts`).
+ * `PENDING_THEN_DECLINED` no se pide por nombre en la práctica: es lo que deriva la tarjeta
+ * de prueba `4111 1111 1111 1111` de Wompi.
  */
 export enum SimulatorScenario {
   APPROVED = "APPROVED",
@@ -36,23 +35,21 @@ export enum SimulatorScenario {
   SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE",
   FLAPPING = "FLAPPING",
   DUPLICATE_PAYMENT = "DUPLICATE_PAYMENT",
+  SLOW = "SLOW",
+  MALFORMED_JSON = "MALFORMED_JSON",
+  MALFORMED_BODY = "MALFORMED_BODY",
+  HTML_ERROR = "HTML_ERROR",
+  PENDING_THEN_DECLINED = "PENDING_THEN_DECLINED",
 }
 
 /**
- * Extrae y normaliza el escenario solicitado desde las cabeceras HTTP de Fastify.
+ * El escenario de la cabecera, o `APPROVED` si no vino ninguna.
+ *
+ * Solo para las rutas que no crean un cobro (tokenización). Las de creación usan
+ * `resolveScenario()`, que además mira los datos de prueba y el monto.
  */
 export function getSimulatorScenario(request: FastifyRequest): string {
-  const headers = request.headers;
-  const headerValue =
-    headers["x-simulator-scenario"] ??
-    headers["x-simulate-scenario"];
-
-  if (!headerValue) {
-    return DEFAULT_SCENARIO;
-  }
-
-  const raw = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-  return raw.trim().toUpperCase();
+  return headerScenario(request) ?? DEFAULT_SCENARIO;
 }
 
 /**
@@ -93,13 +90,19 @@ export class ScenarioEngine {
       case "APPROVED":
       case "APPROVAL":
       case "PENDING":
+      case "PENDING_THEN_DECLINED":
         if (requestBody.payment_method?.type === "PSE") {
           return this.wompiMockFactory.buildPendingPseResponse(requestBody);
         }
         return this.wompiMockFactory.buildApprovedResponse(requestBody);
 
+      // Un PSE nace `PENDING` sin URL pase lo que pase (medido el 18 de septiembre de 2026);
+      // el rechazo lo registra la ruta y lo cierra la primera consulta, con la URL.
       case "DECLINED":
       case "REJECTED":
+        if (requestBody.payment_method?.type === "PSE") {
+          return this.wompiMockFactory.buildPendingPseResponse(requestBody);
+        }
         return this.wompiMockFactory.buildDeclinedResponse(requestBody);
 
       case "EXPIRED":

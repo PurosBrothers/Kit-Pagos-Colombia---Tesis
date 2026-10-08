@@ -90,7 +90,7 @@ const CREDENTIALS: SDKOptions["credentials"] = {
     privateKey: "prv_test_ejemplo_no_real",
     /*
      * Wompi es la única de las cuatro que pide un tercer valor, y no es opcional para
-     * cobrar: sin él no crea la transacción. Que esté acá y las otras tres no lo tengan
+     * cobrar: sin él no crea la transacción. Que esté aquí y las otras tres no lo tengan
      * es parte de lo que este ejemplo muestra: **las credenciales sí cambian entre
      * pasarelas, y el código del pago no.** Lo que el SDK unifica es el cobro, no la
      * cuenta que hay que abrir en cada pasarela.
@@ -165,7 +165,7 @@ const payment: CreatePaymentRequest = {
   }),
   /*
    * El método de pago es el mismo para las cuatro, y el token es opaco: cada pasarela lo
-   * emite con su propio formato y el SDK no lo interpreta. Acá es de mentira porque quien
+   * emite con su propio formato y el SDK no lo interpreta. Aquí es de mentira porque quien
    * responde es la API de Simulación; en producción lo genera el frontend del comercio, que
    * es el único lugar donde puede tocar la tarjeta sin meter al servidor dentro del alcance
    * de PCI DSS.
@@ -323,7 +323,7 @@ function printTable(outcomes: readonly GatewayOutcome[]): void {
  * comercio para conciliar: una pasarela que devuelve otra referencia rompe la
  * conciliación aunque el estado y el monto coincidan. Es exactamente el defecto
  * que tenía Kushki (punto 41 del `architecture-log.md`), y por eso queda fijado
- * también acá y no solo en una prueba unitaria.
+ * también aquí y no solo en una prueba unitaria.
  */
 function findMismatches(outcomes: readonly GatewayOutcome[]): string[] {
   const mismatches: string[] = [];
@@ -448,7 +448,7 @@ async function main(): Promise<void> {
       console.error(`  - ${mismatch}`);
     }
     console.error(
-      "\nUna diferencia acá no es un detalle del ejemplo: significa que el\n" +
+      "\nUna diferencia aquí no es un detalle del ejemplo: significa que el\n" +
         "comercio tendría que escribir código distinto según la pasarela, que es\n" +
         "justo lo que el framework existe para evitar. Si la discrepancia es de la\n" +
         "reconsulta, el simulador está moviendo un cobro al consultarlo, y eso\n" +
@@ -479,7 +479,7 @@ main().catch((error: unknown) => {
     error.code === KitPagosErrorCode.CONNECTION_FAILED
   ) {
     console.error("\nNo se pudo conectar con la API de Simulación.");
-    console.error("Iníciala en otra terminal y vuelve a ejecutar el ejemplo:\n");
+    console.error("Iníciela en otra terminal y vuelva a ejecutar el ejemplo:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }

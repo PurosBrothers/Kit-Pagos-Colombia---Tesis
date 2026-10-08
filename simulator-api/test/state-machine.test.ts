@@ -64,9 +64,9 @@ const pseTable: Transition<Status, FakeRecord>[] = [
   },
 ];
 
-describe("StateMachine — la base que usan las cuatro pasarelas", () => {
-  describe("una transición aplicable", () => {
-    it("lleva el registro al estado de destino", () => {
+describe("StateMachine — the base the four gateways use", () => {
+  describe("an applicable transition", () => {
+    it("takes the record to the target status", () => {
       const machine = new StateMachine(simpleTable, adapter);
 
       expect(machine.transition(pending("t1"), "query")).toEqual({
@@ -76,24 +76,24 @@ describe("StateMachine — la base que usan las cuatro pasarelas", () => {
       });
     });
 
-    it("conserva los campos que no son estado", () => {
+    it("keeps the fields that are not status", () => {
       const machine = new StateMachine(simpleTable, adapter);
-      const conUrl: FakeRecord = {
+      const withUrl: FakeRecord = {
         id: "t1",
         status: "PENDING",
         amount: 1250,
         redirectUrl: "https://banco.example/pagar",
       };
 
-      const resuelto = machine.transition(conUrl, "query");
+      const resolved = machine.transition(withUrl, "query");
 
       // El monto es lo que el criterio de aceptación 6 exige devolver: el problema
       // que este issue arregla es que la consulta perdía el monto del cobro creado.
-      expect(resuelto.amount).toBe(1250);
-      expect(resuelto.redirectUrl).toBe("https://banco.example/pagar");
+      expect(resolved.amount).toBe(1250);
+      expect(resolved.redirectUrl).toBe("https://banco.example/pagar");
     });
 
-    it("no modifica el registro original", () => {
+    it("does not modify the original record", () => {
       const machine = new StateMachine(simpleTable, adapter);
       const original = pending("t1");
 
@@ -103,10 +103,10 @@ describe("StateMachine — la base que usan las cuatro pasarelas", () => {
     });
   });
 
-  describe("una transición no permitida", () => {
-    it("devuelve el registro intacto cuando la petición no aplica", () => {
+  describe("a transition that is not allowed", () => {
+    it("returns the record intact when the request does not apply", () => {
       const machine = new StateMachine(simpleTable, adapter);
-      const aprobado: FakeRecord = {
+      const approved: FakeRecord = {
         id: "t1",
         status: "APPROVED",
         amount: 100,
@@ -114,20 +114,20 @@ describe("StateMachine — la base que usan las cuatro pasarelas", () => {
 
       // Consultar dos veces un cobro ya resuelto tiene que ser idempotente: el
       // criterio 1 exige que el estado se consulte igual después de crearlo.
-      expect(machine.transition(aprobado, "query")).toBe(aprobado);
+      expect(machine.transition(approved, "query")).toBe(approved);
     });
 
-    it("deja intacto un cobro cuyo estado final no tiene salida", () => {
+    it("leaves intact a charge whose final status has no way out", () => {
       const machine = new StateMachine(
         [{ from: ["PENDING"], on: "query", to: "VOIDED" }],
         adapter,
       );
-      const anulado: FakeRecord = { id: "t1", status: "VOIDED", amount: 100 };
+      const voided: FakeRecord = { id: "t1", status: "VOIDED", amount: 100 };
 
-      expect(machine.transition(anulado, "query")).toBe(anulado);
+      expect(machine.transition(voided, "query")).toBe(voided);
     });
 
-    it("deja intacto un cobro cuando la petición es de otro tipo", () => {
+    it("leaves a charge intact when the request is of another kind", () => {
       const machine = new StateMachine(simpleTable, adapter);
       const record = pending("t1");
 
@@ -136,7 +136,7 @@ describe("StateMachine — la base que usan las cuatro pasarelas", () => {
       expect(machine.transition(record, "pay")).toBe(record);
     });
 
-    it("informa que no hay transición disponible", () => {
+    it("reports that no transition is available", () => {
       const machine = new StateMachine(simpleTable, adapter);
 
       expect(machine.canTransition(pending("t1"), "query")).toBe(true);
@@ -147,26 +147,26 @@ describe("StateMachine — la base que usan las cuatro pasarelas", () => {
     });
   });
 
-  describe("el predicado `when`, que es lo que permite el PSE de Wompi", () => {
-    it("la primera consulta publica la URL y sigue pendiente", () => {
+  describe("the `when` predicate, which is what makes the Wompi PSE possible", () => {
+    it("the first query publishes the URL and stays pending", () => {
       const machine = new StateMachine(pseTable, adapter);
-      const primera = machine.transition(pending("t1"), "query");
+      const first = machine.transition(pending("t1"), "query");
 
-      expect(primera.status).toBe("PENDING");
-      expect(primera.redirectUrl).toBe("https://banco.example/pagar");
+      expect(first.status).toBe("PENDING");
+      expect(first.redirectUrl).toBe("https://banco.example/pagar");
     });
 
-    it("la segunda consulta resuelve", () => {
+    it("the second query resolves", () => {
       const machine = new StateMachine(pseTable, adapter);
-      const segunda = machine.transition(
+      const second = machine.transition(
         { ...pending("t1"), redirectUrl: "https://banco.example/pagar" },
         "query",
       );
 
-      expect(segunda.status).toBe("APPROVED");
+      expect(second.status).toBe("APPROVED");
     });
 
-    it("ejecuta el `apply` aunque el estado destino sea el mismo", () => {
+    it("runs `apply` even if the target status is the same", () => {
       const machine = new StateMachine(pseTable, adapter);
 
       // Este es el caso que hace necesario el hook: la transición no cambia el estado,
@@ -175,21 +175,21 @@ describe("StateMachine — la base que usan las cuatro pasarelas", () => {
       expect(machine.transition(pending("t1"), "query").redirectUrl).toBeDefined();
     });
 
-    it("entrega a `apply` el registro con el estado nuevo ya puesto", () => {
-      const vistoPorApply: FakeRecord[] = [];
-      const tablaConApply: Transition<Status, FakeRecord>[] = [
+    it("hands `apply` the record with the new status already set", () => {
+      const seenByApply: FakeRecord[] = [];
+      const tableWithApply: Transition<Status, FakeRecord>[] = [
         {
           from: ["PENDING"],
           on: "query",
           to: "APPROVED",
           apply: (record) => {
-            vistoPorApply.push(record);
+            seenByApply.push(record);
             return { ...record, extra: "dato" };
           },
         },
       ];
 
-      const resultado = new StateMachine(tablaConApply, adapter).transition(
+      const result = new StateMachine(tableWithApply, adapter).transition(
         pending("t1"),
         "query",
       );
@@ -198,61 +198,61 @@ describe("StateMachine — la base que usan las cuatro pasarelas", () => {
       // escribiera `{ ...record, otroCampo }` —que es lo natural— devolvería el cobro al
       // estado anterior y la transición quedaría a medias, sin error ni aviso. Por eso
       // `apply` ve el estado ya aplicado.
-      expect(vistoPorApply[0].status).toBe("APPROVED");
-      expect(resultado.status).toBe("APPROVED");
-      expect(resultado.extra).toBe("dato");
+      expect(seenByApply[0].status).toBe("APPROVED");
+      expect(result.status).toBe("APPROVED");
+      expect(result.extra).toBe("dato");
     });
 
-    it("pasa a `apply` el estado destino, para el caso dinámico", () => {
-      const destinos: Status[] = [];
-      const tablaDinamica: Transition<Status, FakeRecord>[] = [
+    it("passes the target status to `apply`, for the dynamic case", () => {
+      const targets: Status[] = [];
+      const dynamicTable: Transition<Status, FakeRecord>[] = [
         {
           from: ["PENDING"],
           on: "query",
           to: (record) => (record.id.endsWith("1") ? "APPROVED" : "DECLINED"),
-          apply: (record, destino) => {
-            destinos.push(destino);
-            return { ...record, extra: String(destino) };
+          apply: (record, target) => {
+            targets.push(target);
+            return { ...record, extra: String(target) };
           },
         },
       ];
-      const machine = new StateMachine(tablaDinamica, adapter);
+      const machine = new StateMachine(dynamicTable, adapter);
 
       expect(machine.transition(pending("t1"), "query").status).toBe("APPROVED");
       expect(machine.transition(pending("t2"), "query").status).toBe("DECLINED");
-      expect(destinos).toEqual<Status[]>(["APPROVED", "DECLINED"]);
+      expect(targets).toEqual<Status[]>(["APPROVED", "DECLINED"]);
     });
   });
 
-  describe("la validación de la tabla", () => {
-    it("acepta dos transiciones distintas desde el mismo estado", () => {
+  describe("the table validation", () => {
+    it("accepts two different transitions from the same status", () => {
       expect(() => assertUnambiguousTable(pseTable)).not.toThrow();
     });
 
-    it("rechaza dos transiciones sin predicado para el mismo par", () => {
-      const ambigua: Transition<Status, FakeRecord>[] = [
+    it("rejects two transitions without a predicate for the same pair", () => {
+      const ambiguous: Transition<Status, FakeRecord>[] = [
         { from: ["PENDING"], on: "query", to: "APPROVED" },
         { from: ["PENDING"], on: "query", to: "DECLINED" },
       ];
 
       // Sin este chequeo, cuál de las dos se aplica dependería del orden en que
       // quedaron escritas, que es el tipo de defecto invisible que el issue elimina.
-      expect(() => assertUnambiguousTable(ambigua)).toThrow(
+      expect(() => assertUnambiguousTable(ambiguous)).toThrow(
         /dos transiciones sin predicado/,
       );
     });
 
-    it("rechaza la tabla ambigua al construir la máquina", () => {
-      const ambigua: Transition<Status, FakeRecord>[] = [
+    it("rejects the ambiguous table when building the machine", () => {
+      const ambiguous: Transition<Status, FakeRecord>[] = [
         { from: ["PENDING"], on: "query", to: "APPROVED" },
         { from: ["PENDING"], on: "query", to: "DECLINED" },
       ];
 
-      expect(() => new StateMachine(ambigua, adapter)).toThrow(/ambiguas/);
+      expect(() => new StateMachine(ambiguous, adapter)).toThrow(/ambiguas/);
     });
 
-    it("permite que dos transiciones compartan estado si una trae predicado", () => {
-      const distinguidas: Transition<Status, FakeRecord>[] = [
+    it("allows two transitions to share a status if one has a predicate", () => {
+      const distinct: Transition<Status, FakeRecord>[] = [
         {
           from: ["PENDING"],
           on: "query",
@@ -262,25 +262,25 @@ describe("StateMachine — la base que usan las cuatro pasarelas", () => {
         { from: ["PENDING"], on: "query", to: "DECLINED" },
       ];
 
-      expect(() => assertUnambiguousTable(distinguidas)).not.toThrow();
+      expect(() => assertUnambiguousTable(distinct)).not.toThrow();
     });
 
-    it("no confunde dos estados distintos con el mismo par", () => {
-      const valida: Transition<Status, FakeRecord>[] = [
+    it("does not confuse two different statuses with the same pair", () => {
+      const valid: Transition<Status, FakeRecord>[] = [
         { from: ["PENDING"], on: "query", to: "APPROVED" },
         { from: ["VOIDED"], on: "query", to: "DECLINED" },
       ];
 
-      expect(() => assertUnambiguousTable(valida)).not.toThrow();
+      expect(() => assertUnambiguousTable(valid)).not.toThrow();
     });
 
-    it("no confunde dos peticiones distintas desde el mismo estado", () => {
-      const valida: Transition<Status, FakeRecord>[] = [
+    it("does not confuse two different requests from the same status", () => {
+      const valid: Transition<Status, FakeRecord>[] = [
         { from: ["PENDING"], on: "query", to: "APPROVED" },
         { from: ["PENDING"], on: "pay", to: "DECLINED" },
       ];
 
-      expect(() => assertUnambiguousTable(valida)).not.toThrow();
+      expect(() => assertUnambiguousTable(valid)).not.toThrow();
     });
   });
 });

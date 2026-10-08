@@ -19,7 +19,7 @@ describeSandbox(Gateway.KUSHKI, (credentials, baseUrl) => {
     baseUrl,
   });
 
-  it("responde la lista de bancos de PSE, con código y nombre", async () => {
+  it("returns the PSE bank list, with code and name", async () => {
     const banks = await kitPagos.getPseBanks();
 
     expect(banks.length).toBeGreaterThan(0);
@@ -36,9 +36,9 @@ describeSandbox(Gateway.KUSHKI, (credentials, baseUrl) => {
    * Que esta prueba pase significa las tres cosas a la vez: que la ruta
    * `/card/v1/charges` es la correcta, que el token va de verdad, y que la respuesta con
    * `fullResponse` trae lo suficiente para construir una `Transaction`. Si cualquiera de las
-   * tres se rompe, esto falla, y falla acá y no en el comercio.
+   * tres se rompe, esto falla, y falla aquí y no en el comercio.
    */
-  it("cobra una tarjeta y devuelve una transacción legible", async () => {
+  it("charges a card and returns a readable transaction", async () => {
     // Kushki ata el token al monto del cobro, así que tokenizar y cobrar tienen que coincidir.
     const { token } = await tokenizeKushkiCard(credentials, 20000);
 
@@ -77,7 +77,7 @@ describeSandbox(Gateway.KUSHKI, (credentials, baseUrl) => {
    * hizo que el defecto durara, y la razón de que la ruta correcta esté en una constante y no
    * escrita entre las llamadas.
    */
-  it("sigue respondiendo 403 en la ruta vieja, igual que en una inventada", async () => {
+  it("still answers 403 on the old route, same as on a made-up one", async () => {
     const charge = await fetch(`${baseUrl}/charges`, {
       method: "POST",
       headers: {
@@ -116,7 +116,7 @@ describeSandbox(Gateway.KUSHKI, (credentials, baseUrl) => {
    * consulta va a responder y esta prueba se pone roja para avisar que el SDK está diseñado
    * alrededor de una restricción que ya no existe.
    */
-  it("explica que no hay consulta de tarjeta, en vez de culpar a las credenciales", async () => {
+  it("explains there is no card query, instead of blaming the credentials", async () => {
     const { token } = await tokenizeKushkiCard(credentials, 20000);
     const adapter = new KushkiAdapter(baseUrl, credentials);
 
@@ -138,7 +138,7 @@ describeSandbox(Gateway.KUSHKI, (credentials, baseUrl) => {
       code: KitPagosErrorCode.UNSUPPORTED_OPERATION,
     });
 
-    // Y dice cuál es la consulta que Kushki sí tiene, para que el comercio no salga de acá
+    // Y dice cuál es la consulta que Kushki sí tiene, para que el comercio no salga de aquí
     // creyendo que la pasarela no ofrece ninguna.
     await expect(adapter.getStatus(ticket)).rejects.toThrow(/card-async/);
   });
@@ -149,7 +149,7 @@ describeSandbox(Gateway.KUSHKI, (credentials, baseUrl) => {
    * Es la razón por la que el SDK manda esa bandera siempre. La prueba no la manda a propósito
    * y afirma lo que falta: ni monto ni estado, solo los dos identificadores.
    */
-  it("sigue devolviendo una respuesta sin monto ni estado cuando no se pide fullResponse", async () => {
+  it("still returns a response without amount or status when fullResponse is not requested", async () => {
     const { token } = await tokenizeKushkiCard(credentials, 20000);
 
     const response = await fetch(`${baseUrl}/card/v1/charges`, {

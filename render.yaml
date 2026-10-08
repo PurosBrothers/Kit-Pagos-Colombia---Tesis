@@ -16,6 +16,8 @@ services:
         value: 10000
       - key: SIMULATOR_SDK_BASE_URL
         value: https://kit-pagos-colombia.onrender.com
+      - key: SIMULATOR_PUBLIC_ORIGIN
+        value: https://kit-pagos-colombia.onrender.com
       - key: API_AUTH_TOKEN
         sync: false
       - key: WOMPI_PUBLIC_KEY

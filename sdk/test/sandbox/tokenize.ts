@@ -10,7 +10,7 @@ import { Gateway } from "../../src/domain/value-objects/Gateway";
  * recibiera el número de la tarjeta lo metería dentro del alcance de PCI DSS. Así que el SDK
  * acepta un token opaco y nada más.
  *
- * Que estas funciones vivan acá tiene entonces un doble propósito: le dan a las pruebas un
+ * Que estas funciones vivan aquí tiene entonces un doble propósito: le dan a las pruebas un
  * token real, y son el ejemplo ejecutable de lo que el frontend del comercio tiene que hacer
  * antes de llamar al SDK, que es la pregunta que cualquiera se hace al ver que
  * `PaymentMethod.card()` pide un token y no una tarjeta.

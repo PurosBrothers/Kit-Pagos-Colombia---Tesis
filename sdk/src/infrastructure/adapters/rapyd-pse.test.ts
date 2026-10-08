@@ -39,23 +39,23 @@ function completeRequest(): CreatePaymentRequest {
 }
 
 describe("assertPseRequirements", () => {
-  it("acepta una solicitud completa", () => {
+  it("accepts a complete request", () => {
     expect(() => assertPseRequirements(completeRequest())).not.toThrow();
   });
 
   /**
-   * Acumular en vez de cortar en el primero importa más acá que en tarjeta: el flujo
+   * Acumular en vez de cortar en el primero importa más aquí que en tarjeta: el flujo
    * son dos llamadas, y descubrir los cuatro campos de a uno son cuatro ciclos de
    * prueba y error, cada uno dejando un cliente huérfano en Rapyd.
    */
-  it("junta todos los datos que faltan en un solo error", () => {
-    const sinNada: CreatePaymentRequest = {
+  it("gathers all missing data into a single error", () => {
+    const emptyRequest: CreatePaymentRequest = {
       ...completeRequest(),
       payer: new Payer({ email: "cliente@example.com" }),
     };
 
     try {
-      assertPseRequirements(sinNada);
+      assertPseRequirements(emptyRequest);
       throw new Error("debió lanzar");
     } catch (error) {
       const message = (error as Error).message;
@@ -66,8 +66,8 @@ describe("assertPseRequirements", () => {
     }
   });
 
-  it("explica que el rechazo de Rapyd llega cuando el cliente ya existe", () => {
-    const sinTelefono: CreatePaymentRequest = {
+  it("explains that the Rapyd rejection comes when the customer already exists", () => {
+    const withoutPhone: CreatePaymentRequest = {
       ...completeRequest(),
       payer: new Payer({
         email: "cliente@example.com",
@@ -77,7 +77,7 @@ describe("assertPseRequirements", () => {
       }),
     };
 
-    expect(() => assertPseRequirements(sinTelefono)).toThrow(
+    expect(() => assertPseRequirements(withoutPhone)).toThrow(
       /payer\.phone/,
     );
   });
@@ -89,13 +89,13 @@ describe("assertPseRequirements", () => {
    * de dónde sacar el valor bueno.
    */
   it("should reject a code that is neither a Rapyd type nor a PSE code, and say how to get one", () => {
-    const conCodigoDeSandbox: CreatePaymentRequest = {
+    const withSandboxCode: CreatePaymentRequest = {
       ...completeRequest(),
       paymentMethod: PaymentMethod.pse({ bankCode: "1" }),
     };
 
     try {
-      assertPseRequirements(conCodigoDeSandbox);
+      assertPseRequirements(withSandboxCode);
       throw new Error("debió lanzar");
     } catch (error) {
       expect((error as { code: string }).code).toBe(
@@ -118,7 +118,7 @@ describe("assertPseRequirements", () => {
 });
 
 describe("buildCustomerPayload", () => {
-  it("manda nombre, correo y teléfono, que es lo mínimo que Rapyd acepta", () => {
+  it("sends name, email and phone, which is the minimum Rapyd accepts", () => {
     expect(buildCustomerPayload(completeRequest())).toEqual({
       name: "Jaime Pavlich Mariscal",
       email: "cliente@example.com",
@@ -129,9 +129,9 @@ describe("buildCustomerPayload", () => {
   /**
    * Se midió que Rapyd acepta `+573001234567` y `3001234567` por igual, así que el
    * adaptador no transforma el número. Esta prueba fija esa decisión: si alguien
-   * agregara un prefijo "para que quede bien", acá se nota.
+   * agregara un prefijo "para que quede bien", aquí se nota.
    */
-  it("no le agrega el prefijo internacional al teléfono", () => {
+  it("does not add the international prefix to the phone", () => {
     const payload = buildCustomerPayload(completeRequest());
     expect(payload.phone_number).toBe("3001234567");
   });
@@ -152,7 +152,7 @@ describe("buildPsePaymentPayload", () => {
     );
   });
 
-  it("arma el pago con el cliente y el método de PSE", () => {
+  it("builds the payment with the customer and the PSE method", () => {
     const payload = buildPsePaymentPayload(completeRequest(), "cus_abc123");
 
     expect(payload.customer).toBe("cus_abc123");
@@ -172,7 +172,7 @@ describe("buildPsePaymentPayload", () => {
    * Si alguien usara `toMinorUnits()` como en Wompi, el cobro se multiplicaría por
    * cien, y esta prueba es la que lo atrapa.
    */
-  it("manda el monto en pesos y como string con escala", () => {
+  it("sends the amount in pesos and as a string with scale", () => {
     const payload = buildPsePaymentPayload(completeRequest(), "cus_abc123");
     expect(payload.amount).toBe("150000.00");
   });
@@ -181,26 +181,26 @@ describe("buildPsePaymentPayload", () => {
    * Las dos URL del comercio son el único rastro medible de que `ReturnUrlConfig`
    * se envía de verdad: Rapyd las incrusta en la `redirect_url` que devuelve.
    */
-  it("envía las dos URL de retorno del comercio", () => {
+  it("sends both merchant return URLs", () => {
     const payload = buildPsePaymentPayload(completeRequest(), "cus_abc123");
     expect(payload.complete_payment_url).toBe("https://comercio.example.com/retorno");
     expect(payload.error_payment_url).toBe("https://comercio.example.com/retorno");
   });
 
-  it("omite las URL cuando el comercio no las informó", () => {
-    const sinRetorno: CreatePaymentRequest = {
+  it("omits the URLs when the merchant did not provide them", () => {
+    const withoutReturnUrl: CreatePaymentRequest = {
       ...completeRequest(),
       returnUrlConfig: undefined,
     };
 
-    const payload = buildPsePaymentPayload(sinRetorno, "cus_abc123");
+    const payload = buildPsePaymentPayload(withoutReturnUrl, "cus_abc123");
     expect(payload).not.toHaveProperty("complete_payment_url");
     expect(payload).not.toHaveProperty("error_payment_url");
   });
 });
 
 describe("extractCustomerId", () => {
-  it("saca el identificador del cliente", () => {
+  it("extracts the customer identifier", () => {
     expect(
       extractCustomerId({ data: { id: "cus_01f2f7ddace1fc8aa19ae9c535d7fb57" } }),
     ).toBe("cus_01f2f7ddace1fc8aa19ae9c535d7fb57");
@@ -215,8 +215,8 @@ describe("extractCustomerId", () => {
     ["id vacío", { data: { id: "" } }],
     ["sin data", {}],
     ["nulo", null],
-  ])("falla con MALFORMED_RESPONSE cuando la respuesta viene %s", (_caso, respuesta) => {
-    expect(() => extractCustomerId(respuesta)).toThrow(
+  ])("fails with MALFORMED_RESPONSE when the response comes back %s", (_scenario, nativeResponse) => {
+    expect(() => extractCustomerId(nativeResponse)).toThrow(
       expect.objectContaining({ code: KitPagosErrorCode.MALFORMED_RESPONSE }),
     );
   });
@@ -224,7 +224,7 @@ describe("extractCustomerId", () => {
 
 describe("parseRapydPseBanks", () => {
   /** Forma medida: 97 métodos para Colombia, de los cuales 47 son de PSE. */
-  const catalogo = {
+  const countryCatalog = {
     data: [
       {
         type: "co_pse_bancolombia_bank",
@@ -241,7 +241,7 @@ describe("parseRapydPseBanks", () => {
   };
 
   it("should return the full type as code and its PSE code as achCode", () => {
-    expect(parseRapydPseBanks(catalogo)).toEqual([
+    expect(parseRapydPseBanks(countryCatalog)).toEqual([
       { code: "co_pse_bancolombia_bank", name: "Bancolombia", achCode: "1007" },
       { code: "co_pse_banco_davivienda_bank", name: "Banco Davivienda", achCode: "1051" },
     ]);
@@ -262,18 +262,18 @@ describe("parseRapydPseBanks", () => {
    * mezclado, así que dejar pasar un método que no es PSE le pondría al pagador una
    * opción que falla al elegirla.
    */
-  it("descarta los métodos que no son de PSE", () => {
-    const codigos = parseRapydPseBanks(catalogo).map((banco) => banco.code);
-    expect(codigos).not.toContain("co_visa_card");
+  it("drops the methods that are not PSE", () => {
+    const bankCodes = parseRapydPseBanks(countryCatalog).map((bank) => bank.code);
+    expect(bankCodes).not.toContain("co_visa_card");
   });
 
-  it("no revienta con respuestas vacías o inesperadas", () => {
+  it("does not crash on empty or unexpected responses", () => {
     expect(parseRapydPseBanks({ data: [] })).toEqual([]);
     expect(parseRapydPseBanks({})).toEqual([]);
     expect(parseRapydPseBanks(null)).toEqual([]);
   });
 
-  it("usa el tipo como nombre cuando la pasarela no lo manda", () => {
+  it("uses the type as the name when the gateway does not send one", () => {
     expect(
       parseRapydPseBanks({ data: [{ type: "co_pse_banco_raro_bank" }] }),
     ).toEqual([{ code: "co_pse_banco_raro_bank", name: "co_pse_banco_raro_bank" }]);

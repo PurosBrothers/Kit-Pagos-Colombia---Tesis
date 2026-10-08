@@ -30,7 +30,7 @@ import { Credentials } from "../../src/domain/value-objects/Credentials";
  * defecto, y una prueba que falla por motivos ajenos se termina ignorando.
  *
  * Donde una decisión de diseño salió de un error medido, la prueba **afirma que ese error
- * sigue ocurriendo**. Suena al revés y es lo más valioso que hay acá: el día que Kushki
+ * sigue ocurriendo**. Suena al revés y es lo más valioso que hay aquí: el día que Kushki
  * publique `POST /charges`, o que Mercado Pago deje de exigir las cuotas, la prueba lo dice y
  * la decisión se puede revisar con evidencia en vez de quedar como folclore del repositorio.
  */
@@ -113,11 +113,11 @@ export function describeSandbox(
 ): void {
   const credentials = sandboxCredentials(gateway);
   const baseUrl = SANDBOX_BASE_URL[gateway];
-  const title = `${gateway} contra el sandbox real (${baseUrl})`;
+  const title = `${gateway} against the real sandbox (${baseUrl})`;
 
   if (!credentials) {
-    describe.skip(`${title} — saltado: faltan credenciales en .env`, () => {
-      it("necesita credenciales", () => undefined);
+    describe.skip(`${title} — skipped: missing credentials in .env`, () => {
+      it("needs credentials", () => undefined);
     });
     return;
   }

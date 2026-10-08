@@ -4,15 +4,16 @@
  * ## Por qué está separado del RapydAdapter
  *
  * El esquema de firma de Rapyd es un algoritmo cerrado, con una especificación
- * externa publicada (`docs.rapyd.net/en/request-signatures.html`) y un vector
- * de prueba oficial contra el que se puede verificar. No tiene nada que ver con
+ * externa publicada (`docs.rapyd.net/en/request-signatures.html`). La página trae
+ * la fórmula y código de ejemplo, pero no un vector de prueba con la firma esperada
+ * (revisada el 7 de octubre de 2026). No tiene nada que ver con
  * "ser un adaptador de pasarela": es criptografía con un contrato preciso, y
  * cuatro detalles fáciles de implementar mal (ver `computeRapydSignature`).
  *
  * Sacarlo del adaptador tiene dos beneficios concretos:
  *
- * 1. Se puede probar de forma aislada contra el vector oficial, sin montar una
- *    petición HTTP ni mockear `fetch`.
+ * 1. Se puede probar de forma aislada contra un valor calculado aparte con la
+ *    fórmula documentada, sin montar una petición HTTP ni mockear `fetch`.
  * 2. `buildRapydHeaders()` recibe las credenciales como argumento en vez de
  *    leer `this.credentials`, lo que la vuelve una función pura: mismos
  *    argumentos, mismos headers, sin instanciar un adaptador.

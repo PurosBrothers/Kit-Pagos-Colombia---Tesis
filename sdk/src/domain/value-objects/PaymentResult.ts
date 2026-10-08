@@ -32,7 +32,7 @@ import { GatewayTransactionId } from "./GatewayTransactionId";
  * if (result.outcome === "REDIRECT_REQUIRED") {
  *   return response.redirect(result.redirect.redirectUrl);
  * }
- * // Acá TypeScript ya sabe que hay transacción.
+ * // Aquí TypeScript ya sabe que hay transacción.
  * console.log(result.transaction.getStatus());
  * ```
  *

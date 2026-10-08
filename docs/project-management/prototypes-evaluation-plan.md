@@ -134,7 +134,7 @@ La fase comprimida de dos semanas solo cabe si al llegar el 5 de octubre ya es c
 
 1. Los cuatro adaptadores implementados y probados. **Hecho:** cerró al final de la Iteración 2, con 586 pruebas unitarias y el ejemplo de intercambiabilidad verificando por código que las cuatro normalizan igual.
 2. **Los dos prototipos construidos y ejecutables.** Es el cuarto entregable de la Iteración 3 (sección 2.1 de `methodology.md`). Son el objeto de medición: medir tarda poco, construir lo que se mide tarda semanas, así que este es el prerrequisito que menos se puede correr.
-3. La API de Simulación con los escenarios de rechazo, timeout y error de red (Iteración 3). Sin ellos no se puede medir la variable 3 del checklist funcional, que es la distinción entre rechazo de negocio y fallo técnico. **Hoy el simulador responde `501`** a cualquier valor de `x-simulate-scenario` distinto de `APPROVED`.
+3. La API de Simulación con los escenarios de rechazo, timeout y error de red (Iteración 3). Sin ellos no se puede medir la variable 3 del checklist funcional, que es la distinción entre rechazo de negocio y fallo técnico. **Implementado en el issue #122:** los escenarios se alcanzan desde el SDK con los datos de prueba, los montos reservados y las marcas en la credencial (punto 83 del `architecture-log.md`; sección 4 de `docs/02-arquitectura/3-api-de-simulacion.md`, con las combinaciones que siguen en `501`).
 4. El script de métricas CK aplicable a un proyecto externo, no solo a `sdk/`. Hacen falta tres cambios concretos, y el tercero es el que se pasa por alto:
    - un argumento para la raíz de código a medir, porque hoy resuelve `__dirname/../src` de forma fija;
    - un argumento para el `tsconfig.json`, porque cada prototipo tendrá el suyo;

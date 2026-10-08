@@ -1,6 +1,6 @@
 import { buildApp } from "../src/app";
 
-describe("mock de Kushki", () => {
+describe("Kushki mock", () => {
   const validRequestBody = {
     token: "tok_kushki_test",
     amount: {
@@ -16,7 +16,7 @@ describe("mock de Kushki", () => {
   };
 
   describe("POST /v1/sim/kushki/card/v1/charges", () => {
-    it("crea un cargo aprobado con el estado nativo APPROVAL y el monto desglosado", async () => {
+    it("creates an approved charge with the native APPROVAL status and the broken-down amount", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -37,7 +37,7 @@ describe("mock de Kushki", () => {
       await app.close();
     });
 
-    it("acepta APPROVED explícito y lo traduce al valor nativo APPROVAL", async () => {
+    it("accepts an explicit APPROVED and translates it to the native APPROVAL value", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -53,7 +53,7 @@ describe("mock de Kushki", () => {
       await app.close();
     });
 
-    it("devuelve DECLINED en el cuerpo, con el mismo HTTP que una aprobación", async () => {
+    it("returns DECLINED in the body, with the same HTTP status as an approval", async () => {
       // Kushki comunica el rechazo de negocio en el estado dentro del cuerpo, no con un
       // código HTTP distinto. Este caso protege ese detalle del contrato: un adaptador que
       // decidiera mirando `response.ok` reportaría este rechazo como aprobado.
@@ -72,7 +72,7 @@ describe("mock de Kushki", () => {
       await app.close();
     });
 
-    it("devuelve INITIALIZED para un cargo pendiente", async () => {
+    it("returns INITIALIZED for a pending charge", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -88,34 +88,34 @@ describe("mock de Kushki", () => {
       await app.close();
     });
 
-    it("rechaza un cobro sin token con el mismo 400 K001 de la API real", async () => {
+    it("rejects a charge without a token with the same 400 K001 as the real API", async () => {
       // Medido: `POST /card/v1/charges` sin token, o con el literal "simulated-token" que
       // el SDK mandaba, responde `400 K001`. El mock lo exige para que ningún cambio
       // futuro pueda dejar de mandar el token del comercio y seguir en verde (punto 50).
       const app = buildApp();
 
-      const sinToken = await app.inject({
+      const withoutToken = await app.inject({
         method: "POST",
         url: "/v1/sim/kushki/card/v1/charges",
         payload: { ...validRequestBody, token: undefined },
       });
 
-      expect(sinToken.statusCode).toBe(400);
-      expect(sinToken.json().code).toBe("K001");
+      expect(withoutToken.statusCode).toBe(400);
+      expect(withoutToken.json().code).toBe("K001");
 
-      const tokenSimulado = await app.inject({
+      const simulatedToken = await app.inject({
         method: "POST",
         url: "/v1/sim/kushki/card/v1/charges",
         payload: { ...validRequestBody, token: "simulated-token" },
       });
 
-      expect(tokenSimulado.statusCode).toBe(400);
-      expect(tokenSimulado.json().code).toBe("K001");
+      expect(simulatedToken.statusCode).toBe(400);
+      expect(simulatedToken.json().code).toBe("K001");
 
       await app.close();
     });
 
-    it("devuelve EXPIRED para un cargo expirado", async () => {
+    it("returns EXPIRED for an expired charge", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -133,7 +133,7 @@ describe("mock de Kushki", () => {
       await app.close();
     });
 
-    it("responde 504 Gateway Timeout cuando el escenario es TIMEOUT", async () => {
+    it("answers 504 Gateway Timeout when the scenario is TIMEOUT", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -149,7 +149,7 @@ describe("mock de Kushki", () => {
       await app.close();
     });
 
-    it("simula NETWORK_ERROR respondiendo con error 500", async () => {
+    it("simulates NETWORK_ERROR by answering with a 500 error", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -164,7 +164,7 @@ describe("mock de Kushki", () => {
       await app.close();
     });
 
-    it("responde 429 Too Many Requests cuando el escenario es RATE_LIMIT", async () => {
+    it("answers 429 Too Many Requests when the scenario is RATE_LIMIT", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -180,7 +180,7 @@ describe("mock de Kushki", () => {
       await app.close();
     });
 
-    it("responde 500 cuando el escenario es SERVER_ERROR", async () => {
+    it("answers 500 when the scenario is SERVER_ERROR", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -196,7 +196,7 @@ describe("mock de Kushki", () => {
       await app.close();
     });
 
-    it("responde con flapping (503 en intentos iniciales, éxito en el siguiente)", async () => {
+    it("answers with flapping (503 on the first attempts, success on the next one)", async () => {
       const app = buildApp();
       const flapBody = { ...validRequestBody, token: "tok_kushki_flap_1" };
 
@@ -228,7 +228,7 @@ describe("mock de Kushki", () => {
       await app.close();
     });
 
-    it("detecta pagos duplicados cuando el escenario es DUPLICATE_PAYMENT", async () => {
+    it("detects duplicate payments when the scenario is DUPLICATE_PAYMENT", async () => {
       const app = buildApp();
       const dupBody = { ...validRequestBody, token: "tok_kushki_dup_1" };
 
@@ -252,7 +252,7 @@ describe("mock de Kushki", () => {
       await app.close();
     });
 
-    it("responde 501 para escenarios aún no implementados", async () => {
+    it("answers 501 for scenarios not implemented yet", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -281,16 +281,16 @@ describe("mock de Kushki", () => {
      * desenlace.
      */
 
-    it("responde el cargo creado, con su ticketNumber y su monto", async () => {
+    it("answers the created charge, with its ticketNumber and its amount", async () => {
       const app = buildApp();
 
-      const creado = await app.inject({
+      const created = await app.inject({
         method: "POST",
         url: "/v1/sim/kushki/card/v1/charges",
         payload: validRequestBody,
       });
 
-      const { ticketNumber } = creado.json();
+      const { ticketNumber } = created.json();
 
       const response = await app.inject({
         method: "GET",
@@ -308,17 +308,17 @@ describe("mock de Kushki", () => {
       await app.close();
     });
 
-    it("consulta un cargo rechazado sin convertirlo en error HTTP", async () => {
+    it("queries a declined charge without turning it into an HTTP error", async () => {
       const app = buildApp();
 
-      const creado = await app.inject({
+      const created = await app.inject({
         method: "POST",
         url: "/v1/sim/kushki/card/v1/charges",
         headers: { "x-simulate-scenario": "REJECTED" },
         payload: validRequestBody,
       });
 
-      const { ticketNumber } = creado.json();
+      const { ticketNumber } = created.json();
 
       const response = await app.inject({
         method: "GET",
@@ -333,39 +333,39 @@ describe("mock de Kushki", () => {
       await app.close();
     });
 
-    it("devuelve el mismo estado aunque la consulta pida el contrario", async () => {
+    it("returns the same status even if the query asks for the opposite", async () => {
       // Criterio 1 del issue: el escenario se fija en la creación. Si la cabecera de la
       // consulta cambiara el resultado, el mismo cobro sería declinado y aprobado según
       // quién preguntara, y no habría forma de conciliar.
       const app = buildApp();
 
-      const creado = await app.inject({
+      const created = await app.inject({
         method: "POST",
         url: "/v1/sim/kushki/card/v1/charges",
         headers: { "x-simulate-scenario": "DECLINED" },
         payload: validRequestBody,
       });
 
-      const { ticketNumber } = creado.json();
+      const { ticketNumber } = created.json();
 
-      const conAprobado = await app.inject({
+      const withApproved = await app.inject({
         method: "GET",
         url: `/v1/sim/kushki/charges/${ticketNumber}`,
         headers: { "x-simulate-scenario": "APPROVED" },
       });
 
-      const sinCabecera = await app.inject({
+      const withoutHeader = await app.inject({
         method: "GET",
         url: `/v1/sim/kushki/charges/${ticketNumber}`,
       });
 
-      expect(conAprobado.json().details.transactionStatus).toBe("DECLINED");
-      expect(sinCabecera.json().details.transactionStatus).toBe("DECLINED");
+      expect(withApproved.json().details.transactionStatus).toBe("DECLINED");
+      expect(withoutHeader.json().details.transactionStatus).toBe("DECLINED");
 
       await app.close();
     });
 
-    it("responde 404 si el ticket no existe", async () => {
+    it("answers 404 if the ticket does not exist", async () => {
       // Antes respondía 200 con un cargo inventado. Un 200 sobre un identificador
       // desconocido esconde el error: el comercio cree que consultó un cobro y recibió
       // datos de otro. `K404` es un código del simulador: esta ruta no existe en Kushki.

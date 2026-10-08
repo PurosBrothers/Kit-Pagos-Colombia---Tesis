@@ -85,33 +85,33 @@ function kushkiPse(amount: string) {
  *   transacción pendiente de verdad.
  * - **Kushki, PSE:** el identificador es el *token* de la transferencia y la consulta va
  *   a `/transfer/v1/status/{token}`, que responde con el vocabulario de transferencia.
- *   Kushki con tarjeta no entra acá: su ruta de consulta es un 400 `UNSUPPORTED_OPERATION`
+ *   Kushki con tarjeta no entra aquí: su ruta de consulta es un 400 `UNSUPPORTED_OPERATION`
  *   que ya cubre otra prueba de este archivo.
  */
 const READ_CASES = [
   {
     gateway: "mercadopago",
-    metodo: "tarjeta",
+    methodLabel: "card",
     create: () => cardPayload("mercadopago", "50000.00"),
-    idDe: (body: { transaction?: { gatewayTransactionId: string } }) =>
+    idOf: (body: { transaction?: { gatewayTransactionId: string } }) =>
       body.transaction!.gatewayTransactionId,
     status: "APPROVED",
     rawStatus: "approved",
   },
   {
     gateway: "rapyd",
-    metodo: "tarjeta",
+    methodLabel: "card",
     create: () => cardPayload("rapyd", "50000.00"),
-    idDe: (body: { redirect?: { gatewayTransactionId: string } }) =>
+    idOf: (body: { redirect?: { gatewayTransactionId: string } }) =>
       body.redirect!.gatewayTransactionId,
     status: "PENDING",
     rawStatus: "NEW",
   },
   {
     gateway: "kushki",
-    metodo: "PSE",
+    methodLabel: "PSE",
     create: () => kushkiPse("119000.00"),
-    idDe: (body: { redirect?: { gatewayTransactionId: string } }) =>
+    idOf: (body: { redirect?: { gatewayTransactionId: string } }) =>
       body.redirect!.gatewayTransactionId,
     status: "APPROVED",
     rawStatus: "approvedTransaction",
@@ -165,8 +165,8 @@ describe("GET /v1/api/payments/:id (issue #103)", () => {
    * casualidad existe.
    */
   it.each(READ_CASES)(
-    "should return the exact native status of a $gateway $metodo payment",
-    async ({ gateway, create, idDe, status, rawStatus }) => {
+    "should return the exact native status of a $gateway $methodLabel payment",
+    async ({ gateway, create, idOf, status, rawStatus }) => {
       const created = await app.inject({
         method: "POST",
         url: "/v1/api/payments",
@@ -176,7 +176,7 @@ describe("GET /v1/api/payments/:id (issue #103)", () => {
 
       const res = await app.inject({
         method: "GET",
-        url: `/v1/api/payments/${idDe(created.json())}?gateway=${gateway}`,
+        url: `/v1/api/payments/${idOf(created.json())}?gateway=${gateway}`,
       });
 
       expect(res.statusCode).toBe(200);

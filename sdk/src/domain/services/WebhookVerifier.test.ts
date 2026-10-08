@@ -262,6 +262,27 @@ describe("WebhookVerifier", () => {
         expect(verifier.verify(webhook, context, Gateway.MERCADOPAGO)).toBe(false);
       });
 
+      // «If any of the values (data.id, x-request-id) are not present in the received
+      // notification, you must remove them from the manifest before computing the HMAC.»
+      const signRaw = (manifest: string) => crypto.createHmac("sha256", secret).update(manifest).digest("hex");
+
+      it("should verify a notification without x-request-id against a manifest without request-id", () => {
+        const payload = JSON.stringify({ action: "payment.updated", data: { id: "12345678" } });
+        const webhook = incoming(payload, { "x-signature": `ts=${ts},v1=${signRaw(`id:12345678;ts:${ts};`)}` });
+        expect(verifier.verify(webhook, context, Gateway.MERCADOPAGO)).toBe(true);
+      });
+
+      it("should verify a notification without data.id in the URL or body against a manifest without id", () => {
+        const payload = JSON.stringify({ action: "payment.updated" });
+        const webhook = incoming(payload, headersFor(signRaw(`request-id:${requestId};ts:${ts};`)));
+        expect(verifier.verify(webhook, context, Gateway.MERCADOPAGO)).toBe(true);
+      });
+
+      it("should still reject a missing x-signature", () => {
+        const payload = JSON.stringify({ action: "payment.updated", data: { id: "12345678" } });
+        expect(() => verifier.verify(incoming(payload, { "x-request-id": requestId }), context, Gateway.MERCADOPAGO)).toThrow();
+      });
+
       it("should reject a wrong secret", () => {
         const payload = JSON.stringify({ action: "payment.updated", data: { id: "12345678" } });
         const webhook = incoming(payload, headersFor(signManifest("12345678")));
@@ -353,7 +374,7 @@ describe("WebhookVerifier", () => {
   });
 
   describe("parse()", () => {
-    it("normaliza eventos de Wompi", () => {
+    it("normalizes Wompi events", () => {
       const payload = JSON.stringify({
         event: "transaction.updated",
         data: {
@@ -368,7 +389,7 @@ describe("WebhookVerifier", () => {
       expect(event.gateway).toBe(Gateway.WOMPI);
     });
 
-    it("normaliza eventos de Rapyd (PAYMENT_COMPLETED)", () => {
+    it("normalizes Rapyd events (PAYMENT_COMPLETED)", () => {
       const payload = JSON.stringify({
         id: "wh_e0afb507504b5eb901449993fadba20f",
         type: "PAYMENT_COMPLETED",
@@ -382,7 +403,7 @@ describe("WebhookVerifier", () => {
       expect(event.gateway).toBe(Gateway.RAPYD);
     });
 
-    it("normaliza eventos de Rapyd pendientes (PAYMENT_SUCCEEDED con data.status ACT)", () => {
+    it("normalizes pending Rapyd events (PAYMENT_SUCCEEDED with data.status ACT)", () => {
       const payload = JSON.stringify({
         id: "wh_abc123",
         type: "PAYMENT_SUCCEEDED",
@@ -393,7 +414,7 @@ describe("WebhookVerifier", () => {
       expect(event.newStatus).toBe("PENDING");
     });
 
-    it("normaliza eventos de Rapyd expirados (PAYMENT_EXPIRED)", () => {
+    it("normalizes expired Rapyd events (PAYMENT_EXPIRED)", () => {
       const payload = JSON.stringify({
         id: "wh_exp001",
         type: "PAYMENT_EXPIRED",
@@ -404,7 +425,7 @@ describe("WebhookVerifier", () => {
       expect(event.newStatus).toBe("EXPIRED");
     });
 
-    it("normaliza eventos de Rapyd cancelados (PAYMENT_CANCELED)", () => {
+    it("normalizes canceled Rapyd events (PAYMENT_CANCELED)", () => {
       const payload = JSON.stringify({
         id: "wh_can001",
         type: "PAYMENT_CANCELED",
@@ -429,7 +450,7 @@ describe("WebhookVerifier", () => {
       expect(event.gateway).toBe(Gateway.MERCADOPAGO);
     });
 
-    it("normaliza notificaciones nativas de Mercado Pago sin status a PENDING (flujo de 2 pasos)", () => {
+    it("normalizes native Mercado Pago notifications without status to PENDING (2-step flow)", () => {
       const payload = JSON.stringify({
         action: "payment.created",
         data: { id: "mp-native-999" },
@@ -442,7 +463,7 @@ describe("WebhookVerifier", () => {
       expect(event.gateway).toBe(Gateway.MERCADOPAGO);
     });
 
-    it("extrae eventType desde type en Mercado Pago cuando action no está presente", () => {
+    it("extracts eventType from type in Mercado Pago when action is not present", () => {
       const payload = JSON.stringify({
         type: "payment",
         data: { id: "mp-type-888" },
@@ -466,20 +487,66 @@ describe("WebhookVerifier", () => {
       expect(event.gatewayTransactionId).toBe("ORD01JQ4S4KY8HWQ6NA5PXB65B3D3");
     });
 
-    it("normaliza eventos de Kushki con APPROVAL a APPROVED", () => {
+    // Los ids son los del ejemplo «Transacción aprobada» de
+    // https://docs.kushki.com/co/notifications/one-time-payments/webhook-card/ (consultada el
+    // 7 de octubre de 2026): `ticket_number`, `transaction_id` y `token` son campos distintos,
+    // y el `token` de tarjeta no identifica el cobro.
+    it("normalizes Kushki APPROVAL events to APPROVED and reports the ticket_number, not the transaction_id or token", () => {
       const payload = JSON.stringify({
-        transaction_id: "kushki-tx-789",
+        ticket_number: "992823152575262637",
+        transaction_id: "781482485839103928",
+        token: "fca0fe160b5048aca584e30fbf652edf",
         transaction_status: "APPROVAL",
       });
 
       const event = verifier.parse(incoming(payload), Gateway.KUSHKI);
       expect(event.eventType).toBe("transaction.updated");
-      expect(event.gatewayTransactionId).toBe("kushki-tx-789");
+      expect(event.gatewayTransactionId).toBe("992823152575262637");
       expect(event.newStatus).toBe("APPROVED");
       expect(event.gateway).toBe(Gateway.KUSHKI);
     });
 
-    it("mapea estados de rechazo correctamente", () => {
+    // https://docs.kushki.com/co/en/notifications/one-time-payments/webhook-transfer-in/
+    // (consultada el 7 de octubre de 2026): el webhook de transferencia trae `token`,
+    // `ticketNumber` en camelCase, ningún `ticket_number` ni `transaction_id`, y el estado en
+    // `status`. Los campos son un subconjunto del ejemplo «Approved Transaction» de esa página,
+    // con sus valores.
+    const kushkiApprovedTransfer = {
+      country: "Colombia",
+      ticketNumber: "3135812068015768",
+      transferProcessor: "SafetyPay Processor",
+      currency: "COP",
+      trazabilityCode: "655117798",
+      amount: { subtotalIva0: 9000, iva: 0, subtotalIva: 0 },
+      transactionReference: "0a82f882-7a52-4017-bcd4-4cb92077e995",
+      token: "96387bf4e4d4499a9101b50b0a5989df",
+      status: "approvedTransaction",
+    };
+
+    it("reports the token, not the ticketNumber, of the Kushki transfer webhook", () => {
+      const event = verifier.parse(incoming(JSON.stringify(kushkiApprovedTransfer)), Gateway.KUSHKI);
+      expect(event.gatewayTransactionId).toBe("96387bf4e4d4499a9101b50b0a5989df");
+      expect(event.newStatus).toBe("APPROVED");
+    });
+
+    // Valores del ejemplo «Declined Transaction» de la misma página.
+    it("normalizes the declinedTransaction of the Kushki transfer webhook", () => {
+      const declined = {
+        country: "Colombia",
+        responseText: "Monto inválido",
+        transferProcessor: "Pse Processor",
+        responseCode: "T003",
+        currency: "COP",
+        transactionReference: "bce86498-e660-4090-b111-51e33a75bc96",
+        token: "985ac507e9eb404e82e164f3f3f0e25d",
+        status: "declinedTransaction",
+      };
+      const event = verifier.parse(incoming(JSON.stringify(declined)), Gateway.KUSHKI);
+      expect(event.newStatus).toBe("DECLINED");
+      expect(event.gatewayTransactionId).toBe("985ac507e9eb404e82e164f3f3f0e25d");
+    });
+
+    it("maps rejection statuses correctly", () => {
       const wompiDeclined = JSON.stringify({
         data: { transaction: { id: "1", status: "DECLINED" } },
       });
@@ -506,7 +573,7 @@ describe("WebhookVerifier", () => {
       expect(verifier.parse(incoming(kushkiDeclined), Gateway.KUSHKI).newStatus).toBe("DECLINED");
     });
 
-    it("mapea estados adicionales como VOIDED, ERROR y PENDING", () => {
+    it("maps additional statuses such as VOIDED, ERROR and PENDING", () => {
       const wompiVoided = JSON.stringify({
         data: { transaction: { id: "1", status: "VOIDED" } },
       });
@@ -551,8 +618,8 @@ describe("WebhookVerifier", () => {
      * `ERROR`**, que para el comercio es la diferencia entre esperar al pagador y
      * darle la orden por perdida.
      */
-    describe("estados no finales, que PSE volvió alcanzables", () => {
-      it("mapea PENDING de Wompi a PENDING y no a ERROR", () => {
+    describe("non-final statuses that PSE made reachable", () => {
+      it("maps Wompi PENDING to PENDING and not to ERROR", () => {
         const wompiPending = JSON.stringify({
           data: { transaction: { id: "wompi-pse-1", status: "PENDING" } },
         });
@@ -582,7 +649,7 @@ describe("WebhookVerifier", () => {
       });
 
       /** `INITIALIZED` es el estado no final de efectivo y transferencias en Kushki. */
-      it("mapea INITIALIZED de Kushki a PENDING", () => {
+      it("maps Kushki INITIALIZED to PENDING", () => {
         const initialized = JSON.stringify({
           transaction_id: "kushki-cash-1",
           transaction_status: "INITIALIZED",
@@ -596,7 +663,7 @@ describe("WebhookVerifier", () => {
        * Ahora el webhook y el normalizador comparten la fuente, así que un estado
        * que uno entiende el otro también.
        */
-      it("coincide con el normalizador para el mismo estado nativo", () => {
+      it("matches the normalizer for the same native status", () => {
         const normalizer = new ResponseNormalizer();
 
         const wompiResponse = {
@@ -619,7 +686,7 @@ describe("WebhookVerifier", () => {
       });
     });
 
-    it("lanza error si el gateway no es reconocido", () => {
+    it("throws an error if the gateway is not recognized", () => {
       expect(() => verifier.parse(incoming("{}"), "UNKNOWN_GW" as unknown as Gateway)).toThrow(
         "WebhookVerifier.parse: Gateway desconocido"
       );

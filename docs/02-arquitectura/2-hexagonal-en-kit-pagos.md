@@ -204,11 +204,9 @@ Tiene una prueba de fuego permanente: el paquete de `examples/` consume el SDK *
 
 Para que este documento no repita el error del que reemplazó, la lista de lo que **no** está terminado:
 
-- **El motor de escenarios de la API de Simulación solo sabe aprobar**, y solo para Wompi. Falta rechazo, fondos insuficientes, timeout y error de red. Es el primer entregable de la Iteración 3.
+- **Los escenarios de la API de Simulación tienen huecos declarados.** Desde el issue #122 hay rechazo, pendiente, espera y error técnico en las cuatro pasarelas, alcanzables desde el SDK (punto 83 del `architecture-log.md`); las combinaciones sin evidencia de la pasarela real siguen respondiendo `501` (sección 4 de [3-api-de-simulacion.md](3-api-de-simulacion.md)).
 - **El script de métricas CK tiene la ruta fija contra `sdk/src`**, así que todavía no se puede correr sobre los prototipos de la Fase 5.
 - **Los dos proyectos prototípicos no existen** como código; existe su diseño experimental.
-- **La API de Simulación no está desplegada.**
-
 ---
 
 ## 8. Qué sigue

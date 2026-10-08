@@ -52,7 +52,7 @@ La Iteración 3 cierra el artefacto completo, no solo la API de Simulación. Son
 
 | # | Entregable | Qué incluye | Por qué la Fase 5 lo necesita |
 |---|---|---|---|
-| 1 | **API de Simulación completa** | Los escenarios de rechazo, timeout y error, que hoy responden `501`; despliegue en Render; colección Postman versionada | Sin escenarios de fallo no se puede completar la lista de verificación funcional de los prototipos |
+| 1 | **API de Simulación completa** | Los escenarios de rechazo, timeout y error (implementados en el issue #122, punto 83 del `architecture-log.md`); despliegue en Render; colección Postman versionada | Sin escenarios de fallo no se puede completar la lista de verificación funcional de los prototipos |
 | 2 | **Documentación de datos** | El tercer componente del Kit Pagos: `docs/testing-data/` presentado como artefacto, con su nivel de evidencia y sus huecos por pasarela | Es lo que hace reproducible el experimento por alguien que no sea el equipo |
 | 3 | **Página de presentación** | El sitio que muestra el artefacto sin necesidad de clonar el repositorio | Es cómo el jurado y un evaluador externo acceden al resultado |
 | 4 | **Proyectos prototípicos completos** | Los prototipos A (integración directa, control) y B (con SDK, tratamiento), ejecutables y medibles | **Son el objeto de medición del experimento**: sin ellos no hay Fase 5 |
@@ -269,7 +269,7 @@ Comprimir la Fase 5 de 3 a 2 semanas es más riesgoso, porque ahí es donde se c
 1. **Los dos prototipos tienen que estar completos y ejecutables**, porque son el objeto de medición. Es el cuarto entregable de la sección 2.1, y es el que menos puede correrse: medir tarda poco, construir lo que se mide tarda semanas.
 2. **El script de métricas tiene que poder apuntarse a ellos.** El tooling ya existe y funciona —`sdk/scripts/ck-metrics.ts` mide las 31 clases del SDK en cada pull request—, pero resuelve la raíz de código de forma fija a `sdk/src` y falla ante cualquier violación de umbral. Medir un prototipo de integración directa con ese script es imposible por diseño: **va a** exceder los umbrales, y eso es precisamente el resultado que el experimento busca. Hacen falta tres cambios, detallados en [`../04-metricas-y-pruebas/4-medir-los-prototipos.md`](../04-metricas-y-pruebas/4-medir-los-prototipos.md).
 
-A eso se suma que los **escenarios de rechazo, timeout y error** de la API de Simulación son un prerrequisito de la lista de verificación funcional: hoy el simulador responde `501` a cualquier valor distinto de `APPROVED`, así que sin ellos la variable de paridad funcional entre los dos prototipos no se puede completar.
+A eso se suma que los **escenarios de rechazo, timeout y error** de la API de Simulación son un prerrequisito de la lista de verificación funcional: sin ellos la variable de paridad funcional entre los dos prototipos no se puede completar. El issue #122 los implementó con una convención que el SDK alcanza sin cabeceras (punto 83 del `architecture-log.md`); las combinaciones que siguen respondiendo `501` están en la sección 4 de `docs/02-arquitectura/3-api-de-simulacion.md`.
 
 Si alguna de esas condiciones no está lista al entrar a la Fase 5, la única forma de que la fase quepa en 2 semanas es reduciendo qué se evalúa (menos escenarios, menos pasarelas comparadas), y eso deja de ser un ajuste de cronograma: se vuelve un cambio de alcance que, según la sección 7, sí requiere alineación con el director antes de aplicarse.
 

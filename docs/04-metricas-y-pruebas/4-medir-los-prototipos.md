@@ -98,7 +98,7 @@ Y hay una razón de secuencia: los prototipos se construyen en la Iteración 3, 
 
 La variable 3 del checklist funcional es que el prototipo **distinga un rechazo de negocio de un fallo técnico y reintente solo el segundo.**
 
-Eso no se puede implementar ni medir contra un simulador que solo sabe aprobar, que es lo que hay hoy: el motor de escenarios resuelve `APPROVED` y solo para Wompi, y cualquier otro escenario devuelve `501`.
+Eso no se puede implementar ni medir contra un simulador que solo sabe aprobar. Desde el issue #122, el simulador produce rechazos, pendientes, esperas y errores técnicos en las cuatro pasarelas, y un prototipo los provoca solo con el SDK: con los datos de prueba de cada pasarela, los montos reservados y las marcas en la credencial (punto 83 del `architecture-log.md`). Las combinaciones que siguen respondiendo `501` están en la sección 4 de [3-api-de-simulacion.md](../02-arquitectura/3-api-de-simulacion.md).
 
 De ahí sale el orden forzado de la Iteración 3: **escenarios del simulador → prototipos → métricas.** No es una preferencia de planificación, es una dependencia técnica.
 

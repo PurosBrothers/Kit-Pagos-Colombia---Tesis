@@ -84,7 +84,12 @@ export class KitPagos {
   private resolveAdapter() {
     const gateway = this.configurator.getActiveGateway();
     const credentials = this.configurator.getCredentials(gateway);
-    return this.factory.create(gateway, credentials, this.configurator.getBaseUrl(gateway));
+    return this.factory.create(
+      gateway,
+      credentials,
+      this.configurator.getBaseUrl(gateway),
+      this.configurator.getTimeoutMs(),
+    );
   }
 
   /**
@@ -165,11 +170,11 @@ export class KitPagos {
    * });
    * ```
    *
-   * Va acá y no en la configuración porque **quién manda el webhook lo decide el endpoint que
+   * Va aquí y no en la configuración porque **quién manda el webhook lo decide el endpoint que
    * lo recibió, no el estado del SDK**: el comercio ya sabe de quién es, y hacerlo elegir por
    * configuración obligaría a mutar el SDK entre dos peticiones HTTP concurrentes. La pasarela
    * solo tiene que estar en `credentials`, no activa. `toleranceSeconds` es lo contrario: tiene
-   * un valor global razonable en `SDKOptions`, y acá solo se sobreescribe cuando un endpoint
+   * un valor global razonable en `SDKOptions`, y aquí solo se sobreescribe cuando un endpoint
    * concreto necesita otra ventana.
    *
    * Agregar un parámetro opcional no rompe a nadie que ya llame con dos argumentos, lo cual

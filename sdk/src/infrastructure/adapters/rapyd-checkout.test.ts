@@ -21,7 +21,7 @@ describe("rapyd-checkout", () => {
   };
 
   describe("buildCheckoutPayload", () => {
-    it("arma el cobro con el país, la categoría de tarjeta y la referencia del comercio", () => {
+    it("builds the charge with the country, the card category and the merchant reference", () => {
       expect(buildCheckoutPayload(baseRequest)).toEqual({
         amount: "150000.00",
         currency: "COP",
@@ -37,17 +37,17 @@ describe("rapyd-checkout", () => {
      * serializado: `JSON.stringify` convierte `150000.00` en `150000` y eso invalida la
      * firma. Es la misma razón por la que lo hacía el cobro directo.
      */
-    it("manda el monto como string con la escala de la divisa", () => {
+    it("sends the amount as a string with the currency scale", () => {
       expect(buildCheckoutPayload(baseRequest).amount).toBe("150000.00");
     });
 
-    it("no manda el token de tarjeta, que la página de Rapyd no puede usar", () => {
+    it("does not send the card token, which the Rapyd page cannot use", () => {
       expect(JSON.stringify(buildCheckoutPayload(baseRequest))).not.toContain(
         "card_1a2b3c",
       );
     });
 
-    it("mapea las dos URL de retorno cuando el comercio las configura", () => {
+    it("maps both return URLs when the merchant configures them", () => {
       const payload = buildCheckoutPayload({
         ...baseRequest,
         returnUrlConfig: new ReturnUrlConfig(null, {
@@ -60,7 +60,7 @@ describe("rapyd-checkout", () => {
       expect(payload.error_payment_url).toBe("https://comercio.example.com/rechazado");
     });
 
-    it("omite las URL cuando no se configuran, en vez de mandarlas vacías", () => {
+    it("omits the URLs when they are not configured, instead of sending them empty", () => {
       const payload = buildCheckoutPayload(baseRequest);
 
       expect(payload.complete_payment_url).toBeUndefined();
@@ -71,21 +71,21 @@ describe("rapyd-checkout", () => {
   /**
    * Rapyd prefija sus identificadores por recurso, y consultar un checkout en
    * `/payments/{id}` responde `400 ERROR_GET_PAYMENT`. El prefijo es lo que evita esa
-   * llamada perdida, y a diferencia del caso de Kushki acá el discriminador se midió.
+   * llamada perdida, y a diferencia del caso de Kushki aquí el discriminador se midió.
    */
   describe("isRapydCheckoutId", () => {
-    it("reconoce un id de checkout", () => {
+    it("recognizes a checkout id", () => {
       expect(isRapydCheckoutId("checkout_422fb0a43ac1ad77ffd9969f454d3ad6")).toBe(true);
     });
 
-    it("no confunde un id de pago", () => {
+    it("does not mistake a payment id", () => {
       expect(isRapydCheckoutId("payment_d31d3ca850419ab5e2f9f1a33f9c6eea")).toBe(false);
     });
   });
 
   describe("checkoutToPaymentResponse", () => {
     /** Forma real de `GET /v1/checkout/{id}` antes de que el pagador pague. */
-    const sinPagar = {
+    const unpaidCheckout = {
       data: {
         id: "checkout_422fb0a43ac1ad77ffd9969f454d3ad6",
         status: "NEW",
@@ -99,19 +99,19 @@ describe("rapyd-checkout", () => {
       },
     };
 
-    it("reporta el checkout sin pagar con su propio id y la referencia del comercio", () => {
-      const traducida = checkoutToPaymentResponse(sinPagar) as {
+    it("reports the unpaid checkout with its own id and the merchant reference", () => {
+      const mapped = checkoutToPaymentResponse(unpaidCheckout) as {
         data: Record<string, unknown>;
       };
 
-      expect(traducida.data.id).toBe("checkout_422fb0a43ac1ad77ffd9969f454d3ad6");
-      expect(traducida.data.status).toBe("NEW");
-      expect(traducida.data.amount).toBe(150000);
-      expect(traducida.data.merchant_reference_id).toBe("ord-12345");
+      expect(mapped.data.id).toBe("checkout_422fb0a43ac1ad77ffd9969f454d3ad6");
+      expect(mapped.data.status).toBe("NEW");
+      expect(mapped.data.amount).toBe(150000);
+      expect(mapped.data.merchant_reference_id).toBe("ord-12345");
     });
 
-    it("usa el pago real en cuanto el pagador termina", () => {
-      const pagado = {
+    it("uses the real payment as soon as the payer finishes", () => {
+      const paidCheckout = {
         data: {
           id: "checkout_422fb0a43ac1ad77ffd9969f454d3ad6",
           status: "DON",
@@ -126,16 +126,16 @@ describe("rapyd-checkout", () => {
         },
       };
 
-      const traducida = checkoutToPaymentResponse(pagado) as {
+      const mapped = checkoutToPaymentResponse(paidCheckout) as {
         data: Record<string, unknown>;
       };
 
-      expect(traducida.data.id).toBe("payment_d31d3ca850419ab5e2f9f1a33f9c6eea");
-      expect(traducida.data.status).toBe("CLO");
-      expect(traducida.data.paid).toBe(true);
+      expect(mapped.data.id).toBe("payment_d31d3ca850419ab5e2f9f1a33f9c6eea");
+      expect(mapped.data.status).toBe("CLO");
+      expect(mapped.data.paid).toBe(true);
     });
 
-    it("deja pasar una respuesta sin data para que el normalizador la reporte malformada", () => {
+    it("lets a response without data through so the normalizer reports it as malformed", () => {
       expect(checkoutToPaymentResponse({ status: { status: "ERROR" } })).toEqual({
         status: { status: "ERROR" },
       });
