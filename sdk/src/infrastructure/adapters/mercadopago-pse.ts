@@ -321,6 +321,12 @@ function isFailedOrderBody(body: unknown): boolean {
  * Se exigen el status **y** la forma: un `402` sin la orden en `data` sigue siendo error,
  * porque no hay nada que normalizar. El cuerpo se toma del `originalPayload` del error,
  * que ya pasó por la limpieza de credenciales de `httpFailure()`.
+ *
+ * Lo que llega al comercio de ese `402`: la transacción `DECLINED` con `rawStatus` `failed` y,
+ * desde el issue #130, `rejectionReason` con el `status_detail` del pago (`processing_error`),
+ * que lee `readMercadoPagoRejection()`. El cuerpo original no llega: ni `Transaction` ni
+ * `PaymentResult` tienen un campo para la respuesta nativa, y agregarlo cambia la API pública
+ * (punto 87 del architecture-log.md).
  */
 export function acceptFailedOrder(httpStatus: number, failure: KitPagosError): unknown {
   if (httpStatus === FAILED_ORDER_HTTP_STATUS && isFailedOrderBody(failure.originalPayload)) {

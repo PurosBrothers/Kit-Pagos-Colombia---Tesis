@@ -56,6 +56,7 @@ import {
   atCurrencyScale,
   firstNonEmptyString,
 } from "./payload-utils";
+import { readKushkiRejection } from "./kushki-rejection";
 
 const FALLBACK_EMAIL = "customer@kushki.com";
 
@@ -136,6 +137,7 @@ export function normalizeKushkiTransfer(
   );
 
   const rawStatus = String(payload.status ?? "");
+  const status = lookupNativeStatus(KUSHKI_NATIVE_STATUS, rawStatus);
 
   return new Transaction(
     new GatewayTransactionId(token, Gateway.KUSHKI),
@@ -148,7 +150,8 @@ export function normalizeKushkiTransfer(
     amount,
     currency,
     new Payer({ email: firstNonEmptyString([payload.email], FALLBACK_EMAIL) }),
-    lookupNativeStatus(KUSHKI_NATIVE_STATUS, rawStatus),
+    status,
     rawStatus,
+    readKushkiRejection(payload, status),
   );
 }

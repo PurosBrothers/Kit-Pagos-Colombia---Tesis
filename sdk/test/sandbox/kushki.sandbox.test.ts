@@ -73,7 +73,7 @@ describeSandbox(Gateway.KUSHKI, (credentials, baseUrl) => {
    *
    * `POST /charges` era la que el SDK usaba, y responde `403`. Lo que hace que valga la pena
    * fijarlo en una prueba es lo otro: **una ruta inventada responde lo mismo**, así que contra
-   * Kushki un `403` no distingue entre "no tenés permiso" y "esto no existe". Es la trampa que
+   * Kushki un `403` no distingue entre "no tiene permiso" y "esto no existe". Es la trampa que
    * hizo que el defecto durara, y la razón de que la ruta correcta esté en una constante y no
    * escrita entre las llamadas.
    */

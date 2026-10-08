@@ -28,6 +28,7 @@ import {
   flattenKushkiCharge,
   isKushkiFullResponseCharge,
 } from "./kushki-card";
+import { readKushkiRejection } from "./kushki-rejection";
 
 const FALLBACK_EMAIL = "customer@kushki.com";
 
@@ -114,14 +115,16 @@ export class KushkiResponseNormalizer implements GatewayResponseNormalizer {
       Gateway.KUSHKI,
     );
 
+    const status = this.mapStatus(rawStatus);
     return new Transaction(
       gatewayTransactionId,
       orderReference,
       amount,
       currency,
       payer,
-      this.mapStatus(rawStatus),
+      status,
       rawStatus,
+      readKushkiRejection(payload, status),
     );
   }
 

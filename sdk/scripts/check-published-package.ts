@@ -39,7 +39,7 @@
  * pondría rojo un pull request por un desfase que es normal.
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -126,6 +126,40 @@ export async function probe(): Promise<void> {
 }
 `;
 
+/**
+ * Programa de prueba del submódulo `kit-pagos-colombia/browser`, que tiene su propia entrada
+ * en `exports` y en `typesVersions` y por lo tanto su propia forma de quedar mal empaquetado.
+ * La forma de la llamada es la del bloque del README que compila `check:readme`.
+ */
+const BROWSER_PROBE = `
+import {
+  KitPagosBrowser,
+  Gateway,
+  KitPagosError,
+  KitPagosErrorCode,
+  type CardTokenResult,
+  type TokenizeCardParams,
+} from "${PACKAGE_NAME}/browser";
+
+export async function probeBrowser(): Promise<void> {
+  const params: TokenizeCardParams = {
+    gateway: Gateway.WOMPI,
+    publicKey: "pub_test_1234567890",
+    environment: "sandbox",
+    card: { number: "4242424242424242", cvc: "123", expMonth: "12", expYear: "2030", cardHolder: "Juan Pérez" },
+  };
+
+  try {
+    const result: CardTokenResult = await KitPagosBrowser.tokenizeCard(params);
+    void result.token;
+  } catch (error: unknown) {
+    if (error instanceof KitPagosError && error.code === KitPagosErrorCode.GATEWAY_TIMEOUT) {
+      void error.message;
+    }
+  }
+}
+`;
+
 const TSCONFIG = {
   compilerOptions: {
     target: "ES2020",
@@ -135,8 +169,34 @@ const TSCONFIG = {
     skipLibCheck: false,
     noEmit: true,
   },
-  files: ["probe.ts"],
+  files: ["probe.ts", "browser-probe.ts"],
 };
+
+/**
+ * Carga el submódulo de navegador en tiempo de ejecución, con `import` y con `require`.
+ *
+ * El archivo es un módulo ES dentro de un paquete sin `"type"` (README, «Compatibilidad de
+ * `kit-pagos-colombia/browser` fuera del navegador»), así que compilar no alcanza: `require`
+ * de un módulo ES depende de la versión de Node, y `import` de que `exports` apunte al
+ * archivo correcto. Ninguna de las dos cargas llama a la red: solo se mira la exportación.
+ */
+const BROWSER_LOADS: { label: string; args: string[] }[] = [
+  {
+    label: "import (ESM)",
+    args: [
+      "--input-type=module",
+      "-e",
+      `const m = await import("${PACKAGE_NAME}/browser"); if (typeof m.KitPagosBrowser.tokenizeCard !== "function") process.exit(1);`,
+    ],
+  },
+  {
+    label: "require (CJS)",
+    args: [
+      "-e",
+      `const m = require("${PACKAGE_NAME}/browser"); if (typeof m.KitPagosBrowser.tokenizeCard !== "function") process.exit(1);`,
+    ],
+  },
+];
 
 function run(command: string, args: string[], cwd: string): string {
   return execFileSync(command, args, {
@@ -165,6 +225,7 @@ function main(): void {
       JSON.stringify({ name: "published-probe", private: true }, null, 2),
     );
     writeFileSync(path.join(workspace, "probe.ts"), PROBE);
+    writeFileSync(path.join(workspace, "browser-probe.ts"), BROWSER_PROBE);
     writeFileSync(
       path.join(workspace, "tsconfig.json"),
       JSON.stringify(TSCONFIG, null, 2),
@@ -201,11 +262,15 @@ function main(): void {
       workspace,
     );
 
-    const publishedVersion = run(
-      "node",
-      ["-p", `require('${PACKAGE_NAME}/package.json').version`],
-      workspace,
-    ).trim();
+    // Se lee el archivo y no `require('<paquete>/package.json')`: `exports` no publica
+    // `./package.json`, y esa forma falla con `ERR_PACKAGE_PATH_NOT_EXPORTED`.
+    const publishedVersion = String(
+      (
+        JSON.parse(
+          readFileSync(path.join(workspace, "node_modules", PACKAGE_NAME, "package.json"), "utf8"),
+        ) as { version: string }
+      ).version,
+    );
 
     console.log(`  versión publicada: ${publishedVersion}`);
     console.log(`  versión local:     ${localVersion}`);
@@ -222,12 +287,19 @@ function main(): void {
       );
     }
 
-    console.log("\nCompilando un programa contra el paquete instalado...");
+    console.log("\nCompilando la raíz y /browser contra el paquete instalado...");
     run(path.join(workspace, "node_modules", ".bin", "tsc"), [], workspace);
+
+    console.log(`\nCargando ${PACKAGE_NAME}/browser con Node ${process.version}...`);
+    for (const load of BROWSER_LOADS) {
+      run("node", load.args, workspace);
+      console.log(`  ${load.label}: carga y exporta KitPagosBrowser.tokenizeCard`);
+    }
 
     console.log(
       `\nEl paquete ${PACKAGE_NAME}@${publishedVersion} se instala desde npm y su\n` +
-        "superficie pública alcanza para integrar un pago completo con tipos.",
+        "superficie pública alcanza para integrar un pago completo con tipos,\n" +
+        "y /browser compila y se carga con import y con require.",
     );
   } catch (error: unknown) {
     const detail =

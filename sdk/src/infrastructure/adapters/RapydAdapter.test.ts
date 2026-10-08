@@ -260,8 +260,8 @@ describe("RapydAdapter", () => {
     });
 
     it("timestamp in seconds and not in milliseconds", async () => {
-      // Rapyd rechaza timestamps que se desvien mas de 60 segundos del reloj
-      // real. Enviarlo en milisegundos lo situaria decadas en el futuro.
+      // Rapyd rechaza un timestamp con más de 300 s de atraso (medido el 7 de octubre de
+      // 2026). Enviarlo en milisegundos lo situaría décadas en el futuro.
       const mockFetch = mockOk();
       global.fetch = mockFetch;
 
