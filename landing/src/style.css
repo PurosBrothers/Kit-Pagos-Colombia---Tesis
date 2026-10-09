@@ -607,11 +607,11 @@ code, pre {
 .summary-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-family: var(--font-mono);
   font-size: 0.8125rem;
   font-weight: 500;
-  color: var(--brand-green);
+  color: var(--brand-green-dark);
   background: var(--brand-green-light);
   padding: 6px 14px;
   border-radius: var(--radius-sm);
@@ -622,6 +622,33 @@ code, pre {
 
 .technical-accordion-summary:hover .summary-badge {
   background: #dcfce7;
+  border-color: var(--brand-green);
+}
+
+.technical-accordion .summary-label-open {
+  display: none;
+}
+
+.technical-accordion .summary-label-closed {
+  display: inline;
+}
+
+.technical-accordion[open] .summary-label-open {
+  display: inline;
+}
+
+.technical-accordion[open] .summary-label-closed {
+  display: none;
+}
+
+.summary-arrow {
+  display: inline-block;
+  transition: transform 0.2s ease;
+  font-size: 0.75rem;
+}
+
+.technical-accordion[open] .summary-arrow {
+  transform: rotate(180deg);
 }
 
 .technical-accordion-content {
@@ -707,34 +734,6 @@ code, pre {
   color: var(--text-muted);
 }
 
-.endpoint-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.endpoint-card {
-  background: #ffffff;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 20px 24px;
-  box-shadow: var(--shadow-sm);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.endpoint-card:hover {
-  border-color: var(--border-medium);
-  box-shadow: var(--shadow-md);
-}
-
-.endpoint-card-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-}
-
 .method-badge {
   font-family: var(--font-mono);
   font-size: 0.75rem;
@@ -758,67 +757,73 @@ code, pre {
   border: 1px solid #bbf7d0;
 }
 
-.endpoint-path {
-  font-family: var(--font-mono);
-  font-size: 0.9375rem;
+/* Especificación formal de Endpoints (Tabla Canónica de API) */
+.api-spec-table {
+  width: 100%;
+}
+
+.api-spec-table th {
+  white-space: nowrap;
+}
+
+.api-spec-table td {
+  vertical-align: top;
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.api-spec-table code {
+  font-size: 0.8125rem;
+}
+
+.api-route-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.api-route-cell code {
   font-weight: 600;
   color: var(--text-title);
 }
 
-.endpoint-summary-badge {
-  margin-left: auto;
-  font-size: 0.8125rem;
-  color: var(--text-muted);
+.http-codes-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
-.endpoint-desc {
-  font-size: 0.90625rem;
-  color: var(--text-body);
-  line-height: 1.6;
-  margin-bottom: 14px;
-}
-
-.endpoint-meta-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-  background: var(--bg-subtle);
-  padding: 14px 18px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-light);
-  font-size: 0.8125rem;
-}
-
-.meta-item-label {
-  font-weight: 600;
-  color: var(--text-title);
-  display: block;
-  margin-bottom: 3px;
-}
-
-.meta-item-value {
-  color: var(--text-muted);
-  line-height: 1.5;
-}
-
-.meta-item-value code {
-  font-size: 0.78125rem;
-  background: rgba(0, 0, 0, 0.04);
-  padding: 1px 4px;
-  border-radius: var(--radius-xs);
-}
-
-.discriminator-pill {
-  display: inline-block;
+.http-status {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.6875rem;
+  font-weight: 700;
   padding: 2px 6px;
   border-radius: var(--radius-xs);
-  background: #fef3c7;
-  color: #92400e;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+
+.status-200,
+.status-201 {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.status-400,
+.status-401,
+.status-404 {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.status-502,
+.status-504 {
+  background: #fffbeb;
+  color: #b45309;
   border: 1px solid #fde68a;
-  margin-right: 4px;
 }
 
 .sim-routes-grid {

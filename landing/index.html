@@ -196,7 +196,11 @@
               <span class="summary-title">Profundización Técnica: Código Fuente y Normalización de Dominio</span>
               <span class="summary-desc">Comparación de llamadas nativas, cobro unificado interactivo y tabla canónica de estados.</span>
             </div>
-            <span class="summary-badge">Hacé clic para colapsar o expandir ▾</span>
+            <span class="summary-badge">
+              <span class="summary-label-open">Ocultar código y contratos</span>
+              <span class="summary-label-closed">Ver código y contratos</span>
+              <span class="summary-arrow" aria-hidden="true">▾</span>
+            </span>
           </summary>
 
           <div class="technical-accordion-content">
@@ -367,139 +371,164 @@
               <span class="text-muted" style="font-size: 0.8125rem;">5 Endpoints unificados · Seguridad Bearer + Cabeceras x-gateway-*</span>
             </div>
 
-            <div class="endpoint-list">
-              <!-- Endpoint 1 -->
-              <article class="endpoint-card">
-                <div class="endpoint-card-header">
-                  <span class="method-badge method-get">GET</span>
-                  <code class="endpoint-path">/v1/api/gateways</code>
-                  <span class="endpoint-summary-badge">Catálogo de pasarelas</span>
-                </div>
-                <p class="endpoint-desc">
-                  Devuelve la lista de pasarelas que el SDK soporta. Sirve como prueba de vida del montaje de la API; no requiere credenciales de pasarela ni genera llamadas externas.
-                </p>
-                <div class="endpoint-meta-grid">
-                  <div>
-                    <span class="meta-item-label">Autenticación</span>
-                    <span class="meta-item-value">Bearer Token (<code>bearerAuth</code>)</span>
-                  </div>
-                  <div>
-                    <span class="meta-item-label">Respuesta 200</span>
-                    <span class="meta-item-value"><code>{ "gateways": ["wompi", "mercadopago", "kushki", "rapyd"] }</code></span>
-                  </div>
-                  <div>
-                    <span class="meta-item-label">Códigos HTTP</span>
-                    <span class="meta-item-value"><code>200 OK</code> · <code>401 Unauthorized</code></span>
-                  </div>
-                </div>
-              </article>
+            <div class="data-sheet">
+              <div class="data-sheet-header">
+                <h4 class="data-sheet-title">Especificación formal de endpoints unificados</h4>
+                <p class="data-sheet-sub">Contratos HTTP servidos por Fastify. La validación de esquema rechaza peticiones no conformes con <code>400 INVALID_REQUEST</code> antes de invocar la lógica de dominio.</p>
+              </div>
 
-              <!-- Endpoint 2 -->
-              <article class="endpoint-card">
-                <div class="endpoint-card-header">
-                  <span class="method-badge method-post">POST</span>
-                  <code class="endpoint-path">/v1/api/payments</code>
-                  <span class="endpoint-summary-badge">Creación unificada de cobros</span>
-                </div>
-                <p class="endpoint-desc">
-                  Crea un cobro a través del SDK contra la pasarela indicada. La respuesta discrimina explícitamente entre cobro en línea (tarjeta) y redirección obligatoria (PSE o Rapyd), evitando que el cliente asuma erróneamente una transacción inmediata.
-                </p>
-                <div class="endpoint-meta-grid">
-                  <div>
-                    <span class="meta-item-label">Respuesta discriminada 201</span>
-                    <span class="meta-item-value">
-                      <span class="discriminator-pill">TRANSACTION</span> Cobro directo completado.<br>
-                      <span class="discriminator-pill">REDIRECT_REQUIRED</span> PSE o 3DS: entrega <code>redirectUrl</code>.
-                    </span>
-                  </div>
-                  <div>
-                    <span class="meta-item-label">Cabeceras opcionales</span>
-                    <span class="meta-item-value"><code>x-gateway-public-key</code> · <code>x-gateway-private-key</code> · <code>x-gateway-integrity-secret</code></span>
-                  </div>
-                  <div>
-                    <span class="meta-item-label">Códigos HTTP</span>
-                    <span class="meta-item-value"><code>201 Created</code> · <code>400 Bad Request</code> · <code>401 Unauthorized</code> · <code>502 Bad Gateway</code> · <code>504 Gateway Timeout</code></span>
-                  </div>
-                </div>
-              </article>
+              <div class="table-container">
+                <table class="data-table api-spec-table">
+                  <thead>
+                    <tr>
+                      <th style="min-width: 170px;">Método y Ruta</th>
+                      <th>Propósito arquitectónico</th>
+                      <th>Parámetros y Cabeceras</th>
+                      <th>Contrato de Respuesta</th>
+                      <th style="min-width: 110px;">Códigos HTTP</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>
+                        <div class="api-route-cell">
+                          <span class="method-badge method-get">GET</span>
+                          <code>/v1/api/gateways</code>
+                        </div>
+                      </td>
+                      <td>
+                        Consulta del catálogo de pasarelas integradas en el SDK. Sirve como prueba de vida del servicio sin requerir credenciales ni originar llamadas externas.
+                      </td>
+                      <td>
+                        <span class="text-muted">Ninguno adicional</span><br>
+                        <code>Authorization: Bearer &lt;token&gt;</code>
+                      </td>
+                      <td>
+                        <code>200 OK</code>: <code>{ "gateways": string[] }</code>
+                      </td>
+                      <td>
+                        <div class="http-codes-flow">
+                          <span class="http-status status-200">200</span>
+                          <span class="http-status status-401">401</span>
+                        </div>
+                      </td>
+                    </tr>
 
-              <!-- Endpoint 3 -->
-              <article class="endpoint-card">
-                <div class="endpoint-card-header">
-                  <span class="method-badge method-get">GET</span>
-                  <code class="endpoint-path">/v1/api/payments/:id</code>
-                  <span class="endpoint-summary-badge">Consulta de estado canónico</span>
-                </div>
-                <p class="endpoint-desc">
-                  Consulta el estado canónico de una transacción previamente creada. Requiere el parámetro <code>?gateway=&lt;pasarela&gt;</code> en el query string para dirigir la consulta al adaptador correcto y devuelve el <code>transaction</code> normalizado.
-                </p>
-                <div class="endpoint-meta-grid">
-                  <div>
-                    <span class="meta-item-label">Parámetros</span>
-                    <span class="meta-item-value">Ruta: <code>:id</code> (gatewayTransactionId) · Query: <code>?gateway=wompi|mercadopago|kushki|rapyd</code></span>
-                  </div>
-                  <div>
-                    <span class="meta-item-label">Respuesta 200</span>
-                    <span class="meta-item-value"><code>{ "gateway": "...", "transaction": { "status": "APPROVED|DECLINED|PENDING|...", ... } }</code></span>
-                  </div>
-                  <div>
-                    <span class="meta-item-label">Códigos HTTP</span>
-                    <span class="meta-item-value"><code>200 OK</code> · <code>400 Bad Request</code> · <code>401 Unauthorized</code> · <code>404 Not Found</code> · <code>502 Bad Gateway</code> · <code>504 Gateway Timeout</code></span>
-                  </div>
-                </div>
-              </article>
+                    <tr>
+                      <td>
+                        <div class="api-route-cell">
+                          <span class="method-badge method-post">POST</span>
+                          <code>/v1/api/payments</code>
+                        </div>
+                      </td>
+                      <td>
+                        Creación unificada de cobros. La respuesta discrimina explícitamente entre cobro en línea completado y redirección obligatoria (PSE o 3DS).
+                      </td>
+                      <td>
+                        <strong>Cuerpo JSON:</strong> <code>gateway</code>, <code>amount</code>, <code>currency</code>, <code>paymentMethod</code>.<br>
+                        <strong>Cabeceras opcionales:</strong> <code>x-gateway-public-key</code>, <code>x-gateway-private-key</code>, <code>x-gateway-integrity-secret</code>.
+                      </td>
+                      <td>
+                        <strong>Respuesta 201 discriminada (<code>oneOf</code>):</strong><br>
+                        • <code>type: "TRANSACTION"</code>: cobro directo con tarjeta (incluye estado canónico).<br>
+                        • <code>type: "REDIRECT_REQUIRED"</code>: flujo asíncrono con <code>redirectUrl</code> (PSE o Rapyd).
+                      </td>
+                      <td>
+                        <div class="http-codes-flow">
+                          <span class="http-status status-201">201</span>
+                          <span class="http-status status-400">400</span>
+                          <span class="http-status status-401">401</span>
+                          <span class="http-status status-502">502</span>
+                          <span class="http-status status-504">504</span>
+                        </div>
+                      </td>
+                    </tr>
 
-              <!-- Endpoint 4 -->
-              <article class="endpoint-card">
-                <div class="endpoint-card-header">
-                  <span class="method-badge method-get">GET</span>
-                  <code class="endpoint-path">/v1/api/pse-banks</code>
-                  <span class="endpoint-summary-badge">Catálogo de bancos PSE</span>
-                </div>
-                <p class="endpoint-desc">
-                  Lista las entidades financieras habilitadas para PSE. Cada banco incluye su <code>code</code> nativo y, cuando existe, su <code>achCode</code> (código de compensación de la red ACH unificado en las 4 pasarelas).
-                </p>
-                <div class="endpoint-meta-grid">
-                  <div>
-                    <span class="meta-item-label">Parámetros</span>
-                    <span class="meta-item-value">Query opcional: <code>?gateway=&lt;pasarela&gt;</code> (si se omite y se usan credenciales del servidor, devuelve las 4 listas consolidadas)</span>
-                  </div>
-                  <div>
-                    <span class="meta-item-label">Respuesta 200</span>
-                    <span class="meta-item-value"><code>{ "pseBanks": [{ "gateway": "wompi", "banks": [{ "code": "1007", "name": "Bancolombia", "achCode": "1007" }] }] }</code></span>
-                  </div>
-                  <div>
-                    <span class="meta-item-label">Códigos HTTP</span>
-                    <span class="meta-item-value"><code>200 OK</code> · <code>400 Bad Request</code> · <code>401 Unauthorized</code> · <code>502 Bad Gateway</code></span>
-                  </div>
-                </div>
-              </article>
+                    <tr>
+                      <td>
+                        <div class="api-route-cell">
+                          <span class="method-badge method-get">GET</span>
+                          <code>/v1/api/payments/:id</code>
+                        </div>
+                      </td>
+                      <td>
+                        Consulta del estado canónico de una transacción previamente creada. Enruta al adaptador correspondiente y normaliza el resultado al vocabulario del dominio.
+                      </td>
+                      <td>
+                        <strong>Ruta:</strong> <code>:id</code> (ID de transacción de la pasarela)<br>
+                        <strong>Query:</strong> <code>?gateway=wompi|mercadopago|kushki|rapyd</code>
+                      </td>
+                      <td>
+                        <code>200 OK</code>: <code>{ "gateway": string, "transaction": Transaction, "warnings"?: Warning[] }</code><br>
+                        Normaliza a <code>TransactionStatus</code> (APPROVED, DECLINED, PENDING, VOIDED, etc.).
+                      </td>
+                      <td>
+                        <div class="http-codes-flow">
+                          <span class="http-status status-200">200</span>
+                          <span class="http-status status-400">400</span>
+                          <span class="http-status status-401">401</span>
+                          <span class="http-status status-404">404</span>
+                          <span class="http-status status-502">502</span>
+                          <span class="http-status status-504">504</span>
+                        </div>
+                      </td>
+                    </tr>
 
-              <!-- Endpoint 5 -->
-              <article class="endpoint-card">
-                <div class="endpoint-card-header">
-                  <span class="method-badge method-post">POST</span>
-                  <code class="endpoint-path">/v1/api/webhooks/:gateway</code>
-                  <span class="endpoint-summary-badge">Verificación criptográfica de webhooks</span>
-                </div>
-                <p class="endpoint-desc">
-                  Verifica la firma de una notificación entrante de pasarela byte a byte y devuelve el <code>WebhookEvent</code> normalizado. Cualquier rechazo (firma falsa, payload alterado o ventana de tiempo vencida) responde HTTP 401 uniforme sin filtrar causas al atacante.
-                </p>
-                <div class="endpoint-meta-grid">
-                  <div>
-                    <span class="meta-item-label">Parámetros</span>
-                    <span class="meta-item-value">Ruta: <code>:gateway</code> (wompi, mercadopago, kushki, rapyd) · Cuerpo exacto en crudo + cabeceras originales</span>
-                  </div>
-                  <div>
-                    <span class="meta-item-label">Respuesta 200</span>
-                    <span class="meta-item-value"><code>{ "gateway": "wompi", "eventType": "TRANSACTION_UPDATED", "newStatus": "APPROVED" }</code></span>
-                  </div>
-                  <div>
-                    <span class="meta-item-label">Códigos HTTP</span>
-                    <span class="meta-item-value"><code>200 OK</code> · <code>400 Bad Request</code> · <code>401 Unauthorized (firma inválida o rechazada)</code></span>
-                  </div>
-                </div>
-              </article>
+                    <tr>
+                      <td>
+                        <div class="api-route-cell">
+                          <span class="method-badge method-get">GET</span>
+                          <code>/v1/api/pse-banks</code>
+                        </div>
+                      </td>
+                      <td>
+                        Catálogo de entidades financieras habilitadas para transferencias PSE, con identificadores nativos y código de compensación ACH unificado.
+                      </td>
+                      <td>
+                        <strong>Query opcional:</strong> <code>?gateway=&lt;pasarela&gt;</code>.<br>
+                        Si se omite con credenciales del servidor, entrega las listas consolidadas de las 4 pasarelas.
+                      </td>
+                      <td>
+                        <code>200 OK</code>: <code>{ "pseBanks": [{ "gateway": string, "banks": [{ "code": string, "name": string, "achCode"?: string }] }] }</code>
+                      </td>
+                      <td>
+                        <div class="http-codes-flow">
+                          <span class="http-status status-200">200</span>
+                          <span class="http-status status-400">400</span>
+                          <span class="http-status status-401">401</span>
+                          <span class="http-status status-502">502</span>
+                        </div>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td>
+                        <div class="api-route-cell">
+                          <span class="method-badge method-post">POST</span>
+                          <code>/v1/api/webhooks/:gateway</code>
+                        </div>
+                      </td>
+                      <td>
+                        Verificación criptográfica de firma byte a byte y normalización de notificaciones webhook. Falla de forma uniforme en caso de firma inválida sin filtrar causas.
+                      </td>
+                      <td>
+                        <strong>Ruta:</strong> <code>:gateway</code> (wompi, mercadopago, kushki, rapyd)<br>
+                        <strong>Payload:</strong> Cuerpo en crudo y cabeceras HTTP originales de la pasarela.
+                      </td>
+                      <td>
+                        <code>200 OK</code>: <code>{ "gateway": string, "eventType": string, "newStatus": TransactionStatus }</code>
+                      </td>
+                      <td>
+                        <div class="http-codes-flow">
+                          <span class="http-status status-200">200</span>
+                          <span class="http-status status-400">400</span>
+                          <span class="http-status status-401">401</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <!-- Tabla de Mapeo de Códigos de Error Canónicos -->
@@ -605,15 +634,20 @@
               </div>
             </div>
 
-            <div class="endpoint-card" style="margin-top: 16px;">
-              <div class="endpoint-card-header">
-                <span class="method-badge method-post">POST</span>
-                <code class="endpoint-path">/v1/sim/webhooks/trigger/:gateway</code>
-                <span class="endpoint-summary-badge">Emisión de webhooks con firma simulada</span>
+            <div class="sim-gw-box" style="margin-top: 20px;">
+              <div class="sim-gw-name">
+                <span>Simulador de Webhooks Entrantes</span>
+                <span class="endpoints-facet-tag">Disparador de pruebas</span>
               </div>
-              <p class="endpoint-desc">
-                Dispara una notificación HTTP firmada criptográficamente hacia el destino configurado, simulando el evento asíncrono exacto que enviaría la pasarela en producción.
-              </p>
+              <div style="padding-top: 6px;">
+                <div class="sim-route-row" style="margin-bottom: 8px;">
+                  <span class="method-badge method-post sim-route-method">POST</span>
+                  <code>/v1/sim/webhooks/trigger/:gateway</code>
+                </div>
+                <p style="margin: 0; font-size: 0.8125rem; color: var(--text-muted); line-height: 1.5;">
+                  Emite una notificación HTTP firmada criptográficamente hacia una URL destino, reproduciendo de forma determinista el evento asíncrono que entregaría la pasarela en producción.
+                </p>
+              </div>
             </div>
           </div>
         </div>
