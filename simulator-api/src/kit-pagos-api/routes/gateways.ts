@@ -1,5 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { SUPPORTED_GATEWAYS } from "../gateway-param";
+import { GetGatewaysSchema } from "../openapi/schemas";
 
 /**
  * GET /v1/api/gateways: pasarelas que el SDK soporta.
@@ -8,7 +9,7 @@ import { SUPPORTED_GATEWAYS } from "../gateway-param";
  * ningun endpoint de negocio.
  */
 export async function gatewaysRoute(app: FastifyInstance): Promise<void> {
-  app.get("/gateways", async () => {
+  app.get("/gateways", { schema: GetGatewaysSchema }, async () => {
     return { gateways: SUPPORTED_GATEWAYS };
   });
 }

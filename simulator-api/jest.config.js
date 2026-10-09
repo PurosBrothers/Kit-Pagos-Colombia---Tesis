@@ -3,10 +3,13 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/src', '<rootDir>/test'],
   testMatch: ['**/*.spec.ts', '**/*.test.ts'],
+  moduleNameMapper: {
+    '^content-disposition$': '<rootDir>/test/mocks/content-disposition.js',
+  },
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/server.ts',
-    '!src/**/*.d.ts'
+    '!src/**/*.d.ts',
   ],
   coverageThreshold: {
     global: {
