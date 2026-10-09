@@ -458,6 +458,415 @@ code, pre {
   color: #34d399;
 }
 
+/* Ficha Arquitectónica del Hero (Alternativa editorial sin código intrusivo) */
+.hero-spec-card {
+  background: #ffffff;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.spec-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.spec-card-badge {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--brand-green);
+  background: var(--brand-green-light);
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-green);
+}
+
+.spec-card-sub {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.spec-card-body {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.spec-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  font-size: 0.875rem;
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.spec-card-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.spec-card-label {
+  color: var(--text-muted);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.spec-card-value {
+  color: var(--text-title);
+  font-weight: 600;
+  text-align: right;
+}
+
+.spec-card-footer {
+  padding: 12px 20px;
+  background: var(--bg-tint-green);
+  border-top: 1px solid var(--border-green);
+  font-size: 0.8125rem;
+  color: var(--brand-green-dark);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Acordeón de Profundización Técnica y Código */
+.technical-accordion {
+  margin: 40px 0 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.technical-accordion[open] {
+  border-color: var(--border-medium);
+  box-shadow: var(--shadow-md);
+}
+
+.technical-accordion-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 28px;
+  background: var(--bg-subtle);
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-title);
+  border-bottom: 1px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  list-style: none;
+}
+
+.technical-accordion-summary::-webkit-details-marker {
+  display: none;
+}
+
+.technical-accordion[open] .technical-accordion-summary {
+  border-bottom-color: var(--border-default);
+  background: #ffffff;
+}
+
+.technical-accordion-summary:hover {
+  background: #f1f5f9;
+}
+
+.summary-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.summary-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-title);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.summary-desc {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.summary-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--brand-green);
+  background: var(--brand-green-light);
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-green);
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.technical-accordion-summary:hover .summary-badge {
+  background: #dcfce7;
+}
+
+.technical-accordion-content {
+  padding: 36px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 52px;
+}
+
+/* Banner OpenAPI y Explorador de Endpoints */
+.openapi-banner {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border: 1px solid var(--border-green);
+  border-radius: var(--radius-lg);
+  padding: 32px 36px;
+  margin-bottom: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.openapi-banner-content {
+  max-width: 680px;
+}
+
+.openapi-banner-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--brand-green-dark);
+  margin-bottom: 8px;
+}
+
+.openapi-banner-desc {
+  font-size: 0.9375rem;
+  color: #166534;
+  line-height: 1.6;
+}
+
+.openapi-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.endpoints-facet {
+  margin-bottom: 40px;
+}
+
+.endpoints-facet:last-child {
+  margin-bottom: 0;
+}
+
+.endpoints-facet-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-default);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.endpoints-facet-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-title);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.endpoints-facet-tag {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+}
+
+.endpoint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.endpoint-card {
+  background: #ffffff;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 20px 24px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.endpoint-card:hover {
+  border-color: var(--border-medium);
+  box-shadow: var(--shadow-md);
+}
+
+.endpoint-card-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.method-badge {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: var(--radius-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.method-get {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.method-post {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.endpoint-path {
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-title);
+}
+
+.endpoint-summary-badge {
+  margin-left: auto;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.endpoint-desc {
+  font-size: 0.90625rem;
+  color: var(--text-body);
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+
+.endpoint-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  background: var(--bg-subtle);
+  padding: 14px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  font-size: 0.8125rem;
+}
+
+.meta-item-label {
+  font-weight: 600;
+  color: var(--text-title);
+  display: block;
+  margin-bottom: 3px;
+}
+
+.meta-item-value {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.meta-item-value code {
+  font-size: 0.78125rem;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 1px 4px;
+  border-radius: var(--radius-xs);
+}
+
+.discriminator-pill {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  margin-right: 4px;
+}
+
+.sim-routes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.sim-gw-box {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+}
+
+.sim-gw-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-title);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sim-gw-routes {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.78125rem;
+  color: var(--text-body);
+}
+
+.sim-route-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sim-route-method {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+
 /* ==========================================================================
    Section Layout & Headings
    ========================================================================== */
@@ -1546,7 +1955,8 @@ code, pre {
   .paths-split,
   .academic-panel,
   .arch-triptych,
-  .limits-spec-grid {
+  .limits-spec-grid,
+  .sim-routes-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

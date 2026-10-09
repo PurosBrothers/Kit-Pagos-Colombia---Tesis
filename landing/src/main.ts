@@ -397,6 +397,16 @@ function init(): void {
       });
     });
   }
+
+  // Apertura automática del acordeón técnico al hacer clic en enlaces hacia él
+  const techAccordion = document.getElementById("codigo-tecnico") as HTMLDetailsElement | null;
+  document.querySelectorAll<HTMLAnchorElement>('a[href="#codigo-tecnico"]').forEach((link) => {
+    link.addEventListener("click", () => {
+      if (techAccordion && !techAccordion.open) {
+        techAccordion.open = true;
+      }
+    });
+  });
 }
 
 // Inicializar al cargar el DOM
