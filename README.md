@@ -8,11 +8,19 @@ Kit Pagos Colombia son **tres componentes**, no uno:
 
 | Componente | Qué es | Dónde vive |
 |---|---|---|
-| **SDK** | Un paquete de TypeScript con arquitectura hexagonal que unifica cuatro pasarelas colombianas en el servidor y expone `kit-pagos-colombia/browser` para tokenización de tarjeta en el navegador | [`sdk/`](sdk/) |
-| **API de Simulación** | Un servidor con dos caras: en `/v1/sim`, cuatro mocks de las pasarelas para probar los flujos que los sandboxes reales no permiten probar; en `/v1/api`, el SDK expuesto como API REST, para cobrar sin instalarlo. Desplegado en vivo en Render: [https://kit-pagos-colombia.onrender.com](https://kit-pagos-colombia.onrender.com) | [`simulator-api/`](simulator-api/) |
-| **Documentación de datos** | Las tarjetas, bancos y credenciales de prueba de las cuatro pasarelas, con su nivel de evidencia | [`docs/testing-data/`](docs/testing-data/README.md) |
+| **SDK** | Paquete de TypeScript con arquitectura hexagonal que unifica cuatro pasarelas colombianas en el backend y expone `kit-pagos-colombia/browser` para tokenización PCI DSS en el frontend | [`sdk/`](sdk/) · [README del SDK](sdk/README.md) |
+| **API de Simulación y Capa REST** | Servidor Fastify con dos caras: en `/v1/sim`, 23 rutas mock para probar flujos que los sandboxes bloquean; en `/v1/api`, el SDK expuesto como API REST. Documentado formalmente con OpenAPI 3.0 en [`/docs`](https://kit-pagos-colombia.onrender.com/docs) (Swagger UI) y desplegado en Render: [https://kit-pagos-colombia.onrender.com](https://kit-pagos-colombia.onrender.com) | [`simulator-api/`](simulator-api/) · [README de la API](simulator-api/README.md) |
+| **Documentación de datos** | Tarjetas, bancos PSE y credenciales de prueba de las cuatro pasarelas, con nivel de evidencia 1 | [`docs/testing-data/`](docs/testing-data/README.md) |
 
-Los tres juntos son el artefacto de un trabajo de grado. Métodos soportados: **tarjeta y PSE**.
+Los tres juntos son el artefacto de un trabajo de grado en Ingeniería de Sistemas (Pontificia Universidad Javeriana). Métodos soportados: **tarjeta de crédito/débito y PSE**.
+
+---
+
+## Documentación Interactiva de la API (OpenAPI 3.0)
+
+La capa REST y las rutas del simulador están completamente documentadas mediante **OpenAPI 3.0.3**:
+- **Swagger UI interactivo:** [`https://kit-pagos-colombia.onrender.com/docs`](https://kit-pagos-colombia.onrender.com/docs)
+- **Especificación cruda en JSON:** [`https://kit-pagos-colombia.onrender.com/docs/json`](https://kit-pagos-colombia.onrender.com/docs/json)
 
 ---
 
@@ -59,6 +67,18 @@ El ejemplo rápido de código, con la firma exacta de cada llamada, está en la 
 
 ---
 
+## Estructura del Monorepositorio
+
+| Directorio | Propósito | Documentación |
+|---|---|---|
+| [`sdk/`](sdk/) | Código fuente del SDK en TypeScript, pruebas unitarias y métricas CK | [`sdk/README.md`](sdk/README.md) |
+| [`simulator-api/`](simulator-api/) | Servidor Fastify con los 23 mocks de pasarelas y los 5 endpoints de Kit Pagos documentados con OpenAPI 3.0 | [`simulator-api/README.md`](simulator-api/README.md) |
+| [`landing/`](landing/) | Página web interactiva y especificación técnica (Vite / Vanilla CSS) | [`docs/06-landing/`](docs/06-landing/) |
+| [`examples/`](examples/) | Once programas ejecutables que demuestran la integración | [`examples/README.md`](examples/README.md) |
+| [`docs/`](docs/) | Documentación completa: DSR, arquitectura C4, métricas y datos de prueba | [`docs/README.md`](docs/README.md) |
+
+---
+
 ## Documentación
 
 **Empiece por [`docs/README.md`](docs/README.md)**, que tiene el camino de lectura completo, ordenado por concepto.
@@ -76,7 +96,7 @@ El ejemplo rápido de código, con la firma exacta de cada llamada, está en la 
 
 ### Referencia y contexto académico
 
-- [`docs/architecture/architecture-log.md`](docs/architecture/architecture-log.md) — El registro de decisiones del proyecto: más de setenta puntos numerados con los defectos medidos, las decisiones tomadas y las que siguen abiertas. Es la fuente de verdad de por qué el código es como es.
+- [`docs/architecture/architecture-log.md`](docs/architecture/architecture-log.md) — El registro de decisiones del proyecto: más de 87 puntos técnicos documentados con los defectos medidos, las decisiones tomadas y las que siguen abiertas. Es la fuente de verdad de por qué el código es como es.
 - [`docs/architecture/money-representation-analysis.md`](docs/architecture/money-representation-analysis.md) — Por qué el dinero es una cadena y no un número, auditado contra las cuatro pasarelas.
 - [`docs/project-management/`](docs/project-management/) — La metodología (Design Science Research), los objetivos específicos y los prototipos, el cronograma y el plan de evaluación de los prototipos.
 - [SAD (Software Architecture Document)](https://docs.google.com/document/d/1woixOGOkZ3N4OQ1YdFYthfP15brxFDec/edit) — El documento formal de arquitectura, fuera del repositorio.

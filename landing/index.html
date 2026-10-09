@@ -92,42 +92,70 @@
             </div>
           </div>
 
-          <!-- Ficha de Arquitectura del Proyecto -->
+          <!-- Diagrama de Flujo Arquitectónico Hexagonal -->
           <div class="hero-demo-col">
-            <div class="hero-spec-card">
-              <div class="spec-card-header">
-                <span class="spec-card-badge">Ficha Arquitectónica</span>
-                <span class="spec-card-sub">Especificación SAD 15.1</span>
+            <div class="arch-flow-box">
+              <div class="arch-flow-header">
+                <span class="arch-flow-title">Arquitectura Hexagonal · Flujo de Integración</span>
+                <span class="arch-flow-meta">SAD 15.1</span>
               </div>
-              <div class="spec-card-body">
-                <div class="spec-card-row">
-                  <span class="spec-card-label">Pasarelas unificadas:</span>
-                  <span class="spec-card-value">Wompi · Mercado Pago · Kushki · Rapyd</span>
+
+              <div class="arch-flow-body">
+                <!-- Nivel 1: Capa de Aplicación -->
+                <div class="flow-tier flow-tier-app">
+                  <div class="flow-tier-badge">Aplicación / Comercio</div>
+                  <div class="flow-tier-desc">Un solo contrato canónico en TypeScript · <code>KitPagos.createPayment()</code></div>
                 </div>
-                <div class="spec-card-row">
-                  <span class="spec-card-label">Métodos de pago:</span>
-                  <span class="spec-card-value">Tarjeta (Crédito/Débito) y PSE</span>
+
+                <div class="flow-connector">
+                  <span class="connector-line"></span>
+                  <span class="connector-label">Invocación canónica</span>
+                  <span class="connector-line"></span>
                 </div>
-                <div class="spec-card-row">
-                  <span class="spec-card-label">Aislamiento de dominio:</span>
-                  <span class="spec-card-value">Arquitectura Hexagonal (Puertos y Adaptadores)</span>
+
+                <!-- Nivel 2: Núcleo de Dominio -->
+                <div class="flow-tier flow-tier-core">
+                  <div class="flow-tier-badge">Núcleo de Dominio (Hexágono)</div>
+                  <div class="flow-core-grid">
+                    <span class="flow-chip">Objetos de Valor Inmutables</span>
+                    <span class="flow-chip">Puertos de Abstracción</span>
+                    <span class="flow-chip">TransactionStatus Canónico</span>
+                    <span class="flow-chip">0 Dependencias de Runtime</span>
+                  </div>
                 </div>
-                <div class="spec-card-row">
-                  <span class="spec-card-label">Seguridad de datos:</span>
-                  <span class="spec-card-value">Módulo <code>/browser</code> para tokenización (PCI DSS)</span>
+
+                <div class="flow-connector">
+                  <span class="connector-line"></span>
+                  <span class="connector-label">Puertos y Adaptadores</span>
+                  <span class="connector-line"></span>
                 </div>
-                <div class="spec-card-row">
-                  <span class="spec-card-label">API y Documentación:</span>
-                  <span class="spec-card-value">OpenAPI 3.0 con Swagger UI en <code>/docs</code></span>
-                </div>
-                <div class="spec-card-row">
-                  <span class="spec-card-label">Métricas de calidad:</span>
-                  <span class="spec-card-value">Cobertura ≥ 80% · WMC ≤ 15 · CBO ≤ 5 · RFC ≤ 20</span>
+
+                <!-- Nivel 3: Pasarelas de Infraestructura -->
+                <div class="flow-tier flow-tier-adapters">
+                  <div class="flow-adapters-grid">
+                    <div class="adapter-node">
+                      <strong>Wompi</strong>
+                      <span>Centavos · SHA-256</span>
+                    </div>
+                    <div class="adapter-node">
+                      <strong>Mercado Pago</strong>
+                      <span>Pesos · Idempotencia</span>
+                    </div>
+                    <div class="adapter-node">
+                      <strong>Kushki</strong>
+                      <span>Centavos · Llave privada</span>
+                    </div>
+                    <div class="adapter-node">
+                      <strong>Rapyd</strong>
+                      <span>Pesos · HMAC-SHA256</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div class="spec-card-footer">
+
+              <div class="arch-flow-footer">
                 <span class="outcome-dot"></span>
-                <span>Verificado empíricamente contra sandboxes reales y simulados.</span>
+                <span>Normalización automática de montos, firmas y estados en tiempo de ejecución.</span>
               </div>
             </div>
           </div>
@@ -196,11 +224,9 @@
               <span class="summary-title">Profundización Técnica: Código Fuente y Normalización de Dominio</span>
               <span class="summary-desc">Comparación de llamadas nativas, cobro unificado interactivo y tabla canónica de estados.</span>
             </div>
-            <span class="summary-badge">
-              <span class="summary-label-open">Ocultar código y contratos</span>
-              <span class="summary-label-closed">Ver código y contratos</span>
-              <span class="summary-arrow" aria-hidden="true">▾</span>
-            </span>
+            <svg class="accordion-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
           </summary>
 
           <div class="technical-accordion-content">

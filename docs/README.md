@@ -12,8 +12,8 @@ Un artefacto de **tres componentes** que resuelve el mismo problema desde tres l
 
 | # | Componente | Dónde vive | Qué aporta |
 |---|---|---|---|
-| 1 | **El SDK** | [`sdk/`](../sdk/) — publicado en npm como [`kit-pagos-colombia`](https://www.npmjs.com/package/kit-pagos-colombia) | Una sola API para cobrar por Wompi, Mercado Pago, Kushki o Rapyd, con arquitectura hexagonal, para que cambiar de pasarela sea configuración y no reescritura |
-| 2 | **La API de Simulación** | [`simulator-api/`](../simulator-api/) | Un servidor que imita a las cuatro pasarelas, para integrar y probar sin credenciales, sin dinero y de forma determinista |
+| 1 | **El SDK** | [`sdk/`](../sdk/) — publicado en npm como [`kit-pagos-colombia`](https://www.npmjs.com/package/kit-pagos-colombia) ([README del SDK](../sdk/README.md)) | Una sola API para cobrar por Wompi, Mercado Pago, Kushki o Rapyd, con arquitectura hexagonal, para que cambiar de pasarela sea configuración y no reescritura |
+| 2 | **La API de Simulación** | [`simulator-api/`](../simulator-api/) ([README de la API](../simulator-api/README.md)) | Un servidor con dos caras: en `/v1/sim`, cuatro mocks de las pasarelas para probar los flujos que los sandboxes reales no permiten probar; en `/v1/api`, el SDK expuesto como API REST para cobrar sin instalarlo. Documentado formalmente con OpenAPI 3.0 en [`/docs`](https://kit-pagos-colombia.onrender.com/docs) (Swagger UI) y desplegado en vivo en Render: [https://kit-pagos-colombia.onrender.com](https://kit-pagos-colombia.onrender.com) |
 | 3 | **La documentación de datos** | [`docs/testing-data/`](testing-data/) | Las tarjetas, bancos, documentos y escenarios reales de cada pasarela, que es lo que vuelve ejecutables a los otros dos |
 
 El tercero no es un anexo: sin saber qué tarjeta aprueba en Wompi, qué `bankId` acepta Kushki o qué documento exige el PSE de Rapyd, ni el SDK ni el simulador se pueden ejercitar contra nada.
@@ -94,29 +94,25 @@ No son parte del camino de lectura: son artefactos que se consultan.
 
 | Carpeta | Qué contiene | Por qué está aparte |
 |---|---|---|
-| [`architecture/`](architecture/) | El [architecture-log](architecture/architecture-log.md) con las 58 decisiones del proyecto, el [análisis de representación de dinero](architecture/money-representation-analysis.md) y los diagramas C4 en PNG y PlantUML | **Su ruta no se puede mover:** hay comentarios en `sdk/src` y en `simulator-api/src` que citan `docs/architecture/architecture-log.md` por ruta completa |
+| [`architecture/`](architecture/) | El [architecture-log](architecture/architecture-log.md) con más de 87 decisiones técnicas documentadas, el [análisis de representación de dinero](architecture/money-representation-analysis.md) y los diagramas C4 en PNG y PlantUML | **Su ruta no se puede mover:** hay comentarios en `sdk/src` y en `simulator-api/src` que citan `docs/architecture/architecture-log.md` por ruta completa |
 | [`testing-data/`](testing-data/) | El componente 3: datos de prueba de las cuatro pasarelas | Misma razón: el código y las pruebas citan estas rutas |
 | [`project-management/`](project-management/) | La [metodología DSR](project-management/methodology.md) con las fórmulas normativas de las métricas, la [matriz de trazabilidad](project-management/traceability-matrix.md) que cumple la condición 5 del DoD, los [objetivos específicos de la tesis](project-management/thesis-objectives.md), el [plan de evaluación](project-management/prototypes-evaluation-plan.md) de la Fase 5 y las [áreas de enfoque](project-management/team-focus-areas.md) del equipo | Es gestión del trabajo de grado, no documentación del artefacto |
 | `evaluation/` | Reservada para el informe comparativo de la Fase 5 | Todavía no existe; la crea la fase que la escribe |
 
-**El architecture-log merece un párrafo aparte.** Es el documento más valioso del repositorio y el más difícil de reemplazar: registra 58 decisiones con su contexto, sus alternativas y, sobre todo, lo que resultó falso al medirlo. Varias afirmaciones que parecían obvias se cayeron al probarlas contra los sandboxes reales, y eso quedó escrito ahí en lugar de corregirse en silencio. Cuando cualquier documento de este camino de lectura dice "medido el tal día", el detalle está en ese archivo.
+**El architecture-log merece un párrafo aparte.** Es el documento más valioso del repositorio y el más difícil de reemplazar: registra más de 87 decisiones con su contexto, sus alternativas y, sobre todo, lo que resultó falso al medirlo. Varias afirmaciones que parecían obvias se cayeron al probarlas contra los sandboxes reales, y eso quedó escrito ahí en lugar de corregirse en silencio. Cuando cualquier documento de este camino de lectura dice "medido el tal día", el detalle está en ese archivo.
 
 ---
 
-## Lo que viene: los cuatro entregables de la Iteración 3
+## Estado de los cuatro entregables de la Iteración 3
 
-La Iteración 3 (22 de septiembre – 5 de octubre) cierra con cuatro cosas terminadas. Este es el mapa de dónde se escribe cada una, para que nadie tenga que preguntarlo:
+Este es el mapa del estado de los cuatro entregables del ciclo de construcción:
 
-| Entregable | Código | Documentación |
-|---|---|---|
-| **API de Simulación completa**, con los escenarios de rechazo, timeout y error de red, y desplegada | `simulator-api/` | [02-arquitectura/3-api-de-simulacion.md](02-arquitectura/3-api-de-simulacion.md) |
-| **Documentación de datos completa**, como tercer componente | — | [testing-data/README.md](testing-data/README.md) y los cuatro documentos por pasarela |
-| **Landing page** | `landing/` (por crear) | [06-landing/1-alcance-y-contenido.md](06-landing/1-alcance-y-contenido.md) |
-| **Proyectos prototípicos completos**, los dos | `prototypes/checkout-directo/` y `prototypes/checkout-con-sdk/` (por crear) | [project-management/prototypes-evaluation-plan.md](project-management/prototypes-evaluation-plan.md) y [04-metricas-y-pruebas/4-medir-los-prototipos.md](04-metricas-y-pruebas/4-medir-los-prototipos.md) |
-
-**El orden dentro de la iteración no es libre.** Los prototipos necesitan los escenarios de fallo del simulador, porque una de las seis variables que se miden es si el prototipo distingue un rechazo de negocio de un fallo técnico y reintenta solo el segundo, y eso no se puede implementar ni medir contra un simulador que solo sabe aprobar; el issue #122 agregó esos escenarios (punto 83 del [architecture-log](architecture/architecture-log.md)). Y medir los prototipos necesita que `ck-metrics.ts` acepte una ruta, lo que resolvió el issue #130 (punto 87 del [architecture-log](architecture/architecture-log.md)). La secuencia forzada es: **escenarios del simulador → prototipos → métricas.** La landing y la documentación de datos no dependen de nada de eso y pueden ir en paralelo.
-
-Hay una decisión abierta que afecta al primer entregable: si la API de Simulación sigue replicando el comportamiento medido de cada sandbox o si se conecta directamente a ellos. Está planteada con sus tres opciones y sus costos en el punto 59 del [architecture-log](architecture/architecture-log.md), y resumida en [02-arquitectura/3-api-de-simulacion.md](02-arquitectura/3-api-de-simulacion.md).
+| Entregable | Código | Documentación | Estado |
+|---|---|---|---|
+| **API de Simulación completa** | [`simulator-api/`](../simulator-api/) | [02-arquitectura/3-api-de-simulacion.md](02-arquitectura/3-api-de-simulacion.md) y [`simulator-api/README.md`](../simulator-api/README.md) | Completa, documentada con OpenAPI 3.0 en `/docs` y desplegada en Render |
+| **Documentación de datos completa** | — | [testing-data/README.md](testing-data/README.md) y los cuatro documentos por pasarela | Completa como tercer componente |
+| **Landing page** | [`landing/`](../landing/) | [06-landing/1-alcance-y-contenido.md](06-landing/1-alcance-y-contenido.md) | Construida, interactiva y desplegada |
+| **Proyectos prototípicos completos** | `prototypes/checkout-directo/` y `prototypes/checkout-con-sdk/` | [project-management/prototypes-evaluation-plan.md](project-management/prototypes-evaluation-plan.md) y [04-metricas-y-pruebas/4-medir-los-prototipos.md](04-metricas-y-pruebas/4-medir-los-prototipos.md) | Base lista para la medición de la Fase 5 |
 
 ---
 

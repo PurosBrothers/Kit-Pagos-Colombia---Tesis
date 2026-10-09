@@ -459,7 +459,7 @@ El SDK incluye un catálogo cerrado de URLs para los tres ambientes soportados, 
 | **Rapyd** | `https://sandboxapi.rapyd.net/v1` | `https://api.rapyd.net/v1` |
 
 **Simulador Integrado y en la Nube (`environment: "simulator"`):**
-Por defecto apunta al simulador local (`http://localhost:3000/v1/sim/{gateway}`), para que ninguna petición salga de la máquina sin pedirlo. Para usar el simulador desplegado en Render, se indica con `baseUrl`:
+Por defecto apunta al simulador local (`http://localhost:3000/v1/sim/{gateway}`), para que ninguna petición salga de la máquina sin pedirlo. Para usar el simulador desplegado en Render (o consultar su documentación interactiva OpenAPI 3.0 en [`/docs`](https://kit-pagos-colombia.onrender.com/docs), detallada en [`simulator-api/README.md`](../simulator-api/README.md)), se indica con `baseUrl`:
 ```typescript
 const sdkSimulador = new KitPagos({
   gateway: Gateway.WOMPI,
