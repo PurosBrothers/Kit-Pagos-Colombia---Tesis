@@ -47,13 +47,17 @@ export const KitPagosErrorSchema = {
   },
 } as const;
 
-/** Error de autenticación (401 de la API REST). */
+/** Error de autenticación (401 de la API REST o del SDK). */
 export const UnauthorizedSchema = {
   type: "object",
-  required: ["error", "message"],
   additionalProperties: true,
   properties: {
     error: { type: "string", example: "Unauthorized" },
+    code: {
+      type: "string",
+      description: "Código de error del SDK cuando el fallo es de credenciales (INVALID_CREDENTIALS o WEBHOOK_SIGNATURE_INVALID).",
+      example: "INVALID_CREDENTIALS",
+    },
     message: { type: "string", example: "Missing or invalid Authorization header" },
     warnings: {
       type: "array",
@@ -200,6 +204,18 @@ const ReturnUrlConfigSchema = {
   },
 } as const;
 
+const TRANSACTION_STATUS_ENUM = [
+  "APPROVED",
+  "DECLINED",
+  "PENDING",
+  "EXPIRED",
+  "VOIDED",
+  "ERROR",
+  "REFUNDED",
+  "CANCELLED",
+  "UNKNOWN",
+] as const;
+
 /** Respuesta cuando el cobro se completó en línea (tarjeta aprobada). */
 const TransactionOutcomeSchema = {
   type: "object",
@@ -220,7 +236,7 @@ const TransactionOutcomeSchema = {
         payer: PayerSchema,
         status: {
           type: "string",
-          enum: ["APPROVED", "DECLINED", "PENDING", "REFUNDED", "CANCELLED", "UNKNOWN"],
+          enum: TRANSACTION_STATUS_ENUM,
         },
         rawStatus: { type: "string", description: "Estado tal como lo devolvió la pasarela." },
         isApproved: { type: "boolean" },
@@ -380,7 +396,7 @@ export const PostWebhooksSchema = {
         gatewayTransactionId: { type: "string" },
         newStatus: {
           type: "string",
-          enum: ["APPROVED", "DECLINED", "PENDING", "REFUNDED", "CANCELLED", "UNKNOWN"],
+          enum: TRANSACTION_STATUS_ENUM,
         },
       },
     },
@@ -393,24 +409,35 @@ export const PostWebhooksSchema = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// GET /v1/api/gateways (bancos PSE) — placeholder para #103 y #104
+// GET /v1/api/payments/:id
 // ---------------------------------------------------------------------------
 
-export const GetPseBanksSchema = {
+export const GetPaymentStatusSchema = {
   tags: ["Kit Pagos"],
-  summary: "Bancos PSE disponibles",
+  summary: "Consultar estado de un pago",
   description:
-    "Devuelve la lista de entidades financieras habilitadas para PSE según la pasarela indicada. " +
-    "Cada banco incluye su code (el que usa la pasarela) y, cuando existe, su achCode (código de compensación ACH, igual en las cuatro pasarelas).",
+    "Consulta el estado de una transacción previamente creada a través del SDK. " +
+    "El parámetro `gateway` es obligatorio en el query string para dirigir la consulta a la pasarela correcta.",
   security: [{ bearerAuth: [] }],
+  params: {
+    type: "object",
+    required: ["id"],
+    properties: {
+      id: {
+        type: "string",
+        description: "Identificador de la transacción en la pasarela (gatewayTransactionId).",
+        example: "12345-67890",
+      },
+    },
+  },
   querystring: {
     type: "object",
     required: ["gateway"],
     properties: {
       gateway: {
         type: "string",
-        enum: ["wompi", "mercadopago", "kushki", "rapyd"],
-        description: "Pasarela de la que se pide el catálogo.",
+        description: "Pasarela por la que se procesó la transacción: wompi, mercadopago, kushki o rapyd.",
+        example: "wompi",
       },
     },
   },
@@ -420,30 +447,122 @@ export const GetPseBanksSchema = {
   },
   response: {
     200: {
-      description: "Lista de bancos PSE de la pasarela.",
+      description: "Estado normalizado de la transacción.",
       type: "object",
-      required: ["gateway", "banks"],
+      additionalProperties: true,
+      required: ["gateway", "transaction"],
       properties: {
         gateway: { type: "string", example: "wompi" },
-        banks: {
-          type: "array",
-          items: {
-            type: "object",
-            required: ["code", "name"],
-            properties: {
-              code: { type: "string", description: "Código propio de la pasarela.", example: "1007" },
-              name: { type: "string", example: "Bancolombia" },
-              achCode: {
-                type: "string",
-                description: "Código de compensación ACH (PseBankCode). Ausente en bancos de prueba de los sandboxes.",
-                example: "1007",
+        transaction: {
+          type: "object",
+          required: ["gatewayTransactionId", "orderReference", "amount", "currency", "status", "isApproved", "isPending", "isFinal"],
+          properties: {
+            gatewayTransactionId: { type: "string", example: "12345-67890" },
+            orderReference: { type: "string", example: "ORD-001" },
+            amount: { type: "string", example: "50000.00" },
+            currency: { type: "string", example: "COP" },
+            status: {
+              type: "string",
+              enum: TRANSACTION_STATUS_ENUM,
+            },
+            rawStatus: { type: "string", description: "Estado nativo devuelto por la pasarela." },
+            isApproved: { type: "boolean" },
+            isPending: { type: "boolean" },
+            isFinal: { type: "boolean" },
+            authorizationCode: { type: "string" },
+            rejectionReason: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                category: { type: "string" },
+                message: { type: "string" },
               },
             },
           },
+        },
+        warnings: {
+          type: "array",
+          description: "Advertencias cuando se usaron credenciales del servidor en un sandbox real.",
+          items: WarningSchema,
+        },
+      },
+    },
+    400: { description: "Petición inválida o pasarela no soportada.", ...KitPagosErrorSchema },
+    401: { description: "Token Bearer ausente o credenciales insuficientes.", ...UnauthorizedSchema },
+    404: { description: "Transacción no encontrada en la pasarela.", ...KitPagosErrorSchema },
+    502: { description: "Error de la pasarela o reintentos agotados.", ...KitPagosErrorSchema },
+    504: { description: "Timeout de la pasarela.", ...KitPagosErrorSchema },
+  },
+} as const;
+
+// ---------------------------------------------------------------------------
+// GET /v1/api/pse-banks
+// ---------------------------------------------------------------------------
+
+export const GetPseBanksSchema = {
+  tags: ["Kit Pagos"],
+  summary: "Bancos PSE disponibles",
+  description:
+    "Devuelve la lista de entidades financieras habilitadas para PSE según la pasarela indicada. " +
+    "Cada banco incluye su code (el que usa la pasarela) y, cuando existe, su achCode (código de compensación ACH, igual en las cuatro pasarelas). " +
+    "Si se omite el parámetro gateway y se usan credenciales del servidor, devuelve la lista de las cuatro pasarelas.",
+  security: [{ bearerAuth: [] }],
+  querystring: {
+    type: "object",
+    properties: {
+      gateway: {
+        type: "string",
+        description: "Pasarela de la que se pide el catálogo: wompi, mercadopago, kushki o rapyd. Opcional si se usan las credenciales del servidor.",
+        example: "wompi",
+      },
+    },
+  },
+  headers: {
+    type: "object",
+    properties: GatewayCredentialHeaders,
+  },
+  response: {
+    200: {
+      description: "Lista de bancos PSE agrupados por pasarela.",
+      type: "object",
+      additionalProperties: true,
+      required: ["pseBanks"],
+      properties: {
+        pseBanks: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["gateway", "banks"],
+            properties: {
+              gateway: { type: "string", example: "wompi" },
+              banks: {
+                type: "array",
+                items: {
+                  type: "object",
+                  required: ["code", "name"],
+                  properties: {
+                    code: { type: "string", description: "Código propio de la pasarela.", example: "1007" },
+                    name: { type: "string", example: "Bancolombia" },
+                    achCode: {
+                      type: "string",
+                      description: "Código de compensación ACH (PseBankCode). Ausente en bancos de prueba de los sandboxes.",
+                      example: "1007",
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        warnings: {
+          type: "array",
+          description: "Advertencias cuando se usaron credenciales del servidor en un sandbox real.",
+          items: WarningSchema,
         },
       },
     },
     400: { description: "Pasarela no soportada o parámetro ausente.", ...KitPagosErrorSchema },
     401: { description: "Token Bearer ausente o credenciales insuficientes.", ...UnauthorizedSchema },
+    502: { description: "Error de la pasarela al consultar los bancos.", ...KitPagosErrorSchema },
   },
 } as const;

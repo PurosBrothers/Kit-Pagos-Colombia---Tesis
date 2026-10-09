@@ -137,4 +137,57 @@ describe("GET /docs/json — especificación OpenAPI", () => {
     });
     expect(response.json().message).toContain("orderReference");
   });
+
+  it("documenta GET /v1/api/payments/{id} con tag Kit Pagos y parámetros de ruta y consulta", async () => {
+    const app = buildApp({ logger: false });
+    const response = await app.inject({ method: "GET", url: "/docs/json" });
+    const spec = response.json<Record<string, unknown>>();
+    const paths = spec.paths as Record<string, unknown>;
+
+    expect(paths["/v1/api/payments/{id}"]).toBeDefined();
+    const get = (paths["/v1/api/payments/{id}"] as Record<string, unknown>)["get"] as Record<string, unknown>;
+    expect((get.tags as string[])).toContain("Kit Pagos");
+
+    const resp200 = (get.responses as Record<string, unknown>)["200"] as Record<string, unknown>;
+    expect(resp200).toBeDefined();
+    const content = (resp200.content as Record<string, unknown>)["application/json"] as Record<string, unknown>;
+    const schema = content.schema as Record<string, unknown>;
+    expect(schema.required).toContain("gateway");
+    expect(schema.required).toContain("transaction");
+  });
+
+  it("documenta GET /v1/api/pse-banks con tag Kit Pagos y respuesta de bancos agrupados", async () => {
+    const app = buildApp({ logger: false });
+    const response = await app.inject({ method: "GET", url: "/docs/json" });
+    const spec = response.json<Record<string, unknown>>();
+    const paths = spec.paths as Record<string, unknown>;
+
+    expect(paths["/v1/api/pse-banks"]).toBeDefined();
+    const get = (paths["/v1/api/pse-banks"] as Record<string, unknown>)["get"] as Record<string, unknown>;
+    expect((get.tags as string[])).toContain("Kit Pagos");
+
+    const resp200 = (get.responses as Record<string, unknown>)["200"] as Record<string, unknown>;
+    expect(resp200).toBeDefined();
+    const content = (resp200.content as Record<string, unknown>)["application/json"] as Record<string, unknown>;
+    const schema = content.schema as Record<string, unknown>;
+    expect(schema.required).toContain("pseBanks");
+  });
+
+  it("rechaza con 400 e INVALID_REQUEST una petición a GET /payments/:id que omite gateway en el query", async () => {
+    const app = buildApp({ logger: false });
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/api/payments/trx-12345",
+      headers: {
+        authorization: "Bearer test-token",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      code: "INVALID_REQUEST",
+    });
+    expect(response.json().message).toContain("gateway");
+  });
 });
+
