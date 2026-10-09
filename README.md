@@ -2,7 +2,9 @@
 
 Integre una vez. Cambie de pasarela cambiando un valor.
 
-Sitio web y demostración interactiva: [https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/](https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/)
+- 🌐 **Página Web y Documentación Oficial:** [https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/](https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/)
+- 📖 **Documentación Interactiva OpenAPI (Swagger UI):** [https://kit-pagos-colombia.onrender.com/docs](https://kit-pagos-colombia.onrender.com/docs)
+- 📚 **Ruta de Lectura de la Documentación Técnica:** [`docs/README.md`](docs/README.md)
 
 Kit Pagos Colombia son **tres componentes**, no uno:
 
@@ -81,7 +83,9 @@ El ejemplo rápido de código, con la firma exacta de cada llamada, está en la 
 
 ## Documentación
 
-**Empiece por [`docs/README.md`](docs/README.md)**, que tiene el camino de lectura completo, ordenado por concepto.
+- **Página Web y Especificación Técnica Interactiva:** [https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/](https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/)
+- **Documentación Interactiva OpenAPI (Swagger UI):** [https://kit-pagos-colombia.onrender.com/docs](https://kit-pagos-colombia.onrender.com/docs)
+- **Camino de lectura completo en el repositorio:** **Empiece por [`docs/README.md`](docs/README.md)**, que tiene el orden conceptual completo.
 
 | Sección | Para qué sirve |
 |---|---|
