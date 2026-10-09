@@ -351,6 +351,24 @@
                 </div>
               </div>
             </div>
+
+            <!-- Tokenización Frontend en Navegador (KitPagosBrowser) -->
+            <div>
+              <h3 class="comparison-title" style="margin-bottom: 8px;">Tokenización en el navegador: cumplimiento PCI DSS con <code>KitPagosBrowser</code></h3>
+              <p class="section-lead" style="margin-bottom: 24px; font-size: 0.9375rem;">
+                Por normativa internacional (PCI DSS), el backend del comercio jamás debe recibir números de tarjeta en texto plano. El submódulo <code>kit-pagos-colombia/browser</code> (14 KB, cero dependencias) tokeniza directamente desde el cliente web contra Wompi o Mercado Pago y retorna un token opaco seguro (<code>tok_...</code>) para que su servidor procese el cobro sin exponerse a cargas regulatorias.
+              </p>
+
+              <div class="terminal">
+                <div class="terminal-bar">
+                  <span class="terminal-filename">tokenizar-tarjeta-browser.ts</span>
+                  <button type="button" class="btn-copy" data-copy="snippet-browser">Copiar</button>
+                </div>
+                <div class="terminal-body">
+                  <pre><code id="code-snippet-browser"></code></pre>
+                </div>
+              </div>
+            </div>
           </div>
         </details>
       </div>

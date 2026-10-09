@@ -3,6 +3,7 @@ import {
   SNIPPET_GATEWAY_CREDS,
   SNIPPET_DISPARITY_WOMPI,
   SNIPPET_DISPARITY_MERCADOPAGO,
+  SNIPPET_BROWSER_TOKENIZE,
   SNIPPET_REST_CURL,
 } from "./snippets";
 
@@ -304,6 +305,8 @@ function setupCopyButtons(root: Document | HTMLElement = document): void {
         textToCopy = getUnifiedSnippetCode(activeTab);
       } else if (copyTarget === "snippet-rest") {
         textToCopy = SNIPPET_REST_CURL;
+      } else if (copyTarget === "snippet-browser") {
+        textToCopy = SNIPPET_BROWSER_TOKENIZE;
       }
 
       if (textToCopy) {
@@ -331,6 +334,9 @@ function init(): void {
 
   const mpEl = document.getElementById("code-snippet-mercadopago");
   if (mpEl) mpEl.innerHTML = highlightTypeScript(SNIPPET_DISPARITY_MERCADOPAGO);
+
+  const browserEl = document.getElementById("code-snippet-browser");
+  if (browserEl) browserEl.innerHTML = highlightTypeScript(SNIPPET_BROWSER_TOKENIZE);
 
   const restEl = document.getElementById("code-snippet-rest");
   if (restEl) restEl.innerHTML = highlightBash(SNIPPET_REST_CURL);
