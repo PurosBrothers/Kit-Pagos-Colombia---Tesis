@@ -23,6 +23,7 @@ import {
   KitPagosErrorCode,
   type SDKOptions,
 } from "kit-pagos-colombia";
+import { WOMPI_INTEGRITY_SECRET } from "./simulator-secrets";
 
 // Raíz de la API de Wompi en el simulador. Desde el issue #64 es la raíz y no el
 // endpoint de transacciones: el adaptador le agrega la ruta que necesite, porque
@@ -35,9 +36,9 @@ const SIMULATOR_WOMPI_URL = "http://localhost:3000/v1/sim/wompi";
  *
  * Es la única decisión que un comercio tiene que tomar: qué pasarela usar y con
  * qué credenciales. `baseUrl` apunta al simulador; en producción se omite y cada
- * adaptador usa el endpoint real de su pasarela. Las credenciales de este ejemplo
- * son ficticias porque el mock no autentica, pero recorren el mismo camino que
- * las reales.
+ * adaptador usa el endpoint real de su pasarela. Las llaves de este ejemplo son
+ * ficticias, pero el secreto de integridad no puede serlo: el simulador verifica
+ * la firma con el secreto de su cuenta (`simulator-secrets.ts`).
  */
 const options: SDKOptions = {
   gateway: Gateway.WOMPI,
@@ -52,7 +53,7 @@ const options: SDKOptions = {
       // que falta en lugar de ese 422. Es un valor distinto del secreto de eventos
       // que verifica los webhooks: uno firma lo que sale, el otro valida lo que
       // entra, y Wompi los entrega juntos en el mismo panel.
-      integritySecret: "test_integrity_ejemplo_no_real",
+      integritySecret: WOMPI_INTEGRITY_SECRET,
     },
   },
   baseUrl: SIMULATOR_WOMPI_URL,

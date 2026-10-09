@@ -7,6 +7,7 @@ import { OrderReference } from "../../../domain/value-objects/OrderReference";
 import { Payer } from "../../../domain/value-objects/Payer";
 import { GatewayTransactionId } from "../../../domain/value-objects/GatewayTransactionId";
 import { GatewayResponseNormalizer } from "./GatewayResponseNormalizer";
+import { readRapydRejection } from "./rapyd-rejection";
 import {
   parsePayload,
   requireData,
@@ -69,14 +70,16 @@ export class RapydResponseNormalizer implements GatewayResponseNormalizer {
       Gateway.RAPYD,
     );
 
+    const status = this.mapStatus(rawStatus, data);
     return new Transaction(
       gatewayTransactionId,
       orderReference,
       amount,
       currency,
       payer,
-      this.mapStatus(rawStatus, data),
+      status,
       rawStatus,
+      readRapydRejection(data, status),
     );
   }
 

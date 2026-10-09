@@ -1,6 +1,6 @@
 # Cómo medir los prototipos
 
-El experimento de la Fase 5 compara dos prototipos funcionalmente idénticos: uno que integra las pasarelas a mano y otro que usa el SDK. Este documento cubre la parte operativa —cómo se recolecta cada variable— y el bloqueo técnico que hay que resolver antes de poder recolectar la más importante.
+El experimento de la Fase 5 compara dos prototipos funcionalmente idénticos: uno que integra las pasarelas a mano y otro que usa el SDK. Este documento cubre la parte operativa: cómo se recolecta cada variable, incluida la más importante, que hasta el issue #130 no se podía recolectar.
 
 > El diseño experimental está aprobado y vive en [prototypes-evaluation-plan.md](../project-management/prototypes-evaluation-plan.md). Este documento no lo reemplaza: resuelve el cómo.
 
@@ -28,7 +28,7 @@ Y la otra mitad de la regla, la que es fácil de olvidar: los dos tienen que cub
 |---|---|---|
 | 1 | Líneas de integración | Conteo sobre el módulo de pagos de cada prototipo, excluyendo el esqueleto común |
 | 2 | Diff de migración | `git diff --stat` entre el commit de Wompi y el de Mercado Pago |
-| 3 | **Métricas CK** | `npm run metrics` sobre las clases de pago de cada prototipo — **bloqueado, ver §3** |
+| 3 | **Métricas CK** | `npm run metrics -- --root <prototipo>/src --tsconfig <prototipo>/tsconfig.json --json <archivo>` sobre las clases de pago de cada prototipo — ver §3 |
 | 4 | Conceptos nativos expuestos | Conteo de identificadores propios de pasarela en el código del prototipo |
 | 5 | Pasarelas alcanzables | Cuántas de las cuatro puede usar sin escribir código nuevo |
 | 6 | Cobertura de pruebas | Jest, con el mismo esfuerzo de pruebas en ambos |
@@ -53,44 +53,26 @@ grep -rcoE "amount_in_cents|transaction_amount|acceptance_token|integrity|APPROV
 
 ---
 
-## 3. El bloqueo: `ck-metrics.ts` no acepta una ruta
+## 3. Cómo se corre `ck-metrics.ts` sobre un prototipo
 
-La variable 3 es la que el Hito H5 exige literalmente, y hoy **no se puede recolectar**.
+La variable 3 es la que el Hito H5 exige literalmente. Hasta el issue #130 no se podía recolectar: el script resolvía de forma fija contra `sdk/` la raíz de las fuentes, el `tsconfig.json` y los patrones de exclusión, y correrlo sobre `prototypes/checkout-directo/` analizaba el SDK otra vez. El plan de evaluación lo lista como prerrequisito 3 de la Fase 5 y dice, textualmente, que es **"el más fácil de pasar por alto y el que puede costar más caro, porque es el que sostiene el Hito H5"**. El cambio está registrado en el punto 87 del `architecture-log.md`.
 
-El script resuelve sus rutas de forma fija contra el propio SDK:
+Desde `sdk/`, para cada prototipo:
 
-```423:436:sdk/scripts/ck-metrics.ts
-  const sdkRoot = path.resolve(__dirname, '..', 'src');
-
-  const project = new Project({
-    tsConfigFilePath: path.resolve(__dirname, '..', 'tsconfig.json'),
-    skipAddingFilesFromTsConfig: true,
-  });
-
-  project.addSourceFilesAtPaths([
-    `${sdkRoot}/**/*.ts`,
-    `!${sdkRoot}/**/*.test.ts`,
-    `!${sdkRoot}/**/*.spec.ts`,
-  ]);
+```bash
+npm run metrics -- --root ../prototypes/checkout-directo/src --tsconfig ../prototypes/checkout-directo/tsconfig.json --json ../docs/evaluation/ck-checkout-directo.json
+npm run metrics -- --root ../prototypes/checkout-con-sdk/src --tsconfig ../prototypes/checkout-con-sdk/tsconfig.json --json ../docs/evaluation/ck-checkout-con-sdk.json
 ```
 
-Son tres cosas atadas a `sdk/`: la raíz de las fuentes, el `tsconfig.json` y los patrones de exclusión. Correrlo sobre `prototypes/checkout-directo/` hoy analizaría el SDK otra vez.
+Las rutas de los prototipos son las de la sección 1; ajústelas si la estructura final es otra. Qué resuelve cada opción:
 
-### Qué hay que cambiar
+1. **La raíz de fuentes es un argumento** (`--root`, repetible). Sin argumentos, `npm run metrics` analiza `sdk/src` y `sdk/src-browser` y produce el mismo reporte que antes del cambio.
+2. **El `tsconfig.json` del proyecto analizado es un argumento** (`--tsconfig`), porque un prototipo con otro `target` u otras rutas de módulos no se resuelve con el del SDK. Solo se admite junto con `--root`.
+3. **Las exclusiones de pruebas** (`*.test.ts`, `*.spec.ts`) se aplican dentro de cada raíz recibida.
+4. **Las excepciones documentadas no se aplican a un proyecto externo.** `KNOWN_EXCEPTIONS` está indexado por nombre de clase, y una clase del prototipo que se llamara igual que una del SDK habría heredado su excepción: un umbral verde en el reporte y rojo en la realidad. Con `--root` el script no las aplica, y lo indica al final del reporte. Una prueba con un proyecto de muestra cuya clase se llama `Amount` lo comprueba (`sdk/test/scripts/ck-metrics.test.ts`).
+5. **El modo guarda y el modo medición están separados** (`--mode guard|measure`). En modo guarda, una violación sale con código 1: es la condición 4 de la Definition of Done y es el modo por omisión del SDK. En modo medición, **el valor alto es el dato**: el script reporta las violaciones y sale con 0. Es el modo por omisión con `--root`. Un argumento inválido sale con código 2.
 
-1. **Aceptar la raíz de fuentes como argumento**, con `sdk/src` por defecto para no romper `npm run metrics`.
-2. **Aceptar el `tsconfig.json` del proyecto analizado**, porque `ts-morph` necesita resolver los tipos del proyecto que está leyendo. Un prototipo con otro `target` o otras rutas de módulos no se resuelve con el `tsconfig` del SDK.
-3. **Mantener las exclusiones de pruebas** relativas a la raíz que se pase.
-4. **Decidir qué pasa con las excepciones documentadas.** El registro `KNOWN_EXCEPTIONS` está indexado por nombre de clase, y una clase del prototipo que se llame igual que una del SDK heredaría su excepción. Sería un defecto silencioso: un umbral verde en el reporte y rojo en la realidad, que es justamente lo que la regla de excepciones existe para impedir. Lo razonable es que **las excepciones no apliquen cuando se analiza un proyecto externo**.
-5. **Decidir el criterio de salida.** Para el SDK, violar un umbral tiene que fallar con código 1. Para medir un prototipo, **el valor alto es el dato**: el prototipo de integración directa probablemente viole umbrales, y eso es el hallazgo, no un error. El modo de medición debería reportar sin fallar.
-
-El punto 4 y el punto 5 son los que hacen que esto no sea solo "agregarle un parámetro": hay que distinguir **modo guarda** de **modo medición**, porque tienen criterios de éxito opuestos.
-
-### Por qué esto es urgente y no un detalle
-
-El plan de evaluación lo lista como prerrequisito 3 de la Fase 5 y dice, textualmente, que es **"el más fácil de pasar por alto y el que puede costar más caro, porque es el que sostiene el Hito H5"**.
-
-Y hay una razón de secuencia: los prototipos se construyen en la Iteración 3, y medirlos es lo primero que hace la Fase 5. Si el script se parametriza recién cuando haya que medir, se descubre en ese momento que la decisión sobre las excepciones y el código de salida no está tomada, en la fase que tiene dos semanas para medir, correr el experimento de migración y escribir el informe.
+Con `--json <archivo>`, el script escribe además la tabla completa con la fecha, el modo, las raíces, el `tsconfig`, los umbrales y si se aplicaron las excepciones. Ese archivo es el insumo de la recolección: la tabla de la consola tiene colores ANSI y no conviene copiarla al informe.
 
 ---
 

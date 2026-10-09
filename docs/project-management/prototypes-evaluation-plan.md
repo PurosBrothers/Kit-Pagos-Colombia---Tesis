@@ -140,7 +140,7 @@ La fase comprimida de dos semanas solo cabe si al llegar el 5 de octubre ya es c
    - un argumento para el `tsconfig.json`, porque cada prototipo tendrá el suyo;
    - **separar el modo guarda del modo medición.** Hoy el script sale con código 1 ante cualquier violación de umbral, que es exactamente lo que se quiere cuando corre sobre el SDK en un pull request. Pero el prototipo B **va a** exceder los umbrales, y eso es el resultado del experimento, no un fallo: un script que aborte al medirlo no sirve para medirlo.
 
-   El procedimiento completo está en [`../04-metricas-y-pruebas/4-medir-los-prototipos.md`](../04-metricas-y-pruebas/4-medir-los-prototipos.md).
+   El procedimiento completo está en [`../04-metricas-y-pruebas/4-medir-los-prototipos.md`](../04-metricas-y-pruebas/4-medir-los-prototipos.md). **Resuelto en el issue #130** (punto 87 del `architecture-log.md`).
 5. Este documento revisado y aprobado por el equipo, para no discutir el diseño durante la fase.
 
 **Los prerrequisitos 2 y 4 son los que sostienen el Hito H5**, y ninguno de los dos es trabajo de la Fase 5: los dos tienen que estar listos al entrar. El 4 es el más fácil de subestimar porque el script ya existe y funciona —mide las 31 clases del SDK en cada pull request—, y es tentador suponer que apuntarlo a otra carpeta es trivial.
@@ -151,7 +151,7 @@ La fase comprimida de dos semanas solo cabe si al llegar el 5 de octubre ya es c
 
 **Los prototipos se construyen en la Iteración 3, no en la Fase 5.** Eso cambia dónde van sus issues: son el cuarto entregable de la Iteración 3 según la sección 2.1 de `methodology.md`, así que van en el milestone semanal correspondiente de esa iteración, junto con los otros tres entregables (la API de Simulación completa, la documentación de datos y la página de presentación).
 
-Lo mismo aplica a la parametrización de `ck-metrics.ts`: es un issue de la Iteración 3, porque es un prerrequisito y no parte del experimento.
+Lo mismo aplica a la parametrización de `ck-metrics.ts`: es un issue de la Iteración 3, porque es un prerrequisito y no parte del experimento. Se resolvió en el issue #130 (punto 87 del `architecture-log.md`).
 
 Al cerrar la Iteración 3 (Hito H4, ~5 de octubre), crear el milestone `Fase 5 – Demostración y evaluación` sin sufijo semanal, según la sección 3 de `methodology.md`, y abrir los issues de lo que sí es trabajo de la fase: el experimento de migración, la recolección de métricas sobre los prototipos ya construidos, y el informe comparativo.
 

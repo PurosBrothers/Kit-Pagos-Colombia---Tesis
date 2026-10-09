@@ -357,7 +357,9 @@ describe("POST /v1/api/payments (issue #102)", () => {
         headers: {
           "x-gateway-public-key": "pub_custom_client_key",
           "x-gateway-private-key": "prv_custom_client_key",
-          "x-gateway-integrity-secret": "custom_secret_client",
+          // El simulador al que cobra es una sola cuenta de comercio y verifica la firma con
+          // el secreto de su perfil (punto 86); las llaves sí son las del cliente.
+          "x-gateway-integrity-secret": SERVER_CREDENTIALS.WOMPI_INTEGRITY_SECRET,
         },
         payload: {
           gateway: "wompi",

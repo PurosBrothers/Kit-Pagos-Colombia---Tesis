@@ -1,4 +1,4 @@
-import { buildApp } from "../src/app";
+import { buildSignedApp as buildApp } from "./helpers/signedRequests";
 
 describe("Rapyd mock", () => {
   /**

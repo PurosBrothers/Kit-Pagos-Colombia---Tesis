@@ -78,22 +78,53 @@ function redactText(text: string, secrets: readonly string[]): string {
   return secrets.reduce((current, secret) => current.split(secret).join(REDACTED), text);
 }
 
-/** Si un valor es un objeto literal, como los que produce `JSON.parse`. */
+/**
+ * Si un valor es un objeto literal, como los que produce `JSON.parse`.
+ *
+ * Se compara contra la raíz de la cadena de prototipos y no contra `Object.prototype`: el
+ * cuerpo que lee `response.json()` puede venir de otro reino de JavaScript (dentro de Jest,
+ * el del `fetch` de Node), con su propio `Object.prototype`.
+ */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null) return false;
   const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
+  return prototype === null || Object.getPrototypeOf(prototype) === null;
+}
+
+/** Si un valor es un `Error`, de este reino o de otro. */
+function isError(value: unknown): value is Error {
+  return Object.prototype.toString.call(value) === "[object Error]";
+}
+
+/**
+ * Una copia del error con sus propiedades propias limpias, `message` y `stack` incluidos.
+ *
+ * El `SyntaxError` de `JSON.parse` repite el principio del texto que no pudo leer, y ese
+ * error es el `originalPayload` de un `MALFORMED_RESPONSE`. Se conserva el prototipo para
+ * que siga siendo `instanceof` su clase, y si no había nada que limpiar se devuelve el mismo
+ * error, para no romper la identidad del `cause`.
+ */
+function redactError(error: Error, secrets: readonly string[]): Error {
+  const source = error as unknown as Record<string, unknown>;
+  const copy = Object.create(Object.getPrototypeOf(error)) as Record<string, unknown>;
+  let changed = false;
+  for (const key of Object.getOwnPropertyNames(error)) {
+    copy[key] = redactValue(source[key], secrets);
+    changed ||= copy[key] !== source[key];
+  }
+  return changed ? (copy as unknown as Error) : error;
 }
 
 /**
  * Recorre un cuerpo JSON y reemplaza los valores en cada texto.
  *
- * Solo entra en textos, listas y objetos literales, que es todo lo que puede salir de
- * `JSON.parse`. Cualquier otro objeto se deja tal cual.
+ * Entra en textos, listas y objetos literales, que es todo lo que puede salir de
+ * `JSON.parse`, y en errores. Cualquier otro objeto se deja tal cual.
  */
 function redactValue(value: unknown, secrets: readonly string[]): unknown {
   if (typeof value === "string") return redactText(value, secrets);
   if (Array.isArray(value)) return value.map((item) => redactValue(item, secrets));
+  if (isError(value)) return redactError(value, secrets);
   if (isPlainObject(value)) {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [key, redactValue(item, secrets)]),
@@ -124,6 +155,6 @@ export function redactCredentials(
     error.gateway,
     redactValue(error.originalPayload, secrets),
     redactText(error.message, secrets),
-    { cause: error.cause },
+    { cause: redactValue(error.cause, secrets) },
   );
 }

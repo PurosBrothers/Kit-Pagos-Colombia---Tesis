@@ -42,6 +42,7 @@ interface KushkiChargeDetails {
   readonly iceValue?: unknown;
   readonly currencyCode?: unknown;
   readonly contactDetails?: unknown;
+  readonly responseCode?: unknown;
 }
 
 /**
@@ -77,6 +78,7 @@ export function flattenKushkiCharge(
     transaction_status: details.transactionStatus,
     trackingCode: details.trackingCode,
     contactDetails: details.contactDetails,
+    responseCode: details.responseCode,
     amount: {
       subtotalIva0: details.subtotalIva0 ?? 0,
       subtotalIva: details.subtotalIva ?? 0,

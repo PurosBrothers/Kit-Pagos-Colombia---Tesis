@@ -121,7 +121,7 @@ function buildModule(blocks: string[]): string {
     "/* Generado por scripts/check-readme.ts. No editar. */",
     "/* eslint-disable */",
     // El README usa Express en el ejemplo de webhooks sin declararlo, porque el lector ya
-    // tiene su servidor. Acá se declara para que el bloque compile aislado.
+    // tiene su servidor. Aquí se declara para que el bloque compile aislado.
     "declare const app: { post(ruta: string, manejador: (req: any, res: any) => void): void };",
     importsRoot,
     importsBrowser,
@@ -140,7 +140,7 @@ function main(): void {
 
   const dist = path.join(sdkRoot, "dist", "index.d.ts");
   if (!fs.existsSync(dist)) {
-    console.error("Falta dist/. Corré `npm run build` antes de verificar el README.");
+    console.error("Falta dist/. Corra `npm run build` antes de verificar el README.");
     process.exit(1);
   }
 

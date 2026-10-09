@@ -78,7 +78,9 @@ export function generateSalt(): string {
 
 /**
  * Timestamp Unix en segundos enteros.
- * Rapyd rechaza peticiones que se desvíen más de 60 segundos del reloj real.
+ * Rapyd acepta hasta 300 s de atraso y al menos 3600 s de adelanto respecto del reloj real
+ * (medido el 7 de octubre de 2026, `docs/testing-data/rapyd.md`, «La firma, el `timestamp` y
+ * el `salt`»).
  */
 export function currentUnixTimestamp(): number {
   return Math.floor(Date.now() / 1000);

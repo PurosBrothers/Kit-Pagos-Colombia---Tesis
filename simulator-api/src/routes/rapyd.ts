@@ -7,6 +7,12 @@ import {
 } from "../gateways/rapyd/types";
 import { randomUUID } from "node:crypto";
 import { invalidCredentialRequested } from "../scenarios/invalidCredential";
+import { rapydSecretKey } from "../auth/merchantSecrets";
+import {
+  missingAuthentication,
+  SaltRegistry,
+  signatureRejection,
+} from "../gateways/rapyd/requestSignature";
 import { resolveScenario, wholePesosFromDecimal } from "../scenarios/scenarioFromRequest";
 import { bankListFailure, queryFailure, technicalFailure } from "../scenarios/technicalFailure";
 import {
@@ -67,9 +73,9 @@ const HOSTED_PAGE_NOT_FOUND = {
  * 2. `GET  /v1/sim/rapyd/payments/:paymentId` — consulta de estado (200).
  * 3. `POST /v1/sim/rapyd/checkout` — pagina de pago alojada (201), el camino de tarjeta.
  * 4. `GET  /v1/sim/rapyd/checkout/:checkoutId` — consulta de la pagina (200).
- * 5. `GET  /v1/sim/rapyd/checkout/:checkoutId/pagar` — la visita del pagador a la pagina,
+ * 5. `GET  /v1/sim/rapyd/checkout/:checkoutId/pay` — la visita del pagador a la pagina,
  *    que es el unico punto donde el cobro se concreta. No es una ruta de la API de Rapyd:
- *    es el destino de `redirect_url`.
+ *    es el destino de `redirect_url`. La ruta vieja, `/pagar`, responde `308` hacia esta.
  *
  * Sigue el mismo reparto que la ruta de Mercado Pago: instancia su propia
  * fabrica y resuelve el escenario aquí, sin pasar por `ScenarioEngine`. Ese
@@ -82,14 +88,9 @@ const HOSTED_PAGE_NOT_FOUND = {
  * pasa por `ScenarioEngine`. Es deriva conocida, no un descuido, y se resuelve
  * cuando ese motor se generalice.
  *
- * **El mock no verifica la firma de las peticiones entrantes.** Rapyd exige
- * `access_key`, `salt`, `timestamp` y `signature` en cada request, y el SDK los
- * envia, pero validarlos aquí requiere la clase `SignatureGenerator` que
- * `layers-and-components.md` marca como pendiente en la API de Simulacion. Sin
- * eso, un adaptador que calcule mal la firma pasaria igual contra el mock: por
- * eso la correccion de la firma se cubre con pruebas unitarias del adaptador
- * contra el vector de la documentacion oficial, y no confiando en el mock.
- * 5. `GET  /v1/sim/rapyd/checkout/:checkoutId/pagar` — la visita del pagador a la pagina.
+ * Desde el punto 86 el mock verifica `access_key`, `salt`, `timestamp` y `signature` en
+ * cada petición a la API, con el secreto del perfil (`requestSignature.ts`). Antes no lo
+ * hacía, y un adaptador que calculara mal la firma pasaba igual contra el simulador.
  */
 /**
  * El rechazo de un `access_key` desconocido.
@@ -117,10 +118,30 @@ function unauthenticatedApiCall() {
 export async function rapydRoutes(app: FastifyInstance): Promise<void> {
   const mockFactory = new GatewayMockFactory();
 
+  const salts = new SaltRegistry();
+  const rawBodies = new WeakMap<FastifyRequest, string>();
+
   /*
-   * Todas las rutas de la API de Rapyd revisan la llave antes que el cuerpo, porque la firma
-   * se verifica sobre la petición entera. El orden frente a las validaciones del cuerpo no se
-   * midió. La página `/pagar` queda fuera: es del simulador y el pagador no manda llaves.
+   * La firma se calcula sobre el cuerpo exacto que se envió, así que se guarda el texto antes de
+   * parsearlo. Volver a serializar el objeto aceptaría un cuerpo con espacios o con ceros de más
+   * que Rapyd rechaza (lo dice su propio mensaje de firma). El parser vale solo dentro de este
+   * plugin: las demás pasarelas siguen con el de Fastify.
+   */
+  const parseJson = app.getDefaultJsonParser("error", "error");
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (request, body, done) => {
+    rawBodies.set(request, body as string);
+    parseJson(request, body as string, done);
+  });
+
+  /*
+   * Todas las rutas de la API de Rapyd autentican antes que el cuerpo, porque la firma cubre la
+   * petición entera. El orden frente a las validaciones del cuerpo no se midió. La página `/pay`
+   * queda fuera: es del simulador y el pagador no manda llaves.
+   *
+   * El orden (punto 86): cabeceras faltantes (`400`), credencial inválida, firma, timestamp y
+   * salt. La credencial inválida —la marca en `access_key` o la cabecera `INVALID_CREDENTIALS`—
+   * va antes que la firma porque Rapyd no puede calcular la firma de una llave que no conoce: el
+   * secreto es de la cuenta de esa llave. Ese lugar no se midió; las otras posiciones sí.
    */
   const API_ROUTES = new Set([
     "/v1/sim/rapyd/payments",
@@ -132,8 +153,34 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
   ]);
 
   app.addHook("preHandler", async (request, reply) => {
-    if (API_ROUTES.has(request.routeOptions.url ?? "") && invalidCredentialRequested(request, ["access_key"])) {
+    if (!API_ROUTES.has(request.routeOptions.url ?? "")) {
+      return;
+    }
+
+    const signed = {
+      method: request.method,
+      url: request.url,
+      headers: request.headers,
+      rawBody: rawBodies.get(request) ?? "",
+    };
+
+    const missing = missingAuthentication(signed);
+    if (missing !== undefined) {
+      return reply.code(missing.statusCode).send(missing.body);
+    }
+
+    if (invalidCredentialRequested(request, ["access_key"])) {
       return reply.code(401).send(unauthenticatedApiCall());
+    }
+
+    const rejected = signatureRejection(
+      signed,
+      rapydSecretKey(app.credentialResolver),
+      salts,
+      Math.floor(Date.now() / 1000),
+    );
+    if (rejected !== undefined) {
+      return reply.code(rejected.statusCode).send(rejected.body);
     }
   });
 
@@ -433,7 +480,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
    * suponer que el pago aparece solo.
    */
   app.get(
-    "/v1/sim/rapyd/checkout/:checkoutId/pagar",
+    "/v1/sim/rapyd/checkout/:checkoutId/pay",
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { checkoutId } = request.params as { checkoutId: string };
       const checkout = rapydCheckouts.findById(checkoutId);
@@ -485,6 +532,18 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
       return reply
         .code(200)
         .send({ paid: paidCheckout.payment.paid === true, payment_id: paidCheckout.payment.id });
+    },
+  );
+
+  /*
+   * La ruta en español que tuvo la página hasta el issue #130 (deuda del punto 84). Una URL de
+   * pago ya entregada sigue funcionando: `308` conserva el método, y la nueva vive en `/pay`.
+   */
+  app.get(
+    "/v1/sim/rapyd/checkout/:checkoutId/pagar",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { checkoutId } = request.params as { checkoutId: string };
+      return reply.redirect(`/v1/sim/rapyd/checkout/${encodeURIComponent(checkoutId)}/pay`, 308);
     },
   );
 

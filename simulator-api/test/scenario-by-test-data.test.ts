@@ -1,4 +1,4 @@
-import { buildApp } from "../src/app";
+import { buildSignedApp as buildApp } from "./helpers/signedRequests";
 import * as credentialResolver from "../src/auth/CredentialResolver";
 import { slowResponseDelayMs } from "../src/scenarios/technicalFailure";
 import { cardTokenOutcomeFor } from "../src/store/CardTokenOutcomes";
@@ -174,7 +174,7 @@ const rapydCard: Flow = {
   idOf: (body) => (body as { data?: { id?: string } })?.data?.id,
   query: (app, id) => app.inject({ method: "GET", url: `/v1/sim/rapyd/checkout/${id}` }),
   settle: async (app, id) => {
-    const visit = await app.inject({ method: "GET", url: `/v1/sim/rapyd/checkout/${id}/pagar` });
+    const visit = await app.inject({ method: "GET", url: `/v1/sim/rapyd/checkout/${id}/pay` });
     const payment = await app.inject({
       method: "GET",
       url: `/v1/sim/rapyd/payments/${visit.json().payment_id}`,

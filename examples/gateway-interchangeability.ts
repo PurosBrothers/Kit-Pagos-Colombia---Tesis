@@ -36,6 +36,7 @@ import {
   type CreatePaymentRequest,
   type Transaction,
 } from "kit-pagos-colombia";
+import { RAPYD_SECRET_KEY, WOMPI_INTEGRITY_SECRET } from "./simulator-secrets";
 
 /** Las cuatro pasarelas que el framework unifica, en orden de implementación. */
 const GATEWAYS = [
@@ -94,12 +95,15 @@ const CREDENTIALS: SDKOptions["credentials"] = {
      * es parte de lo que este ejemplo muestra: **las credenciales sí cambian entre
      * pasarelas, y el código del pago no.** Lo que el SDK unifica es el cobro, no la
      * cuenta que hay que abrir en cada pasarela.
+     *
+     * Este secreto y el de Rapyd son los de la cuenta del simulador, que verifica las
+     * firmas (`simulator-secrets.ts`).
      */
-    integritySecret: "test_integrity_ejemplo_no_real",
+    integritySecret: WOMPI_INTEGRITY_SECRET,
   },
   [Gateway.RAPYD]: {
     publicKey: "rapyd_access_key_ejemplo_no_real",
-    privateKey: "rapyd_secret_key_ejemplo_no_real",
+    privateKey: RAPYD_SECRET_KEY,
   },
   [Gateway.MERCADOPAGO]: {
     publicKey: "APP_USR_public_ejemplo_no_real",

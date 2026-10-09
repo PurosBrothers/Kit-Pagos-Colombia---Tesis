@@ -38,6 +38,7 @@ import {
   KitPagosErrorCode,
   type SDKOptions,
 } from "kit-pagos-colombia";
+import { RAPYD_SECRET_KEY } from "./simulator-secrets";
 
 /** Raíz de la API de Rapyd en el simulador, no el endpoint de pagos. */
 const SIMULATOR_RAPYD_URL = "http://localhost:3000/v1/sim/rapyd";
@@ -48,9 +49,10 @@ const options: SDKOptions = {
     [Gateway.RAPYD]: {
       // En Rapyd la llave pública es el `access_key`, que viaja en claro en un
       // header, y la privada es el `secret_key`, que nunca se transmite: solo
-      // participa del cálculo de la firma de cada petición.
+      // participa del cálculo de la firma de cada petición. El simulador verifica
+      // esa firma con el secreto de su cuenta (`simulator-secrets.ts`).
       publicKey: "rak_test_ejemplo_no_real",
-      privateKey: "rsk_test_ejemplo_no_real",
+      privateKey: RAPYD_SECRET_KEY,
     },
   },
   baseUrl: SIMULATOR_RAPYD_URL,
