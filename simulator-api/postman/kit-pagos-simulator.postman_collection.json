@@ -1250,10 +1250,10 @@
                   "  pm.expect(ok, `código ${pm.response.code}`).to.be.true;",
                   "});",
                   "const json = pm.response.json();",
-                  "if (json.webhook && json.webhook.body) {",
-                  "  pm.environment.set(\"webhookBody\", json.webhook.body);",
-                  "  pm.environment.set(\"webhookChecksum\", (json.webhook.headers && json.webhook.headers[\"x-event-checksum\"]) || \"\");",
-                  "}"
+                  "// Se sobrescribe siempre, para que una corrida anterior no deje un webhook viejo.",
+                  "const webhook = json.webhook || {};",
+                  "pm.environment.set(\"webhookBody\", webhook.body || \"\");",
+                  "pm.environment.set(\"webhookChecksum\", (webhook.headers && webhook.headers[\"x-event-checksum\"]) || \"\");"
                 ]
               }
             }
@@ -1304,9 +1304,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Si el trigger firmó un webhook, la verificación responde 200; si el servidor no tiene secreto, responde 401.",
-                  "pm.test(\"POST /v1/api/webhooks/:gateway: responde 2xx o 401\", () => {",
-                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 401]);",
+                  "// 401 es la respuesta a una firma inválida: no puede contar como éxito.",
+                  "if (!pm.environment.get(\"webhookChecksum\")) {",
+                  "  pm.test.skip(\"POST /v1/api/webhooks/:gateway: el trigger no devolvió un webhook firmado\", () => {});",
+                  "  return;",
+                  "}",
+                  "pm.test(\"POST /v1/api/webhooks/:gateway: acepta el webhook firmado por el trigger\", () => {",
+                  "  pm.expect(pm.response.code).to.equal(200);",
                   "});"
                 ]
               }

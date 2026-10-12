@@ -26,7 +26,9 @@ Colección y ambientes versionados de la API de Simulación de Kit Pagos Colombi
     lleva firma.
 - **Pruebas.** Cada petición comprueba que responde 2xx. El trigger tiene su propia prueba: sin
   `SIMULATOR_WEBHOOK_TARGET_URL` responde `409 WEBHOOK_TARGET_NOT_CONFIGURED` con el webhook firmado,
-  y eso cuenta como éxito. Si alguna prueba falla, Newman sale con un código distinto de 0.
+  y eso cuenta como éxito. `POST /v1/api/webhooks/wompi` exige `200`; si el trigger no devolvió un
+  webhook firmado (el servidor no tiene el secreto de eventos), su prueba se omite. Si alguna prueba
+  falla, Newman sale con un código distinto de 0.
 
 ## Credenciales
 
