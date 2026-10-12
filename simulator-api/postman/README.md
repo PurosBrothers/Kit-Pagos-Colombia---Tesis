@@ -1,57 +1,67 @@
-# Colección de Postman — API de Simulación de Kit Pagos Colombia
+# Colección de Postman — API de Simulación
 
-Esta carpeta contiene la colección oficial y los entornos versionados de Postman para interactuar con la **API de Simulación** de Kit Pagos Colombia, tanto en entorno local como en el despliegue en la nube (Render).
+Colección y ambientes versionados de la API de Simulación de Kit Pagos Colombia (issue #131).
 
----
+## Archivos
 
-## 📁 Contenido del Directorio
+- `kit-pagos-simulator.postman_collection.json`: 33 peticiones en 7 carpetas.
+  1. `00. Diagnóstico`: `GET /health`.
+  2. `01. Capa REST Kit Pagos (/v1/api)`: `gateways`, `payments`, `payments/:id` y `pse-banks`.
+  3. `02` a `05`: las rutas `/v1/sim` de Wompi, Mercado Pago, Rapyd y Kushki.
+  4. `06. Webhooks`: `POST /v1/sim/webhooks/trigger` y `POST /v1/api/webhooks/:gateway`.
+- `local.postman_environment.json`: `http://localhost:3000`.
+- `render.postman_environment.json`: `https://kit-pagos-colombia.onrender.com`.
 
-- **`kit-pagos-simulator.postman_collection.json`**: Colección en formato Postman Schema v2.1.0 con carpetas organizadas por responsabilidad:
-  1. `00. Diagnóstico`: Endpoint de verificación de salud (`GET /health`).
-  2. `01. Capa REST Kit Pagos (/v1/api)`: Los cinco endpoints unificados (`gateways`, `payments`, `payments/:id`, `pse-banks`, `webhooks/:gateway`).
-  3. `02. Simulador Wompi (/v1/sim/wompi)`: Rutas de transacciones, tokenización de tarjeta, PSE y términos.
-  4. `03. Simulador Mercado Pago (/v1/sim/mercadopago)`: Rutas de pagos, tokenización, órdenes de PSE y métodos de pago.
-  5. `04. Simulador Rapyd (/v1/sim/rapyd)`: Rutas de pagos, clientes, checkout hospedado y catálogo PSE.
-  6. `05. Simulador Kushki (/v1/sim/kushki)`: Rutas de cobro con tarjeta, tokenización de transferencia, init y consulta.
-  7. `06. Webhooks Simulados`: Disparador de eventos salientes (`POST /v1/sim/webhooks/trigger`).
-- **`local.postman_environment.json`**: Entorno configurado para el servidor local (`http://localhost:3000`).
-- **`render.postman_environment.json`**: Entorno configurado para el despliegue productivo en Render (`https://kit-pagos-colombia.onrender.com`).
+## Cómo funciona
 
----
+- **Orden.** Las carpetas se corren en orden. Cada creación guarda su id en el ambiente
+  (`wompiTransactionId`, `mpPaymentId`, `rapydCheckoutId`, `kushkiTransferToken`…) y la consulta
+  siguiente lo usa. El trigger de webhooks firma la transacción de Wompi de la carpeta `02`, y
+  `POST /v1/api/webhooks/wompi` verifica ese mismo webhook.
+- **Firmas.** El simulador exige firma, como las pasarelas reales (punto 86 del `architecture-log.md`):
+  - Wompi: `POST /transactions` calcula `signature` en su pre-request, con la fórmula de
+    `sdk/src/infrastructure/adapters/wompi-pse.ts`.
+  - Rapyd: la carpeta `04` calcula `salt`, `timestamp` y `signature` en su pre-request, con la
+    fórmula de `sdk/src/infrastructure/adapters/rapyd-signature.ts`. La página `/checkout/:id/pay` no
+    lleva firma.
+- **Pruebas.** Cada petición comprueba que responde 2xx. El trigger tiene su propia prueba: sin
+  `SIMULATOR_WEBHOOK_TARGET_URL` responde `409 WEBHOOK_TARGET_NOT_CONFIGURED` con el webhook firmado,
+  y eso cuenta como éxito. Si alguna prueba falla, Newman sale con un código distinto de 0.
 
-## 🔐 Política de Seguridad y Credenciales
+## Credenciales
 
-- **Cero secretos en el repositorio:** La colección y los entornos **no contienen llaves privadas ni credenciales reales**.
-- Los endpoints bajo `/v1/api` y el disparador de webhooks requieren autenticación Bearer mediante la variable `{{apiAuthToken}}`.
-- En el entorno de Render, la variable `apiAuthToken` se define con valor en blanco para que cada desarrollador o evaluador configure su token de sesión (`API_AUTH_TOKEN`) en memoria sin persistir secretos en el control de versiones.
+La colección no trae credenciales. Las variables sensibles son `apiAuthToken`,
+`wompiIntegritySecret` y `rapydSecretKey`:
 
----
+- En `local`, los dos secretos traen los valores por omisión del simulador
+  (`test_integrity_kit_pagos_simulator` y `rapyd_secret_kit_pagos_simulator`). Son públicos y están
+  en `simulator-api/src/auth/merchantSecrets.ts`.
+- En `render`, las tres están vacías y son de tipo `secret`. Se pasan al correr la colección.
 
-## 🚀 Uso e Importación en Postman
+> [!IMPORTANT]
+> Si el simulador local corre con un `.env` que trae `WOMPI_INTEGRITY_SECRET` o
+> `RAPYD_API_SECRET_KEY`, firma con esos valores y no con los de omisión. Hay que poner esos mismos
+> valores en `wompiIntegritySecret` y `rapydSecretKey`, igual que hace `examples/simulator-secrets.ts`.
+> Si no, Wompi responde `422 La firma es inválida` y Rapyd `401 UNAUTHENTICATED_API_CALL`.
 
-1. Abra Postman y haga clic en **Import**.
-2. Seleccione los archivos:
-   - `kit-pagos-simulator.postman_collection.json`
-   - `local.postman_environment.json`
-   - `render.postman_environment.json`
-3. En el selector de entornos (esquina superior derecha), elija:
-   - **Kit Pagos Simulator - Local** para pruebas locales en `localhost:3000`.
-   - **Kit Pagos Simulator - Render (Nube)** para pruebas contra el despliegue de Render.
+## Correr con Newman
 
----
+Contra el servidor local:
 
-## 🧪 Ejecución Automatizada con Newman (CLI)
-
-Puede ejecutar la colección completa desde la terminal utilizando [Newman](https://www.npmjs.com/package/newman):
-
-### Contra el servidor local:
 ```bash
-npx newman run kit-pagos-simulator.postman_collection.json -e local.postman_environment.json
+npx newman run simulator-api/postman/kit-pagos-simulator.postman_collection.json \
+  -e simulator-api/postman/local.postman_environment.json
 ```
 
-### Contra el despliegue en Render:
+Contra Render, con los secretos del servicio pasados al correr (nunca escritos en el repo):
+
 ```bash
-npx newman run kit-pagos-simulator.postman_collection.json \
-  -e render.postman_environment.json \
-  --env-var "apiAuthToken=TU_TOKEN_AQUI"
+npx newman run simulator-api/postman/kit-pagos-simulator.postman_collection.json \
+  -e simulator-api/postman/render.postman_environment.json \
+  --env-var "apiAuthToken=<token de Render>" \
+  --env-var "wompiIntegritySecret=<secreto de Render>" \
+  --env-var "rapydSecretKey=<secreto de Render>"
 ```
+
+Si Render no tiene configurados esos secretos, deje fuera las dos últimas `--env-var`: el simulador
+usa sus valores por omisión, y los scripts también.

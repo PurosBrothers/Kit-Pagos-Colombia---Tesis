@@ -75,9 +75,13 @@ export function createAuthHook(options?: AuthHookOptions) {
   const env = loadServerEnv();
   const token =
     options?.expectedToken ??
-    (env.API_AUTH_TOKEN?.trim() ||
-      env.SIMULATOR_API_AUTH_TOKEN?.trim() ||
-      undefined);
+    (process.env.NODE_ENV === "test"
+      ? (process.env.API_AUTH_TOKEN?.trim() ||
+          process.env.SIMULATOR_API_AUTH_TOKEN?.trim() ||
+          undefined)
+      : (env.API_AUTH_TOKEN?.trim() ||
+          env.SIMULATOR_API_AUTH_TOKEN?.trim() ||
+          undefined));
 
   const exemptPaths = options?.exemptPaths ?? DEFAULT_EXEMPT_PATHS;
   const protectedPaths = options?.protectedPaths ?? DEFAULT_PROTECTED_PATHS;
