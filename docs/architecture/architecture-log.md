@@ -2900,6 +2900,36 @@ Era `/pagar`, en español (deuda del punto 84). La ruta vieja responde `308` hac
 
 **Estado:** Resuelto con deuda nombrada: el prefijo de 10 caracteres del `SyntaxError`, el cuerpo original del `402` fuera de la API pública, y las categorías que no tienen fuente (`UNKNOWN`), sobre todo en Kushki con tarjeta, cuya cuenta UAT no rechaza.
 
+### 88. Despliegue de simulator-api en Render y colección Postman versionada (issue #131)
+
+**Responsable:** Joshua (issue #131, PR #147).
+
+**Contexto.**
+El primer entregable de la Iteración 3 (`docs/project-management/methodology.md`, §2) asignaba tres partes a la API de Simulación: los escenarios de fallo (cerrados en el issue #122, punto 83), el despliegue en la nube en Render (punto 79) y la colección Postman versionada. El issue #131 pedía consolidar el despliegue productivo de la API de Simulación en Render, asegurar su reproducibilidad desatendida mediante colección y ambientes de Postman ejecutables con Newman, y resolver la integración de secretos sin romper el modo abierto ni fugar credenciales al repositorio.
+
+**Decisión 1: la colección de Postman cubre 33 peticiones encadenadas y firma dinámicamente Wompi y Rapyd.**
+La colección vive en `simulator-api/postman/kit-pagos-simulator.postman_collection.json` con ambientes `local.postman_environment.json` y `render.postman_environment.json`.
+- **Orden secuencial:** Organizada en 7 carpetas (`00. Diagnóstico`, `01. Capa REST`, `02. Wompi`, `03. Mercado Pago`, `04. Rapyd`, `05. Kushki`, `06. Webhooks`).
+- **Encadenamiento dinámico:** Cada creación guarda su identificador generado (`wompiTransactionId`, `mpPaymentId`, `mpOrderId`, `rapydCheckoutId`, `kushkiChargeTicket`, `kushkiTransferToken`) en el ambiente, y las consultas posteriores lo consumen.
+- **Firma dinámica:** En cumplimiento con el punto 86, los scripts pre-request calculan la firma criptográfica exacta: Wompi calcula SHA-256 hex sobre `referencia + monto + divisa + secreto`, y Rapyd genera `salt`, `timestamp` y la firma HMAC-SHA256 Base64 sobre el cuerpo crudo.
+- **Aserciones 2xx y webhooks:** Cada petición comprueba respuesta HTTP 2xx. El trigger de webhooks acepta `409 WEBHOOK_TARGET_NOT_CONFIGURED` como respuesta válida sin destino configurado porque entrega el webhook firmado en el cuerpo; el endpoint de verificación `POST /v1/api/webhooks/wompi` exige `200` y valida la firma criptográfica usando el verificador real del SDK.
+
+**Decisión 2: resolución jerárquica de Secret Files de Render (`/etc/secrets/.env`).**
+Render monta los archivos secretos en `/etc/secrets/.env`. `CredentialResolver.loadServerEnv()` resuelve de forma ordenada: la raíz del monorepo (`../../../.env`), el directorio de trabajo local (`.env`), el directorio padre (`../.env`) y `/etc/secrets/.env`. Esto permite cargar los secretos de pasarela en la nube sin configurarlos en texto plano en la interfaz web ni en el repositorio.
+
+**Decisión 3: modo abierto en Render para evaluación pública y aislamiento de pruebas locales.**
+En Render, `API_AUTH_TOKEN` se mantiene sin configurar. Esto permite que el jurado de tesis, los evaluadores externos, la landing page y Newman interactúen con `/v1/api` y con el trigger de webhooks sin requerir bearer tokens privados. En el entorno local de desarrollo, `authHook.ts` aísla las pruebas de Jest (`NODE_ENV === "test"`) para que no hereden el token privado del `.env` local del desarrollador, preservando la hermeticidad de las pruebas unitarias.
+
+**Decisión 4: redespliegue automatizado mediante Deploy Hook.**
+Se documentó `RENDER_DEPLOY_HOOK_URL` en `.env.example`, permitiendo invocar `curl -X POST "$RENDER_DEPLOY_HOOK_URL"` para desencadenar el ciclo de build (`npm ci && npm run build`) y start (`npm start`) en Render sin acceder manualmente a la consola web.
+
+**Lo medido.**
+- **Newman contra Render (`https://kit-pagos-colombia.onrender.com`):** 33 de 33 peticiones ejecutadas, 0 fallidas, 33 de 33 aserciones pasadas en 7.5 segundos (12 de octubre de 2026, 14:20).
+- **Pruebas unitarias:** 41 suites y 1020 pruebas del simulador pasando (`npm test` en `simulator-api`); 55 suites y 900 pruebas del SDK pasando (`npm test` en `sdk`).
+- **Guía completa:** Documentada formalmente en `docs/02-arquitectura/4-despliegue-en-render-y-coleccion-postman.md`.
+
+**Estado:** Resuelto en infraestructura, código, pruebas y documentación (`render.yaml`, `simulator-api/postman/`, `CredentialResolver.ts`, `authHook.ts`, `docs/02-arquitectura/4-despliegue-en-render-y-coleccion-postman.md`).
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
