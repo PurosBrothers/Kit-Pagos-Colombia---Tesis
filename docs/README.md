@@ -46,6 +46,7 @@ Por qué el sistema está construido así y cómo verificarlo en el código.
 | [1-arquitectura-hexagonal.md](02-arquitectura/1-arquitectura-hexagonal.md) | Qué es la arquitectura hexagonal, qué patrones de DDD y GoF se usan, y por qué encaja en este problema |
 | [2-hexagonal-en-kit-pagos.md](02-arquitectura/2-hexagonal-en-kit-pagos.md) | Dónde está cada capa en el código real, con los comandos para comprobar que la regla de dependencia se cumple |
 | [3-api-de-simulacion.md](02-arquitectura/3-api-de-simulacion.md) | Qué hace el segundo componente, sus rutas, sus escenarios y hasta dónde llega su fidelidad |
+| [4-despliegue-en-render-y-coleccion-postman.md](02-arquitectura/4-despliegue-en-render-y-coleccion-postman.md) | Cómo está desplegada la API en Render, Blueprint IaC, gestión de secretos y verificación con Postman/Newman |
 | [layers-and-components.md](02-arquitectura/layers-and-components.md) | Especificación oficial de cada componente (nivel 3 del modelo C4). Es la referencia normativa |
 | [ubiquitous-language.md](02-arquitectura/ubiquitous-language.md) | La matriz campo por campo entre el modelo del SDK y el formato nativo de cada pasarela |
 
