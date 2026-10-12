@@ -2337,8 +2337,8 @@ Surgió el debate arquitectónico sobre si los subproyectos del repositorio debe
 **Publicación de versión oficial `0.2.0` del SDK:**
 Alineado con el punto 53 sobre versionado semántico en fase pre-estabilización (`0.x.y`), se publicó formalmente `kit-pagos-colombia@0.2.0` en npm (`npm publish --access public`). Esta versión incorpora el soporte completo para tokenización en navegador (`kit-pagos-colombia/browser`), la resolución extendida de PSE y bancos, y los esquemas REST consolidados.
 
-**Diferimiento de la colección Postman:**
-Por decisión explícita de equipo, la elaboración de la colección versionada de Postman (contemplada en el entregable de la Iteración 3) se pospone para consolidarse una vez se implementen los escenarios de fallo restantes (issue #122) y se estabilice el catálogo total de endpoints, evitando la duplicación de esfuerzo y el riesgo de mantener colecciones desfasadas mientras la superficie de rutas continúa evolucionando.
+**Colección Postman versionada (`simulator-api/postman/`):**
+Tras la estabilización del catálogo completo de endpoints y escenarios de fallo (issues #122 y #105), se formalizó y versionó la colección Postman oficial en `simulator-api/postman/kit-pagos-simulator.postman_collection.json` (formato Postman Schema v2.1.0). La colección cubre la totalidad de la superficie expuesta: diagnóstico (`/health`), los 5 endpoints unificados de `/v1/api`, y las rutas nativas de simulación de Wompi, Mercado Pago, Rapyd y Kushki, así como el trigger de webhooks. Asimismo, se versionaron los entornos `local.postman_environment.json` y `render.postman_environment.json`, asegurando que ninguna credencial privada o sensible quede almacenada en el repositorio.
 
 **Lo medido (5 de octubre de 2026):**
 - Servicio en producción respondiendo en `https://kit-pagos-colombia.onrender.com`.

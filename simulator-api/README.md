@@ -131,6 +131,19 @@ El servidor escuchará por defecto en `http://localhost:3000`.
 
 ---
 
+## Colección de Postman
+
+La API de simulación y la capa REST cuentan con una colección versionada de Postman en formato Schema v2.1.0 y entornos listos para usar en:
+[`postman/`](./postman/)
+
+- `kit-pagos-simulator.postman_collection.json`: Peticiones organizadas para todos los endpoints de `/v1/api`, diagnóstico (`/health`), y las 4 pasarelas en `/v1/sim`.
+- `local.postman_environment.json`: Entorno para ejecución en `localhost:3000`.
+- `render.postman_environment.json`: Entorno para pruebas contra la nube de Render (`https://kit-pagos-colombia.onrender.com`).
+
+Consulte [`postman/README.md`](./postman/README.md) para instrucciones de importación y ejecución con Newman en terminal.
+
+---
+
 ## Variables de Entorno
 
 | Variable | Descripción | Valor por Defecto |

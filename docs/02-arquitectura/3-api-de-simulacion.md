@@ -621,6 +621,14 @@ El servicio productivo en la nube está disponible en:
   baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim"
   ```
 
+- **Redespliegue continuo mediante Deploy Hook:**
+  El despliegue en Render se actualiza automáticamente con cada push a la rama autorizada (`devops`). Cuando se requiere forzar o automatizar un redespliegue sin ingresar a la consola de administración, se utiliza el webhook configurado:
+  ```bash
+  # URL provista en el panel de Render y referenciada en .env.example
+  curl -X POST "$RENDER_DEPLOY_HOOK_URL"
+  ```
+  Render encola el build usando la receta de `render.yaml` (`npm ci && npm run build`), lanza el proceso con `npm start` y verifica la disponibilidad mediante `GET /health`.
+
 ---
 
 ## 9. Qué sigue
