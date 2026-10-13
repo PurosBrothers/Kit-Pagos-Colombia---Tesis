@@ -326,7 +326,14 @@ export const PostPaymentsSchema = {
       paymentMethod: PaymentMethodSchema,
       returnUrlConfig: ReturnUrlConfigSchema,
       taxBreakdown: TaxBreakdownSchema,
-      ipAddress: { type: "string", example: "186.84.90.1" },
+      ipAddress: {
+        type: "string",
+        description:
+          "IP del pagador. Opcional: si no llega, la API usa la de la petición, o la primera de " +
+          "X-Forwarded-For si el servidor tiene SIMULATOR_TRUST_FORWARDED_FOR=true. " +
+          "Mercado Pago la exige para PSE. Un backend que llama a la API debe enviarla.",
+        example: "186.84.90.1",
+      },
     },
   },
   response: {

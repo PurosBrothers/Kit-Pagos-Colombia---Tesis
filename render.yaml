@@ -18,6 +18,8 @@ services:
         value: https://kit-pagos-colombia.onrender.com
       - key: SIMULATOR_PUBLIC_ORIGIN
         value: https://kit-pagos-colombia.onrender.com
+      - key: SIMULATOR_TRUST_FORWARDED_FOR
+        value: "true"
       - key: API_AUTH_TOKEN
         sync: false
       - key: WOMPI_PUBLIC_KEY
