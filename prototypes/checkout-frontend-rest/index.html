@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prototipo C · Checkout hacia la API REST de Kit Pagos</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; color: #1f2933; }
+      fieldset { border: 1px solid #cbd2d9; border-radius: 6px; margin: 0 0 1rem; }
+      label { display: inline-block; margin: 0.25rem 1rem 0.25rem 0; }
+      input, select, button { font: inherit; }
+      button[type="submit"] { padding: 0.4rem 1.2rem; }
+      #status { font-weight: 600; }
+      #trace { background: #f5f7fa; padding: 0.75rem; white-space: pre-wrap; font-size: 0.85rem; min-height: 3rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Checkout C</h1>
+    <p>Cobra contra <code>/v1/api</code> sin instalar <code>kit-pagos-colombia</code>. La pasarela es solo un valor del formulario.</p>
+
+    <form id="checkout">
+      <fieldset>
+        <legend>Pedido</legend>
+        <label>Pasarela <select id="gateway" name="gateway"></select></label>
+        <label>Monto (COP) <input name="amount" value="50000.00" inputmode="decimal" required /></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Pagador</legend>
+        <label>Correo <input name="email" type="email" value="pagador.c@example.com" required /></label>
+        <label>Nombre <input name="firstName" value="Felipe" required /></label>
+        <label>Apellido <input name="lastName" value="Ruiz" required /></label>
+        <label>Documento <select name="documentType"><option>CC</option><option>CE</option><option>NIT</option></select></label>
+        <label>Número <input name="documentNumber" value="1020304050" required /></label>
+        <label>Teléfono <input name="phone" value="3001234567" required /></label>
+        <label>Calle <input name="streetName" value="Carrera 7" required /></label>
+        <label>Número <input name="streetNumber" value="71-21" required /></label>
+        <label>Ciudad <input name="city" value="Bogota" required /></label>
+        <label>Código postal <input name="zipCode" value="110221" required /></label>
+        <label>Barrio <input name="neighborhood" value="Chapinero" required /></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Método</legend>
+        <label><input type="radio" name="method" value="PSE" checked /> PSE</label>
+        <label><input type="radio" name="method" value="CARD" /> Tarjeta</label>
+      </fieldset>
+
+      <fieldset id="pse-fields">
+        <legend>PSE</legend>
+        <label>Banco <select id="bank" name="bank"></select></label>
+      </fieldset>
+
+      <fieldset id="card-fields" hidden>
+        <legend>Tarjeta</legend>
+        <p>El número va del navegador a la ruta de tokenización de la pasarela; a <code>/v1/api</code> solo llega el token.</p>
+        <label>Número <input name="cardNumber" value="4242424242424242" autocomplete="cc-number" /></label>
+        <label>CVC <input name="cvc" value="123" autocomplete="cc-csc" /></label>
+        <label>Mes <input name="expMonth" value="12" autocomplete="cc-exp-month" /></label>
+        <label>Año <input name="expYear" value="2030" autocomplete="cc-exp-year" /></label>
+        <label>Titular <input name="cardHolder" value="APRO" autocomplete="cc-name" /></label>
+      </fieldset>
+
+      <button type="submit">Pagar</button>
+    </form>
+
+    <section>
+      <h2>Resultado</h2>
+      <p id="status">Cargando pasarelas…</p>
+      <p><a id="redirect-link" hidden></a></p>
+      <p><button id="return-button" type="button" hidden>Volver al comercio como lo haría el banco</button></p>
+      <h3>Traza de llamadas a la API</h3>
+      <pre id="trace"></pre>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
