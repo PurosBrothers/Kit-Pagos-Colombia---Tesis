@@ -2452,7 +2452,7 @@ Tomada por Joan el 4 de octubre de 2026, al aprobar el inventario del alcance de
 - Agrega una llamada de red para obtener la llave, aunque se puede guardar en caché por instancia.
 - Necesita generar un JWE en el navegador, sea con una dependencia como `jose` o con WebCrypto. No se comprobó si la segunda opción cabe sin dependencias, ni cuánto pesaría el bundle con la primera.
 - Exige distinguir el 502 por un cifrado mal hecho de una caída real.
-- Presiona el WMC: la clase está en 18, con umbral 20 (punto 77, decisión 5).
+- Presiona el WMC: la clase mide 17 con umbral 20 (`npm run metrics`, 13 de octubre de 2026). Cuando se tomó la decisión estaba en 18 (punto 77, decisión 5).
 
 **Deuda nombrada:** el SDK no sigue la recomendación por defecto de la pasarela. Declarado en `docs/03-sdk/6-tokenizacion-frontend.md` y en el JSDoc de `WompiTokenizer`, sin que ninguna de las dos afirmaciones pretenda que la variante simple tenga o deje de tener el mismo alcance PCI DSS que la cifrada.
 
