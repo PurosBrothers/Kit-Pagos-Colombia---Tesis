@@ -179,7 +179,9 @@ describe("Rapyd payment page", () => {
       const visit = await app.inject({ method: "GET", url: paymentRoute(data.redirect_url) });
 
       expect(visit.statusCode).toBe(200);
-      expect(visit.json().paid).toBe(true);
+      expect(visit.headers["content-type"]).toBe("text/html; charset=utf-8");
+      expect(visit.body).toContain("API de Simulación de Kit Pagos Colombia");
+      expect(visit.body).not.toContain(data.id);
 
       const queryResponse = await app.inject({
         method: "GET",

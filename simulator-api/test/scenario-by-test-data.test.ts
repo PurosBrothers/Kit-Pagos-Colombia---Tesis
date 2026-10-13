@@ -174,10 +174,11 @@ const rapydCard: Flow = {
   idOf: (body) => (body as { data?: { id?: string } })?.data?.id,
   query: (app, id) => app.inject({ method: "GET", url: `/v1/sim/rapyd/checkout/${id}` }),
   settle: async (app, id) => {
-    const visit = await app.inject({ method: "GET", url: `/v1/sim/rapyd/checkout/${id}/pay` });
+    await app.inject({ method: "GET", url: `/v1/sim/rapyd/checkout/${id}/pay` });
+    const checkout = await app.inject({ method: "GET", url: `/v1/sim/rapyd/checkout/${id}` });
     const payment = await app.inject({
       method: "GET",
-      url: `/v1/sim/rapyd/payments/${visit.json().payment_id}`,
+      url: `/v1/sim/rapyd/payments/${checkout.json().data.payment.id}`,
     });
     return payment.json().data.status;
   },
