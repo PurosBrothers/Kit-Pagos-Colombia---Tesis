@@ -68,12 +68,12 @@ Este documento define **cuáles** son los prototipos y **qué** demuestra cada u
 |---|---|---|---|---|---|
 | **A — checkout directo (control)** | `prototypes/checkout-directo/` | Checkout mínimo de comercio electrónico: mostrar un producto, cobrarlo, informar el resultado, recibir la notificación asíncrona y consultar el estado | Wompi (integración inicial); migra a Mercado Pago en el experimento | Ninguno del framework: integración directa contra las APIs nativas | OE-06 (baseline de la comparación) |
 | **B — checkout con SDK (tratamiento)** | `prototypes/checkout-con-sdk/` | El mismo checkout mínimo, funcionalmente idéntico al A | Wompi; migra a Mercado Pago | **P1** — backend hacia SDK | OE-03 y OE-06 |
-| **C — checkout frontend → REST** | `prototypes/checkout-frontend-rest/` | El mismo caso, pero el cobro se completa desde un navegador contra `/v1/api` | Las cuatro, cambiando solo el valor de `gateway` (igual que el issue #109) | **P2** — frontend hacia REST hacia SDK | OE-03 y OE-04 |
+| **C — checkout frontend → REST** | `prototypes/checkout-frontend-rest/` | El mismo caso, pero el cobro se completa desde un navegador contra `/v1/api` | Las cuatro con PSE, cambiando solo el valor de `gateway`; con tarjeta, Wompi y Mercado Pago, las dos que tokenizan en el navegador (issue #109, puntos 91 y 92 del `architecture-log.md`) | **P2** — frontend hacia REST hacia SDK | OE-03 y OE-04 |
 
 ### 5.2. Cómo se leen las filas
 
 - **A y B son el par de medición del experimento central de la Fase 5** (el costo de migrar Wompi → Mercado Pago, variable 2 del plan de evaluación). Todo lo que no es integración de pagos es idéntico entre los dos (esqueleto común fuera del conteo), según la regla dura de la sección 2 del plan de evaluación.
-- **C ejercita el patrón P2 y amplía el alcance que la tesis declara**: con A y B el proyecto solo demostraría el patrón uno, y el issue #115 pide que el conjunto de prototipos ejercite al menos dos de los tres patrones. C no participa del experimento formal A/B con métricas CK: es demostración de alcance, y se construye en la misma Iteración 3 (entregable 4) en paralelo con el cliente del issue #109, con el que comparte el mismo flujo.
+- **C ejercita el patrón P2 y amplía el alcance que la tesis declara**: con A y B el proyecto solo demostraría el patrón uno, y el issue #115 pide que el conjunto de prototipos ejercite al menos dos de los tres patrones. C no participa del experimento formal A/B con métricas CK: es demostración de alcance, y es el mismo cliente del issue #109 (decisión del 5 de octubre de 2026 en ese issue), construido en la Iteración 3 (entregable 4).
 - **P3 no tiene prototipo asignado**: es el límite declarado de la sección 3. No se fuerza un prototipo para un patrón investigado y no implementado.
 
 ### 5.3. Qué mide la Fase 5 y qué no — descargo

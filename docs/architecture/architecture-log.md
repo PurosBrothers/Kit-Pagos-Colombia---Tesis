@@ -3048,6 +3048,95 @@ Con la instalación nueva, Fastify 5.12.5 resolvió `light-my-request` 6.8.0, qu
 
 ---
 
+### 91. El cliente de navegador contra `/v1/api` y el prototipo C (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.**
+El issue pide un cliente de frontend que cobre contra `/v1/api` sin instalar `kit-pagos-colombia` y sin saber qué pasarela hay detrás, para volver ejecutable el patrón de integración 2. Un comentario del 5 de octubre de 2026 decidió que vive en `prototypes/checkout-frontend-rest/` y que es también el prototipo C. El punto 64 dejó el origen de CORS de `/v1/api` en `*` hasta que existiera este cliente. El 13 de octubre de 2026 Joan decidió: una aplicación con build, con Vite y TypeScript como `landing/`; un servidor estático con `node:http` en otro origen que la API; PSE de punta a punta y tarjeta con `KitPagosBrowser` cargado desde jsDelivr con la versión fija; y subir `simulator-api` a `kit-pagos-colombia@^0.5.0`.
+
+**Decisión 1: Vite y TypeScript, sin framework de UI.**
+La página es un formulario y un resultado: el DOM se maneja con `FormData` y `replaceChildren()` en `src/main.ts`, y la lógica queda en `src/checkout.ts`, que no toca el DOM y se prueba sola. Un framework habría agregado dependencias para nada que la página necesite, y es justo lo que el issue advertía: algo que envejece antes de la sustentación. Vite da el build y el tipado de `landing/`, y el build sale en un solo archivo de JavaScript.
+
+*Alternativa descartada.* Una página sin build, con `fetch` en un `<script>`. No permitía el chequeo de tipos ni separar la lógica para probarla con la misma cadena del resto del repositorio.
+
+**Decisión 2: Vitest y no Jest.**
+El paquete es ESM (`"type": "module"`), igual que la salida de Vite. Vitest corre ese TypeScript sin transformación aparte y lee `vite.config.ts`; Jest exigía `ts-jest` y el modo ESM experimental de Node. La lógica del cliente se prueba en el entorno `node`, con un `fetch` falso que devuelve las formas medidas: no hace falta `jsdom`.
+
+**Decisión 3: el servidor estático es `server.mjs`, con `node:http` y sin dependencias.**
+Sirve `dist/` en `localhost:4100`, otro origen que la API en `localhost:3000`, para que el navegador haga el preflight de verdad. Entrega `/config.json` desde su entorno: la URL de la API, el ambiente de tokenización y las llaves públicas `CHECKOUT_PUBLIC_KEY_<PASARELA>`. Responde solo `GET` y `HEAD` y no sirve nada fuera de `dist/`.
+
+**Decisión 4: el módulo de navegador se carga desde jsDelivr, con la versión fija y solo al pagar con tarjeta.**
+`src/tokenizer.ts` importa `https://cdn.jsdelivr.net/npm/kit-pagos-colombia@0.5.0/dist/browser/index.js`. Con un rango, la página ejecutaría sobre la tarjeta del pagador la próxima versión que se publique, sin revisión. La importación es dinámica, así que el cobro con PSE no descarga código del SDK. Comprobado el 13 de octubre de 2026: jsDelivr entrega ese archivo con `access-control-allow-origin: *`, `x-jsd-version: 0.5.0` y `cache-control: … immutable`, 16 470 bytes, SHA-256 `f1bc1d0f…275334`. Sin integridad de subrecurso: la importación dinámica no la admite. Queda como deuda.
+
+**Decisión 5: ningún nombre de pasarela en el código del cliente, y que lo decida el SDK.**
+Las pasarelas salen de `GET /v1/api/gateways`, los bancos de `GET /v1/api/pse-banks` y el cuerpo del cobro es uno solo para las cuatro, con el pagador completo que pide Mercado Pago para PSE y sin `ipAddress`, que el navegador no conoce. Para la tarjeta, el cliente llama a `KitPagosBrowser.tokenizeCard()` con cualquier pasarela, y es el SDK el que rechaza Kushki y Rapyd con `UNSUPPORTED_OPERATION` antes de enviar nada. `test/no-gateway-names.test.ts` falla si un archivo de `src/`, `index.html` o `server.mjs` nombra una pasarela.
+
+**Decisión 6: el origen de CORS de `/v1/api` se queda en `*`.**
+El cliente no manda cookies ni `Authorization`, así que un origen abierto no expone nada que un `curl` no pueda pedir: la API sin `API_AUTH_TOKEN` ya está abierta a cualquiera, y con el token, el token es la protección. Restringir el origen no le quita nada a un atacante que llama desde un servidor y sí obliga a configurar cada origen de cada comercio. Medido en memoria: el preflight de `POST /v1/api/payments` desde `http://localhost:4100` responde `204` con `access-control-allow-origin: *`, `access-control-allow-methods: GET,HEAD,POST` y `access-control-allow-headers: content-type`.
+
+*Alternativa descartada.* Una variable `API_CORS_ORIGINS` con la lista de orígenes. Se justifica el día que la API acepte credenciales del navegador (cookies o `credentials: "include"`), que es cuando `*` deja de estar permitido ([Fetch Standard, «CORS protocol and credentials»](https://fetch.spec.whatwg.org/#cors-protocol-and-credentials)); hoy no las acepta.
+
+**Decisión 7: la llave pública llega por la configuración del despliegue.**
+Decisión de Joan del 13 de octubre de 2026 (16:50). La llave pública con la que el navegador tokeniza sale de `CHECKOUT_PUBLIC_KEY_<PASARELA>`, que `server.mjs` entrega en `/config.json`: el código no la trae, y es el lugar donde un frontend real guarda su llave publicable. Contra un sandbox real, lo esperable es que tenga que ser de la misma cuenta que las credenciales del servidor, aunque no se midió; en el simulador cualquier valor sirve.
+
+*Alternativa descartada.* Que `/v1/api` expusiera la llave pública del perfil del servidor, para que el cliente no necesitara configuración. Agregaba una ruta a la API para una sola llave, y el cliente igual necesita saber dónde está la API.
+
+**Decisión 8: la tarjeta de Rapyd queda fuera del prototipo C.**
+Decisión de Joan del 13 de octubre de 2026 (16:50). El criterio de tarjeta del issue aplica a las pasarelas que tokenizan en el navegador. Rapyd sí cobra con tarjeta por `/v1/api` sin token, en su página alojada (medido abajo), pero ese camino no pasa por `KitPagosBrowser` y el cliente no lo usa.
+
+**Lo medido** (13 de octubre de 2026, en memoria con `buildApp()` y `app.inject()`, `fetch` desviado a `inject()` sin abrir puertos, `kit-pagos-colombia@0.5.0` y el bundle de navegador bajado de jsDelivr).
+
+- Credenciales del servidor en el ambiente `simulator`: sin ninguna variable, las cuatro pasarelas responden `401`. El mínimo son nueve: las dos llaves de cada pasarela y `WOMPI_INTEGRITY_SECRET`, sin la cual Wompi responde `401 INVALID_CREDENTIALS` porque el SDK no puede firmar.
+- PSE, con `ipAddress` en el cuerpo: las cuatro responden `REDIRECT_REQUIRED` y llegan a `APPROVED` con una consulta del cliente. En Wompi, la consulta que publica la URL del banco la hace el SDK dentro del cobro. Solo la `redirectUrl` de Wompi es una página del simulador; las de Mercado Pago, Kushki y Rapyd apuntan a los dominios reales. Ninguna devuelve al pagador a la URL de retorno.
+- Tarjeta: con Wompi y Mercado Pago, `KitPagosBrowser` en el ambiente `simulator` emitió el token y el cobro llegó a `APPROVED`. Wompi nace `PENDING` y resuelve en la primera consulta. Con Rapyd, el cobro con tarjeta y sin token responde `REDIRECT_REQUIRED` hacia el checkout alojado del simulador; no se usa en este cliente.
+
+**Lo medido en el navegador** (13 de octubre de 2026, de 16:28 a 16:31, UTC−5). Se usó el navegador de Cursor contra `http://localhost:4100`, con la API de Simulación encendida con las nueve variables de prueba. Un espía de `fetch` en la página y el log del simulador registraron cada petición. La salida completa está en `docs/05-ejemplos/checkout-frontend-rest.md`.
+
+- PSE: Wompi (banco `1`, 16:28:42), Kushki (16:29:44) y Rapyd (16:29:59) llegaron a `APPROVED` con una consulta después de la vuelta. En Wompi se abrió la página del banco del simulador; en Kushki y Rapyd la vuelta se hizo con el botón, sin abrir sus dominios reales.
+- Mercado Pago con PSE (16:29:16) respondió `400 INVALID_REQUEST`: «PSE en Mercado Pago requiere estos datos y no llegaron: ipAddress.» Lo lanza la validación del SDK (`mercadopago-pse.ts`) porque Mercado Pago exige la IP del pagador (punto 45). En la medición en memoria la sonda la mandaba; el navegador no la conoce. Con la API tomando la IP de la petición (punto 92), la segunda corrida (16:59:18) respondió `201 REDIRECT_REQUIRED` y llegó a `APPROVED` (`processed`) con una consulta. Wompi (17:00:06) y Rapyd (17:00:29) se repitieron como regresión, con el mismo resultado que en la primera corrida.
+- Tarjeta: Wompi (16:30:21) y Mercado Pago (16:30:40) llegaron a `APPROVED`. El número viajó solo a `POST /v1/sim/wompi/tokens/cards` y a `POST /v1/sim/mercadopago/card_tokens`. A `POST /v1/api/payments` llegó el token, sin `Authorization`. Kushki (16:30:55) y Rapyd (16:30:58) dieron `UNSUPPORTED_OPERATION` sin ninguna petición.
+- CORS: el simulador registró `OPTIONS /v1/api/payments` con `Origin: http://localhost:4100` y `Access-Control-Request-Headers: content-type`, que respondió `204`. Antes de él registró `OPTIONS /v1/sim/wompi/tokens/cards` con `authorization,content-type`, que respondió `200`.
+- jsDelivr: el bundle se cargó al pulsar «Pagar» con tarjeta, con 16 470 bytes descomprimidos y 4 905 transferidos. En los PSE no se cargó.
+
+*Defecto encontrado en la medición.* Al volver del banco con «Atrás», el navegador recargó la página (navegación `back_forward`) y el botón de retorno, que solo existía en la página anterior, desapareció. El pago pendiente seguía en `sessionStorage`, pero nada lo ofrecía. Ahora la página lo lee al cargar (`peekPending()`) y vuelve a mostrar el botón. Las pruebas unitarias no lo veían, porque no navegan.
+
+*La IP del pagador en el patrón 2.* En el patrón 1 la pone el backend del comercio, que la lee de la petición del pagador. En el patrón 2 quien recibe esa petición es la API. Se resolvió en la API, y el razonamiento está en el punto 92.
+
+**Insumo para la Prioridad 3.** Con tarjeta, este cliente cobra solo por Wompi y Mercado Pago. Kushki necesita un token de su propia ruta de tokenización y Rapyd cobra en su página alojada: un frontend que quiera las cuatro tiene que cargar el SDK de navegador de cada pasarela o redirigir a una página de la pasarela. La API REST no lo resuelve, y es el problema que motiva la Prioridad 3.
+
+**Estado:** Resuelto en código (`prototypes/checkout-frontend-rest/`). PSE en las cuatro pasarelas y tarjeta en las dos que tokenizan en el navegador, medidos en el navegador. La integridad de subrecurso del bundle queda como deuda.
+
+---
+
+### 92. La API toma la IP del pagador de la petición, y la página de pago de Rapyd responde HTML (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.**
+La medición en el navegador del punto 91 encontró que el PSE de Mercado Pago no se podía cobrar desde un frontend contra `/v1/api`. Mercado Pago exige la IP del pagador (punto 45), y el SDK rechaza el cobro sin `ipAddress`, pero un navegador no conoce su IP pública. La misma medición dejó a la vista que la página de pago de Rapyd del simulador, `GET /v1/sim/rapyd/checkout/:id/pay`, respondía un JSON (`{"paid":true,"payment_id":…}`) a un pagador que la abre en el navegador. Joan decidió las dos cosas el 13 de octubre de 2026 (16:50).
+
+**Decisión 1: si el cuerpo no trae `ipAddress`, `POST /v1/api/payments` usa la IP de la petición.**
+En el patrón 2 la petición del pagador llega a la API, así que la API está en el mismo lugar donde, en el patrón 1, el backend del comercio lee esa IP. Si el cuerpo la trae, manda la del cuerpo: un backend que llama a la API la sigue enviando, porque la de la petición sería la suya. Un `ipAddress` en blanco cuenta como ausente. Solo el PSE de Mercado Pago la usa (`mercadopago-pse.ts`), así que completarla no cambia lo que el SDK manda a las otras tres pasarelas.
+
+**Decisión 2: detrás de un proxy, la IP sale de `X-Forwarded-For` y solo si se configura, sin activar `trustProxy`.**
+Render pasa el tráfico por Cloudflare y por sus balanceadores, y su documentación indica que la IP real del cliente se lee de `x-forwarded-for`; su ejemplo toma el primer valor ([render.com/articles/how-render-handles-ddos-attacks](https://render.com/articles/how-render-handles-ddos-attacks), consultada el 13 de octubre de 2026). Con `SIMULATOR_TRUST_FORWARDED_FOR=true`, `payerIpOf()` toma ese primer valor; sin la variable, o si la cabecera viene vacía, usa la del socket. `render.yaml` la declara en `"true"`. Por omisión queda apagada, porque sin un proxy que escriba la cabecera cualquier cliente pondría la IP que quisiera.
+
+*Alternativa descartada.* Activar el `trustProxy` de Fastify, que era la propuesta inicial ([fastify.dev, `trustProxy`](https://fastify.dev/docs/latest/Reference/Server/#trustproxy)). Además de `request.ip` cambia `request.protocol` y `request.host`, que pasarían a leer `X-Forwarded-Proto` y `X-Forwarded-Host`. De ellos sale `requestOrigin()`, el origen de las URL que el simulador entrega. El punto 84 ya descartó confiar en esas cabeceras, porque Render no documenta que mande `X-Forwarded-Proto`, y por eso existe `SIMULATOR_PUBLIC_ORIGIN`. Leer la cabecera solo para la IP deja intacto ese razonamiento.
+
+**Decisión 3: la página de pago de Rapyd responde HTML.**
+Es una convención del simulador (nivel 3), no una medición: la ruta no existe en Rapyd y no imita su página alojada. Responde una página mínima que dice que es del simulador, como la del banco del PSE de Wompi y la de términos. No informa si el pago se aprobó, porque eso se lee consultando el checkout, igual que contra la API real, y tampoco repite el identificador que llegó en la URL. Conserva el efecto que tenía: la visita pasa el checkout a `DON` y hace nacer el pago. Un checkout inexistente sigue respondiendo `404` con el cuerpo de Rapyd, y `/pagar` sigue respondiendo `308` hacia `/pay`. Las tres pruebas que leían `paid` o `payment_id` del JSON ahora leen el pago desde la consulta del checkout. Los ejemplos y la colección Postman no leían el cuerpo de la página.
+
+**Lo medido** (13 de octubre de 2026).
+
+- Pruebas nuevas en `simulator-api/test/payer-ip.test.ts` (14), con un proveedor falso que captura lo que la ruta le pasa al SDK: IP del cuerpo, IP del socket, IP en blanco y `X-Forwarded-For` ignorada sin la variable. Con la variable: el primer valor, la del cuerpo antes que la cabecera, y el socket si la cabecera falta o viene vacía. También la lectura de la variable. En `payments.test.ts`, el PSE de Mercado Pago sin `ipAddress`, contra el SDK real, responde `201 REDIRECT_REQUIRED`.
+- Mutaciones: sin el respaldo de la IP de la petición fallan 6 de 43 pruebas; leyendo `X-Forwarded-For` siempre, 1 de 14; tomando la última dirección en vez de la primera, 2 de 14.
+- En el navegador: el PSE de Mercado Pago pasó de `400` (16:29:16) a `APPROVED` (16:59:18, punto 91). La página de Rapyd, abierta directamente a las 17:01:00, respondió `text/html`; la consulta siguiente dio el checkout `APPROVED` (`CLO`), y `/pagar` respondió `308`.
+
+**Estado:** Resuelto en código (`simulator-api/src/kit-pagos-api/payer-ip.ts`, `routes/payments.ts`, `src/routes/rapyd.ts`, `render.yaml`). Falta agregar `SIMULATOR_TRUST_FORWARDED_FOR` a `.env.example`, que va aparte para no chocar con un cambio reciente de `devops` en ese archivo. Que la IP llegue bien detrás de Render solo está probado con `app.inject` y la cabecera escrita a mano; falta comprobarlo en el despliegue.
+
+---
+
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
 
 ### 15. Migración Rapyd / PayU GPO — Cambio de algoritmo de firma y renombrado del enum
