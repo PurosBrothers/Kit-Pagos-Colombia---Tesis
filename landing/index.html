@@ -26,12 +26,9 @@
       <nav class="header-nav" aria-label="Navegación principal">
         <ul class="nav-links">
           <li><a href="#problema" class="nav-link">El problema</a></li>
-          <li><a href="#codigo-tecnico" class="nav-link">Código y dominio</a></li>
-          <li><a href="#api-docs" class="nav-link">API y OpenAPI</a></li>
-          <li><a href="#componentes" class="nav-link">Componentes</a></li>
-          <li><a href="#sandbox" class="nav-link">Sandboxes</a></li>
-          <li><a href="#limites" class="nav-link">Límites</a></li>
-          <li><a href="#empezar" class="nav-link">Cómo empezar</a></li>
+          <li><a href="#arquitectura" class="nav-link">Arquitectura</a></li>
+          <li><a href="#api-docs" class="nav-link">API</a></li>
+          <li><a href="#empezar" class="nav-link">Empezar</a></li>
           <li><a href="#academico" class="nav-link">Tesis</a></li>
         </ul>
       </nav>
@@ -49,12 +46,9 @@
     <!-- Menú móvil -->
     <div class="mobile-nav" id="mobile-nav" aria-hidden="true">
       <a href="#problema" class="nav-link">El problema</a>
-      <a href="#codigo-tecnico" class="nav-link">Código y dominio</a>
-      <a href="#api-docs" class="nav-link">API y OpenAPI</a>
-      <a href="#componentes" class="nav-link">Componentes</a>
-      <a href="#sandbox" class="nav-link">Sandboxes</a>
-      <a href="#limites" class="nav-link">Límites</a>
-      <a href="#empezar" class="nav-link">Cómo empezar</a>
+      <a href="#arquitectura" class="nav-link">Arquitectura</a>
+      <a href="#api-docs" class="nav-link">API</a>
+      <a href="#empezar" class="nav-link">Empezar</a>
       <a href="#academico" class="nav-link">Tesis</a>
       <div class="mobile-nav-actions">
         <a href="https://kit-pagos-colombia.onrender.com/docs" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Swagger UI (/docs) ↗</a>
@@ -87,8 +81,14 @@
             </p>
 
             <div class="hero-actions">
-              <a href="#api-docs" class="btn btn-primary">Documentación de API y OpenAPI (/docs) ↗</a>
-              <a href="#codigo-tecnico" class="btn btn-secondary">Ver código y arquitectura técnica ▾</a>
+              <a href="https://kit-pagos-colombia.onrender.com/docs" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Probar en Swagger UI (/docs) ↗</a>
+              <a href="https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">Ver en GitHub ↗</a>
+            </div>
+
+            <div class="hero-render-status" id="hero-render-status">
+              <span class="status-indicator-dot" id="render-indicator-dot"></span>
+              <span class="status-indicator-text" id="render-status-text">Conectando con API en Render...</span>
+              <span class="status-indicator-note">(Servicio en Free tier · si está inactivo despierta en ~30s)</span>
             </div>
           </div>
 
@@ -249,7 +249,28 @@
                       <button type="button" class="btn-copy" data-copy="snippet-wompi">Copiar</button>
                     </div>
                     <div class="terminal-body">
-                      <pre><code id="code-snippet-wompi"></code></pre>
+                      <pre><code id="code-snippet-wompi"><span class="tok-cm">// 1. Obtener acceptance_token obligatorio previo</span>
+<span class="tok-kw">const</span> presign = <span class="tok-kw">await</span> fetch("https://sandbox.wompi.co/v1/merchants/pub_test_x");
+<span class="tok-kw">const</span> { presigned_acceptance } = (<span class="tok-kw">await</span> presign.json()).data;
+<span class="tok-kw">const</span> token = presigned_acceptance.acceptance_token;
+
+<span class="tok-cm">// 2. Calcular firma de integridad SHA-256 en centavos</span>
+<span class="tok-kw">const</span> raw = "ORD-<span class="tok-num">1</span>" + "<span class="tok-num">15000000</span>" + "COP" + "integrity_secret";
+<span class="tok-kw">const</span> signature = sha256(raw);
+
+<span class="tok-cm">// 3. Petición POST a Wompi</span>
+<span class="tok-kw">const</span> res = <span class="tok-kw">await</span> fetch("https://sandbox.wompi.co/v1/transactions", {
+  method: "POST",
+  headers: { Authorization: "Bearer pub_test_x" },
+  body: JSON.stringify({
+    amount_in_cents: <span class="tok-num">15000000</span>, // &lt;- Centavos obligatorios
+    currency: "COP",
+    signature,
+    acceptance_token: token,
+    payment_method: { <span class="tok-kw">type</span>: "CARD", token: "tok_test_card" },
+    reference: "ORD-<span class="tok-num">1</span>",
+  }),
+});</code></pre>
                     </div>
                   </div>
                 </div>
@@ -265,7 +286,24 @@
                       <button type="button" class="btn-copy" data-copy="snippet-mercadopago">Copiar</button>
                     </div>
                     <div class="terminal-body">
-                      <pre><code id="code-snippet-mercadopago"></code></pre>
+                      <pre><code id="code-snippet-mercadopago"><span class="tok-cm">// Cobro directo en Mercado Pago (sin acceptance_token)</span>
+<span class="tok-cm">// Exige cabecera X-Idempotency-Key y monto en pesos</span>
+<span class="tok-kw">const</span> idempotencyKey = crypto.randomUUID();
+
+<span class="tok-kw">const</span> res = <span class="tok-kw">await</span> fetch("https://api.mercadopago.com/v1/payments", {
+  method: "POST",
+  headers: {
+    Authorization: "Bearer APP_USR-xxx",
+    "X-Idempotency-Key": idempotencyKey, // &lt;- Cabecera obligatoria
+  },
+  body: JSON.stringify({
+    transaction_amount: <span class="tok-num">150000</span>, // &lt;- Pesos directos (no centavos)
+    token: "tok_test_card",
+    installments: <span class="tok-num">1</span>, // &lt;- Obligatorio como entero
+    payer: { email: "cliente@example.com" },
+    external_reference: "ORD-<span class="tok-num">1</span>",
+  }),
+});</code></pre>
                     </div>
                   </div>
                 </div>
@@ -297,7 +335,39 @@
                       </div>
                     </div>
                     <div class="terminal-body">
-                      <pre><code id="code-snippet-unified"></code></pre>
+                      <pre><code id="code-snippet-unified"><span class="tok-kw">import</span> {
+  KitPagos,
+  Gateway,
+  Amount,
+  Currency,
+  OrderReference,
+  Payer,
+  PaymentMethod,
+} <span class="tok-kw">from</span> "kit-pagos-colombia";
+
+<span class="tok-cm">// 1. Instanciar pasarela activa (lo único que cambia para alternar)</span>
+<span class="tok-kw">const</span> kitPagos = <span class="tok-kw">new</span> KitPagos({
+  gateway: Gateway.WOMPI, // &lt;- Lo único que cambia para alternar
+  credentials: {
+    [Gateway.WOMPI]: {
+      publicKey: "pub_test_demo",
+      privateKey: "prv_test_demo",
+      integritySecret: "test_integrity_secret",
+    },
+  },
+});
+
+<span class="tok-cm">// 2. Cobro unificado: idéntico para cualquier pasarela</span>
+<span class="tok-kw">const</span> resultado = <span class="tok-kw">await</span> kitPagos.createPayment({
+  amount: <span class="tok-kw">new</span> Amount("<span class="tok-num">150000</span>.<span class="tok-num">00</span>"),
+  currency: <span class="tok-kw">new</span> Currency("COP"),
+  orderReference: <span class="tok-kw">new</span> OrderReference("ORDER-<span class="tok-num">1042</span>"),
+  payer: <span class="tok-kw">new</span> Payer({
+    email: "cliente@example.com",
+    fullName: "Jaime Pavlich",
+  }),
+  paymentMethod: PaymentMethod.card("tok_test_card_12345"),
+});</code></pre>
                     </div>
                   </div>
                 </div>
@@ -365,7 +435,22 @@
                   <button type="button" class="btn-copy" data-copy="snippet-browser">Copiar</button>
                 </div>
                 <div class="terminal-body">
-                  <pre><code id="code-snippet-browser"></code></pre>
+                  <pre><code id="code-snippet-browser"><span class="tok-kw">import</span> { KitPagosBrowser, Gateway } <span class="tok-kw">from</span> "kit-pagos-colombia/browser";
+
+<span class="tok-kw">const</span> browser = <span class="tok-kw">new</span> KitPagosBrowser();
+
+<span class="tok-cm">// Tokenización directa en navegador: el número de tarjeta jamás toca tu backend (PCI DSS)</span>
+<span class="tok-kw">const</span> { token } = <span class="tok-kw">await</span> browser.tokenizeCard({
+  gateway: Gateway.WOMPI,
+  publicKey: "pub_test_demo",
+  card: {
+    number: "<span class="tok-num">4242424242424242</span>",
+    cvc: "<span class="tok-num">123</span>",
+    expMonth: "<span class="tok-num">12</span>",
+    expYear: "<span class="tok-num">28</span>",
+    cardHolder: "Jaime Pavlich",
+  },
+});</code></pre>
                 </div>
               </div>
             </div>
@@ -392,6 +477,10 @@
             <p class="openapi-banner-desc">
               Accede a la interfaz interactiva para explorar esquemas, probar endpoints en vivo, inspeccionar uniones discriminadas y validar respuestas normalizadas tanto en el simulador local como en el servicio desplegado en Render.
             </p>
+            <div class="openapi-coldstart-note">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="notice-icon"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+              <span><strong>Aviso de disponibilidad:</strong> El servicio gratuito en Render suspende el contenedor tras 15 minutos sin tráfico. Si lleva tiempo inactivo, la primera carga de Swagger UI o llamada a la API puede tardar ~30 segundos en responder (cold start). Una vez despierto, opera con latencia inmediata.</span>
+            </div>
           </div>
           <div class="openapi-banner-actions">
             <a href="https://kit-pagos-colombia.onrender.com/docs" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
@@ -616,7 +705,7 @@
                 <span>API de Simulación de Pasarelas</span>
                 <span class="endpoints-facet-tag">Tag: Simulación · Prefijo: /v1/sim</span>
               </h3>
-              <span class="text-muted" style="font-size: 0.8125rem;">23 Rutas Mock nativas · Sin costo ni dependencia de red</span>
+              <span class="text-muted" style="font-size: 0.8125rem;">23 Rutas Mock · Cubre el 100% de endpoints de tarjeta y PSE de las 4 pasarelas</span>
             </div>
 
             <p class="endpoint-desc" style="margin-bottom: 20px;">
@@ -699,8 +788,8 @@
     </section>
 
     <!-- Sección 3: Los tres componentes y el explorador de Sandbox -->
-    <section class="section" id="componentes">
-      <div class="wrap">
+    <section class="section" id="arquitectura">
+      <div class="wrap" id="componentes">
         <header class="section-header">
           <span class="section-num">3.3 · Arquitectura del artefacto</span>
           <h2 class="section-title">El artefacto son tres componentes, no uno</h2>
@@ -731,10 +820,10 @@
               <h3 class="arch-title">API de Simulación</h3>
             </div>
             <p class="arch-desc">
-              Servidor local con 23 rutas simuladas para ejercitar los flujos que los sandboxes reales bloquean (como el desenlace de PSE o la Orders API de Mercado Pago). Expone además la capa REST en <code>/v1/api</code> para probar cobros sin escribir código.
+              Servidor local con 23 rutas simuladas que cubren el 100% de los endpoints de tarjeta y PSE que usan las cuatro pasarelas (Wompi, Mercado Pago, Kushki y Rapyd). Permite ejercitar los flujos que los sandboxes reales bloquean (como el desenlace de PSE o la Orders API de Mercado Pago) y expone la capa REST en <code>/v1/api</code> para probar cobros sin escribir código.
             </p>
             <div class="arch-meta">
-              23 Rutas Mock · Capa REST /v1/api · Sin Costo / Sin Red · Respuestas Predecibles
+              23 Rutas Mock (100% endpoints tarjeta y PSE) · Capa REST /v1/api · Sin Costo / Sin Red · Respuestas Predecibles
             </div>
           </article>
 
@@ -766,7 +855,63 @@
           </div>
 
           <div class="console-body" id="sandbox-content">
-            <!-- Rellenado dinámicamente por main.ts -->
+            <div class="sandbox-header-box">
+              <div class="sandbox-host-info">
+                <span class="sandbox-host-label">URL Oficial de Sandbox:</span>
+                <code class="sandbox-host-url">https://sandbox.wompi.co/v1</code>
+              </div>
+              <button type="button" class="btn-copy btn-copy-sm" data-copy-text="https://sandbox.wompi.co/v1">Copiar URL</button>
+            </div>
+
+            <div class="sandbox-grid">
+              <div class="sandbox-table-col">
+                <h4 class="sandbox-section-title">Tarjetas de Prueba Documentadas</h4>
+                <div class="table-container">
+                  <table class="data-table sandbox-table">
+                    <thead>
+                      <tr>
+                        <th>Tipo</th>
+                        <th>Número de tarjeta</th>
+                        <th>Exp</th>
+                        <th>CVC</th>
+                        <th>Resultado esperado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><strong class="card-type-name">Crédito / Débito</strong></td>
+                        <td><code class="card-num-box">4242 4242 4242 4242</code></td>
+                        <td class="text-secondary">Futuro</td>
+                        <td><code class="card-cvc-box">123</code></td>
+                        <td><span class="outcome-cell status-approved"><span class="outcome-dot"></span>APPROVED</span></td>
+                      </tr>
+                      <tr>
+                        <td><strong class="card-type-name">Crédito / Débito</strong></td>
+                        <td><code class="card-num-box">4111 1111 1111 1111</code></td>
+                        <td class="text-secondary">Futuro</td>
+                        <td><code class="card-cvc-box">123</code></td>
+                        <td><span class="outcome-cell status-declined"><span class="outcome-dot"></span>DECLINED</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="sandbox-rules-col">
+                <h4 class="sandbox-section-title">Requisitos Técnicos y Cabeceras</h4>
+                <ul class="sandbox-rule-list">
+                  <li class="sandbox-rule-item"><span class="rule-bullet">•</span><span>Llave pública con prefijo pub_test_* enviada en cabecera 'Authorization: Bearer &lt;pub_key&gt;'.</span></li>
+                  <li class="sandbox-rule-item"><span class="rule-bullet">•</span><span>Firma de integridad obligatoria: SHA256(referencia + centavos + COP + integritySecret).</span></li>
+                  <li class="sandbox-rule-item"><span class="rule-bullet">•</span><span>Token de aceptación previo: debe pedirse a GET /merchants/{pub_key} antes de cobrar.</span></li>
+                  <li class="sandbox-rule-item"><span class="rule-bullet">•</span><span>El cobro nace como PENDING y transiciona asíncronamente a APPROVED o DECLINED.</span></li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="sandbox-quirk-box">
+              <span class="sandbox-quirk-label">Nota de integración</span>
+              <p class="sandbox-quirk-text">En el sandbox de Wompi, la URL de redirección de PSE aparece en el mismo instante en que se resuelve el pago. Para probar redirección real se utiliza la API de Simulación local.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -831,39 +976,92 @@
           <span class="section-num">3.5 · Guía de inicio</span>
           <h2 class="section-title">Comenzar a probar en 30 segundos</h2>
           <p class="section-lead">
-            La vía más corta para evaluar el Kit Pagos es la capa REST: una sola petición HTTP sin instalar Node ni compilar proyectos. Para integración en código fuente, el paquete npm está estructurado.
+            Evalúa Kit Pagos Colombia en 30 segundos mediante una petición HTTP directa contra la capa REST o instalando el paquete npm en tu proyecto Node/TypeScript.
           </p>
         </header>
 
         <div class="paths-split">
-          <!-- Ruta 1: REST -->
+          <!-- Ruta 1: REST interactivo -->
           <div class="path-box">
             <div class="path-header">
-              <h3 class="path-title">1. Probar con una petición HTTP (Capa REST)</h3>
-              <span class="path-meta">La vía más rápida</span>
+              <h3 class="path-title">Opción 1: Evaluar en 30s sin instalar nada</h3>
+              <span class="path-meta">Vía instantánea · Capa REST</span>
             </div>
             <p class="path-desc">
-              La API de Simulación expone el SDK a través de una interfaz REST en <code>/v1/api</code>. Permite ejecutar cobros y recibir respuestas normalizadas usando únicamente <code>curl</code> o Postman.
+              Envía un cobro de prueba a la API en Render (o local en <code>localhost:3000</code>). Observa la normalización a <code>TransactionStatus.APPROVED</code> en tiempo real.
             </p>
 
             <div class="terminal">
-              <div class="terminal-bar">
-                <span class="terminal-filename">curl -X POST /v1/api/payments</span>
-                <button type="button" class="btn-copy" data-copy="snippet-rest">Copiar</button>
+              <div class="terminal-bar terminal-bar-interactive">
+                <div class="terminal-tabs" role="tablist" aria-label="Vista de terminal">
+                  <button type="button" class="term-tab-btn is-active" id="btn-tab-curl-req">Petición (cURL)</button>
+                  <button type="button" class="term-tab-btn" id="btn-tab-curl-res">Respuesta (HTTP 201)</button>
+                </div>
+                <div class="terminal-actions">
+                  <button type="button" class="btn-live-run" id="btn-run-live-curl" title="Ejecutar llamada HTTP real contra Render">
+                    <span class="live-dot" id="live-run-dot"></span>
+                    <span class="live-btn-text" id="live-run-text">Probar en vivo ⚡</span>
+                  </button>
+                  <button type="button" class="btn-copy" id="btn-copy-curl" data-copy="snippet-rest">Copiar</button>
+                </div>
               </div>
               <div class="terminal-body">
-                <pre><code id="code-snippet-rest"></code></pre>
+                <div id="pane-curl-req" class="terminal-pane is-active">
+                  <pre><code id="code-snippet-rest"><span class="tok-kw">curl</span> <span class="tok-fn">-X</span> POST https://kit-pagos-colombia.onrender.com/v1/api/payments \
+  <span class="tok-fn">-H</span> "Content-Type: application/json" \
+  <span class="tok-fn">-H</span> "x-kit-pagos-environment: sandbox" \
+  <span class="tok-fn">-d</span> '{
+    "gateway": "wompi",
+    "amount": "150000.00",
+    "currency": "COP",
+    "orderReference": "ORD-CURL-001",
+    "payer": {
+      "email": "dev@javeriana.edu.co",
+      "fullName": "Joshua Prieto"
+    },
+    "paymentMethod": {
+      "type": "CARD",
+      "token": "tok_test_card_12345"
+    }
+  }'</code></pre>
+                </div>
+                <div id="pane-curl-res" class="terminal-pane" style="display: none;">
+                  <div class="terminal-res-meta">
+                    <span class="res-badge res-badge-201" id="res-badge-status">HTTP 201 CREATED</span>
+                    <span class="res-meta-time" id="res-meta-latency">Latencia: ~140ms</span>
+                    <span class="res-meta-info">Wompi &rarr; Canónico APPROVED</span>
+                  </div>
+                  <pre><code id="code-snippet-rest-response">{
+  <span class="tok-str">"outcome"</span>: <span class="tok-str">"TRANSACTION"</span>,
+  <span class="tok-str">"transaction"</span>: {
+    <span class="tok-str">"gatewayTransactionId"</span>: <span class="tok-str">"1042-wompi-mock"</span>,
+    <span class="tok-str">"orderReference"</span>: <span class="tok-str">"ORD-CURL-001"</span>,
+    <span class="tok-str">"amount"</span>: <span class="tok-str">"150000.00"</span>,
+    <span class="tok-str">"currency"</span>: <span class="tok-str">"COP"</span>,
+    <span class="tok-str">"payer"</span>: {
+      <span class="tok-str">"email"</span>: <span class="tok-str">"dev@javeriana.edu.co"</span>,
+      <span class="tok-str">"fullName"</span>: <span class="tok-str">"Joshua Prieto"</span>
+    },
+    <span class="tok-str">"status"</span>: <span class="tok-str">"APPROVED"</span>,
+    <span class="tok-str">"rawStatus"</span>: <span class="tok-str">"APPROVED"</span>,
+    <span class="tok-str">"isApproved"</span>: <span class="tok-kw">true</span>,
+    <span class="tok-str">"isPending"</span>: <span class="tok-kw">false</span>,
+    <span class="tok-str">"isFinal"</span>: <span class="tok-kw">true</span>
+  },
+  <span class="tok-str">"rawStatus"</span>: <span class="tok-str">"APPROVED"</span>
+}</code></pre>
+                </div>
               </div>
             </div>
 
             <ol class="path-steps">
               <li>
                 <span class="step-marker">a</span>
-                <span>Descubre las pasarelas activas con <code>GET https://kit-pagos-colombia.onrender.com/v1/api/gateways</code> (o en local con <code>localhost:3000</code>).</span>
+                <span>Haz clic en <strong>Probar en vivo ⚡</strong> para consultar la instancia real en Render o copia el cURL en tu terminal.</span>
               </li>
               <li>
                 <span class="step-marker">b</span>
-                <span>Cambia el campo <code>gateway</code> por <code>wompi</code>, <code>kushki</code> o <code>rapyd</code> para observar cómo cada una responde con su estado canónico.</span>
+                <span>Explora y ejecuta más endpoints interactivos con esquemas OpenAPI en <a href="https://kit-pagos-colombia.onrender.com/docs" target="_blank" rel="noopener noreferrer">Swagger UI (/docs) ↗</a>.</span>
               </li>
             </ol>
           </div>
@@ -871,11 +1069,11 @@
           <!-- Ruta 2: SDK npm -->
           <div class="path-box">
             <div class="path-header">
-              <h3 class="path-title">2. Integrar en tu proyecto Node / TypeScript</h3>
+              <h3 class="path-title">Opción 2: Instalar en tu proyecto Node</h3>
               <span class="path-meta">Paquete npm oficial</span>
             </div>
             <p class="path-desc">
-              Instala el SDK para utilizar las clases de dominio, objetos de valor inmutables, adaptadores y validación de tipos estricta.
+              Instala el SDK para utilizar clases de dominio, tipado estricto, objetos de valor inmutables y adaptadores desacoplados.
             </p>
 
             <div class="terminal" style="margin-bottom: 18px;">
@@ -888,23 +1086,32 @@
               </div>
             </div>
 
-            <span class="path-subhead">Clonar el monorepositorio localmente:</span>
-            <div class="terminal">
-              <div class="terminal-bar">
-                <span class="terminal-filename">Instalación completa</span>
-                <button type="button" class="btn-copy" data-copy-text="cd sdk && npm install && npm run build&#10;cd ../simulator-api && npm install && npm run dev&#10;cd ../examples && npm install && npm run simulate:wompi">Copiar</button>
-              </div>
-              <div class="terminal-body">
-                <pre><code><span class="tok-cm"># Compilar SDK y levantar API de simulación</span>
-cd sdk && npm install && npm run build
-cd ../simulator-api && npm install && npm run dev
+            <!-- Desplegable para compilación de monorepositorio -->
+            <details class="monorepo-expandable">
+              <summary class="monorepo-summary">
+                <span class="monorepo-summary-text">¿Deseas clonar y compilar el monorepositorio local? (5 comandos)</span>
+                <span class="monorepo-summary-badge">Desarrollo</span>
+              </summary>
+              <div class="monorepo-expandable-body">
+                <p class="monorepo-explain">Para evaluadores de tesis o desarrolladores que deseen compilar el núcleo del SDK, levantar el simulador local y correr los ejemplos:</p>
+                <div class="terminal">
+                  <div class="terminal-bar">
+                    <span class="terminal-filename">Compilación completa</span>
+                    <button type="button" class="btn-copy" data-copy-text="cd sdk &amp;&amp; npm install &amp;&amp; npm run build&#10;cd ../simulator-api &amp;&amp; npm install &amp;&amp; npm run dev&#10;cd ../examples &amp;&amp; npm install &amp;&amp; npm run simulate:wompi">Copiar</button>
+                  </div>
+                  <div class="terminal-body">
+                    <pre><code><span class="tok-cm"># Compilar SDK y levantar API de simulación</span>
+cd sdk &amp;&amp; npm install &amp;&amp; npm run build
+cd ../simulator-api &amp;&amp; npm install &amp;&amp; npm run dev
 
 <span class="tok-cm"># Ejecutar los ejemplos ejecutables</span>
-cd ../examples && npm install && npm run simulate:wompi</code></pre>
+cd ../examples &amp;&amp; npm install &amp;&amp; npm run simulate:wompi</code></pre>
+                  </div>
+                </div>
               </div>
-            </div>
+            </details>
 
-            <div class="path-footer-link">
+            <div class="path-footer-link" style="margin-top: 18px;">
               Consulta la <a href="https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/blob/devops/docs/03-sdk/4-guia-de-implementacion.md" target="_blank" rel="noopener noreferrer">Guía de Implementación completa ↗</a> para el detalle paso a paso de cada caso de uso.
             </div>
           </div>
@@ -983,7 +1190,7 @@ cd ../examples && npm install && npm run simulate:wompi</code></pre>
       </div>
 
       <div class="footer-disclaimer">
-        Kit Pagos Colombia es un proyecto académico de investigación y desarrollo de software de la Pontificia Universidad Javeriana de Bogotá. No es una entidad financiera ni capta recursos del público. Las marcas Wompi, Mercado Pago, Kushki y Rapyd pertenecen a sus respectivos titulares y se citan únicamente con fines de interoperabilidad y análisis de compatibilidad técnica.
+        Kit Pagos Colombia es un proyecto académico open source de la Pontificia Universidad Javeriana de Bogotá, publicado bajo licencia Apache-2.0. Las marcas Wompi, Mercado Pago, Kushki y Rapyd pertenecen a sus respectivos titulares y se citan únicamente con fines de interoperabilidad y análisis de compatibilidad técnica.
       </div>
     </div>
   </footer>
