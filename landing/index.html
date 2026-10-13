@@ -77,7 +77,7 @@
             </h1>
 
             <p class="hero-sub">
-              Wompi pide centavos y SHA-256; Mercado Pago pide pesos y UUID de idempotencia; Kushki y Rapyd manejan sus propios esquemas de firma y estados. Este SDK normaliza cobros, webhooks y bancos de PSE en una sola capa sin dependencias externas, e incluye un simulador local para probar flujos sin quemar saldo ni credenciales de prueba.
+              Wompi pide centavos y SHA-256; Mercado Pago pide pesos y UUID de idempotencia; Kushki y Rapyd manejan sus propios esquemas de firma y estados. Este SDK normaliza cobros, webhooks y bancos de PSE en una sola capa, con una sola dependencia (<code>big.js</code>, para la aritmética de los montos), e incluye un simulador local para probar flujos sin quemar saldo ni credenciales de prueba.
             </p>
 
             <div class="hero-actions">
@@ -120,7 +120,7 @@
                     <span class="flow-chip">Objetos de Valor Inmutables</span>
                     <span class="flow-chip">Puertos de Abstracción</span>
                     <span class="flow-chip">TransactionStatus Canónico</span>
-                    <span class="flow-chip">0 Dependencias de Runtime</span>
+                    <span class="flow-chip">1 Dependencia de Runtime (big.js)</span>
                   </div>
                 </div>
 
@@ -209,7 +209,7 @@
           </div>
           <div class="disparity-row">
             <div class="disparity-term">3. Asimetría en PSE</div>
-            <div class="disparity-desc">Bancolombia en Mercado Pago es el código <code>1007</code>; en Rapyd es <code>co_pse_bancolombia_bank</code>. Además, Wompi entrega la URL de redirección en la primera respuesta, mientras Kushki exige dos llamadas obligatorias (crear token y luego transfer-in).</div>
+            <div class="disparity-desc">Bancolombia en Mercado Pago es el código <code>1007</code>; en Rapyd es <code>co_pse_bancolombia_bank</code>. Además, Wompi no entrega la URL del banco al crear el cobro: aparece en una consulta posterior, junto con el desenlace; y Kushki exige dos llamadas obligatorias (crear token y luego transfer-in).</div>
           </div>
           <div class="disparity-row">
             <div class="disparity-term">4. Bloqueos en pruebas</div>
@@ -426,7 +426,7 @@
             <div>
               <h3 class="comparison-title" style="margin-bottom: 8px;">Tokenización en el cliente: cumplimiento PCI DSS</h3>
               <p class="section-lead" style="margin-bottom: 24px; font-size: 0.9375rem;">
-                Por norma PCI DSS, los datos de tarjeta nunca deben tocar tu servidor. El módulo <code>kit-pagos-colombia/browser</code> (14 KB, cero dependencias) tokeniza directo desde el navegador contra Wompi o Mercado Pago y te entrega un token opaco (<code>tok_...</code>) listo para cobrar desde el backend.
+                El número de la tarjeta no pasa por tu servidor: el navegador lo manda directo a la pasarela, y tu backend solo recibe el token. El módulo <code>kit-pagos-colombia/browser</code> (16 KB, cero dependencias) tokeniza directo desde el navegador contra Wompi o Mercado Pago y te entrega un token opaco (<code>tok_...</code>) listo para cobrar desde el backend.
               </p>
 
               <div class="terminal">
@@ -806,10 +806,10 @@
               <h3 class="arch-title">SDK Hexagonal</h3>
             </div>
             <p class="arch-desc">
-              Paquete npm en TypeScript con tipado estricto y cero dependencias de Node. El dominio no sabe nada de HTTP ni de pasarelas específicas. Incluye <code>kit-pagos-colombia/browser</code> para tokenizar tarjetas en el front sin meter tu backend en alcance PCI DSS.
+              Paquete npm en TypeScript con tipado estricto y una sola dependencia de runtime (<code>big.js</code>). El dominio no sabe nada de HTTP ni de pasarelas específicas. Incluye <code>kit-pagos-colombia/browser</code> para tokenizar tarjetas en el front sin meter tu backend en alcance PCI DSS.
             </p>
             <div class="arch-meta">
-              TypeScript 5.x · Arquitectura Hexagonal · Cero Dependencias · Módulo /browser
+              TypeScript 6 · Arquitectura Hexagonal · Una Dependencia (big.js) · Módulo /browser
             </div>
           </article>
 
@@ -1133,7 +1133,7 @@ cd ../examples &amp;&amp; npm install &amp;&amp; npm run simulate:wompi</code></
               Kit Pagos Colombia es nuestro proyecto de grado para optar al título de Ingeniero de Sistemas en la Pontificia Universidad Javeriana. Lo estructuramos con la metodología <strong>Design Science Research (DSR)</strong> para construir una solución funcional a un problema recurrente de la industria.
             </p>
             <p>
-              Cada decisión de diseño está soportada en ADRs en el repositorio, con pruebas automatizadas y límites de calidad de código: acoplamiento CBO ≤ 5, complejidad ciclomática WMC ≤ 15 y cobertura de pruebas ≥ 80%.
+              Cada decisión de diseño está soportada en ADRs en el repositorio, con pruebas automatizadas y límites de calidad de código: acoplamiento CBO ≤ 5, complejidad por clase WMC ≤ 20 (la suma de la complejidad ciclomática de sus métodos) y cobertura de pruebas ≥ 80%.
             </p>
             <div class="authors-block">
               <span class="authors-label">Autores:</span>
