@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { GatewayMockFactory } from "../gateways/mercadopago/GatewayMockFactory";
 import {
+  allowAnyOrigin,
+  MERCADOPAGO_TOKENIZATION_PREFLIGHT_HEADERS,
+  registerTokenizationPreflight,
+} from "../gateways/tokenizationCors";
+import {
   MercadoPagoCreateOrderRequestBody,
   MercadoPagoCreatePaymentRequestBody,
   MercadoPagoOrderStatus,
@@ -611,8 +616,10 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // ── POST /v1/sim/mercadopago/card_tokens (issue #127) ────────────────────
+  registerTokenizationPreflight(app, "/v1/sim/mercadopago/card_tokens", MERCADOPAGO_TOKENIZATION_PREFLIGHT_HEADERS);
   app.post(
     "/v1/sim/mercadopago/card_tokens",
+    { onSend: allowAnyOrigin },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const query = request.query as { public_key?: string } | undefined;
       const publicKey = query?.public_key;
