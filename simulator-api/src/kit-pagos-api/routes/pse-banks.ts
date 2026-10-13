@@ -3,6 +3,7 @@ import { Gateway, KitPagosErrorCode, PseBank } from "kit-pagos-colombia";
 import { CLIENT_CREDENTIAL_HEADERS, RequestHeaders } from "../../auth/CredentialResolver";
 import { gatewayClientFor } from "../gateway-client";
 import { SUPPORTED_GATEWAYS, parseGateway, unsupportedGatewayBody } from "../gateway-param";
+import { GetPseBanksSchema } from "../openapi/schemas";
 
 /**
  * Serializa un `PseBank` del SDK a JSON para la respuesta HTTP.
@@ -79,6 +80,7 @@ function bringsOwnCredentials(headers: RequestHeaders): boolean {
 export async function pseBanksRoute(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { gateway?: string } }>(
     "/pse-banks",
+    { schema: GetPseBanksSchema },
     async (
       request: FastifyRequest<{ Querystring: { gateway?: string } }>,
       reply: FastifyReply,

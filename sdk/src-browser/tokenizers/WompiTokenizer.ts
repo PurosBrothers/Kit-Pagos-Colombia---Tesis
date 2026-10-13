@@ -73,6 +73,11 @@ function errorMessageFor(status: number, error: WompiErrorBody | undefined): str
  *
  * Usa solo `fetch` nativo, sin dependencias de Node.js. CORS fue medido: Wompi admite
  * el preflight y la llamada directa desde el navegador del pagador a `/v1/tokens/cards`.
+ *
+ * Usa la variante **simple** de tokenización: la tarjeta viaja en el cuerpo JSON de
+ * `POST /v1/tokens/cards` sobre HTTPS. Wompi recomienda por defecto cifrar la tarjeta,
+ * pero la variante simple es la que este tokenizador usa y declara; que el SDK no siga
+ * la recomendación por defecto es deuda nombrada en el punto 81 del `architecture-log.md`.
  */
 export class WompiTokenizer {
   /** Resuelve la URL base de Wompi desde el catálogo cerrado. */

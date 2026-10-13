@@ -53,26 +53,33 @@ export interface ResolvedCredentials {
  * aplicando el mismo criterio que sdk/test/sandbox/sandbox-env.ts.
  */
 export function loadServerEnv(): Record<string, string | undefined> {
-  const rootEnvPath = path.resolve(__dirname, "../../../.env");
+  const candidatePaths = [
+    path.resolve(__dirname, "../../../.env"),
+    path.resolve(process.cwd(), ".env"),
+    path.resolve(process.cwd(), "../.env"),
+    "/etc/secrets/.env",
+  ];
   const entries: Record<string, string> = {};
 
-  if (fs.existsSync(rootEnvPath)) {
-    try {
-      const content = fs.readFileSync(rootEnvPath, "utf8");
-      for (const line of content.split("\n")) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) {
-          continue;
+  for (const envPath of candidatePaths) {
+    if (fs.existsSync(envPath)) {
+      try {
+        const content = fs.readFileSync(envPath, "utf8");
+        for (const line of content.split("\n")) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) {
+            continue;
+          }
+          const separator = trimmed.indexOf("=");
+          const key = trimmed.slice(0, separator).trim();
+          const value = trimmed.slice(separator + 1).trim();
+          if (key && !(key in entries)) {
+            entries[key] = value;
+          }
         }
-        const separator = trimmed.indexOf("=");
-        const key = trimmed.slice(0, separator).trim();
-        const value = trimmed.slice(separator + 1).trim();
-        if (key) {
-          entries[key] = value;
-        }
+      } catch {
+        // Si no se puede leer, se ignora
       }
-    } catch {
-      // Si no se puede leer, se confía en process.env
     }
   }
 

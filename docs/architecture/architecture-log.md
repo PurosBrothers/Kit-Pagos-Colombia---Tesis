@@ -2337,8 +2337,8 @@ Surgió el debate arquitectónico sobre si los subproyectos del repositorio debe
 **Publicación de versión oficial `0.2.0` del SDK:**
 Alineado con el punto 53 sobre versionado semántico en fase pre-estabilización (`0.x.y`), se publicó formalmente `kit-pagos-colombia@0.2.0` en npm (`npm publish --access public`). Esta versión incorpora el soporte completo para tokenización en navegador (`kit-pagos-colombia/browser`), la resolución extendida de PSE y bancos, y los esquemas REST consolidados.
 
-**Diferimiento de la colección Postman:**
-Por decisión explícita de equipo, la elaboración de la colección versionada de Postman (contemplada en el entregable de la Iteración 3) se pospone para consolidarse una vez se implementen los escenarios de fallo restantes (issue #122) y se estabilice el catálogo total de endpoints, evitando la duplicación de esfuerzo y el riesgo de mantener colecciones desfasadas mientras la superficie de rutas continúa evolucionando.
+**Colección Postman versionada (`simulator-api/postman/`):**
+Tras la estabilización del catálogo completo de endpoints y escenarios de fallo (issues #122 y #105), se formalizó y versionó la colección Postman oficial en `simulator-api/postman/kit-pagos-simulator.postman_collection.json` (formato Postman Schema v2.1.0). La colección cubre la totalidad de la superficie expuesta: diagnóstico (`/health`), los 5 endpoints unificados de `/v1/api`, y las rutas nativas de simulación de Wompi, Mercado Pago, Rapyd y Kushki, así como el trigger de webhooks. Asimismo, se versionaron los entornos `local.postman_environment.json` y `render.postman_environment.json`, asegurando que ninguna credencial privada o sensible quede almacenada en el repositorio.
 
 **Lo medido (5 de octubre de 2026):**
 - Servicio en producción respondiendo en `https://kit-pagos-colombia.onrender.com`.
@@ -2413,6 +2413,50 @@ Los niveles de evidencia de las tablas se corrigieron contra el registro: el PSE
 > **Revisado en el punto 83.** El `init` de Kushki aplica ahora los escenarios de negocio de la cabecera; `EXPIRED`, `FLAPPING` y `DUPLICATE_PAYMENT` responden `501` sin mover la transferencia.
 
 > **Revisado en el punto 84.** La orden rechazada de Mercado Pago sí nace: el `402` trae la orden en `data` y la consulta responde `200` en `failed` (medido el 7 de octubre de 2026, `docs/testing-data/mercado-pago.md`). La tabla del criterio 1 ya la incluye.
+
+### 81. `WompiTokenizer` usa la tokenización simple de Wompi, no la cifrada recomendada (issue #132)
+
+**Responsable:** Henao (issue #132).
+
+**Contexto.**
+`WompiTokenizer` (`sdk/src-browser/tokenizers/WompiTokenizer.ts`) envía la tarjeta en el cuerpo JSON de `POST /v1/tokens/cards` sobre HTTPS: es la variante **simple** de tokenización de Wompi. La página de métodos de pago ([docs.wompi.co — Métodos de pago](https://docs.wompi.co/en/docs/colombia/metodos-de-pago/), consultada el 4 de octubre de 2026) recomienda por defecto cifrar la información de la tarjeta: *«By default we recommend tokenizing by encrypting the card information. If your use case does not support encryption, select the simple tokenization tab.»*
+
+La variante cifrada tiene tres pasos:
+
+1. Obtener la llave pública de cifrado con `GET /v1/tokens/keys/tokenization`.
+2. Generar un JWE con `RSA-OAEP-256` y contenido `A256GCM` a partir de los mismos cinco campos.
+3. Enviarlo como cadena en el campo `payload` del mismo `POST /v1/tokens/cards`.
+
+La documentación oficial no explica qué protege el cifrado adicional sobre HTTPS, ni si cambia el alcance PCI DSS. No se pudo comprobar, y este punto no lo afirma.
+
+**Lo medido (4 de octubre de 2026, sandbox de Wompi, llave pública de prueba del proyecto).**
+
+| Petición | Hora | Resultado |
+|---|---|---|
+| `GET /v1/tokens/keys/tokenization` en sandbox y en producción, con `Authorization: Bearer` | 17:50 | 200, `data.publicKey` en PEM. El cuerpo del PEM llega con espacios en vez de saltos de línea, e `importSPKI` de `jose` 5.10.0 lo importó igual. |
+| La misma ruta en sandbox, sin autenticación | 17:50 | 200, la misma forma |
+| `POST /v1/tokens/cards` con `{ payload: <JWE> }`, tarjeta `4242424242424242` | 17:51 | 201 `CREATED`, token `tok_test_…`, `last_four` 4242 |
+| `POST /v1/tokens/cards` sin cifrar (lo que hace hoy `WompiTokenizer`), la misma tarjeta | 17:51 | 201 `CREATED`, los mismos doce campos en `data` |
+| `POST /v1/tokens/cards` con `{ payload: "no-es-un-jwe" }` | 17:51 | **502**, no 422 |
+
+**El dato que importa:** un `payload` mal formado no responde como error de validación, sino con 502. `WompiTokenizer` traduce todo 5xx a `GATEWAY_SERVER_ERROR` (punto 77, decisión 4). Si el SDK cifrara mal, el comercio vería una caída de Wompi y no un defecto del SDK.
+
+**Decisión.**
+Tomada por Joan el 4 de octubre de 2026, al aprobar el inventario del alcance de código del proyecto (#130): **se mantiene la tokenización simple y se declara.**
+
+- Es una variante que Wompi documenta y acepta, y medida da la misma respuesta.
+- Ningún requisito funcional ni entregable exige la variante cifrada.
+
+**Alternativa descartada:** adoptar la variante cifrada en `WompiTokenizer`.
+
+- Agrega una llamada de red para obtener la llave, aunque se puede guardar en caché por instancia.
+- Necesita generar un JWE en el navegador, sea con una dependencia como `jose` o con WebCrypto. No se comprobó si la segunda opción cabe sin dependencias, ni cuánto pesaría el bundle con la primera.
+- Exige distinguir el 502 por un cifrado mal hecho de una caída real.
+- Presiona el WMC: la clase mide 17 con umbral 20 (`npm run metrics`, 13 de octubre de 2026). Cuando se tomó la decisión estaba en 18 (punto 77, decisión 5).
+
+**Deuda nombrada:** el SDK no sigue la recomendación por defecto de la pasarela. Declarado en `docs/03-sdk/6-tokenizacion-frontend.md` y en el JSDoc de `WompiTokenizer`, sin que ninguna de las dos afirmaciones pretenda que la variante simple tenga o deje de tener el mismo alcance PCI DSS que la cifrada.
+
+**Estado:** Resuelto con deuda nombrada.
 
 ### 82. Declaración dinámica de ambiente y resolución de URLs mediante catálogo cerrado en el SDK (Issue #123)
 
@@ -2899,6 +2943,36 @@ Era `/pagar`, en español (deuda del punto 84). La ruta vieja responde `308` hac
 **Lo medido.** Las cifras de la suite completa, de los ejemplos, del contrato y del paquete van en la verificación final del PR.
 
 **Estado:** Resuelto con deuda nombrada: el prefijo de 10 caracteres del `SyntaxError`, el cuerpo original del `402` fuera de la API pública, y las categorías que no tienen fuente (`UNKNOWN`), sobre todo en Kushki con tarjeta, cuya cuenta UAT no rechaza.
+
+### 88. Despliegue de simulator-api en Render y colección Postman versionada (issue #131)
+
+**Responsable:** Joshua (issue #131, PR #147).
+
+**Contexto.**
+El primer entregable de la Iteración 3 (`docs/project-management/methodology.md`, §2) asignaba tres partes a la API de Simulación: los escenarios de fallo (cerrados en el issue #122, punto 83), el despliegue en la nube en Render (punto 79) y la colección Postman versionada. El issue #131 pedía consolidar el despliegue productivo de la API de Simulación en Render, asegurar su reproducibilidad desatendida mediante colección y ambientes de Postman ejecutables con Newman, y resolver la integración de secretos sin romper el modo abierto ni fugar credenciales al repositorio.
+
+**Decisión 1: la colección de Postman cubre 33 peticiones encadenadas y firma dinámicamente Wompi y Rapyd.**
+La colección vive en `simulator-api/postman/kit-pagos-simulator.postman_collection.json` con ambientes `local.postman_environment.json` y `render.postman_environment.json`.
+- **Orden secuencial:** Organizada en 7 carpetas (`00. Diagnóstico`, `01. Capa REST`, `02. Wompi`, `03. Mercado Pago`, `04. Rapyd`, `05. Kushki`, `06. Webhooks`).
+- **Encadenamiento dinámico:** Cada creación guarda su identificador generado (`wompiTransactionId`, `mpPaymentId`, `mpOrderId`, `rapydCheckoutId`, `kushkiChargeTicket`, `kushkiTransferToken`) en el ambiente, y las consultas posteriores lo consumen.
+- **Firma dinámica:** En cumplimiento con el punto 86, los scripts pre-request calculan la firma criptográfica exacta: Wompi calcula SHA-256 hex sobre `referencia + monto + divisa + secreto`, y Rapyd genera `salt`, `timestamp` y la firma HMAC-SHA256 Base64 sobre el cuerpo crudo.
+- **Aserciones 2xx y webhooks:** Cada petición comprueba respuesta HTTP 2xx. El trigger de webhooks acepta `409 WEBHOOK_TARGET_NOT_CONFIGURED` como respuesta válida sin destino configurado porque entrega el webhook firmado en el cuerpo; el endpoint de verificación `POST /v1/api/webhooks/wompi` exige `200` y valida la firma criptográfica usando el verificador real del SDK.
+
+**Decisión 2: resolución jerárquica de Secret Files de Render (`/etc/secrets/.env`).**
+Render monta los archivos secretos en `/etc/secrets/.env`. `CredentialResolver.loadServerEnv()` resuelve de forma ordenada: la raíz del monorepo (`../../../.env`), el directorio de trabajo local (`.env`), el directorio padre (`../.env`) y `/etc/secrets/.env`. Esto permite cargar los secretos de pasarela en la nube sin configurarlos en texto plano en la interfaz web ni en el repositorio.
+
+**Decisión 3: modo abierto en Render para evaluación pública y aislamiento de pruebas locales.**
+En Render, `API_AUTH_TOKEN` se mantiene sin configurar. Esto permite que el jurado de tesis, los evaluadores externos, la landing page y Newman interactúen con `/v1/api` y con el trigger de webhooks sin requerir bearer tokens privados. En el entorno local de desarrollo, `authHook.ts` aísla las pruebas de Jest (`NODE_ENV === "test"`) para que no hereden el token privado del `.env` local del desarrollador, preservando la hermeticidad de las pruebas unitarias.
+
+**Decisión 4: redespliegue automatizado mediante Deploy Hook.**
+Se documentó `RENDER_DEPLOY_HOOK_URL` en `.env.example`, permitiendo invocar `curl -X POST "$RENDER_DEPLOY_HOOK_URL"` para desencadenar el ciclo de build (`npm ci && npm run build`) y start (`npm start`) en Render sin acceder manualmente a la consola web.
+
+**Lo medido.**
+- **Newman contra Render (`https://kit-pagos-colombia.onrender.com`):** 33 de 33 peticiones ejecutadas, 0 fallidas, 33 de 33 aserciones pasadas en 7.5 segundos (12 de octubre de 2026, 14:20).
+- **Pruebas unitarias:** 41 suites y 1020 pruebas del simulador pasando (`npm test` en `simulator-api`); 55 suites y 900 pruebas del SDK pasando (`npm test` en `sdk`).
+- **Guía completa:** Documentada formalmente en `docs/02-arquitectura/4-despliegue-en-render-y-coleccion-postman.md`.
+
+**Estado:** Resuelto en infraestructura, código, pruebas y documentación (`render.yaml`, `simulator-api/postman/`, `CredentialResolver.ts`, `authHook.ts`, `docs/02-arquitectura/4-despliegue-en-render-y-coleccion-postman.md`).
 
 ---
 

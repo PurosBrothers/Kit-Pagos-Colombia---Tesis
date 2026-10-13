@@ -1,0 +1,1323 @@
+{
+  "info": {
+    "_postman_id": "8c12e345-0001-4a56-b789-kitpagos0001",
+    "name": "Kit Pagos Colombia - Simulator API",
+    "description": "Colección versionada de la API de Simulación de Kit Pagos Colombia (issue #131). Cubre /health, los 5 endpoints de /v1/api, las rutas /v1/sim de Wompi, Mercado Pago, Rapyd y Kushki, y el trigger de webhooks. Las carpetas se ejecutan en orden: cada creación guarda su id en el ambiente y la consulta siguiente lo usa. Sin credenciales: los secretos van en el ambiente.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// El trigger y la verificación de webhooks tienen sus propias aserciones:",
+          "if (pm.info.requestName === \"POST /v1/sim/webhooks/trigger\" || pm.info.requestName === \"POST /v1/api/webhooks/:gateway\") { return; }",
+          "pm.test(`${pm.info.requestName}: responde 2xx`, () => { pm.expect(pm.response.code).to.be.within(200, 299); });"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00. Diagnóstico",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01. Capa REST Kit Pagos (/v1/api)",
+      "item": [
+        {
+          "name": "GET /v1/api/gateways",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiAuthToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/api/gateways",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "api",
+                "gateways"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /v1/api/payments",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiAuthToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-gateway-public-key",
+                "value": "pub_test_wompi_key",
+                "type": "text"
+              },
+              {
+                "key": "x-gateway-private-key",
+                "value": "prv_test_wompi_key",
+                "type": "text"
+              },
+              {
+                "key": "x-gateway-integrity-secret",
+                "value": "{{wompiIntegritySecret}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/api/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "api",
+                "payments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gateway\": \"WOMPI\",\n  \"amount\": 50000,\n  \"currency\": \"COP\",\n  \"description\": \"Pago de prueba vía API REST\",\n  \"orderReference\": \"ORD-API-POSTMAN-{{$timestamp}}\",\n  \"payer\": {\n    \"email\": \"postman.tester@example.com\",\n    \"fullName\": \"Tester Postman\",\n    \"documentType\": \"CC\",\n    \"documentNumber\": \"123456789\",\n    \"phoneNumber\": \"3001234567\"\n  },\n  \"paymentMethod\": {\n    \"type\": \"CARD\",\n    \"cardToken\": \"tok_test_card_postman\"\n  }\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const secret = pm.environment.get(\"wompiIntegritySecret\") || \"test_integrity_kit_pagos_simulator\";",
+                  "pm.request.headers.upsert({ key: \"x-gateway-integrity-secret\", value: secret });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const id = (json.transaction && json.transaction.gatewayTransactionId) || (json.redirect && json.redirect.gatewayTransactionId) || json.gatewayTransactionId;",
+                  "pm.environment.set(\"apiPaymentId\", id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /v1/api/payments/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiAuthToken}}",
+                "type": "text"
+              },
+              {
+                "key": "x-gateway-public-key",
+                "value": "pub_test_wompi_key",
+                "type": "text"
+              },
+              {
+                "key": "x-gateway-private-key",
+                "value": "prv_test_wompi_key",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/api/payments/{{apiPaymentId}}?gateway=wompi",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "api",
+                "payments",
+                "{{apiPaymentId}}"
+              ],
+              "query": [
+                {
+                  "key": "gateway",
+                  "value": "wompi"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /v1/api/pse-banks",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiAuthToken}}",
+                "type": "text"
+              },
+              {
+                "key": "x-gateway-public-key",
+                "value": "pub_test_wompi_key",
+                "type": "text"
+              },
+              {
+                "key": "x-gateway-private-key",
+                "value": "prv_test_wompi_key",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/api/pse-banks?gateway=wompi",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "api",
+                "pse-banks"
+              ],
+              "query": [
+                {
+                  "key": "gateway",
+                  "value": "wompi"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02. Simulador Wompi (/v1/sim/wompi)",
+      "item": [
+        {
+          "name": "GET /v1/sim/wompi/merchants/:publicKey",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/wompi/merchants/pub_test_wompi_key",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "wompi",
+                "merchants",
+                "pub_test_wompi_key"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"wompiAcceptanceToken\", pm.response.json().data.presigned_acceptance.acceptance_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /v1/sim/wompi/terms",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/wompi/terms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "wompi",
+                "terms"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /v1/sim/wompi/pse/financial_institutions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/wompi/pse/financial_institutions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "wompi",
+                "pse",
+                "financial_institutions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /v1/sim/wompi/pse/redirect",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/wompi/pse/redirect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "wompi",
+                "pse",
+                "redirect"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /v1/sim/wompi/tokens/cards",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer pub_test_wompi_key",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/wompi/tokens/cards",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "wompi",
+                "tokens",
+                "cards"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"number\": \"4242424242424242\",\n  \"cvc\": \"123\",\n  \"exp_month\": \"12\",\n  \"exp_year\": \"28\",\n  \"card_holder\": \"POSTMAN TESTER\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"wompiCardToken\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/sim/wompi/transactions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer prv_test_wompi_key",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/wompi/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "wompi",
+                "transactions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount_in_cents\": 5000000,\n  \"currency\": \"COP\",\n  \"customer_email\": \"postman@example.com\",\n  \"reference\": \"ORD-WOMPI-POSTMAN-{{$timestamp}}\",\n  \"payment_method\": {\n    \"type\": \"CARD\",\n    \"token\": \"{{wompiCardToken}}\",\n    \"installments\": 1\n  },\n  \"acceptance_token\": \"{{wompiAcceptanceToken}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Firma de integridad: la misma fórmula de sdk/src/infrastructure/adapters/wompi-pse.ts (hex minúscula).",
+                  "const body = JSON.parse(pm.variables.replaceIn(pm.request.body.raw));",
+                  "const secret = pm.environment.get(\"wompiIntegritySecret\") || \"test_integrity_kit_pagos_simulator\";",
+                  "body.signature = CryptoJS.SHA256(`${body.reference}${body.amount_in_cents}${body.currency}${secret}`).toString(CryptoJS.enc.Hex);",
+                  "pm.request.body.raw = JSON.stringify(body);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"wompiTransactionId\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /v1/sim/wompi/transactions/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer prv_test_wompi_key",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/wompi/transactions/{{wompiTransactionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "wompi",
+                "transactions",
+                "{{wompiTransactionId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03. Simulador Mercado Pago (/v1/sim/mercadopago)",
+      "item": [
+        {
+          "name": "GET /v1/sim/mercadopago/payment_methods",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer APP_USR_TEST_TOKEN",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/mercadopago/payment_methods",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "mercadopago",
+                "payment_methods"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /v1/sim/mercadopago/card_tokens",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/mercadopago/card_tokens?public_key=APP_USR_PUBLIC_KEY",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "mercadopago",
+                "card_tokens"
+              ],
+              "query": [
+                {
+                  "key": "public_key",
+                  "value": "APP_USR_PUBLIC_KEY"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"card_number\": \"4242424242424242\",\n  \"security_code\": \"123\",\n  \"expiration_month\": 12,\n  \"expiration_year\": 2028,\n  \"cardholder\": {\n    \"name\": \"APRO\"\n  }\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"mpCardToken\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/sim/mercadopago/payments",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer APP_USR_TEST_TOKEN",
+                "type": "text"
+              },
+              {
+                "key": "X-Idempotency-Key",
+                "value": "postman-mp-{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/mercadopago/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "mercadopago",
+                "payments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_amount\": 50000,\n  \"token\": \"{{mpCardToken}}\",\n  \"description\": \"Pago de prueba Postman\",\n  \"installments\": 1,\n  \"payment_method_id\": \"visa\",\n  \"external_reference\": \"ORD-MP-POSTMAN-{{$timestamp}}\",\n  \"payer\": {\n    \"email\": \"postman@example.com\"\n  }\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"mpPaymentId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /v1/sim/mercadopago/payments/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer APP_USR_TEST_TOKEN",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/mercadopago/payments/{{mpPaymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "mercadopago",
+                "payments",
+                "{{mpPaymentId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /v1/sim/mercadopago/orders",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer APP_USR_TEST_TOKEN",
+                "type": "text"
+              },
+              {
+                "key": "X-Idempotency-Key",
+                "value": "postman-mp-order-{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/mercadopago/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "mercadopago",
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"online\",\n  \"total_amount\": \"50000\",\n  \"external_reference\": \"ORD-MP-PSE-{{$timestamp}}\",\n  \"transactions\": {\n    \"payments\": [\n      {\n        \"amount\": \"50000\",\n        \"payment_method\": {\n          \"id\": \"pse\",\n          \"type\": \"bank_transfer\"\n        }\n      }\n    ]\n  },\n  \"payer\": {\n    \"email\": \"postman@example.com\"\n  }\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"mpOrderId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /v1/sim/mercadopago/orders/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer APP_USR_TEST_TOKEN",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/mercadopago/orders/{{mpOrderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "mercadopago",
+                "orders",
+                "{{mpOrderId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04. Simulador Rapyd (/v1/sim/rapyd)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Firma Rapyd: la misma fórmula de sdk/src/infrastructure/adapters/rapyd-signature.ts.",
+              "// La página GET /checkout/:id/pay es del simulador y no lleva firma.",
+              "if (pm.request.url.path[pm.request.url.path.length - 1] === \"pay\") { return; }",
+              "const secret = pm.environment.get(\"rapydSecretKey\") || \"rapyd_secret_kit_pagos_simulator\";",
+              "const accessKey = pm.environment.get(\"rapydAccessKey\");",
+              "if (pm.request.body && pm.request.body.raw) {",
+              "  pm.request.body.raw = JSON.stringify(JSON.parse(pm.variables.replaceIn(pm.request.body.raw)));",
+              "}",
+              "const body = (pm.request.body && pm.request.body.raw) || \"\";",
+              "const query = pm.request.url.getQueryString();",
+              "const path = \"/\" + pm.request.url.path.map((s) => pm.variables.replaceIn(s)).join(\"/\") + (query ? \"?\" + pm.variables.replaceIn(query) : \"\");",
+              "const salt = CryptoJS.lib.WordArray.random(8).toString(CryptoJS.enc.Hex);",
+              "const timestamp = Math.floor(Date.now() / 1000).toString();",
+              "const toSign = pm.request.method.toLowerCase() + path + salt + timestamp + accessKey + secret + body;",
+              "const hex = CryptoJS.HmacSHA256(toSign, secret).toString(CryptoJS.enc.Hex);",
+              "const signature = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(hex));",
+              "pm.request.headers.upsert({ key: \"salt\", value: salt });",
+              "pm.request.headers.upsert({ key: \"timestamp\", value: timestamp });",
+              "pm.request.headers.upsert({ key: \"signature\", value: signature });"
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "name": "GET /v1/sim/rapyd/payment_methods/country",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_key",
+                "value": "{{rapydAccessKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/rapyd/payment_methods/country?country=CO&currency=COP",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "rapyd",
+                "payment_methods",
+                "country"
+              ],
+              "query": [
+                {
+                  "key": "country",
+                  "value": "CO"
+                },
+                {
+                  "key": "currency",
+                  "value": "COP"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /v1/sim/rapyd/customers",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "access_key",
+                "value": "{{rapydAccessKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/rapyd/customers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "rapyd",
+                "customers"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Tester\",\n  \"email\": \"postman@example.com\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"rapydCustomerId\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/sim/rapyd/payments",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "access_key",
+                "value": "{{rapydAccessKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/rapyd/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "rapyd",
+                "payments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50000,\n  \"currency\": \"COP\",\n  \"merchant_reference_id\": \"ORD-RAPYD-POSTMAN-{{$timestamp}}\",\n  \"payment_method\": {\n    \"type\": \"co_pse_bancolombia_bank\"\n  },\n  \"customer\": \"{{rapydCustomerId}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"rapydPaymentId\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /v1/sim/rapyd/payments/:paymentId",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_key",
+                "value": "{{rapydAccessKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/rapyd/payments/{{rapydPaymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "rapyd",
+                "payments",
+                "{{rapydPaymentId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /v1/sim/rapyd/checkout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "access_key",
+                "value": "{{rapydAccessKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/rapyd/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "rapyd",
+                "checkout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50000,\n  \"currency\": \"COP\",\n  \"country\": \"CO\",\n  \"merchant_reference_id\": \"ORD-RAPYD-CHK-{{$timestamp}}\",\n  \"complete_checkout_url\": \"https://example.com/success\",\n  \"cancel_checkout_url\": \"https://example.com/cancel\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"rapydCheckoutId\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /v1/sim/rapyd/checkout/:checkoutId",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "access_key",
+                "value": "{{rapydAccessKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/rapyd/checkout/{{rapydCheckoutId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "rapyd",
+                "checkout",
+                "{{rapydCheckoutId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /v1/sim/rapyd/checkout/:checkoutId/pay",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/rapyd/checkout/{{rapydCheckoutId}}/pay",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "rapyd",
+                "checkout",
+                "{{rapydCheckoutId}}",
+                "pay"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05. Simulador Kushki (/v1/sim/kushki)",
+      "item": [
+        {
+          "name": "GET /v1/sim/kushki/transfer/v1/bankList",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Public-Merchant-Id",
+                "value": "{{kushkiPublicMerchantId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/kushki/transfer/v1/bankList",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "kushki",
+                "transfer",
+                "v1",
+                "bankList"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /v1/sim/kushki/transfer/v1/tokens",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Public-Merchant-Id",
+                "value": "{{kushkiPublicMerchantId}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/kushki/transfer/v1/tokens",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "kushki",
+                "transfer",
+                "v1",
+                "tokens"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": {\n    \"subtotalIva\": 0,\n    \"subtotalIva0\": 50000,\n    \"iva\": 0,\n    \"currency\": \"COP\"\n  },\n  \"bankId\": \"1007\",\n  \"callbackUrl\": \"https://example.com/kushki/callback\",\n  \"userType\": \"0\",\n  \"documentType\": \"CC\",\n  \"documentNumber\": \"123456789\",\n  \"paymentDescription\": \"Pago Postman PSE Kushki {{$timestamp}}\",\n  \"email\": \"postman@example.com\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"kushkiTransferToken\", pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/sim/kushki/transfer/v1/init",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Private-Merchant-Id",
+                "value": "{{kushkiPrivateMerchantId}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/kushki/transfer/v1/init",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "kushki",
+                "transfer",
+                "v1",
+                "init"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{kushkiTransferToken}}\",\n  \"amount\": {\n    \"subtotalIva\": 0,\n    \"subtotalIva0\": 50000,\n    \"iva\": 0,\n    \"currency\": \"COP\"\n  }\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /v1/sim/kushki/transfer/v1/status/:token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Private-Merchant-Id",
+                "value": "{{kushkiPrivateMerchantId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/kushki/transfer/v1/status/{{kushkiTransferToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "kushki",
+                "transfer",
+                "v1",
+                "status",
+                "{{kushkiTransferToken}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /v1/sim/kushki/card/v1/charges",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Private-Merchant-Id",
+                "value": "{{kushkiPrivateMerchantId}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/kushki/card/v1/charges",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "kushki",
+                "card",
+                "v1",
+                "charges"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"tok_kushki_card_token_test\",\n  \"amount\": {\n    \"subtotalIva\": 0,\n    \"subtotalIva0\": 50000,\n    \"iva\": 0,\n    \"currency\": \"COP\"\n  },\n  \"orderDetails\": {\n    \"trackingCode\": \"ORD-KUSHKI-{{$timestamp}}\"\n  }\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"kushkiTicketNumber\", pm.response.json().ticketNumber);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /v1/sim/kushki/charges/:ticketNumber",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Private-Merchant-Id",
+                "value": "{{kushkiPrivateMerchantId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/kushki/charges/{{kushkiTicketNumber}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "kushki",
+                "charges",
+                "{{kushkiTicketNumber}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "06. Webhooks",
+      "description": "Requiere haber corrido antes la carpeta de Wompi: el trigger firma la transacción {{wompiTransactionId}}.",
+      "item": [
+        {
+          "name": "POST /v1/sim/webhooks/trigger",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiAuthToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/webhooks/trigger",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "webhooks",
+                "trigger"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gateway\": \"wompi\",\n  \"transactionId\": \"{{wompiTransactionId}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 200 si hay SIMULATOR_WEBHOOK_TARGET_URL; 409 si falta destino o secreto en el servidor.",
+                  "pm.test(\"POST /v1/sim/webhooks/trigger: responde 200 o 409\", () => {",
+                  "  const json = pm.response.json();",
+                  "  const ok = pm.response.code === 200 || (pm.response.code === 409 && (json.code === \"WEBHOOK_TARGET_NOT_CONFIGURED\" || json.code === \"WEBHOOK_SECRET_NOT_CONFIGURED\"));",
+                  "  pm.expect(ok, `código ${pm.response.code}`).to.be.true;",
+                  "});",
+                  "const json = pm.response.json();",
+                  "// Se sobrescribe siempre, para que una corrida anterior no deje un webhook viejo.",
+                  "const webhook = json.webhook || {};",
+                  "pm.environment.set(\"webhookBody\", webhook.body || \"\");",
+                  "pm.environment.set(\"webhookChecksum\", (webhook.headers && webhook.headers[\"x-event-checksum\"]) || \"\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/api/webhooks/:gateway",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiAuthToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Event-Checksum",
+                "value": "{{webhookChecksum}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/api/webhooks/wompi",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "api",
+                "webhooks",
+                "wompi"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{{webhookBody}}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 401 es la respuesta a una firma inválida: no puede contar como éxito.",
+                  "if (!pm.environment.get(\"webhookChecksum\")) {",
+                  "  pm.test.skip(\"POST /v1/api/webhooks/:gateway: el trigger no devolvió un webhook firmado\", () => {});",
+                  "  return;",
+                  "}",
+                  "pm.test(\"POST /v1/api/webhooks/:gateway: acepta el webhook firmado por el trigger\", () => {",
+                  "  pm.expect(pm.response.code).to.equal(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

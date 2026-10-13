@@ -26,7 +26,8 @@
       <nav class="header-nav" aria-label="Navegación principal">
         <ul class="nav-links">
           <li><a href="#problema" class="nav-link">El problema</a></li>
-          <li><a href="#demostracion" class="nav-link">Demostración</a></li>
+          <li><a href="#codigo-tecnico" class="nav-link">Código y dominio</a></li>
+          <li><a href="#api-docs" class="nav-link">API y OpenAPI</a></li>
           <li><a href="#componentes" class="nav-link">Componentes</a></li>
           <li><a href="#sandbox" class="nav-link">Sandboxes</a></li>
           <li><a href="#limites" class="nav-link">Límites</a></li>
@@ -37,7 +38,7 @@
 
       <div class="header-actions">
         <a href="https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">GitHub ↗</a>
-        <a href="#empezar" class="btn btn-primary">Probar con REST</a>
+        <a href="https://kit-pagos-colombia.onrender.com/docs" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Swagger UI (/docs) ↗</a>
       </div>
 
       <button type="button" class="menu-toggle" id="menu-toggle" aria-label="Abrir menú" aria-expanded="false">
@@ -48,14 +49,15 @@
     <!-- Menú móvil -->
     <div class="mobile-nav" id="mobile-nav" aria-hidden="true">
       <a href="#problema" class="nav-link">El problema</a>
-      <a href="#demostracion" class="nav-link">Demostración</a>
+      <a href="#codigo-tecnico" class="nav-link">Código y dominio</a>
+      <a href="#api-docs" class="nav-link">API y OpenAPI</a>
       <a href="#componentes" class="nav-link">Componentes</a>
       <a href="#sandbox" class="nav-link">Sandboxes</a>
       <a href="#limites" class="nav-link">Límites</a>
       <a href="#empezar" class="nav-link">Cómo empezar</a>
       <a href="#academico" class="nav-link">Tesis</a>
       <div class="mobile-nav-actions">
-        <a href="#empezar" class="btn btn-primary">Probar con REST</a>
+        <a href="https://kit-pagos-colombia.onrender.com/docs" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Swagger UI (/docs) ↗</a>
         <a href="https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">GitHub ↗</a>
       </div>
     </div>
@@ -76,43 +78,84 @@
         <div class="hero-grid">
           <div class="hero-content">
             <h1 class="hero-title">
-              Integrás una vez.<br>
-              <span class="text-accent">Cambiás de pasarela cambiando un valor.</span>
+              Unificación arquitectónica de pasarelas de pago para Colombia.<br>
+              <span class="text-accent">Una sola capa canónica para Wompi, Mercado Pago, Kushki y Rapyd.</span>
             </h1>
 
             <p class="hero-sub">
-              Cuatro pasarelas colombianas (Wompi, Mercado Pago, Kushki, Rapyd), tarjeta de crédito/débito y PSE, con los datos de prueba documentados para que puedas verificarlo vos.
+              En Colombia, cada pasarela impone contratos incompatibles en montos, firmas, flujos de PSE y validaciones. Kit Pagos Colombia aísla el dominio comercial en un SDK hexagonal, respaldado por un simulador desacoplado y documentado formalmente con OpenAPI 3.0.
             </p>
 
             <div class="hero-actions">
-              <a href="#empezar" class="btn btn-primary">Probar con una petición HTTP</a>
-              <a href="#demostracion" class="btn btn-secondary">Ver código unificado</a>
+              <a href="#api-docs" class="btn btn-primary">Documentación de API y OpenAPI (/docs) ↗</a>
+              <a href="#codigo-tecnico" class="btn btn-secondary">Ver código y arquitectura técnica ▾</a>
             </div>
           </div>
 
-          <!-- Demostración Técnica Integrada -->
+          <!-- Diagrama de Flujo Arquitectónico Hexagonal -->
           <div class="hero-demo-col">
-            <div class="code-dock">
-              <div class="code-dock-header">
-                <span class="code-dock-file">checkout.ts</span>
-                <span class="code-dock-meta">Demostración de Dominio</span>
+            <div class="arch-flow-box">
+              <div class="arch-flow-header">
+                <span class="arch-flow-title">Arquitectura Hexagonal · Flujo de Integración</span>
+                <span class="arch-flow-meta">SAD 15.1</span>
               </div>
-              <div class="code-dock-body">
-                <pre><code><span class="tok-kw">const</span> kitPagos = <span class="tok-kw">new</span> <span class="tok-typ">KitPagos</span>({
-  gateway: <span class="tok-typ">Gateway</span>.WOMPI, <span class="tok-cm">// &lt;- Lo único que cambia</span>
-  credentials,
-});
 
-<span class="tok-kw">const</span> resultado = <span class="tok-kw">await</span> kitPagos.createPayment({
-  amount: <span class="tok-kw">new</span> <span class="tok-typ">Amount</span>(<span class="tok-str">"150000.00"</span>),
-  currency: <span class="tok-kw">new</span> <span class="tok-typ">Currency</span>(<span class="tok-str">"COP"</span>),
-  orderReference: <span class="tok-kw">new</span> <span class="tok-typ">OrderReference</span>(<span class="tok-str">"ORD-1"</span>),
-  paymentMethod: <span class="tok-typ">PaymentMethod</span>.card(token),
-});</code></pre>
+              <div class="arch-flow-body">
+                <!-- Nivel 1: Capa de Aplicación -->
+                <div class="flow-tier flow-tier-app">
+                  <div class="flow-tier-badge">Aplicación / Comercio</div>
+                  <div class="flow-tier-desc">Un solo contrato canónico en TypeScript · <code>KitPagos.createPayment()</code></div>
+                </div>
+
+                <div class="flow-connector">
+                  <span class="connector-line"></span>
+                  <span class="connector-label">Invocación canónica</span>
+                  <span class="connector-line"></span>
+                </div>
+
+                <!-- Nivel 2: Núcleo de Dominio -->
+                <div class="flow-tier flow-tier-core">
+                  <div class="flow-tier-badge">Núcleo de Dominio (Hexágono)</div>
+                  <div class="flow-core-grid">
+                    <span class="flow-chip">Objetos de Valor Inmutables</span>
+                    <span class="flow-chip">Puertos de Abstracción</span>
+                    <span class="flow-chip">TransactionStatus Canónico</span>
+                    <span class="flow-chip">0 Dependencias de Runtime</span>
+                  </div>
+                </div>
+
+                <div class="flow-connector">
+                  <span class="connector-line"></span>
+                  <span class="connector-label">Puertos y Adaptadores</span>
+                  <span class="connector-line"></span>
+                </div>
+
+                <!-- Nivel 3: Pasarelas de Infraestructura -->
+                <div class="flow-tier flow-tier-adapters">
+                  <div class="flow-adapters-grid">
+                    <div class="adapter-node">
+                      <strong>Wompi</strong>
+                      <span>Centavos · SHA-256</span>
+                    </div>
+                    <div class="adapter-node">
+                      <strong>Mercado Pago</strong>
+                      <span>Pesos · Idempotencia</span>
+                    </div>
+                    <div class="adapter-node">
+                      <strong>Kushki</strong>
+                      <span>Centavos · Llave privada</span>
+                    </div>
+                    <div class="adapter-node">
+                      <strong>Rapyd</strong>
+                      <span>Pesos · HMAC-SHA256</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div class="code-dock-footer">
-                <span class="dock-result-label">Resultado canónico normalizado:</span>
-                <code class="dock-result-val">APPROVED</code>
+
+              <div class="arch-flow-footer">
+                <span class="outcome-dot"></span>
+                <span>Normalización automática de montos, firmas y estados en tiempo de ejecución.</span>
               </div>
             </div>
           </div>
@@ -148,142 +191,506 @@
       <div class="wrap">
         <header class="section-header">
           <span class="section-num">3.1 · El problema</span>
-          <h2 class="section-title">La misma intención de cobro. Dos mundos incompatibles.</h2>
+          <h2 class="section-title">La fragmentación de pagos en Colombia: contratos incompatibles y reglas dispersas.</h2>
           <p class="section-lead">
-            Sin una capa de abstracción, integrar Wompi y Mercado Pago para cobrar $150.000 COP con tarjeta exige dos modelos incompatibles. Nadie tiene que leer todo el código para ver que no se parecen en nada.
+            Sin una capa de abstracción, integrar Wompi, Mercado Pago, Kushki y Rapyd para procesar cobros en Colombia exige lidiar con dialectos técnicos completamente asimétricos. La disparidad abarca desde la escala monetaria hasta los mecanismos criptográficos de verificación.
           </p>
         </header>
 
-        <div class="comparison-container">
-          <div class="comparison-col">
-            <div class="comparison-heading">
-              <h3 class="comparison-title">Wompi nativo</h3>
-              <span class="comparison-traits">2 llamadas HTTP · Monto en centavos · Firma SHA-256</span>
-            </div>
-            <div class="terminal">
-              <div class="terminal-bar">
-                <span class="terminal-filename">wompi-pago-tarjeta.ts</span>
-                <button type="button" class="btn-copy" data-copy="snippet-wompi">Copiar</button>
-              </div>
-              <div class="terminal-body">
-                <pre><code id="code-snippet-wompi"></code></pre>
-              </div>
-            </div>
+        <div class="disparity-analysis" style="margin-bottom: 24px;">
+          <h3 class="disparity-title">Cuatro disparidades estructurales encontradas en sandboxes colombianos</h3>
+          <div class="disparity-row">
+            <div class="disparity-term">1. Escala y divisa</div>
+            <div class="disparity-desc">Wompi exige montos expresados como enteros en céntimos (<code>15000000</code>). Mercado Pago y Kushki exigen pesos enteros (<code>150000</code>). Un error en esta regla produce cobros multiplicados o divididos por 100 en producción.</div>
           </div>
-
-          <div class="comparison-col">
-            <div class="comparison-heading">
-              <h3 class="comparison-title">Mercado Pago nativo</h3>
-              <span class="comparison-traits">1 llamada HTTP · Monto en pesos · Idempotencia obligatoria</span>
-            </div>
-            <div class="terminal">
-              <div class="terminal-bar">
-                <span class="terminal-filename">mercadopago-pago-tarjeta.ts</span>
-                <button type="button" class="btn-copy" data-copy="snippet-mercadopago">Copiar</button>
-              </div>
-              <div class="terminal-body">
-                <pre><code id="code-snippet-mercadopago"></code></pre>
-              </div>
-            </div>
+          <div class="disparity-row">
+            <div class="disparity-term">2. Firmas y seguridad</div>
+            <div class="disparity-desc">Wompi rechaza la petición con HTTP 422 si falta la firma SHA-256 calculada con el secreto de integridad. Rapyd exige firma HMAC-SHA256 combinando ruta, timestamp, salt y access_key. Mercado Pago exige la cabecera <code>X-Idempotency-Key</code> (UUID v4) por petición.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">3. Asimetría en PSE</div>
+            <div class="disparity-desc">Cada pasarela maneja códigos de banco propietarios (en Mercado Pago Bancolombia es <code>1007</code>; en Rapyd es <code>co_pse_bancolombia_bank</code>). Wompi entrega la URL de redirección bancaria síncronamente, mientras Kushki exige dos llamadas ("Transfer In") y Mercado Pago requiere órdenes previas.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">4. Bloqueos en pruebas</div>
+            <div class="disparity-desc">La Orders API de Mercado Pago para PSE responde HTTP 401 en sandbox exigiendo credenciales de producción. Kushki no implementa consulta de estado de tarjeta en su API oficial (responde <code>CAS004</code>). El SDK desacopla estas fallas con la API de Simulación.</div>
           </div>
         </div>
 
-        <div class="disparity-analysis">
-          <h3 class="disparity-title">Análisis técnico de disparidades encontradas</h3>
-          <div class="disparity-row">
-            <div class="disparity-term">Monto y divisa</div>
-            <div class="disparity-desc">Wompi exige montos expresados como enteros en céntimos (<code>15000000</code>). Mercado Pago y Kushki exigen pesos enteros (<code>150000</code>). Una confusión en esta regla produce cobros multiplicados o divididos por 100.</div>
+        <!-- Acordeón Desplegable de Profundización Técnica y Código -->
+        <details class="technical-accordion" id="codigo-tecnico" open>
+          <summary class="technical-accordion-summary">
+            <div class="summary-heading">
+              <span class="summary-title">Profundización Técnica: Código Fuente y Normalización de Dominio</span>
+              <span class="summary-desc">Comparación de llamadas nativas, cobro unificado interactivo y tabla canónica de estados.</span>
+            </div>
+            <svg class="accordion-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </summary>
+
+          <div class="technical-accordion-content">
+            <!-- Comparación de llamadas nativas -->
+            <div>
+              <h3 class="comparison-title" style="margin-bottom: 8px;">Comparación nativa: la misma intención de cobro, dos mundos incompatibles</h3>
+              <p class="section-lead" style="margin-bottom: 24px; font-size: 0.9375rem;">
+                Observe cómo Wompi exige dos llamadas HTTP, cálculo manual de firma SHA-256 y montos en centavos, mientras Mercado Pago requiere cabecera de idempotencia obligatoria y montos en pesos.
+              </p>
+
+              <div class="comparison-container">
+                <div class="comparison-col">
+                  <div class="comparison-heading">
+                    <h4 class="comparison-title">Wompi nativo</h4>
+                    <span class="comparison-traits">2 llamadas HTTP · Monto en centavos · Firma SHA-256</span>
+                  </div>
+                  <div class="terminal">
+                    <div class="terminal-bar">
+                      <span class="terminal-filename">wompi-pago-tarjeta.ts</span>
+                      <button type="button" class="btn-copy" data-copy="snippet-wompi">Copiar</button>
+                    </div>
+                    <div class="terminal-body">
+                      <pre><code id="code-snippet-wompi"></code></pre>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="comparison-col">
+                  <div class="comparison-heading">
+                    <h4 class="comparison-title">Mercado Pago nativo</h4>
+                    <span class="comparison-traits">1 llamada HTTP · Monto en pesos · Idempotencia obligatoria</span>
+                  </div>
+                  <div class="terminal">
+                    <div class="terminal-bar">
+                      <span class="terminal-filename">mercadopago-pago-tarjeta.ts</span>
+                      <button type="button" class="btn-copy" data-copy="snippet-mercadopago">Copiar</button>
+                    </div>
+                    <div class="terminal-body">
+                      <pre><code id="code-snippet-mercadopago"></code></pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cobro Unificado y Tabla Canónica -->
+            <div>
+              <h3 class="comparison-title" style="margin-bottom: 8px;">El mismo cobro unificado: una sola línea distinta</h3>
+              <p class="section-lead" style="margin-bottom: 24px; font-size: 0.9375rem;">
+                Con Kit Pagos Colombia, el código de cobro permanece inalterado. El cambio de proveedor es una decisión de configuración en una única propiedad del adaptador.
+              </p>
+
+              <div class="demo-split">
+                <div class="demo-code-pane">
+                  <div class="tabs-nav" role="tablist" aria-label="Seleccionar pasarela">
+                    <button type="button" class="tab-btn demo-tab is-active" data-gateway="WOMPI">Gateway.WOMPI</button>
+                    <button type="button" class="tab-btn demo-tab" data-gateway="MERCADOPAGO">Gateway.MERCADOPAGO</button>
+                    <button type="button" class="tab-btn demo-tab" data-gateway="KUSHKI">Gateway.KUSHKI</button>
+                    <button type="button" class="tab-btn demo-tab" data-gateway="RAPYD">Gateway.RAPYD</button>
+                  </div>
+
+                  <div class="terminal">
+                    <div class="terminal-bar">
+                      <span class="terminal-filename">cobro-unificado.ts</span>
+                      <div class="terminal-actions">
+                        <button type="button" class="btn-toggle-code" id="btn-toggle-unified">Ver config. completa ▾</button>
+                        <button type="button" class="btn-copy" data-copy="snippet-unified">Copiar</button>
+                      </div>
+                    </div>
+                    <div class="terminal-body">
+                      <pre><code id="code-snippet-unified"></code></pre>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="demo-table-pane">
+                  <div class="data-sheet">
+                    <div class="data-sheet-header">
+                      <h4 class="data-sheet-title">Tabla canónica de normalización de estados</h4>
+                      <p class="data-sheet-sub">Mapeo del vocabulario nativo de cada pasarela al contrato canónico del dominio (<code>TransactionStatus</code>).</p>
+                    </div>
+
+                    <div class="table-container">
+                      <table class="data-table">
+                        <thead>
+                          <tr>
+                            <th>Pasarela</th>
+                            <th>Estado nativo</th>
+                            <th>Estado canónico</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td><strong>Wompi</strong></td>
+                            <td><code>APPROVED</code></td>
+                            <td><span class="outcome-cell status-approved"><span class="outcome-dot"></span>APPROVED</span></td>
+                          </tr>
+                          <tr>
+                            <td><strong>Rapyd</strong></td>
+                            <td><code class="text-amber">CLO</code> (+ paid: true)</td>
+                            <td><span class="outcome-cell status-approved"><span class="outcome-dot"></span>APPROVED</span></td>
+                          </tr>
+                          <tr>
+                            <td><strong>Mercado Pago</strong></td>
+                            <td><code>approved</code></td>
+                            <td><span class="outcome-cell status-approved"><span class="outcome-dot"></span>APPROVED</span></td>
+                          </tr>
+                          <tr>
+                            <td><strong>Kushki</strong></td>
+                            <td><code>APPROVAL</code></td>
+                            <td><span class="outcome-cell status-approved"><span class="outcome-dot"></span>APPROVED</span></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div class="technical-note">
+                      <span class="technical-note-label">Particularidad de Rapyd:</span>
+                      En Rapyd, el estado de éxito nativo es <code>CLO</code>. No significa "pagado" sino "cerrado" (closed). El adaptador evalúa <code>CLO</code> en conjunto con el flag booleano <code>paid: true</code> para emitir <code>APPROVED</code> de forma determinista.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tokenización Frontend en Navegador (KitPagosBrowser) -->
+            <div>
+              <h3 class="comparison-title" style="margin-bottom: 8px;">Tokenización en el navegador: cumplimiento PCI DSS con <code>KitPagosBrowser</code></h3>
+              <p class="section-lead" style="margin-bottom: 24px; font-size: 0.9375rem;">
+                Por normativa internacional (PCI DSS), el backend del comercio jamás debe recibir números de tarjeta en texto plano. El submódulo <code>kit-pagos-colombia/browser</code> (14 KB, cero dependencias) tokeniza directamente desde el cliente web contra Wompi o Mercado Pago y retorna un token opaco seguro (<code>tok_...</code>) para que su servidor procese el cobro sin exponerse a cargas regulatorias.
+              </p>
+
+              <div class="terminal">
+                <div class="terminal-bar">
+                  <span class="terminal-filename">tokenizar-tarjeta-browser.ts</span>
+                  <button type="button" class="btn-copy" data-copy="snippet-browser">Copiar</button>
+                </div>
+                <div class="terminal-body">
+                  <pre><code id="code-snippet-browser"></code></pre>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="disparity-row">
-            <div class="disparity-term">Cabeceras y firmas</div>
-            <div class="disparity-desc">Wompi rechaza la petición con HTTP 422 si falta la firma SHA-256 calculada con el secreto de integridad. Mercado Pago devuelve HTTP 400 si se omite la cabecera <code>X-Idempotency-Key</code> (UUID v4 generado por petición).</div>
-          </div>
-          <div class="disparity-row">
-            <div class="disparity-term">Flujo previo</div>
-            <div class="disparity-desc">Wompi exige obtener un token de aceptación de términos consumido en una llamada GET previa al endpoint de merchant; Mercado Pago procesa directo pero rechaza con error si no se envía <code>installments: 1</code> como entero explícito.</div>
-          </div>
-        </div>
+        </details>
       </div>
     </section>
 
-    <!-- Sección 2: La demostración -->
-    <section class="section section-alt" id="demostracion">
+    <!-- Sección 2: Especificación de API y OpenAPI 3.0 -->
+    <section class="section section-alt" id="api-docs">
       <div class="wrap">
         <header class="section-header">
-          <span class="section-num">3.2 · Demostración</span>
-          <h2 class="section-title">El mismo pago. Una sola línea distinta.</h2>
+          <span class="section-num">3.2 · Especificación de API y Documentación</span>
+          <h2 class="section-title">OpenAPI 3.0: Documentación interactiva y contratos de validación</h2>
           <p class="section-lead">
-            Con Kit Pagos Colombia, el código de cobro permanece inalterado. El cambio de proveedor es una decisión de configuración en una única propiedad del adaptador.
+            El Simulador API y la capa REST de Kit Pagos están documentados mediante la especificación OpenAPI 3.0.3 servida en <code>/docs</code> con Swagger UI. Los schemas se usan simultáneamente para validar peticiones antes de llegar al handler y para generar la documentación sin riesgo de divergencia.
           </p>
         </header>
 
-        <div class="demo-split">
-          <div class="demo-code-pane">
-            <div class="tabs-nav" role="tablist" aria-label="Seleccionar pasarela">
-              <button type="button" class="tab-btn demo-tab is-active" data-gateway="WOMPI">Gateway.WOMPI</button>
-              <button type="button" class="tab-btn demo-tab" data-gateway="MERCADOPAGO">Gateway.MERCADOPAGO</button>
-              <button type="button" class="tab-btn demo-tab" data-gateway="KUSHKI">Gateway.KUSHKI</button>
-              <button type="button" class="tab-btn demo-tab" data-gateway="RAPYD">Gateway.RAPYD</button>
-            </div>
-
-            <div class="terminal">
-              <div class="terminal-bar">
-                <span class="terminal-filename">cobro-unificado.ts</span>
-                <div class="terminal-actions">
-                  <button type="button" class="btn-toggle-code" id="btn-toggle-unified">Ver config. completa ▾</button>
-                  <button type="button" class="btn-copy" data-copy="snippet-unified">Copiar</button>
-                </div>
-              </div>
-              <div class="terminal-body">
-                <pre><code id="code-snippet-unified"></code></pre>
-              </div>
-            </div>
+        <!-- Banner OpenAPI / Swagger UI -->
+        <div class="openapi-banner">
+          <div class="openapi-banner-content">
+            <h3 class="openapi-banner-title">Documentación Interactiva Swagger UI</h3>
+            <p class="openapi-banner-desc">
+              Accede a la interfaz interactiva para explorar esquemas, probar endpoints en vivo, inspeccionar uniones discriminadas y validar respuestas normalizadas tanto en el simulador local como en el servicio desplegado en Render.
+            </p>
           </div>
+          <div class="openapi-banner-actions">
+            <a href="https://kit-pagos-colombia.onrender.com/docs" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+              Abrir Swagger UI (/docs) ↗
+            </a>
+            <a href="https://kit-pagos-colombia.onrender.com/docs/json" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
+              Descargar spec JSON (/docs/json) ↗
+            </a>
+          </div>
+        </div>
 
-          <div class="demo-table-pane">
+        <!-- Explorador de las dos caras de la API -->
+        <div class="endpoints-container">
+          <!-- Cara 1: Kit Pagos REST API (/v1/api) -->
+          <div class="endpoints-facet">
+            <div class="endpoints-facet-heading">
+              <h3 class="endpoints-facet-title">
+                <span>Capa REST de Kit Pagos</span>
+                <span class="endpoints-facet-tag">Tag: Kit Pagos · Prefijo: /v1/api</span>
+              </h3>
+              <span class="text-muted" style="font-size: 0.8125rem;">5 Endpoints unificados · Seguridad Bearer + Cabeceras x-gateway-*</span>
+            </div>
+
             <div class="data-sheet">
               <div class="data-sheet-header">
-                <h3 class="data-sheet-title">Tabla de normalización de estados</h3>
-                <p class="data-sheet-sub">Mapeo del vocabulario nativo de cada pasarela al contrato canónico del dominio.</p>
+                <h4 class="data-sheet-title">Especificación formal de endpoints unificados</h4>
+                <p class="data-sheet-sub">Contratos HTTP servidos por Fastify. La validación de esquema rechaza peticiones no conformes con <code>400 INVALID_REQUEST</code> antes de invocar la lógica de dominio.</p>
               </div>
 
               <div class="table-container">
-                <table class="data-table">
+                <table class="data-table api-spec-table">
                   <thead>
                     <tr>
-                      <th>Pasarela</th>
-                      <th>Estado nativo</th>
-                      <th>Estado canónico</th>
+                      <th style="min-width: 170px;">Método y Ruta</th>
+                      <th>Propósito arquitectónico</th>
+                      <th>Parámetros y Cabeceras</th>
+                      <th>Contrato de Respuesta</th>
+                      <th style="min-width: 110px;">Códigos HTTP</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td><strong>Wompi</strong></td>
-                      <td><code>APPROVED</code></td>
-                      <td><span class="outcome-cell status-approved"><span class="outcome-dot"></span>APPROVED</span></td>
+                      <td>
+                        <div class="api-route-cell">
+                          <span class="method-badge method-get">GET</span>
+                          <code>/v1/api/gateways</code>
+                        </div>
+                      </td>
+                      <td>
+                        Consulta del catálogo de pasarelas integradas en el SDK. Sirve como prueba de vida del servicio sin requerir credenciales ni originar llamadas externas.
+                      </td>
+                      <td>
+                        <span class="text-muted">Ninguno adicional</span><br>
+                        <code>Authorization: Bearer &lt;token&gt;</code>
+                      </td>
+                      <td>
+                        <code>200 OK</code>: <code>{ "gateways": string[] }</code>
+                      </td>
+                      <td>
+                        <div class="http-codes-flow">
+                          <span class="http-status status-200">200</span>
+                          <span class="http-status status-401">401</span>
+                        </div>
+                      </td>
                     </tr>
+
                     <tr>
-                      <td><strong>Rapyd</strong></td>
-                      <td><code class="text-amber">CLO</code></td>
-                      <td><span class="outcome-cell status-approved"><span class="outcome-dot"></span>APPROVED</span></td>
+                      <td>
+                        <div class="api-route-cell">
+                          <span class="method-badge method-post">POST</span>
+                          <code>/v1/api/payments</code>
+                        </div>
+                      </td>
+                      <td>
+                        Creación unificada de cobros. La respuesta discrimina explícitamente entre cobro en línea completado y redirección obligatoria (PSE o 3DS).
+                      </td>
+                      <td>
+                        <strong>Cuerpo JSON:</strong> <code>gateway</code>, <code>amount</code>, <code>currency</code>, <code>paymentMethod</code>.<br>
+                        <strong>Cabeceras opcionales:</strong> <code>x-gateway-public-key</code>, <code>x-gateway-private-key</code>, <code>x-gateway-integrity-secret</code>.
+                      </td>
+                      <td>
+                        <strong>Respuesta 201 discriminada (<code>oneOf</code>):</strong><br>
+                        • <code>type: "TRANSACTION"</code>: cobro directo con tarjeta (incluye estado canónico).<br>
+                        • <code>type: "REDIRECT_REQUIRED"</code>: flujo asíncrono con <code>redirectUrl</code> (PSE o Rapyd).
+                      </td>
+                      <td>
+                        <div class="http-codes-flow">
+                          <span class="http-status status-201">201</span>
+                          <span class="http-status status-400">400</span>
+                          <span class="http-status status-401">401</span>
+                          <span class="http-status status-502">502</span>
+                          <span class="http-status status-504">504</span>
+                        </div>
+                      </td>
                     </tr>
+
                     <tr>
-                      <td><strong>Mercado Pago</strong></td>
-                      <td><code>approved</code></td>
-                      <td><span class="outcome-cell status-approved"><span class="outcome-dot"></span>APPROVED</span></td>
+                      <td>
+                        <div class="api-route-cell">
+                          <span class="method-badge method-get">GET</span>
+                          <code>/v1/api/payments/:id</code>
+                        </div>
+                      </td>
+                      <td>
+                        Consulta del estado canónico de una transacción previamente creada. Enruta al adaptador correspondiente y normaliza el resultado al vocabulario del dominio.
+                      </td>
+                      <td>
+                        <strong>Ruta:</strong> <code>:id</code> (ID de transacción de la pasarela)<br>
+                        <strong>Query:</strong> <code>?gateway=wompi|mercadopago|kushki|rapyd</code>
+                      </td>
+                      <td>
+                        <code>200 OK</code>: <code>{ "gateway": string, "transaction": Transaction, "warnings"?: Warning[] }</code><br>
+                        Normaliza a <code>TransactionStatus</code> (APPROVED, DECLINED, PENDING, VOIDED, etc.).
+                      </td>
+                      <td>
+                        <div class="http-codes-flow">
+                          <span class="http-status status-200">200</span>
+                          <span class="http-status status-400">400</span>
+                          <span class="http-status status-401">401</span>
+                          <span class="http-status status-404">404</span>
+                          <span class="http-status status-502">502</span>
+                          <span class="http-status status-504">504</span>
+                        </div>
+                      </td>
                     </tr>
+
                     <tr>
-                      <td><strong>Kushki</strong></td>
-                      <td><code>APPROVAL</code></td>
-                      <td><span class="outcome-cell status-approved"><span class="outcome-dot"></span>APPROVED</span></td>
+                      <td>
+                        <div class="api-route-cell">
+                          <span class="method-badge method-get">GET</span>
+                          <code>/v1/api/pse-banks</code>
+                        </div>
+                      </td>
+                      <td>
+                        Catálogo de entidades financieras habilitadas para transferencias PSE, con identificadores nativos y código de compensación ACH unificado.
+                      </td>
+                      <td>
+                        <strong>Query opcional:</strong> <code>?gateway=&lt;pasarela&gt;</code>.<br>
+                        Si se omite con credenciales del servidor, entrega las listas consolidadas de las 4 pasarelas.
+                      </td>
+                      <td>
+                        <code>200 OK</code>: <code>{ "pseBanks": [{ "gateway": string, "banks": [{ "code": string, "name": string, "achCode"?: string }] }] }</code>
+                      </td>
+                      <td>
+                        <div class="http-codes-flow">
+                          <span class="http-status status-200">200</span>
+                          <span class="http-status status-400">400</span>
+                          <span class="http-status status-401">401</span>
+                          <span class="http-status status-502">502</span>
+                        </div>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td>
+                        <div class="api-route-cell">
+                          <span class="method-badge method-post">POST</span>
+                          <code>/v1/api/webhooks/:gateway</code>
+                        </div>
+                      </td>
+                      <td>
+                        Verificación criptográfica de firma byte a byte y normalización de notificaciones webhook. Falla de forma uniforme en caso de firma inválida sin filtrar causas.
+                      </td>
+                      <td>
+                        <strong>Ruta:</strong> <code>:gateway</code> (wompi, mercadopago, kushki, rapyd)<br>
+                        <strong>Payload:</strong> Cuerpo en crudo y cabeceras HTTP originales de la pasarela.
+                      </td>
+                      <td>
+                        <code>200 OK</code>: <code>{ "gateway": string, "eventType": string, "newStatus": TransactionStatus }</code>
+                      </td>
+                      <td>
+                        <div class="http-codes-flow">
+                          <span class="http-status status-200">200</span>
+                          <span class="http-status status-400">400</span>
+                          <span class="http-status status-401">401</span>
+                        </div>
+                      </td>
                     </tr>
                   </tbody>
                 </table>
               </div>
+            </div>
 
-              <div class="technical-note">
-                <span class="technical-note-label">Particularidad de Rapyd:</span>
-                En Rapyd, el estado de éxito nativo es <code>CLO</code>. No significa "pagado" sino "cerrado" (closed). El adaptador evalúa <code>CLO</code> en conjunto con el flag booleano <code>paid: true</code> para emitir <code>APPROVED</code> de forma determinista.
+            <!-- Tabla de Mapeo de Códigos de Error Canónicos -->
+            <div class="data-sheet" style="margin-top: 24px;">
+              <div class="data-sheet-header">
+                <h4 class="data-sheet-title">Mapeo canónico de errores (KitPagosErrorCode)</h4>
+                <p class="data-sheet-sub">Los doce códigos de error del dominio están formalmente asociados a su código de estado HTTP correspondiente según RF-08.</p>
+              </div>
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Código SDK</th>
+                      <th>HTTP Status</th>
+                      <th>Causa / Descripción técnica</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td><code>INVALID_REQUEST</code></td><td><code class="text-amber">400</code></td><td>Petición malformada, campos faltantes o valores fuera de rango.</td></tr>
+                    <tr><td><code>UNSUPPORTED_OPERATION</code></td><td><code class="text-amber">400</code></td><td>Operación no soportada por la pasarela activa (ej. consulta de tarjeta en Kushki).</td></tr>
+                    <tr><td><code>INVALID_CREDENTIALS</code></td><td><code class="text-amber">401</code></td><td>Llaves públicas/privadas ausentes, inválidas o rechazadas por el proveedor.</td></tr>
+                    <tr><td><code>WEBHOOK_SIGNATURE_INVALID</code></td><td><code class="text-amber">401</code></td><td>Firma HMAC/SHA-256 no coincide o marca de tiempo fuera de la ventana de tolerancia.</td></tr>
+                    <tr><td><code>RESOURCE_NOT_FOUND</code></td><td><code class="text-amber">404</code></td><td>Transacción o recurso inexistente en la pasarela.</td></tr>
+                    <tr><td><code>RATE_LIMIT_EXCEEDED</code></td><td><code class="text-amber">429</code></td><td>Límite de peticiones por segundo alcanzado en el proveedor.</td></tr>
+                    <tr><td><code>CONNECTION_FAILED</code></td><td><code class="text-amber">502</code></td><td>Fallo de socket de red o DNS al contactar el API de la pasarela.</td></tr>
+                    <tr><td><code>GATEWAY_SERVER_ERROR</code></td><td><code class="text-amber">502</code></td><td>Error 5xx interno emitido por los servidores del proveedor.</td></tr>
+                    <tr><td><code>MALFORMED_RESPONSE</code></td><td><code class="text-amber">502</code></td><td>Respuesta del proveedor con JSON inválido o estructura incompatible.</td></tr>
+                    <tr><td><code>MAX_RETRIES_EXCEEDED</code></td><td><code class="text-amber">502</code></td><td>Intentos de reintento exponencial agotados por el RetryHandler.</td></tr>
+                    <tr><td><code>GATEWAY_TIMEOUT</code></td><td><code class="text-amber">504</code></td><td>Tiempo límite de espera excedido sin respuesta del proveedor.</td></tr>
+                    <tr><td><code>UNKNOWN_ERROR</code></td><td><code class="text-amber">500</code></td><td>Excepción no clasificada en tiempo de ejecución.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cara 2: API de Simulación de Pasarelas (/v1/sim) -->
+          <div class="endpoints-facet">
+            <div class="endpoints-facet-heading">
+              <h3 class="endpoints-facet-title">
+                <span>API de Simulación de Pasarelas</span>
+                <span class="endpoints-facet-tag">Tag: Simulación · Prefijo: /v1/sim</span>
+              </h3>
+              <span class="text-muted" style="font-size: 0.8125rem;">23 Rutas Mock nativas · Sin costo ni dependencia de red</span>
+            </div>
+
+            <p class="endpoint-desc" style="margin-bottom: 20px;">
+              El simulador emula el comportamiento de los endpoints nativos de cada pasarela. Permite inyección controlada de errores mediante montos reservados (ej. <code>10001</code> para fallo de red, <code>10003</code> para timeout tardío, <code>10100</code> para declinación) y ejercitar webhooks con firmas criptográficas idénticas a producción.
+            </p>
+
+            <div class="sim-routes-grid">
+              <div class="sim-gw-box">
+                <div class="sim-gw-name">
+                  <span>Wompi Simulado</span>
+                  <span class="endpoints-facet-tag">5 rutas</span>
+                </div>
+                <ul class="sim-gw-routes">
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/wompi/merchants/:key</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/wompi/tokens/cards</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/wompi/transactions</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/wompi/transactions/:id</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/wompi/pse/financial_institutions</code></li>
+                </ul>
+              </div>
+
+              <div class="sim-gw-box">
+                <div class="sim-gw-name">
+                  <span>Mercado Pago Simulado</span>
+                  <span class="endpoints-facet-tag">4 rutas</span>
+                </div>
+                <ul class="sim-gw-routes">
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/mercadopago/v1/payments</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/mercadopago/v1/payments/:id</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/mercadopago/v1/orders</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/mercadopago/v1/payment_methods/pse/banks</code></li>
+                </ul>
+              </div>
+
+              <div class="sim-gw-box">
+                <div class="sim-gw-name">
+                  <span>Kushki Simulado</span>
+                  <span class="endpoints-facet-tag">4 rutas</span>
+                </div>
+                <ul class="sim-gw-routes">
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/kushki/card/v1/charges</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/kushki/tokens/v1/card</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/kushki/transfer-in/v1/init</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/kushki/transfer-in/v1/status/:token</code></li>
+                </ul>
+              </div>
+
+              <div class="sim-gw-box">
+                <div class="sim-gw-name">
+                  <span>Rapyd Simulado</span>
+                  <span class="endpoints-facet-tag">4 rutas</span>
+                </div>
+                <ul class="sim-gw-routes">
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/rapyd/v1/checkout</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/rapyd/v1/payments</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/rapyd/v1/payments/:id</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/rapyd/v1/payment_methods/banks</code></li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="sim-gw-box" style="margin-top: 20px;">
+              <div class="sim-gw-name">
+                <span>Simulador de Webhooks Entrantes</span>
+                <span class="endpoints-facet-tag">Disparador de pruebas</span>
+              </div>
+              <div style="padding-top: 6px;">
+                <div class="sim-route-row" style="margin-bottom: 8px;">
+                  <span class="method-badge method-post sim-route-method">POST</span>
+                  <code>/v1/sim/webhooks/trigger/:gateway</code>
+                </div>
+                <p style="margin: 0; font-size: 0.8125rem; color: var(--text-muted); line-height: 1.5;">
+                  Emite una notificación HTTP firmada criptográficamente hacia una URL destino, reproduciendo de forma determinista el evento asíncrono que entregaría la pasarela en producción.
+                </p>
               </div>
             </div>
           </div>
@@ -296,7 +703,7 @@
       <div class="wrap">
         <header class="section-header">
           <span class="section-num">3.3 · Arquitectura del artefacto</span>
-          <h2 class="section-title">El artefacto son tres cosas, no una</h2>
+          <h2 class="section-title">El artefacto son tres componentes, no uno</h2>
           <p class="section-lead">
             Reducir el proyecto al SDK pierde de vista la mitad del valor técnico. Los tres componentes resuelven la integración completa, desde el diseño de software hasta las pruebas automatizadas sin credenciales.
           </p>

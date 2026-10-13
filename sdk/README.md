@@ -60,6 +60,14 @@ pnpm add kit-pagos-colombia
 
 ## Guía Rápida de Uso
 
+- **Paso 1:** [Inicializar el SDK](#1-inicializar-el-sdk)
+- **Paso 2:** [Crear una Transacción con Tarjeta](#2-crear-una-transacción-con-tarjeta)
+  - 🌐 **Frontend:** [Tokenización en el Navegador con `kit-pagos-colombia/browser` (PCI DSS)](#21-tokenización-en-el-navegador-kit-pagos-colombiabrowser)
+- **Paso 3:** [Crear una Transacción con PSE](#3-crear-una-transacción-con-pse-redirección-bancaria)
+- **Paso 4:** [Consultar Estado de una Transacción](#4-consultar-estado-de-una-transacción)
+- **Paso 5:** [Verificar Webhooks (Notificaciones)](#5-verificar-webhooks-notificaciones-de-la-pasarela)
+- **Paso 6:** [Manejo Unificado de Errores](#6-manejo-unificado-de-errores)
+
 ### 1. Inicializar el SDK
 
 Configure las credenciales de sus pasarelas e indique cuál es la pasarela activa:
@@ -459,7 +467,7 @@ El SDK incluye un catálogo cerrado de URLs para los tres ambientes soportados, 
 | **Rapyd** | `https://sandboxapi.rapyd.net/v1` | `https://api.rapyd.net/v1` |
 
 **Simulador Integrado y en la Nube (`environment: "simulator"`):**
-Por defecto apunta al simulador local (`http://localhost:3000/v1/sim/{gateway}`), para que ninguna petición salga de la máquina sin pedirlo. Para usar el simulador desplegado en Render, se indica con `baseUrl`:
+Por defecto apunta al simulador local (`http://localhost:3000/v1/sim/{gateway}`), para que ninguna petición salga de la máquina sin pedirlo. Para usar el simulador desplegado en Render (o consultar su documentación interactiva OpenAPI 3.0 en [`/docs`](https://kit-pagos-colombia.onrender.com/docs), detallada en [`simulator-api/README.md`](../simulator-api/README.md)), se indica con `baseUrl`:
 ```typescript
 const sdkSimulador = new KitPagos({
   gateway: Gateway.WOMPI,
