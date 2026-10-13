@@ -6,7 +6,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
  * comercio, en otro origen que el simulador.
  *
  * Nivel 1 — medido el 13 de octubre de 2026 a las 12:22 (UTC−5), con
- * `Origin: http://localhost:4000` (punto 88 del `architecture-log.md`):
+ * `Origin: http://localhost:4000` (punto 89 del `architecture-log.md`):
  * - el preflight de `https://sandbox.wompi.co/v1/tokens/cards` y el de
  *   `https://api.mercadopago.com/v1/card_tokens` responden 200 con las cabeceras de abajo;
  * - las respuestas del `POST` traen `access-control-allow-origin: *` también cuando son un

@@ -4,7 +4,7 @@ import {
   WOMPI_TOKENIZATION_PREFLIGHT_HEADERS,
 } from "../src/gateways/tokenizationCors";
 
-// El origen de la página del comercio con el que se midió el 13 de octubre de 2026 (punto 88).
+// El origen de la página del comercio con el que se midió el 13 de octubre de 2026 (punto 89).
 const MERCHANT_ORIGIN = "http://localhost:4000";
 
 const WOMPI_TOKENS = "/v1/sim/wompi/tokens/cards";
@@ -35,7 +35,7 @@ function accessControlHeaders(headers: Record<string, unknown>): Record<string, 
   return Object.fromEntries(Object.entries(headers).filter(([key]) => key.startsWith("access-control-")));
 }
 
-describe("CORS of the card tokenization routes (point 88)", () => {
+describe("CORS of the card tokenization routes (point 89)", () => {
   const app = buildApp();
 
   afterAll(async () => {
