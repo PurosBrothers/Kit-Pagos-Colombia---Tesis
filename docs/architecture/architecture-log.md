@@ -2414,6 +2414,50 @@ Los niveles de evidencia de las tablas se corrigieron contra el registro: el PSE
 
 > **Revisado en el punto 84.** La orden rechazada de Mercado Pago sí nace: el `402` trae la orden en `data` y la consulta responde `200` en `failed` (medido el 7 de octubre de 2026, `docs/testing-data/mercado-pago.md`). La tabla del criterio 1 ya la incluye.
 
+### 81. `WompiTokenizer` usa la tokenización simple de Wompi, no la cifrada recomendada (issue #132)
+
+**Responsable:** Henao (issue #132).
+
+**Contexto.**
+`WompiTokenizer` (`sdk/src-browser/tokenizers/WompiTokenizer.ts`) envía la tarjeta en el cuerpo JSON de `POST /v1/tokens/cards` sobre HTTPS: es la variante **simple** de tokenización de Wompi. La página de métodos de pago ([docs.wompi.co — Métodos de pago](https://docs.wompi.co/en/docs/colombia/metodos-de-pago/), consultada el 4 de octubre de 2026) recomienda por defecto cifrar la información de la tarjeta: *«By default we recommend tokenizing by encrypting the card information. If your use case does not support encryption, select the simple tokenization tab.»*
+
+La variante cifrada tiene tres pasos:
+
+1. Obtener la llave pública de cifrado con `GET /v1/tokens/keys/tokenization`.
+2. Generar un JWE con `RSA-OAEP-256` y contenido `A256GCM` a partir de los mismos cinco campos.
+3. Enviarlo como cadena en el campo `payload` del mismo `POST /v1/tokens/cards`.
+
+La documentación oficial no explica qué protege el cifrado adicional sobre HTTPS, ni si cambia el alcance PCI DSS. No se pudo comprobar, y este punto no lo afirma.
+
+**Lo medido (4 de octubre de 2026, sandbox de Wompi, llave pública de prueba del proyecto).**
+
+| Petición | Hora | Resultado |
+|---|---|---|
+| `GET /v1/tokens/keys/tokenization` en sandbox y en producción, con `Authorization: Bearer` | 17:50 | 200, `data.publicKey` en PEM. El cuerpo del PEM llega con espacios en vez de saltos de línea, e `importSPKI` de `jose` 5.10.0 lo importó igual. |
+| La misma ruta en sandbox, sin autenticación | 17:50 | 200, la misma forma |
+| `POST /v1/tokens/cards` con `{ payload: <JWE> }`, tarjeta `4242424242424242` | 17:51 | 201 `CREATED`, token `tok_test_…`, `last_four` 4242 |
+| `POST /v1/tokens/cards` sin cifrar (lo que hace hoy `WompiTokenizer`), la misma tarjeta | 17:51 | 201 `CREATED`, los mismos doce campos en `data` |
+| `POST /v1/tokens/cards` con `{ payload: "no-es-un-jwe" }` | 17:51 | **502**, no 422 |
+
+**El dato que importa:** un `payload` mal formado no responde como error de validación, sino con 502. `WompiTokenizer` traduce todo 5xx a `GATEWAY_SERVER_ERROR` (punto 77, decisión 4). Si el SDK cifrara mal, el comercio vería una caída de Wompi y no un defecto del SDK.
+
+**Decisión.**
+Tomada por Joan el 4 de octubre de 2026, al aprobar el inventario del alcance de código del proyecto (#130): **se mantiene la tokenización simple y se declara.**
+
+- Es una variante que Wompi documenta y acepta, y medida da la misma respuesta.
+- Ningún requisito funcional ni entregable exige la variante cifrada.
+
+**Alternativa descartada:** adoptar la variante cifrada en `WompiTokenizer`.
+
+- Agrega una llamada de red para obtener la llave, aunque se puede guardar en caché por instancia.
+- Necesita generar un JWE en el navegador, sea con una dependencia como `jose` o con WebCrypto. No se comprobó si la segunda opción cabe sin dependencias, ni cuánto pesaría el bundle con la primera.
+- Exige distinguir el 502 por un cifrado mal hecho de una caída real.
+- Presiona el WMC: la clase mide 17 con umbral 20 (`npm run metrics`, 13 de octubre de 2026). Cuando se tomó la decisión estaba en 18 (punto 77, decisión 5).
+
+**Deuda nombrada:** el SDK no sigue la recomendación por defecto de la pasarela. Declarado en `docs/03-sdk/6-tokenizacion-frontend.md` y en el JSDoc de `WompiTokenizer`, sin que ninguna de las dos afirmaciones pretenda que la variante simple tenga o deje de tener el mismo alcance PCI DSS que la cifrada.
+
+**Estado:** Resuelto con deuda nombrada.
+
 ### 82. Declaración dinámica de ambiente y resolución de URLs mediante catálogo cerrado en el SDK (Issue #123)
 
 **Responsable:** Prieto / Equipo (secciones 9 y 15 del SAD, `sdk/src/domain/value-objects/Environment.ts`, `sdk/src/infrastructure/config/gateway-urls.ts`, `sdk/src/infrastructure/config/SDKConfigurator.ts`, `simulator-api/src/auth/targetEnvironment.ts`, `simulator-api/src/services/KitPagosProvider.ts`).
