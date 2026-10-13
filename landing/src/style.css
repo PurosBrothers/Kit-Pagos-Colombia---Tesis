@@ -63,12 +63,6 @@ html {
   font-size: 16px;
 }
 
-@media (min-width: 1200px) {
-  html {
-    font-size: 17px;
-  }
-}
-
 body {
   background-color: var(--bg-page);
   color: var(--text-body);
@@ -1254,6 +1248,12 @@ code, pre {
   border: 1px solid rgba(245, 158, 11, 0.35);
 }
 
+.res-badge-error {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
 .res-meta-time {
   color: #94a3b8;
 }
@@ -1391,7 +1391,7 @@ code, pre {
 .demo-split {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-  gap: 36px;
+  gap: 48px;
   align-items: start;
 }
 
@@ -1439,11 +1439,11 @@ code, pre {
   border: 1px solid rgba(226, 232, 240, 0.8);
   border-radius: var(--radius-md);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  padding: 24px 28px;
+  padding: 30px 32px;
 }
 
 .data-sheet-header {
-  margin-bottom: 18px;
+  margin-bottom: 22px;
 }
 
 .data-sheet-title {
@@ -1463,7 +1463,7 @@ code, pre {
   border: 1px solid #e2e8f0;
   border-radius: var(--radius-sm);
   background: #ffffff;
-  margin-bottom: 20px;
+  margin-bottom: 0;
 }
 
 .data-table {
@@ -1493,6 +1493,15 @@ code, pre {
   font-size: 0.84375rem;
   line-height: 1.5;
   vertical-align: middle;
+}
+
+/* Tabla Canónica: mayor padding interno para evitar sensación de celdas pegadas */
+.canonical-table th {
+  padding: 13px 20px;
+}
+
+.canonical-table td {
+  padding: 16px 20px;
 }
 
 .data-table tbody tr {
@@ -1565,24 +1574,26 @@ code, pre {
 }
 
 .technical-note {
-  padding: 14px 18px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-default);
+  margin-top: 28px;
+  padding: 18px 22px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid var(--brand-green);
   border-radius: var(--radius-sm);
   font-size: 0.84375rem;
-  line-height: 1.6;
-  color: var(--text-body);
+  line-height: 1.65;
+  color: #334155;
 }
 
 .technical-note-label {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--brand-green);
+  font-weight: 700;
+  color: var(--brand-green-dark);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 /* ==========================================================================

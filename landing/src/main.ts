@@ -359,7 +359,7 @@ function setupLiveRunner(): void {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-kit-pagos-environment": "sandbox",
+            "x-kit-pagos-environment": "simulator",
           },
           body: JSON.stringify({
             gateway: "wompi",
@@ -381,8 +381,20 @@ function setupLiveRunner(): void {
         const data = await response.json();
 
         if (badgeStatus) {
-          badgeStatus.textContent = `HTTP ${response.status} ${response.status === 201 ? "CREATED" : "OK"}`;
-          badgeStatus.className = "res-badge res-badge-201";
+          badgeStatus.textContent = response.ok
+            ? `HTTP ${response.status} ${response.status === 201 ? "CREATED" : "OK"}`
+            : `HTTP ${response.status}`;
+          badgeStatus.className = response.ok
+            ? "res-badge res-badge-201"
+            : "res-badge res-badge-error";
+        }
+        const metaInfo = document.querySelector(".terminal-res-meta .res-meta-info");
+        if (metaInfo) {
+          if (response.ok && data?.transaction?.status) {
+            metaInfo.textContent = `Wompi → Canónico ${data.transaction.status}`;
+          } else if (!response.ok) {
+            metaInfo.textContent = data?.code ? `Error: ${data.code}` : "Error en la petición";
+          }
         }
         if (metaLatency) {
           metaLatency.textContent = `Latencia: ${elapsed}ms`;
@@ -425,7 +437,7 @@ async function checkRenderHealth(): Promise<void> {
   }, 2500);
 
   try {
-    const res = await fetch("https://kit-pagos-colombia.onrender.com/health", {
+    const res = await fetch("https://kit-pagos-colombia.onrender.com/v1/api/gateways", {
       method: "GET",
       headers: { Accept: "application/json" },
     });
@@ -552,7 +564,8 @@ function init(): void {
   // Configurar botones de copia
   setupCopyButtons();
 
-  // Comprobar estado de salud de la API en Render y programar keep-alive
+  // Comprobar estado de salud inicial y mantener despierto el contenedor en Render
+  // mediante un keep-alive cada 10 min mientras el usuario tenga abierta la pestaña
   checkRenderHealth();
   setInterval(checkRenderHealth, 10 * 60 * 1000);
 
