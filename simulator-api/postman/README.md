@@ -4,7 +4,7 @@ Colección y ambientes versionados de la API de Simulación de Kit Pagos Colombi
 
 ## Archivos
 
-- `kit-pagos-simulator.postman_collection.json`: 33 peticiones en 7 carpetas.
+- `kit-pagos-simulator.postman_collection.json`: 36 peticiones en 7 carpetas.
   1. `00. Diagnóstico`: `GET /health`.
   2. `01. Capa REST Kit Pagos (/v1/api)`: `gateways`, `payments`, `payments/:id` y `pse-banks`.
   3. `02` a `05`: las rutas `/v1/sim` de Wompi, Mercado Pago, Rapyd y Kushki.
@@ -15,15 +15,15 @@ Colección y ambientes versionados de la API de Simulación de Kit Pagos Colombi
 ## Cómo funciona
 
 - **Orden.** Las carpetas se corren en orden. Cada creación guarda su id en el ambiente
-  (`wompiTransactionId`, `mpPaymentId`, `rapydCheckoutId`, `kushkiTransferToken`…) y la consulta
+  (`wompiTransactionId`, `mpPaymentId`, `mpOrderId`, `mpBankPaymentId`, `rapydCheckoutId`, `kushkiTransferToken`…) y la consulta
   siguiente lo usa. El trigger de webhooks firma la transacción de Wompi de la carpeta `02`, y
   `POST /v1/api/webhooks/wompi` verifica ese mismo webhook.
 - **Firmas.** El simulador exige firma, como las pasarelas reales (punto 86 del `architecture-log.md`):
   - Wompi: `POST /transactions` calcula `signature` en su pre-request, con la fórmula de
     `sdk/src/infrastructure/adapters/wompi-pse.ts`.
   - Rapyd: la carpeta `04` calcula `salt`, `timestamp` y `signature` en su pre-request, con la
-    fórmula de `sdk/src/infrastructure/adapters/rapyd-signature.ts`. La página `/checkout/:id/pay` no
-    lleva firma.
+    fórmula de `sdk/src/infrastructure/adapters/rapyd-signature.ts`. Las páginas `/checkout/:id/pay` y
+    `/complete-bank-payment` no llevan firma.
 - **Pruebas.** Cada petición comprueba que responde 2xx. El trigger tiene su propia prueba: sin
   `SIMULATOR_WEBHOOK_TARGET_URL` responde `409 WEBHOOK_TARGET_NOT_CONFIGURED` con el webhook firmado,
   y eso cuenta como éxito. `POST /v1/api/webhooks/wompi` exige `200`; si el trigger no devolvió un

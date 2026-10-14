@@ -657,7 +657,11 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.environment.set(\"mpOrderId\", pm.response.json().id);"
+                  "pm.environment.set(\"mpOrderId\", pm.response.json().id);",
+                  "// La URL del banco lleva un id numérico de doce dígitos, que no es el PAY… del pago.",
+                  "const bankUrl = pm.response.json().transactions.payments[0].payment_method.redirect_url || \"\";",
+                  "const bankId = /\\/payments\\/(\\d+)\\/bank_transfer/.exec(bankUrl);",
+                  "pm.environment.set(\"mpBankPaymentId\", bankId ? bankId[1] : \"\");"
                 ]
               }
             }
@@ -689,6 +693,28 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "GET /v1/sim/mercadopago/payments/:paymentId/bank_transfer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/mercadopago/payments/{{mpBankPaymentId}}/bank_transfer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "mercadopago",
+                "payments",
+                "{{mpBankPaymentId}}",
+                "bank_transfer"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -701,8 +727,9 @@
             "type": "text/javascript",
             "exec": [
               "// Firma Rapyd: la misma fórmula de sdk/src/infrastructure/adapters/rapyd-signature.ts.",
-              "// La página GET /checkout/:id/pay es del simulador y no lleva firma.",
-              "if (pm.request.url.path[pm.request.url.path.length - 1] === \"pay\") { return; }",
+              "// Las páginas GET /checkout/:id/pay y GET /complete-bank-payment son del simulador y no llevan firma.",
+              "const lastSegment = pm.request.url.path[pm.request.url.path.length - 1];",
+              "if (lastSegment === \"pay\" || lastSegment === \"complete-bank-payment\") { return; }",
               "const secret = pm.environment.get(\"rapydSecretKey\") || \"rapyd_secret_kit_pagos_simulator\";",
               "const accessKey = pm.environment.get(\"rapydAccessKey\");",
               "if (pm.request.body && pm.request.body.raw) {",
@@ -875,6 +902,32 @@
                 "rapyd",
                 "payments",
                 "{{rapydPaymentId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /v1/sim/rapyd/complete-bank-payment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/rapyd/complete-bank-payment?token={{rapydPaymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "rapyd",
+                "complete-bank-payment"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{rapydPaymentId}}"
+                }
               ]
             }
           },
@@ -1117,6 +1170,34 @@
                 "v1",
                 "status",
                 "{{kushkiTransferToken}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /v1/sim/kushki/transfer/v1/agent",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/kushki/transfer/v1/agent?token={{kushkiTransferToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "kushki",
+                "transfer",
+                "v1",
+                "agent"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{kushkiTransferToken}}"
+                }
               ]
             }
           },

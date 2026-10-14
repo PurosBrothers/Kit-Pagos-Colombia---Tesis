@@ -20,7 +20,7 @@ Corresponde a la implementación y cierre del **Issue #131** (PR #147), que comp
 | **Directorio raíz (`rootDir`)** | `simulator-api` |
 | **Comando de construcción** | `npm ci && npm run build` |
 | **Comando de arranque** | `npm start` |
-| **Colección de Postman** | [`simulator-api/postman/kit-pagos-simulator.postman_collection.json`](../../simulator-api/postman/kit-pagos-simulator.postman_collection.json) (33 peticiones, 100% aprobadas con Newman) |
+| **Colección de Postman** | [`simulator-api/postman/kit-pagos-simulator.postman_collection.json`](../../simulator-api/postman/kit-pagos-simulator.postman_collection.json) (36 peticiones, 100% aprobadas con Newman contra el simulador local) |
 
 ---
 
@@ -170,11 +170,11 @@ La colección vive en [`simulator-api/postman/`](../../simulator-api/postman/) y
 
 ### 5.1. Estructura de las 7 carpetas
 
-La colección cuenta con **33 peticiones** diseñadas para ejecutarse en orden:
+La colección cuenta con **36 peticiones** diseñadas para ejecutarse en orden:
 
 ```text
 simulator-api/postman/
-├── kit-pagos-simulator.postman_collection.json  # 33 peticiones
+├── kit-pagos-simulator.postman_collection.json  # 36 peticiones
 ├── local.postman_environment.json               # Apunta a http://localhost:3000
 ├── render.postman_environment.json              # Apunta a https://kit-pagos-colombia.onrender.com
 └── README.md                                    # Instrucciones detalladas de uso
@@ -183,11 +183,11 @@ simulator-api/postman/
 | Carpeta | Endpoints | Descripción |
 |---|---|---|
 | **00. Diagnóstico** | `GET /health` | Valida que el servidor esté vivo (HTTP 200). |
-| **01. Capa REST Kit Pagos (/v1/api)** | `GET /v1/api/gateways`<br>`POST /v1/api/payments`<br>`GET /v1/api/payments/:id`<br>`GET /v1/api/pse-banks` | Ejercita el SDK 0.4.0 expuesto como API REST. Crea un pago con Wompi, consulta su estado y consulta bancos PSE de Kushki. |
-| **02. Wompi (/v1/sim/wompi)** | `GET /merchants`<br>`GET /terms`<br>`POST /transactions`<br>`GET /transactions/:id`<br>`GET /pse/redirect` | Simula la API nativa de Wompi. `POST /transactions` incluye un script pre-request que calcula la firma de integridad SHA-256 en tiempo real. |
-| **03. Mercado Pago (/v1/sim/mercadopago)** | `POST /payments`<br>`GET /payments/:id`<br>`POST /orders`<br>`GET /orders/:id`<br>`GET /identification_types`<br>`GET /payment_methods` | Simula pagos directos con tarjeta, órdenes de PSE y catálogos de medios de pago. |
-| **04. Rapyd (/v1/sim/rapyd)** | `POST /checkout`<br>`GET /checkout/:id`<br>`GET /checkout/:id/pay`<br>`POST /checkout/:id/pay`<br>`GET /payments/:id`<br>`GET /rates`<br>`GET /banks` | Simula el checkout hospedado y pagos. Todas las rutas de API calculan dinámicamente en su pre-request las cabeceras `salt`, `timestamp` y la firma HMAC-SHA256 Base64. |
-| **05. Kushki (/v1/sim/kushki)** | `POST /charges`<br>`GET /charges/:ticketNumber`<br>`POST /transfer/init`<br>`GET /transfer/status/:token`<br>`GET /transfer/banks`<br>`GET /tokens` | Simula cargos con tarjeta, inicio de transferencias PSE, consulta de estados y catálogo bancario. |
+| **01. Capa REST Kit Pagos (/v1/api)** | `GET /v1/api/gateways`<br>`POST /v1/api/payments`<br>`GET /v1/api/payments/:id`<br>`GET /v1/api/pse-banks` | Ejercita el SDK expuesto como API REST. Crea un pago con Wompi, consulta su estado y consulta los bancos PSE. |
+| **02. Wompi (/v1/sim/wompi)** | `GET /merchants/:publicKey`<br>`GET /terms`<br>`GET /pse/financial_institutions`<br>`GET /pse/redirect`<br>`POST /tokens/cards`<br>`POST /transactions`<br>`GET /transactions/:id` | Simula la API nativa de Wompi. `POST /transactions` incluye un script pre-request que calcula la firma de integridad SHA-256 en tiempo real. `GET /pse/redirect` es la página de banco del PSE. |
+| **03. Mercado Pago (/v1/sim/mercadopago)** | `GET /payment_methods`<br>`POST /card_tokens`<br>`POST /payments`<br>`GET /payments/:id`<br>`POST /orders`<br>`GET /orders/:id`<br>`GET /payments/:paymentId/bank_transfer` | Simula pagos directos con tarjeta, órdenes de PSE y el catálogo de medios de pago. `POST /orders` guarda en `mpBankPaymentId` el id numérico de la URL del banco, y la última petición abre esa página. |
+| **04. Rapyd (/v1/sim/rapyd)** | `GET /payment_methods/country`<br>`POST /customers`<br>`POST /payments`<br>`GET /payments/:paymentId`<br>`GET /complete-bank-payment`<br>`POST /checkout`<br>`GET /checkout/:checkoutId`<br>`GET /checkout/:checkoutId/pay` | Simula el checkout hospedado, los pagos y la página de banco del PSE. Las rutas de API calculan en su pre-request las cabeceras `salt`, `timestamp` y la firma HMAC-SHA256 Base64; las dos páginas (`/pay` y `/complete-bank-payment`) no llevan firma. |
+| **05. Kushki (/v1/sim/kushki)** | `GET /transfer/v1/bankList`<br>`POST /transfer/v1/tokens`<br>`POST /transfer/v1/init`<br>`GET /transfer/v1/status/:token`<br>`GET /transfer/v1/agent`<br>`POST /card/v1/charges`<br>`GET /charges/:ticketNumber` | Simula la transferencia PSE (banco, token, inicio, estado y la página de banco `/agent`) y los cargos con tarjeta. |
 | **06. Webhooks** | `POST /v1/sim/webhooks/trigger`<br>`POST /v1/api/webhooks/wompi` | El trigger genera un webhook sintético firmado criptográficamente de la transacción de Wompi creada en la carpeta 02, y el segundo endpoint lo verifica usando el verificador real del SDK. |
 
 ### 5.2. Encadenamiento dinámico de identificadores
@@ -205,7 +205,7 @@ if (response.data && response.data.id) {
 // La URL utiliza: {{baseUrl}}/v1/sim/wompi/transactions/{{wompiTransactionId}}
 ```
 
-El mismo encadenamiento se aplica a `mpPaymentId`, `mpOrderId`, `rapydCheckoutId`, `rapydPaymentId`, `kushkiChargeTicket` y `kushkiTransferToken`.
+El mismo encadenamiento se aplica a `mpPaymentId`, `mpOrderId`, `mpBankPaymentId`, `rapydCheckoutId`, `rapydPaymentId`, `kushkiChargeTicket` y `kushkiTransferToken`.
 
 ### 5.3. Firmas criptográficas dinámicas en Pre-requests
 
@@ -253,7 +253,7 @@ npx newman run simulator-api/postman/kit-pagos-simulator.postman_collection.json
 
 ### 6.3. Reporte de ejecución contra Render (Medición en vivo)
 
-Resultado certificado ejecutado sobre `https://kit-pagos-colombia.onrender.com`:
+Resultado certificado ejecutado sobre `https://kit-pagos-colombia.onrender.com`. Fue una corrida de 33 peticiones, anterior a las tres de las páginas de banco del PSE (issue #109); con las 36 actuales solo se corrió el simulador local (14 de octubre de 2026, 36 de 36), no Render:
 
 ```text
 ┌─────────────────────────┬─────────────────────┬─────────────────────┐
