@@ -743,11 +743,11 @@ async function main(): Promise<void> {
      * URL, y hacerlo mantiene el orden verdadero de los eventos —crear, redirigir,
      * consultar— en lugar de saltarse el paso del medio.
      *
-     * El fallo se tolera porque **no todas las URL son visitables desde aquí**, y eso
-     * no es un defecto de la demo: Kushki devuelve una del dominio
-     * `sandbox-pse.kushkipagos.com`, que es lo que devuelve de verdad, así que el
-     * destino queda fuera del simulador. Tratarlo como error haría que la demo se
-     * cayera justo en el punto donde está mostrando algo correcto.
+     * El fallo se tolera porque **no toda URL de banco es visitable desde aquí**, y eso
+     * no es un defecto de la demo: las cuatro pasarelas del simulador entregan una
+     * página suya, pero la URL de una sandbox real apuntaría a un dominio de la
+     * pasarela. Tratarlo como error haría que la demo se cayera justo en el punto
+     * donde está mostrando algo correcto.
      */
     console.log("\nVisitando la URL, que es lo que haría el pagador...");
     try {

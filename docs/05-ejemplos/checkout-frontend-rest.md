@@ -51,7 +51,7 @@ Y abrir `http://localhost:4100`. El tokenizador del SDK tiene fijo `http://local
 
 1. La página pide las pasarelas y, para la elegida, sus bancos de PSE.
 2. `POST /v1/api/payments` con un solo cuerpo para las cuatro: monto, divisa, referencia, el pagador completo (con documento, teléfono y dirección, que Mercado Pago exige para PSE), el método y `returnUrlConfig.returnUrl`. No lleva `ipAddress`: el navegador no conoce su IP pública, y la API toma la de la petición (ver «La IP del pagador»).
-3. Si la respuesta es `REDIRECT_REQUIRED`, la página guarda el pago pendiente en `sessionStorage` y muestra el enlace a `redirectUrl`. Al volver a la URL de retorno (`/?retorno=1`), lee el pago pendiente y consulta. Si el pagador regresa con «Atrás», el navegador puede recargar la página en vez de restaurarla; la página encuentra el pago pendiente y vuelve a ofrecer la vuelta.
+3. Si la respuesta es `REDIRECT_REQUIRED`, la página guarda el pago pendiente en `sessionStorage` y muestra el enlace a `redirectUrl`. Al volver a la URL de retorno (`/?retorno=1`), lee el pago pendiente y consulta. El enlace «Volver al comercio» de la página de banco del simulador lleva ahí. El botón «Ya pagué: consultar el estado» hace lo mismo sin pasar por el banco, para el pagador que cerró la pestaña del banco o regresó con «Atrás»: el navegador puede recargar la página en vez de restaurarla, y la página encuentra el pago pendiente y vuelve a ofrecer el botón.
 4. Si es `TRANSACTION` y el estado no es final, consulta. En los dos casos, `GET /v1/api/payments/:id?gateway=` se repite hasta `isFinal`, con un tope de diez consultas.
 
 Lo que cambia entre pasarelas está en las respuestas, no en el código. Medido el 13 de octubre de 2026 en memoria, con `buildApp()` y `app.inject()` sobre `kit-pagos-colombia@0.5.0`, el perfil de prueba de arriba y un cuerpo que sí llevaba `ipAddress` (punto 91 del [architecture-log](../architecture/architecture-log.md)):
@@ -59,9 +59,11 @@ Lo que cambia entre pasarelas está en las respuestas, no en el código. Medido 
 | Pasarela | Respuesta del cobro con PSE | Destino de `redirectUrl` | Llamadas del SDK al simulador dentro del cobro | Consultas del cliente hasta el estado final |
 |---|---|---|---|---|
 | Wompi | `REDIRECT_REQUIRED`, `PENDING` | `http://localhost:3000/v1/sim/wompi/pse/redirect?ticket_id=…`, una página del simulador | 3: el comercio, la transacción y la consulta que publica la URL del banco | 1, `APPROVED` |
-| Mercado Pago | `REDIRECT_REQUIRED`, `action_required` | `https://www.mercadopago.com.co/payments/…/bank_transfer`, el dominio real | 1: la orden | 1, `APPROVED` (`processed`) |
-| Kushki | `REDIRECT_REQUIRED`, `initializedTransaction` | `https://sandbox-pse.kushkipagos.com/transfer/v1/agent?token=…`, el dominio real | 2: el token y el `init` | 1, `APPROVED` (`approvedTransaction`) |
-| Rapyd | `REDIRECT_REQUIRED`, `ACT` | `https://sandboxcheckout.rapyd.net/complete-bank-payment?…`, el dominio real, con la URL de retorno en `complete_payment_url` | 2: el cliente y el pago | 1, `APPROVED` (`CLO`) |
+| Mercado Pago | `REDIRECT_REQUIRED`, `action_required` | `http://localhost:3000/v1/sim/mercadopago/payments/PAY…/bank_transfer`, una página del simulador | 1: la orden | 1, `APPROVED` (`processed`) |
+| Kushki | `REDIRECT_REQUIRED`, `initializedTransaction` | `http://localhost:3000/v1/sim/kushki/transfer/v1/agent?token=…`, una página del simulador | 2: el token y el `init` | 1, `APPROVED` (`approvedTransaction`) |
+| Rapyd | `REDIRECT_REQUIRED`, `ACT` | `http://localhost:3000/v1/sim/rapyd/complete-bank-payment?…`, una página del simulador, con la URL de retorno en `complete_payment_url` | 2: el cliente y el pago | 1, `APPROVED` (`CLO`) |
+
+Los destinos de Mercado Pago, Kushki y Rapyd son de la corrida del 14 de octubre de 2026: hasta entonces eran URL de los dominios reales de cada pasarela (punto 93). Las demás columnas son de la medición del 13.
 
 En Wompi el cobro con PSE necesita dos consultas al simulador, pero la primera la hace el SDK dentro de `createPayment()` para obtener la URL del banco: al cliente le queda una. Con el banco `2` de Wompi, el cobro vuelve `TRANSACTION` y `DECLINED`, sin redirección.
 
@@ -80,6 +82,16 @@ Dos corridas del 13 de octubre de 2026 (UTC−5), con el navegador de Cursor con
 | Mercado Pago | Tarjeta, titular `APRO` | 16:30:40 | `201 TRANSACTION`, `approved` | — | 0 | `APPROVED` (`approved`) |
 | Kushki | Tarjeta | 16:30:55 | `UNSUPPORTED_OPERATION` de `KitPagosBrowser`, sin ninguna petición | — | — | Sin cobro |
 | Rapyd | Tarjeta | 16:30:58 | `UNSUPPORTED_OPERATION` de `KitPagosBrowser`, sin ninguna petición | — | — | Sin cobro |
+
+En esas dos corridas las URL de banco de Mercado Pago, Kushki y Rapyd no se abrieron, y la vuelta se hizo con el botón de retorno de la página. Al abrirlas el 14 de octubre de 2026 (UTC−5), entre las 09:45 y las 09:49, con el navegador de Cursor, resultó que ninguna servía para un pagador:
+
+| Pasarela | URL que entregó la API | Qué mostró el navegador |
+|---|---|---|
+| Mercado Pago | `https://www.mercadopago.com.co/payments/PAY01ILKVL8J29A/bank_transfer` | «Esta página no existe»: el identificador lo inventó el simulador |
+| Kushki | `https://sandbox-pse.kushkipagos.com/transfer/v1/agent?token=5152ae2d…` | Pantalla en blanco: el dominio no resuelve (`Could not resolve host`) |
+| Rapyd | `https://sandboxcheckout.rapyd.net/complete-bank-payment?token=payment_e379…` | La página real «Rapyd Bank Payment Simulation»; con «Success» y «Pay» no volvió a `localhost:4100`, porque Rapyd no conoce el token |
+
+Por eso el criterio del issue, «PSE de punta a punta, incluida la redirección», no se cumplía con esas tres. El arreglo (punto 93) es que las cuatro páginas de banco sean del simulador y devuelvan al pagador a la URL de retorno. Repetido el recorrido entre las 10:10 y las 10:13, con las cuatro: cobro con PSE, enlace al banco, página de banco, «Volver al comercio» y consulta, el cliente mostró `APPROVED` en Mercado Pago (`processed`), Kushki (`approvedTransaction`), Rapyd (`CLO`) y Wompi (`APPROVED`). Wompi con el banco `2` mostró `DECLINED` sin redirección, y la tarjeta de Wompi y Mercado Pago siguió aprobando.
 
 La traza de la página en el PSE de Wompi, tal como la mostró (horas en UTC). La página se recarga dos veces: al salir hacia el banco y al volver por la URL de retorno.
 
@@ -120,7 +132,7 @@ La traza de la página registra solo el método, la ruta y el código de cada ll
 
 ## Lo que el simulador no puede mostrar
 
-- **La vuelta del banco.** Ninguna página de banco ni de checkout del simulador devuelve al pagador a la URL de retorno: la de Wompi es una página fija, sin enlaces, y las de Mercado Pago, Kushki y Rapyd son las URL de sus dominios reales, que el simulador imita sin servirlas. La página ofrece un botón que navega a la URL de retorno, que es lo que haría el banco.
+- **La página real del banco.** Las cuatro páginas de banco del simulador dicen que son del simulador y ofrecen un enlace «Volver al comercio» a la URL de retorno que mandó el comercio. Es una convención (nivel 3, punto 93): no imitan la página del banco ni la de la pasarela, y contra un sandbox real quien devuelve al pagador es el banco.
 - **El desenlace por la visita.** En las cuatro, el estado del PSE avanza con la consulta y no con la visita a la página del banco (sección 4.1 de [3-api-de-simulacion.md](../02-arquitectura/3-api-de-simulacion.md)).
 
 ## Insumo para la Prioridad 3: Kushki y Rapyd no tokenizan en el navegador

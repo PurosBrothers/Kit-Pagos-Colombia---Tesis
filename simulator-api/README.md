@@ -95,6 +95,11 @@ El servidor provee 23 rutas organizadas por pasarela que emulan el comportamient
   - `POST /v1/sim/rapyd/v1/payments` — Creación de cobro (tarjeta o PSE).
   - `GET /v1/sim/rapyd/v1/payments/:id` — Consulta de pago por ID.
   - `GET /v1/sim/rapyd/v1/payment_methods/banks` — Lista de bancos habilitados.
+- **Páginas de banco del PSE** (HTML, a donde la API manda al pagador; avisan que la redirección es simulada y ofrecen volver a la URL de retorno del comercio, sin mover el pago):
+  - `GET /v1/sim/wompi/pse/redirect?ticket_id=` — Wompi.
+  - `GET /v1/sim/mercadopago/payments/:paymentId/bank_transfer` — Mercado Pago.
+  - `GET /v1/sim/kushki/transfer/v1/agent?token=` — Kushki.
+  - `GET /v1/sim/rapyd/complete-bank-payment?token=` — Rapyd.
 - **Disparador de Webhooks (`/v1/sim/webhooks/trigger/:gateway`)**:
   - `POST /v1/sim/webhooks/trigger/:gateway` — Dispara una notificación HTTP firmada criptográficamente hacia un endpoint destino, permitiendo probar la recepción de webhooks de forma determinista.
 
