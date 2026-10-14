@@ -11,7 +11,7 @@ Kit Pagos Colombia son **tres componentes**, no uno:
 | Componente | Qué es | Dónde vive |
 |---|---|---|
 | **SDK** | Paquete de TypeScript con arquitectura hexagonal que unifica cuatro pasarelas colombianas en el backend y expone `kit-pagos-colombia/browser` para tokenización PCI DSS en el frontend | [`sdk/`](sdk/) · [README del SDK](sdk/README.md) |
-| **API de Simulación y Capa REST** | Servidor Fastify con dos caras: en `/v1/sim`, 23 rutas mock para probar flujos que los sandboxes bloquean; en `/v1/api`, el SDK expuesto como API REST. Documentado formalmente con OpenAPI 3.0 en [`/docs`](https://kit-pagos-colombia.onrender.com/docs) (Swagger UI) y desplegado en Render: [https://kit-pagos-colombia.onrender.com](https://kit-pagos-colombia.onrender.com) | [`simulator-api/`](simulator-api/) · [README de la API](simulator-api/README.md) |
+| **API de Simulación y Capa REST** | Servidor Fastify con dos caras: en `/v1/sim`, 30 rutas mock para probar flujos que los sandboxes bloquean; en `/v1/api`, el SDK expuesto como API REST. Documentado formalmente con OpenAPI 3.0 en [`/docs`](https://kit-pagos-colombia.onrender.com/docs) (Swagger UI) y desplegado en Render: [https://kit-pagos-colombia.onrender.com](https://kit-pagos-colombia.onrender.com) | [`simulator-api/`](simulator-api/) · [README de la API](simulator-api/README.md) |
 | **Documentación de datos** | Tarjetas, bancos PSE y credenciales de prueba de las cuatro pasarelas, con nivel de evidencia 1 | [`docs/testing-data/`](docs/testing-data/README.md) |
 
 Los tres juntos son el artefacto de un trabajo de grado en Ingeniería de Sistemas (Pontificia Universidad Javeriana). Métodos soportados: **tarjeta de crédito/débito y PSE**.
@@ -74,7 +74,7 @@ El ejemplo rápido de código, con la firma exacta de cada llamada, está en la 
 | Directorio | Propósito | Documentación |
 |---|---|---|
 | [`sdk/`](sdk/) | Código fuente del SDK en TypeScript, pruebas unitarias y métricas CK | [`sdk/README.md`](sdk/README.md) |
-| [`simulator-api/`](simulator-api/) | Servidor Fastify con los 23 mocks de pasarelas y los 5 endpoints de Kit Pagos documentados con OpenAPI 3.0 | [`simulator-api/README.md`](simulator-api/README.md) |
+| [`simulator-api/`](simulator-api/) | Servidor Fastify con las 30 rutas mock de pasarelas y los 5 endpoints de Kit Pagos documentados con OpenAPI 3.0 | [`simulator-api/README.md`](simulator-api/README.md) |
 | [`landing/`](landing/) | Página web interactiva y especificación técnica (Vite / Vanilla CSS) | [`docs/06-landing/`](docs/06-landing/) |
 | [`examples/`](examples/) | Once programas ejecutables que demuestran la integración | [`examples/README.md`](examples/README.md) |
 | [`docs/`](docs/) | Documentación completa: DSR, arquitectura C4, métricas y datos de prueba | [`docs/README.md`](docs/README.md) |

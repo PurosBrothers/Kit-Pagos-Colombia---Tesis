@@ -59,7 +59,7 @@ Lo que cambia entre pasarelas está en las respuestas, no en el código. Medido 
 | Pasarela | Respuesta del cobro con PSE | Destino de `redirectUrl` | Llamadas del SDK al simulador dentro del cobro | Consultas del cliente hasta el estado final |
 |---|---|---|---|---|
 | Wompi | `REDIRECT_REQUIRED`, `PENDING` | `http://localhost:3000/v1/sim/wompi/pse/redirect?ticket_id=…`, una página del simulador | 3: el comercio, la transacción y la consulta que publica la URL del banco | 1, `APPROVED` |
-| Mercado Pago | `REDIRECT_REQUIRED`, `action_required` | `http://localhost:3000/v1/sim/mercadopago/payments/PAY…/bank_transfer`, una página del simulador | 1: la orden | 1, `APPROVED` (`processed`) |
+| Mercado Pago | `REDIRECT_REQUIRED`, `action_required` | `http://localhost:3000/v1/sim/mercadopago/payments/<12 dígitos>/bank_transfer`, una página del simulador | 1: la orden | 1, `APPROVED` (`processed`) |
 | Kushki | `REDIRECT_REQUIRED`, `initializedTransaction` | `http://localhost:3000/v1/sim/kushki/transfer/v1/agent?token=…`, una página del simulador | 2: el token y el `init` | 1, `APPROVED` (`approvedTransaction`) |
 | Rapyd | `REDIRECT_REQUIRED`, `ACT` | `http://localhost:3000/v1/sim/rapyd/complete-bank-payment?…`, una página del simulador, con la URL de retorno en `complete_payment_url` | 2: el cliente y el pago | 1, `APPROVED` (`CLO`) |
 
@@ -132,7 +132,8 @@ La traza de la página registra solo el método, la ruta y el código de cada ll
 
 ## Lo que el simulador no puede mostrar
 
-- **La página real del banco.** Las cuatro páginas de banco del simulador dicen que son del simulador y ofrecen un enlace «Volver al comercio» a la URL de retorno que mandó el comercio. Es una convención (nivel 3, punto 93): no imitan la página del banco ni la de la pasarela, y contra un sandbox real quien devuelve al pagador es el banco.
+- **La página real del banco.** Las cuatro páginas de banco del simulador dicen que son del simulador y ofrecen un enlace «Volver al comercio» a la URL de retorno que mandó el comercio. Es una convención (nivel 3, punto 93): no imitan la página del banco ni la de la pasarela, y contra un sandbox real quien devuelve al pagador es el banco. En Mercado Pago real la URL de banco lleva al portal de PSE de ACH Colombia, el pagador vuelve por un comprobante de Mercado Pago y la `callback_url` recibe `?payment_id=<id>`; la página del simulador solo repite ese último paso (medido el 14 de octubre de 2026, `docs/testing-data/mercado-pago.md`).
+- **Mercado Pago real no acepta este cliente desde `localhost`.** El cliente manda `returnUrl` con su propio origen, `http://localhost:4100/…`, y Mercado Pago responde `402 processing_error` a una `callback_url` que apunta a la máquina local (medido el 14 de octubre de 2026). Contra el simulador funciona; contra el sandbox real hace falta servir el cliente desde un host público.
 - **El desenlace por la visita.** En las cuatro, el estado del PSE avanza con la consulta y no con la visita a la página del banco (sección 4.1 de [3-api-de-simulacion.md](../02-arquitectura/3-api-de-simulacion.md)).
 
 ## Insumo para la Prioridad 3: Kushki y Rapyd no tokenizan en el navegador

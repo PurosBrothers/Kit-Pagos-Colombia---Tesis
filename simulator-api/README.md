@@ -7,7 +7,7 @@
 La **API de Simulación** es el segundo componente del artefacto de Kit Pagos Colombia. Desarrollada sobre [Fastify](https://fastify.dev/) en TypeScript, cumple dos funciones arquitectónicas desacopladas:
 
 1. **Capa REST de Kit Pagos (`/v1/api`)**: Expone las capacidades del SDK a través de una interfaz HTTP unificada, permitiendo procesar cobros, consultar estados, listar bancos PSE y verificar firmas de webhooks sin necesidad de instalar el paquete npm.
-2. **Servidor Mock de Pasarelas (`/v1/sim`)**: Provee 23 rutas simuladas con fidelidad a los contratos de **Wompi**, **Mercado Pago**, **Kushki** y **Rapyd**, permitiendo ejercitar flujos completos (incluyendo escenarios de rechazo, timeout, errores de red y desenlaces de PSE) sin depender de conexión a internet ni incurrir en bloqueos de sandboxes reales.
+2. **Servidor Mock de Pasarelas (`/v1/sim`)**: Provee 30 rutas simuladas con fidelidad a los contratos de **Wompi**, **Mercado Pago**, **Kushki** y **Rapyd**, permitiendo ejercitar flujos completos (incluyendo escenarios de rechazo, timeout, errores de red y desenlaces de PSE) sin depender de conexión a internet ni incurrir en bloqueos de sandboxes reales.
 
 Servicio desplegado en vivo en Render: [https://kit-pagos-colombia.onrender.com](https://kit-pagos-colombia.onrender.com)
 
@@ -69,39 +69,50 @@ Mapeo formal a códigos de estado HTTP según el estándar del proyecto (RF-08):
 
 ## 2. Servidor Mock de Simulación (`/v1/sim`)
 
-El servidor provee 23 rutas organizadas por pasarela que emulan el comportamiento y formato de carga de cada sandbox oficial:
+El servidor provee 30 rutas organizadas por pasarela que emulan el comportamiento y formato de carga de cada sandbox oficial, más el disparador de webhooks y `GET /health`. Las rutas se enumeran con su nivel de evidencia en [`docs/02-arquitectura/3-api-de-simulacion.md`](../docs/02-arquitectura/3-api-de-simulacion.md).
 
 ### Rutas por Pasarela
 
-- **Wompi (`/v1/sim/wompi`)**:
-  - `GET /v1/sim/wompi/merchants/:key` — Consulta de comercio y aceptación de términos.
+- **Wompi (`/v1/sim/wompi`)** — 7:
+  - `GET /v1/sim/wompi/merchants/:publicKey` — Consulta de comercio y aceptación de términos.
   - `POST /v1/sim/wompi/tokens/cards` — Emisión de token de tarjeta.
   - `POST /v1/sim/wompi/transactions` — Creación de transacción (tarjeta o PSE).
   - `GET /v1/sim/wompi/transactions/:id` — Consulta de estado de transacción.
   - `GET /v1/sim/wompi/pse/financial_institutions` — Lista de instituciones financieras PSE.
+  - `GET /v1/sim/wompi/pse/redirect` — Página de banco del PSE (ver abajo).
   - `GET /v1/sim/wompi/terms` — Términos y condiciones del simulador.
-- **Mercado Pago (`/v1/sim/mercadopago`)**:
-  - `POST /v1/sim/mercadopago/v1/payments` — Cobro directo con tarjeta (exige idempotencia).
-  - `GET /v1/sim/mercadopago/v1/payments/:id` — Consulta de transacción por ID.
-  - `POST /v1/sim/mercadopago/v1/orders` — Creación de orden PSE.
-  - `GET /v1/sim/mercadopago/v1/payment_methods/pse/banks` — Catálogo de bancos PSE.
-- **Kushki (`/v1/sim/kushki`)**:
+- **Mercado Pago (`/v1/sim/mercadopago`)** — 7:
+  - `POST /v1/sim/mercadopago/payments` — Cobro directo con tarjeta (exige idempotencia).
+  - `GET /v1/sim/mercadopago/payments/:id` — Consulta de pago con tarjeta por ID.
+  - `POST /v1/sim/mercadopago/card_tokens` — Emisión de token de tarjeta.
+  - `POST /v1/sim/mercadopago/orders` — Creación de orden PSE.
+  - `GET /v1/sim/mercadopago/orders/:id` — Consulta de orden.
+  - `GET /v1/sim/mercadopago/payment_methods` — Catálogo de medios de pago, con los bancos PSE.
+  - `GET /v1/sim/mercadopago/payments/:paymentId/bank_transfer` — Página de banco del PSE (ver abajo).
+- **Kushki (`/v1/sim/kushki`)** — 7:
   - `POST /v1/sim/kushki/card/v1/charges` — Cobro directo con tarjeta.
-  - `POST /v1/sim/kushki/tokens/v1/card` — Tokenización de tarjeta.
-  - `POST /v1/sim/kushki/transfer-in/v1/init` — Inicio de transferencia bancaria PSE.
-  - `GET /v1/sim/kushki/transfer-in/v1/status/:token` — Consulta de estado de transferencia PSE.
-- **Rapyd (`/v1/sim/rapyd`)**:
-  - `POST /v1/sim/rapyd/v1/checkout` — Creación de página alojada (Hosted Checkout).
-  - `POST /v1/sim/rapyd/v1/payments` — Creación de cobro (tarjeta o PSE).
-  - `GET /v1/sim/rapyd/v1/payments/:id` — Consulta de pago por ID.
-  - `GET /v1/sim/rapyd/v1/payment_methods/banks` — Lista de bancos habilitados.
-- **Páginas de banco del PSE** (HTML, a donde la API manda al pagador; avisan que la redirección es simulada y ofrecen volver a la URL de retorno del comercio, sin mover el pago):
-  - `GET /v1/sim/wompi/pse/redirect?ticket_id=` — Wompi.
-  - `GET /v1/sim/mercadopago/payments/:paymentId/bank_transfer` — Mercado Pago.
-  - `GET /v1/sim/kushki/transfer/v1/agent?token=` — Kushki.
-  - `GET /v1/sim/rapyd/complete-bank-payment?token=` — Rapyd.
-- **Disparador de Webhooks (`/v1/sim/webhooks/trigger/:gateway`)**:
-  - `POST /v1/sim/webhooks/trigger/:gateway` — Dispara una notificación HTTP firmada criptográficamente hacia un endpoint destino, permitiendo probar la recepción de webhooks de forma determinista.
+  - `GET /v1/sim/kushki/charges/:ticketNumber` — Consulta de cargo con tarjeta.
+  - `GET /v1/sim/kushki/transfer/v1/bankList` — Lista de bancos PSE.
+  - `POST /v1/sim/kushki/transfer/v1/tokens` — Token de la transferencia, con el banco y la URL de retorno.
+  - `POST /v1/sim/kushki/transfer/v1/init` — Inicio de transferencia bancaria PSE.
+  - `GET /v1/sim/kushki/transfer/v1/status/:token` — Consulta de estado de transferencia PSE.
+  - `GET /v1/sim/kushki/transfer/v1/agent` — Página de banco del PSE (ver abajo).
+- **Rapyd (`/v1/sim/rapyd`)** — 9:
+  - `POST /v1/sim/rapyd/payments` — Creación de cobro (tarjeta o PSE).
+  - `GET /v1/sim/rapyd/payments/:paymentId` — Consulta de pago por ID.
+  - `POST /v1/sim/rapyd/checkout` — Creación de página alojada (Hosted Checkout).
+  - `GET /v1/sim/rapyd/checkout/:checkoutId` — Consulta del checkout.
+  - `GET /v1/sim/rapyd/checkout/:checkoutId/pay` — Página que simula al pagador completando el pago del checkout.
+  - `GET /v1/sim/rapyd/checkout/:checkoutId/pagar` — Redirección `308` hacia `/pay`.
+  - `POST /v1/sim/rapyd/customers` — Creación de cliente.
+  - `GET /v1/sim/rapyd/payment_methods/country` — Medios de pago y bancos del país.
+  - `GET /v1/sim/rapyd/complete-bank-payment` — Página de banco del PSE (ver abajo).
+- **Disparador de Webhooks**:
+  - `POST /v1/sim/webhooks/trigger` — Dispara una notificación HTTP firmada criptográficamente hacia un endpoint destino, permitiendo probar la recepción de webhooks de forma determinista.
+
+### Páginas de banco del PSE
+
+Las cuatro pasarelas entregan, en la respuesta del cobro con PSE, una URL que apunta a una página del propio simulador (las cuatro rutas marcadas arriba). Es HTML: avisa que la redirección es simulada y ofrece «Volver al comercio», a la URL de retorno que el comercio pidió al crear el cobro (Mercado Pago le agrega `payment_id`, como la real). No mueve el pago: el desenlace lo fija el banco de prueba o el escenario al crearlo, y se lee consultando el pago.
 
 ---
 

@@ -250,6 +250,28 @@ Sin medir: si otras causas de rechazo llegan con esta misma forma (un monto bajo
 `422`, según el punto 45 del `architecture-log.md`), si el estado `failed` es definitivo pasados
 más de 6 segundos y qué responde un reenvío de la misma `X-Idempotency-Key` después del `402`.
 
+### La URL de banco del PSE y la vuelta al comercio (14 de octubre de 2026)
+
+> **Medido contra la API real entre las 10:58 y las 11:18 (UTC−5), para el issue #109.** Mismo
+> cuerpo y mismo token `APP_USR-` que el control de la sección anterior, y el navegador de Cursor
+> para abrir las URL. Las capturas están en la evidencia del #109 (`medicion-real-mercadopago/`).
+
+| Qué se hizo | Lo que pasó |
+| --- | --- |
+| `POST /v1/orders` con el control (`callback_url` `https://example.com/retorno-pse`) | `201`, `action_required / waiting_transfer`; `payment_method.redirect_url` = `https://www.mercadopago.com.co/payments/<12 dígitos>/bank_transfer?caller_id=<id de la cuenta>&hash=<uuid>` |
+| Comparar el id de la ruta con el del pago (`PAY01…`, 29 caracteres) | **No coinciden.** El de la ruta es numérico de 12 dígitos |
+| `GET` de la `redirect_url` con `fetch` de Node | `403` |
+| `GET` de la `redirect_url` con el `user-agent` de un navegador | `302` a `https://registro.pse.com.co/PSENF/index.html?enc=<cifrado>` |
+| Abrirla en el navegador | La página «PSE A UN CLIC» de ACH Colombia: «Autoriza a PSE y realiza tus pagos en línea», con «Continuar» y «Regresar al comercio». **No es una página de Mercado Pago.** No se siguió por «Continuar», que pide registrarse con un código enviado al correo: el simulador de bancos con escenarios que describe el paso a paso de abajo no se vio |
+| «Regresar al comercio» y confirmar | Primero «Comprobante de tu pago con Pse» en `…/payments/<12 dígitos>/bank_transfer?caller_id=…&hash=…&from_pse=true` («Tu pago a <vendedor> está en proceso», cuenta regresiva de 3 s, referencia CUS) y después la `callback_url` con **`?payment_id=<el id numérico de la ruta>`** |
+| `callback_url` `http://comercio-de-prueba.example.com/retorno` | `201`: acepta `http` si el host es público |
+| `callback_url` `http://127.0.0.1:4299/…` (4 de 4), `https://127.0.0.1/retorno`, `https://localhost/retorno`, `http://localhost:4100/` | `402`, `processing_error`, sin `redirect_url`: **rechaza una `callback_url` que apunta a la máquina local**, con `http` o con `https` |
+
+Dos limitaciones. La vuelta medida es la de **cancelar** con «Regresar al comercio»; no se llegó al
+desenlace `approved`, que exige autorizar en un banco. Y el `402` intermitente de la sección anterior
+también apareció una vez con la `callback_url` del control (una de tres órdenes idénticas); no se
+caracterizó. Sin medir: si el `payment_id` de la vuelta se puede consultar en la API de órdenes.
+
 ### Paso a paso de implementación en Sandbox (Orders API)
 
 1. **Crear la Orden:** Envía la solicitud a `POST /v1/orders` utilizando tu `Access Token` de prueba:
