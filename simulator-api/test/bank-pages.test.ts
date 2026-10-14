@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { renderBankPage } from "../src/gateways/bankPage";
 import { buildSignedApp } from "./helpers/signedRequests";
 import { wompiTransactions } from "../src/store/GatewayStores";
-import { bankReturnUrlFor, rememberBankReturnUrl } from "../src/store/BankReturnUrls";
+import { bankReturnUrlFor, rememberBankReturnUrl, withQueryParam } from "../src/store/BankReturnUrls";
 
 /**
  * La página de banco del PSE en las cuatro pasarelas (issue #109).
@@ -20,6 +20,8 @@ interface BankRedirect {
   url: string;
   /** El valor que el comercio no debe ver reflejado en la página. */
   identifier: string;
+  /** El enlace que la página debe ofrecer: la URL del comercio, con lo que la pasarela agregue. */
+  returnHref?: string;
 }
 
 async function wompiRedirect(app: FastifyInstance, redirectUrl: string | null = RETURN_URL) {
@@ -52,7 +54,10 @@ async function wompiRedirect(app: FastifyInstance, redirectUrl: string | null = 
   };
 }
 
-async function mercadopagoRedirect(app: FastifyInstance): Promise<BankRedirect> {
+async function mercadopagoRedirect(
+  app: FastifyInstance,
+  callbackUrl: string = RETURN_URL,
+): Promise<BankRedirect> {
   const created = await app.inject({
     method: "POST",
     url: "/v1/sim/mercadopago/orders",
@@ -86,11 +91,14 @@ async function mercadopagoRedirect(app: FastifyInstance): Promise<BankRedirect> 
         ],
       },
       additional_info: { "payer.ip_address": "200.100.50.25" },
-      config: { online: { callback_url: RETURN_URL } },
+      config: { online: { callback_url: callbackUrl } },
     },
   });
   const payment = created.json().transactions.payments[0];
-  return { url: payment.payment_method.redirect_url, identifier: payment.id };
+  const url: string = payment.payment_method.redirect_url;
+  const bankId = new URL(url).pathname.split("/")[5];
+  const separator = callbackUrl.includes("?") ? "&" : "?";
+  return { url, identifier: payment.id, returnHref: `${callbackUrl}${separator}payment_id=${bankId}` };
 }
 
 async function kushkiRedirect(app: FastifyInstance): Promise<BankRedirect> {
@@ -153,7 +161,7 @@ describe("the PSE bank page", () => {
       "mercadopago",
       "Mercado Pago",
       mercadopagoRedirect,
-      /^\/v1\/sim\/mercadopago\/payments\/PAY[0-9A-Z]+\/bank_transfer$/,
+      /^\/v1\/sim\/mercadopago\/payments\/[1-9][0-9]{11}\/bank_transfer$/,
     ],
     ["kushki", "Kushki", kushkiRedirect, /^\/v1\/sim\/kushki\/transfer\/v1\/agent$/],
     ["rapyd", "Rapyd", rapydRedirect, /^\/v1\/sim\/rapyd\/complete-bank-payment$/],
@@ -179,11 +187,11 @@ describe("the PSE bank page", () => {
     });
 
     it("sends the payer back to the URL the merchant asked for", async () => {
-      const { url } = await redirectFor(app);
+      const { url, returnHref } = await redirectFor(app);
 
       const page = await app.inject({ method: "GET", url: pathAndQuery(url) });
 
-      expect(page.body).toContain(`<a href="${RETURN_URL}">Volver al comercio</a>`);
+      expect(page.body).toContain(`<a href="${returnHref ?? RETURN_URL}">Volver al comercio</a>`);
     });
 
     it("does not echo the identifier that came in the URL", async () => {
@@ -196,7 +204,9 @@ describe("the PSE bank page", () => {
 
     it("answers a page without a link for a payment it does not know", async () => {
       const { url } = await redirectFor(app);
-      const unknown = pathAndQuery(url).replace(/(PAY|token=|payment_)[0-9A-Za-z]+/, "$1desconocido");
+      const unknown = pathAndQuery(url)
+        .replace(/\/payments\/\d+\//, "/payments/999999999999/")
+        .replace(/(token=|payment_)[0-9A-Za-z]+/, "$1desconocido");
 
       const page = await app.inject({ method: "GET", url: unknown });
 
@@ -213,6 +223,43 @@ describe("the PSE bank page", () => {
       const { url } = await redirectFor(app);
 
       expect(new URL(url).origin).toBe("https://kit-pagos-colombia.onrender.com");
+    });
+  });
+
+  describe("mercadopago", () => {
+    it("publishes the numeric id the real URL carries, and not the PAY id of the payment", async () => {
+      const { url, identifier } = await mercadopagoRedirect(app);
+
+      expect(new URL(url).pathname).toMatch(/\/payments\/[1-9][0-9]{11}\/bank_transfer$/);
+      expect(url).not.toContain(identifier);
+    });
+
+    it("adds payment_id to the callback_url, as the real return does", async () => {
+      const { url, returnHref } = await mercadopagoRedirect(app);
+
+      const page = await app.inject({ method: "GET", url: pathAndQuery(url) });
+
+      expect(returnHref).toMatch(/^https:\/\/comercio\.example\.com\/retorno\?payment_id=[1-9][0-9]{11}$/);
+      expect(page.body).toContain(`<a href="${returnHref}">Volver al comercio</a>`);
+    });
+
+    it("keeps the query the merchant already had on the callback_url", async () => {
+      const { url, returnHref } = await mercadopagoRedirect(app, "https://comercio.example.com/retorno?orden=7");
+
+      const page = await app.inject({ method: "GET", url: pathAndQuery(url) });
+
+      expect(returnHref).toContain("?orden=7&payment_id=");
+      // En el atributo HTML el `&` va escapado, y el navegador lo lee como `&`.
+      expect(page.body).toContain(`<a href="${returnHref?.replace("&", "&amp;")}">Volver al comercio</a>`);
+    });
+
+    it("does not link a callback_url that is not http or https, even with payment_id added", async () => {
+      const { url } = await mercadopagoRedirect(app, "javascript:alert(1)");
+
+      const page = await app.inject({ method: "GET", url: pathAndQuery(url) });
+
+      expect(page.body).not.toContain("<a ");
+      expect(page.body).not.toContain("javascript:");
     });
   });
 
@@ -304,6 +351,17 @@ describe("the PSE bank page", () => {
 
       expect(bankReturnUrlFor("wompi", "mismo-id")).toBe("https://uno.example.com/");
       expect(bankReturnUrlFor("kushki", "mismo-id")).toBe("https://dos.example.com/");
+    });
+
+    it("adds a query parameter to a URL, keeping the one it already has", () => {
+      expect(withQueryParam("https://comercio.example.com/r", "payment_id", "1")).toBe("https://comercio.example.com/r?payment_id=1");
+      expect(withQueryParam("https://comercio.example.com/r?a=2", "payment_id", "1")).toBe("https://comercio.example.com/r?a=2&payment_id=1");
+    });
+
+    it("returns no URL when the merchant sent none, and leaves a value that is not a URL as it came", () => {
+      expect(withQueryParam(undefined, "payment_id", "1")).toBeUndefined();
+      expect(withQueryParam("", "payment_id", "1")).toBeUndefined();
+      expect(withQueryParam("esto no es una URL", "payment_id", "1")).toBe("esto no es una URL");
     });
   });
 });

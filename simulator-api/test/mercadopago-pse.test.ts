@@ -98,7 +98,7 @@ describe("PSE in the Mercado Pago simulator", () => {
     expect(order.status).toBe("action_required");
     expect(order.status_detail).toBe("waiting_transfer");
     expect(order.transactions.payments[0].payment_method.redirect_url).toMatch(
-      /^http:\/\/[^/]+\/v1\/sim\/mercadopago\/payments\/PAY[0-9A-Z]+\/bank_transfer$/,
+      /^http:\/\/[^/]+\/v1\/sim\/mercadopago\/payments\/[1-9][0-9]{11}\/bank_transfer$/,
     );
   });
 

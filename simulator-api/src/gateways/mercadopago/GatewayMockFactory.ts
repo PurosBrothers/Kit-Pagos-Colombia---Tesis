@@ -195,6 +195,22 @@ export class GatewayMockFactory {
   }
 
   /**
+   * El identificador que la URL del banco lleva en la ruta (`/payments/<id>/bank_transfer`).
+   *
+   * Nivel 1 — medido contra `api.mercadopago.com` el 14 de octubre de 2026: son doce dígitos y
+   * **no** son el `PAY…` del pago (`docs/testing-data/mercado-pago.md`, «La URL de banco del
+   * PSE y la vuelta al comercio»). La vuelta al comercio lo trae como `payment_id`. El valor
+   * es aleatorio; solo la forma está medida.
+   */
+  generateBankPaymentId(): string {
+    const first = 1 + Math.floor(Math.random() * 9);
+    const rest = Math.floor(Math.random() * 1e11)
+      .toString()
+      .padStart(11, "0");
+    return `${first}${rest}`;
+  }
+
+  /**
    * Construye la respuesta de una orden de PSE esperando al pagador.
    *
    * Reproduce el caso que la API real devuelve con HTTP 201: `action_required` /
@@ -204,13 +220,15 @@ export class GatewayMockFactory {
    *
    * `origin` es el `protocolo://host` de la petición que crea la orden (`requestOrigin()`):
    * la URL del banco apunta a la página de banco del propio simulador, con la forma de ruta
-   * que ya publicaba (`/payments/<id>/bank_transfer`) bajo `/v1/sim/mercadopago`. Antes
+   * medida (`/payments/<id numérico>/bank_transfer`) bajo `/v1/sim/mercadopago`. Antes
    * apuntaba al dominio real con un id inventado y abrirla daba «Esta página no existe»
-   * (issue #109).
+   * (issue #109). `bankPaymentId` es ese id numérico (`generateBankPaymentId()`); el llamador
+   * lo necesita para registrar la URL de retorno.
    */
   buildPendingOrderResponse(
     requestBody: MercadoPagoCreateOrderRequestBody,
     origin: string,
+    bankPaymentId: string,
     customId?: string,
   ): MercadoPagoOrderResponse {
     const paymentId = this.generateOrderId("PAY");
@@ -221,9 +239,7 @@ export class GatewayMockFactory {
       paymentId,
       status: "action_required",
       statusDetail: "waiting_transfer",
-      // El identificador del pago va en la URL porque es lo que hace la pasarela
-      // real, y así el ejemplo muestra una URL distinta por pago.
-      redirectUrl: `${origin}/v1/sim/mercadopago/payments/${paymentId}/bank_transfer`,
+      redirectUrl: `${origin}/v1/sim/mercadopago/payments/${bankPaymentId}/bank_transfer`,
       financialInstitution: requested?.payment_method?.financial_institution,
     });
   }

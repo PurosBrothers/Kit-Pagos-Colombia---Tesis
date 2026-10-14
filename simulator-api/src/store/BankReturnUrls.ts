@@ -32,3 +32,22 @@ export function bankReturnUrlFor(gateway: string, id: string): string | undefine
 export function clearBankReturnUrls(): void {
   returnUrls.clear();
 }
+
+/**
+ * La URL con un parámetro de query agregado, o la misma si no es una URL.
+ *
+ * Mercado Pago lo hace al volver del banco: `callback_url` + `?payment_id=<id>` (medido el
+ * 14 de octubre de 2026). Respeta la query que ya traiga la URL del comercio.
+ */
+export function withQueryParam(url: string | undefined, name: string, value: string): string | undefined {
+  if (!url) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.append(name, value);
+    return parsed.href;
+  } catch {
+    return url;
+  }
+}
