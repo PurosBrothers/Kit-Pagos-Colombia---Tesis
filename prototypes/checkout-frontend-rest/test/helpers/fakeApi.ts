@@ -48,7 +48,7 @@ export const FIXTURES: Record<string, GatewayFixture> = {
   mercadopago: {
     bank: { code: "1001", name: "Banco de Bogotá", achCode: "1001" },
     pseCreated: redirect(
-      "https://www.mercadopago.com.co/payments/PAY01333BYV13CI/bank_transfer",
+      "http://localhost:3000/v1/sim/mercadopago/payments/PAY01333BYV13CI/bank_transfer",
       "ORD01IGY5S0YE85",
       "action_required",
     ),
@@ -57,7 +57,7 @@ export const FIXTURES: Record<string, GatewayFixture> = {
   kushki: {
     bank: { code: "001", name: "Bancolombia" },
     pseCreated: redirect(
-      "https://sandbox-pse.kushkipagos.com/transfer/v1/agent?token=c5afaddcd31442a18e08ffa50a4c9d80",
+      "http://localhost:3000/v1/sim/kushki/transfer/v1/agent?token=c5afaddcd31442a18e08ffa50a4c9d80",
       "c5afaddcd31442a18e08ffa50a4c9d80",
       "initializedTransaction",
     ),
@@ -66,7 +66,7 @@ export const FIXTURES: Record<string, GatewayFixture> = {
   rapyd: {
     bank: { code: "co_pse_bancolombia_bank", name: "Bancolombia", achCode: "1007" },
     pseCreated: redirect(
-      "https://sandboxcheckout.rapyd.net/complete-bank-payment?token=payment_678b16dd29e989c3040f52a1124ce90f",
+      "http://localhost:3000/v1/sim/rapyd/complete-bank-payment?token=payment_678b16dd29e989c3040f52a1124ce90f",
       "payment_678b16dd29e989c3040f52a1124ce90f",
       "ACT",
     ),
