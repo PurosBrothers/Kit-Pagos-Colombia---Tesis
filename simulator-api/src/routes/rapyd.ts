@@ -1,4 +1,5 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { sendBankPage } from "../gateways/bankPage";
 import { GatewayMockFactory } from "../gateways/rapyd/GatewayMockFactory";
 import {
   RapydCreateCheckoutRequestBody,
@@ -21,6 +22,7 @@ import {
 } from "../state/rapydStateMachine";
 import { rememberScenarioTarget } from "../state/scenarioTarget";
 import { requestOrigin } from "../store/BankRedirectOrigins";
+import { bankReturnUrlFor, rememberBankReturnUrl } from "../store/BankReturnUrls";
 import { rapydCheckouts, rapydPayments } from "../store/GatewayStores";
 import {
   hasDuplicateMark,
@@ -311,9 +313,10 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
          * tabla cuando el comercio consulta, salvo que la creación haya pedido que siga
          * pendiente.
          */
-        const pse = mockFactory.buildPseCreatedResponse(requestBody);
+        const pse = mockFactory.buildPseCreatedResponse(requestBody, requestOrigin(request));
         rapydPayments.save(pse.data.id, pse.data);
         rememberFailure(pse.data.id);
+        rememberBankReturnUrl("rapyd", pse.data.id, requestBody.complete_payment_url);
 
         if (wantsPending) {
           rememberScenarioTarget("rapyd", "payment", pse.data.id, "ACT");
@@ -329,6 +332,21 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(201).send(approved);
     },
   );
+
+  /**
+   * El destino de `redirect_url` de un PSE: la página de banco de Rapyd (issue #109).
+   *
+   * Nivel 3 — convención del simulador. La ruta (`/complete-bank-payment?token=`) se midió en
+   * el sandbox de Rapyd, donde la página real ofrece «Success», «Error» y «Pay»; aquí no se
+   * imita. Devuelve al pagador a la `complete_payment_url` que el comercio mandó al crear el
+   * pago (la lee del registro y no de la query) y no mueve el pago: el desenlace lo decide el
+   * escenario y se ve al consultarlo, a diferencia del checkout de tarjeta, que sí avanza con
+   * la visita.
+   */
+  app.get("/v1/sim/rapyd/complete-bank-payment", async (request: FastifyRequest, reply: FastifyReply) => {
+    const { token } = request.query as { token?: string };
+    return sendBankPage(reply, "rapyd", token ? bankReturnUrlFor("rapyd", token) : undefined);
+  });
 
   /**
    * Página de pago alojada: el camino de tarjeta de Rapyd.

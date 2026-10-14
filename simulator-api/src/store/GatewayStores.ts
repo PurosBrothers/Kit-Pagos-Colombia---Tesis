@@ -6,6 +6,7 @@ import {
 import { RapydCheckout, RapydPayment } from "../gateways/rapyd/types";
 import { WompiTransaction } from "../gateways/wompi/types";
 import { clearBankRedirectOrigins } from "./BankRedirectOrigins";
+import { clearBankReturnUrls } from "./BankReturnUrls";
 import { clearCardTokenOutcomes } from "./CardTokenOutcomes";
 import { clearScenarioMarks } from "./ScenarioMarks";
 import { clearScenarioTargets } from "../state/scenarioTarget";
@@ -77,5 +78,6 @@ export function resetSimulatorState(): void {
   clearScenarioTargets();
   clearCardTokenOutcomes();
   clearBankRedirectOrigins();
+  clearBankReturnUrls();
   clearTraceabilityCodes();
 }

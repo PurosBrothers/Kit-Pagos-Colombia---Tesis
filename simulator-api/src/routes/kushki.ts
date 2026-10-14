@@ -1,4 +1,5 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { sendBankPage } from "../gateways/bankPage";
 import { GatewayMockFactory } from "../gateways/kushki/GatewayMockFactory";
 import {
   KushkiChargeResponse,
@@ -19,6 +20,8 @@ import {
   kushkiTransferMachine,
 } from "../state/kushkiStateMachine";
 import { rememberScenarioTarget } from "../state/scenarioTarget";
+import { requestOrigin } from "../store/BankRedirectOrigins";
+import { bankReturnUrlFor, rememberBankReturnUrl } from "../store/BankReturnUrls";
 import { kushkiCharges, kushkiTransfers } from "../store/GatewayStores";
 import { rememberTraceabilityCode } from "../store/TransferTraceability";
 import {
@@ -543,12 +546,28 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
 
       kushkiTransfers.save(body.token, moved);
 
-      const initResponse = mockFactory.buildTransferInit(body.token);
+      const initResponse = mockFactory.buildTransferInit(body.token, requestOrigin(request));
       rememberTraceabilityCode(body.token, initResponse.trazabilityCode);
+      rememberBankReturnUrl("kushki", body.token, transfer.callbackUrl);
 
       return reply.code(201).send(initResponse);
     },
   );
+
+  /**
+   * El destino de `redirectUrl`: el agente de PSE de una transferencia (issue #109).
+   *
+   * Nivel 3 — convención del simulador. La forma de la ruta (`/transfer/v1/agent?token=`) es la
+   * que el simulador ya publicaba, tomada de la referencia de Kushki y sin medición propia
+   * (no hubo credenciales de API); el contenido de la página no se imita, y el dominio real no
+   * resuelve para un token que el simulador inventó. La página devuelve al pagador al `callbackUrl` que
+   * el comercio mandó al pedir el token y no mueve la transferencia: el desenlace lo decide el
+   * escenario y se ve al consultar el estado.
+   */
+  app.get("/v1/sim/kushki/transfer/v1/agent", async (request: FastifyRequest, reply: FastifyReply) => {
+    const { token } = request.query as { token?: string };
+    return sendBankPage(reply, "kushki", token ? bankReturnUrlFor("kushki", token) : undefined);
+  });
 
   /**
    * Consulta de estado de una transferencia.

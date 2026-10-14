@@ -12,12 +12,15 @@ import {
   MercadoPagoOrderStatus,
   MercadoPagoTokenizeCardRequestBody,
 } from "../gateways/mercadopago/types";
+import { sendBankPage } from "../gateways/bankPage";
 import { getSimulatorScenario } from "../scenarios/ScenarioEngine";
 import { invalidCredentialRequested } from "../scenarios/invalidCredential";
 import { resolveScenario, wholePesosFromDecimal } from "../scenarios/scenarioFromRequest";
 import { bankListFailure, queryFailure, technicalFailure } from "../scenarios/technicalFailure";
 import { mpOrderMachine, mpPaymentMachine } from "../state/mercadopagoStateMachine";
 import { rememberScenarioTarget } from "../state/scenarioTarget";
+import { requestOrigin } from "../store/BankRedirectOrigins";
+import { bankReturnUrlFor, rememberBankReturnUrl } from "../store/BankReturnUrls";
 import {
   CardTokenOutcome,
   cardTokenOutcomeFor,
@@ -467,8 +470,16 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const response = mockFactory.buildPendingOrderResponse(requestBody);
+      const response = mockFactory.buildPendingOrderResponse(requestBody, requestOrigin(request));
       mercadopagoOrders.save(String(response.id), response);
+
+      // La página de banco devuelve al pagador a la `callback_url` de la orden, que viaja en
+      // la creación y no en ninguna consulta.
+      rememberBankReturnUrl(
+        "mercadopago",
+        response.transactions.payments[0].id,
+        requestBody.config?.online?.callback_url,
+      );
 
       /*
        * El escenario se registra aquí y la consulta lo aplica.
@@ -561,6 +572,24 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       }
 
       return reply.code(200).send(moved);
+    },
+  );
+
+  /**
+   * El destino de `redirect_url`: la página del banco de un PSE (issue #109).
+   *
+   * Nivel 3 — convención del simulador. La forma de la ruta (`/payments/<id>/bank_transfer`)
+   * es la de la respuesta de Mercado Pago registrada en las pruebas del SDK, sin medición
+   * propia en `docs/testing-data/`; el contenido de la página del banco no se imita, y el
+   * dominio real no sirve para una orden que el simulador inventó. La página devuelve al
+   * pagador a la `callback_url` de la orden y no mueve la orden: el desenlace del PSE lo
+   * decide el escenario al crearla y se ve al consultarla (`mpOrderMachine`).
+   */
+  app.get(
+    "/v1/sim/mercadopago/payments/:paymentId/bank_transfer",
+    async (request: FastifyRequest<{ Params: { paymentId: string } }>, reply: FastifyReply) => {
+      const { paymentId } = request.params;
+      return sendBankPage(reply, "mercadopago", bankReturnUrlFor("mercadopago", paymentId));
     },
   );
 

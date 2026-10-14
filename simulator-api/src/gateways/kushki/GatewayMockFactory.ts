@@ -163,15 +163,20 @@ export class GatewayMockFactory {
    * decia antes `status: "INITIALIZED"`, un campo que Kushki no manda y un valor que
    * pertenece al vocabulario de tarjeta.
    *
-   * La `redirectUrl` imita la real, que apunta a un agente de Kushki con el token en
+   * La `redirectUrl` imita la forma real, que apunta a un agente de Kushki con el token en
    * la query. A donde lleve despues —portal de PSE o banco directo— depende de si el
    * comercio tiene PSE 1.0 o PSE Avanza 2.0.
+   *
+   * `origin` es el `protocolo://host` de la peticion que hace el `init` (`requestOrigin()`):
+   * el agente es la pagina de banco del propio simulador, bajo `/v1/sim/kushki`. Antes
+   * apuntaba a `sandbox-pse.kushkipagos.com`, un dominio que no resuelve para un token que el
+   * simulador invento (issue #109).
    */
-  buildTransferInit(token: string): KushkiTransferInitResponse {
+  buildTransferInit(token: string, origin: string): KushkiTransferInitResponse {
     return {
       bankId: "001",
       bankName: "Bancolombia",
-      redirectUrl: `https://sandbox-pse.kushkipagos.com/transfer/v1/agent?token=${token}`,
+      redirectUrl: `${origin}/v1/sim/kushki/transfer/v1/agent?token=${token}`,
       transactionReference: randomUUID(),
       trazabilityCode: String(Math.floor(Math.random() * 1_000_000_000)),
     };

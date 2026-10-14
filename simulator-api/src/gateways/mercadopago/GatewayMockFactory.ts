@@ -201,9 +201,16 @@ export class GatewayMockFactory {
    * `waiting_transfer` y la URL del banco ya presente en la creación. A
    * diferencia de Wompi, aquí no hay nada que sondear (ver el punto 43 del
    * `architecture-log.md` para la comparación).
+   *
+   * `origin` es el `protocolo://host` de la petición que crea la orden (`requestOrigin()`):
+   * la URL del banco apunta a la página de banco del propio simulador, con la forma de ruta
+   * que ya publicaba (`/payments/<id>/bank_transfer`) bajo `/v1/sim/mercadopago`. Antes
+   * apuntaba al dominio real con un id inventado y abrirla daba «Esta página no existe»
+   * (issue #109).
    */
   buildPendingOrderResponse(
     requestBody: MercadoPagoCreateOrderRequestBody,
+    origin: string,
     customId?: string,
   ): MercadoPagoOrderResponse {
     const paymentId = this.generateOrderId("PAY");
@@ -216,7 +223,7 @@ export class GatewayMockFactory {
       statusDetail: "waiting_transfer",
       // El identificador del pago va en la URL porque es lo que hace la pasarela
       // real, y así el ejemplo muestra una URL distinta por pago.
-      redirectUrl: `https://www.mercadopago.com.co/payments/${paymentId}/bank_transfer`,
+      redirectUrl: `${origin}/v1/sim/mercadopago/payments/${paymentId}/bank_transfer`,
       financialInstitution: requested?.payment_method?.financial_institution,
     });
   }
