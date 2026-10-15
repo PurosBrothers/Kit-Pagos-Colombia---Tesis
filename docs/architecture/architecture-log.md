@@ -3170,6 +3170,53 @@ Lo que la página del banco real muestra no se imita en ninguna de las cuatro. S
 
 **Estado:** Resuelto en código (`simulator-api/src/gateways/bankPage.ts`, `src/store/BankReturnUrls.ts`, `src/routes/{wompi,mercadopago,kushki,rapyd}.ts`, y las fábricas de respuesta de las tres últimas). Actualizados `3-api-de-simulacion.md` (32 endpoints, 30 que imitan a las pasarelas), `docs/05-ejemplos/checkout-frontend-rest.md`, `docs/testing-data/mercado-pago.md`, el README del simulador y su colección Postman (36 peticiones) con la tabla de `4-despliegue-en-render-y-coleccion-postman.md`. Corregidos de paso los conteos de rutas que ya estaban desactualizados en `README.md` (23, ahora 30), `simulator-api/README.md` y `layers-and-components.md` (26, ahora 32). Queda la landing, que dice «25 rutas»: está en `devops` por otro PR y se corrige después de integrar este.
 
+### 94. El cliente C corre contra Render y contra el sandbox, sin simulador local (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.**
+El 14 de octubre de 2026 (5:32 p. m.) Joshua probó el prototipo C y dijo tres cosas: que mandaba siempre a `localhost`, que para él debería poder mandar al sandbox oficial («si no, de qué sirve un prototipo») y que debería funcionar con la API de Simulación desplegada en Render, sin correrla en su máquina. Al intentarlo con `set KIT_PAGOS_API_URL=…` y `npm start`, «explota» y le pide el simulador local. Se revisó el cliente y tenía razón en lo de fondo:
+
+- La API por omisión era `http://localhost:3000/v1/api`.
+- El cliente nunca mandaba `x-kit-pagos-environment` (punto 69), así que no había manera de ir al sandbox: la API usa el simulador si la cabecera falta.
+- El ambiente de la tokenización era otra variable, `TOKENIZATION_ENVIRONMENT`, separada del de las llamadas a la API: se podía tokenizar contra `sandbox` y cobrar contra `simulator`, una combinación sin sentido.
+- Una API que no respondía salía como «Failed to fetch».
+- `set VARIABLE=valor` define la variable en cmd y no en PowerShell. Si Joshua usó PowerShell, el servidor arrancó con la API por omisión, `localhost:3000`, sin avisar, y eso explicaría el «me pide correr el simulador». No se probó en Windows: es una hipótesis, no un hallazgo.
+
+**Decisión 1: el servidor estático lee argumentos, y por omisión apunta a Render.**
+`server.mjs` acepta `--api-url`, `--environment`, `--public-key=<pasarela>:<llave>` (una vez por pasarela), `--port` y `--help`; las mismas opciones existen como variables (`KIT_PAGOS_API_URL`, `KIT_PAGOS_ENVIRONMENT`, `CHECKOUT_PUBLIC_KEY_<PASARELA>`, `PORT`) y un argumento gana sobre su variable. Los argumentos viajan igual en bash, PowerShell y cmd. Tres scripts: `npm start` (Render, `simulator`), `npm run start:sandbox` (Render, `sandbox`) y `npm run start:local` (`localhost:3000`, `simulator`). Un ambiente o una URL inválidos, o la falta del build, terminan con un mensaje que dice qué corregir. El ambiente `production` no se acepta: exigiría llaves privadas del comercio en el navegador.
+
+La API por omisión es la de Render, no `localhost`. Es una decisión de criterio: es lo que Joshua pidió, y deja el cliente usable sin encender nada. Tiene un costo que se dice abajo.
+
+**Decisión 2: un solo ambiente para las llamadas y para la tokenización.**
+El cliente manda `x-kit-pagos-environment` en cada llamada a `/v1/api` y le pasa el mismo valor a `KitPagosBrowser.tokenizeCard()`. `TOKENIZATION_ENVIRONMENT` desaparece. Si la API responde con `x-kit-pagos-warning` (el uso de credenciales del servidor en `sandbox`), la página lo muestra. La página dice arriba a qué API y con qué ambiente habla.
+
+**Decisión 3: la tarjeta contra un simulador remoto se bloquea antes de enviar el número, y el motivo se dice.**
+El tokenizador del SDK tiene fijo `http://localhost:3000/v1/sim/<pasarela>` como destino del ambiente `simulator` (punto 78), y es a propósito: una página no puede mandar un número de tarjeta a un host que ella elija. Con la API en Render y `simulator`, el token que se obtuviera de `localhost:3000` no serviría, y la tarjeta se estaría mandando a un destino que el comercio no eligió. El cliente detecta esa combinación (`cardTokenizationProblem`) y no envía nada: «Con el ambiente simulator, el SDK tokeniza la tarjeta contra localhost:3000, y esta API está en …». No se cambió el SDK. Con Render se paga con PSE; con tarjeta, `start:local` o `start:sandbox`.
+
+**Decisión 4: una API que no responde dice cuál y qué hacer.**
+Un fallo de red sale como `API_UNREACHABLE`: «No se pudo conectar con la API en <origen>. Verifique que esté encendida; si es la desplegada en Render, puede estar despertando».
+
+**Lo medido** (14 de octubre de 2026, 22:47–22:55 UTC−5; la tabla completa está en `docs/05-ejemplos/checkout-frontend-rest.md`, «En Render y en el sandbox»).
+
+- Pruebas del cliente: 64 en total, con cobertura de sentencias 94.43 % y de ramas 97.84 % (`server.mjs`, 88.69 % de líneas; sin cubrir el bloque que escucha en el puerto). Cubren el ambiente en cada llamada, el aviso, el mensaje de red, el bloqueo de la tarjeta, la precedencia de argumentos sobre variables, las opciones inválidas y, en procesos reales, `--help` (código 0), `--environment=production` y un argumento desconocido (código 1). Once mutaciones sobre `api.ts`, `config.ts` y `server.mjs`: las once las detectó alguna prueba.
+- En el navegador, contra Render: el ambiente `sandbox` llega a las pasarelas reales. Wompi, PSE banco `1`: `APPROVED` en la primera respuesta. Wompi, tarjeta con la llave pública de sandbox: la tokenización llegó a Wompi (rechazó el titular `APRO`, de menos de cinco caracteres) y con otro titular terminó `APPROVED`. Rapyd: la página real «Rapyd Bank Payment Simulation», «Success» y «Pay», vuelta a `localhost` y `APPROVED` (`CLO`). Kushki: la página real «Kushki Bank», «Transacción pendiente», vuelta con «Volver al comercio» y estado `PENDING` (`initializedTransaction`) durante las diez consultas, 14 segundos.
+- Con `start:local`: PSE de Kushki y tarjeta de Wompi, `APPROVED`.
+
+**Hallazgos de la medición.**
+
+- La URL real del PSE de Kushki es `https://api-uat.kushkipagos.com/transfer/v1/agent?token=…&mid=…`, que redirige a `uat-sandbox.kushkipagos.com/checkout/transfer?status=pending&…`. La ruta coincide con la de la página del simulador (punto 93, que la había tomado de la referencia); el dominio que el simulador usaba antes no era el real. Al volver, Kushki agrega `&token=` a la URL del comercio, y la página del simulador no. No se cambió.
+- El sandbox de Kushki no cierra el PSE por sí solo: el simulador responde `APPROVED` en la primera consulta y el sandbox seguía pendiente. Es una diferencia de comportamiento entre los dos, no un defecto del cliente, que trata «pendiente» como un estado válido.
+- El `APRO` con que viene el formulario es el titular de prueba de Mercado Pago y la tarjeta de Wompi en sandbox lo rechaza. El campo es libre y el cliente no sabe de pasarelas, así que no se cambió el valor por omisión; queda dicho en el documento del ejemplo.
+
+**Lo que no está resuelto.**
+
+- **Render corre código anterior a los puntos 92 y 93.** Contra Render con `simulator`, el PSE de Kushki, Mercado Pago y Rapyd entrega URL de banco que no sirven, y Mercado Pago responde `400` por la IP. Es exactamente lo que Joshua vio en el PR #155, y lo arregla integrar el #109 y volver a desplegar (`autoDeploy` está activo en `render.yaml`, pero la rama que Render observa no está en el archivo). Hasta entonces, `npm start` prueba bien el PSE de Wompi y los mensajes del cliente, y no el de las otras tres.
+- **Mercado Pago en `sandbox` no funciona desde este cliente**: rechaza una `callback_url` de `localhost` con `402` (punto 93), y el cliente se sirve desde `localhost`. Haría falta servirlo desde un host público.
+- Windows y PowerShell no se probaron.
+
+**Estado:** Resuelto en código y documentación en `prototypes/checkout-frontend-rest/` (`server.mjs`, `src/{api,checkout,config,main}.ts`, `index.html`, `package.json` y las pruebas) y en `docs/05-ejemplos/checkout-frontend-rest.md`. Pendiente tras integrar el #109: volver a desplegar Render y repetir el PSE de las cuatro pasarelas contra él en `simulator`.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd

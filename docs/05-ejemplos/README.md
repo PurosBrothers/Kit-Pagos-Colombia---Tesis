@@ -108,7 +108,7 @@ De los doce, tres tienen su propio documento porque enseñan más que su propia 
 
 Los doce sirven al patrón de integración 1, un backend que importa el SDK. El patrón 2, un frontend que cobra contra la API REST sin instalar el SDK, no cabe en un programa de `tsx`: es una página. Vive en `prototypes/checkout-frontend-rest/`, porque es también el prototipo C.
 
-- **[checkout-frontend-rest.md](checkout-frontend-rest.md)** — Un cobro con PSE de punta a punta contra `/v1/api` desde otro origen, con el mismo código para las cuatro pasarelas, y la tarjeta tokenizada en el navegador para que el número nunca llegue a la API (issue #109).
+- **[checkout-frontend-rest.md](checkout-frontend-rest.md)** — Un cobro con PSE de punta a punta contra `/v1/api` desde otro origen, con el mismo código para las cuatro pasarelas, y la tarjeta tokenizada en el navegador para que el número nunca llegue a la API. Corre contra la API de Render, contra el sandbox oficial o contra un simulador local, sin encender nada por omisión (issue #109).
 
 ---
 
