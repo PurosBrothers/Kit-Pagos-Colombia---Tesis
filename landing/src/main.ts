@@ -284,6 +284,178 @@ function updateUnifiedSnippet(activeGateway?: string): void {
   codeEl.innerHTML = highlightTypeScript(getUnifiedSnippetCode(currentGw));
 }
 
+function highlightJson(json: string): string {
+  const htmlEscaped = json
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  return htmlEscaped.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+    (match) => {
+      let cls = "tok-num";
+      if (/^"/.test(match)) {
+        if (/:$/.test(match)) {
+          cls = "tok-kw";
+        } else {
+          cls = "tok-str";
+        }
+      } else if (/true|false/.test(match)) {
+        cls = "tok-kw";
+      } else if (/null/.test(match)) {
+        cls = "tok-kw";
+      }
+      return `<span class="${cls}">${match}</span>`;
+    },
+  );
+}
+
+function setupLiveRunner(): void {
+  const reqTab = document.getElementById("btn-tab-curl-req");
+  const resTab = document.getElementById("btn-tab-curl-res");
+  const reqPane = document.getElementById("pane-curl-req");
+  const resPane = document.getElementById("pane-curl-res");
+  const runBtn = document.getElementById("btn-run-live-curl") as HTMLButtonElement | null;
+  const runDot = document.getElementById("live-run-dot");
+  const runText = document.getElementById("live-run-text");
+  const badgeStatus = document.getElementById("res-badge-status");
+  const metaLatency = document.getElementById("res-meta-latency");
+  const codeRes = document.getElementById("code-snippet-rest-response");
+
+  const showReq = () => {
+    reqTab?.classList.add("is-active");
+    resTab?.classList.remove("is-active");
+    if (reqPane) reqPane.style.display = "block";
+    if (resPane) resPane.style.display = "none";
+  };
+
+  const showRes = () => {
+    resTab?.classList.add("is-active");
+    reqTab?.classList.remove("is-active");
+    if (reqPane) reqPane.style.display = "none";
+    if (resPane) resPane.style.display = "block";
+  };
+
+  reqTab?.addEventListener("click", (e) => {
+    e.preventDefault();
+    showReq();
+  });
+
+  resTab?.addEventListener("click", (e) => {
+    e.preventDefault();
+    showRes();
+  });
+
+  if (runBtn) {
+    runBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      runBtn.disabled = true;
+      if (runDot) runDot.className = "live-dot live-dot-running";
+      if (runText) runText.textContent = "Ejecutando...";
+
+      const t0 = performance.now();
+      try {
+        const response = await fetch("https://kit-pagos-colombia.onrender.com/v1/api/payments", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-kit-pagos-environment": "simulator",
+          },
+          body: JSON.stringify({
+            gateway: "wompi",
+            amount: "150000.00",
+            currency: "COP",
+            orderReference: `ORD-LIVE-${Date.now().toString().slice(-4)}`,
+            payer: {
+              email: "dev@javeriana.edu.co",
+              fullName: "Joshua Prieto",
+            },
+            paymentMethod: {
+              type: "CARD",
+              token: "tok_test_card_12345",
+            },
+          }),
+        });
+
+        const elapsed = Math.round(performance.now() - t0);
+        const data = await response.json();
+
+        if (badgeStatus) {
+          badgeStatus.textContent = response.ok
+            ? `HTTP ${response.status} ${response.status === 201 ? "CREATED" : "OK"}`
+            : `HTTP ${response.status}`;
+          badgeStatus.className = response.ok
+            ? "res-badge res-badge-201"
+            : "res-badge res-badge-error";
+        }
+        const metaInfo = document.querySelector(".terminal-res-meta .res-meta-info");
+        if (metaInfo) {
+          if (response.ok && data?.transaction?.status) {
+            metaInfo.textContent = `Wompi → Canónico ${data.transaction.status}`;
+          } else if (!response.ok) {
+            metaInfo.textContent = data?.code ? `Error: ${data.code}` : "Error en la petición";
+          }
+        }
+        if (metaLatency) {
+          metaLatency.textContent = `Latencia: ${elapsed}ms`;
+        }
+        if (codeRes) {
+          codeRes.innerHTML = highlightJson(JSON.stringify(data, null, 2));
+        }
+
+        showRes();
+      } catch {
+        const elapsed = Math.round(performance.now() - t0);
+        if (badgeStatus) {
+          badgeStatus.textContent = "DESPERTANDO RENDER (~30s)";
+          badgeStatus.className = "res-badge res-badge-warning";
+        }
+        if (metaLatency) {
+          metaLatency.textContent = `Tiempo transcurrido: ${elapsed}ms`;
+        }
+        if (codeRes) {
+          codeRes.innerHTML = `<span class="tok-cm">// El contenedor en Render se encuentra en reposo tras 15m de inactividad.\n// Está despertando (cold start ~30s). Reintenta en unos instantes o abre Swagger UI.</span>\n{\n  <span class="tok-kw">"message"</span>: <span class="tok-str">"Render cold start in progress. Try again shortly."</span>\n}`;
+        }
+        showRes();
+      } finally {
+        runBtn.disabled = false;
+        if (runDot) runDot.className = "live-dot";
+        if (runText) runText.textContent = "Probar en vivo ⚡";
+      }
+    });
+  }
+}
+
+async function checkRenderHealth(): Promise<void> {
+  const dot = document.getElementById("render-indicator-dot");
+  const text = document.getElementById("render-status-text");
+  if (!dot || !text) return;
+
+  const wakingTimeout = setTimeout(() => {
+    dot.className = "status-indicator-dot status-dot-waking";
+    text.textContent = "API en Render: Despertando contenedor (~30s)...";
+  }, 2500);
+
+  try {
+    const res = await fetch("https://kit-pagos-colombia.onrender.com/v1/api/gateways", {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+    clearTimeout(wakingTimeout);
+    if (res.ok) {
+      dot.className = "status-indicator-dot status-dot-online";
+      text.textContent = "API en Render: En línea (activa)";
+    } else {
+      dot.className = "status-indicator-dot status-dot-warning";
+      text.textContent = `API en Render: Respuesta HTTP ${res.status}`;
+    }
+  } catch {
+    clearTimeout(wakingTimeout);
+    dot.className = "status-indicator-dot status-dot-waking";
+    text.textContent = "API en Render: Inactiva o despertando (~30s)";
+  }
+}
+
 function setupCopyButtons(root: Document | HTMLElement = document): void {
   const buttons = root.querySelectorAll<HTMLButtonElement>(".btn-copy");
   buttons.forEach((btn) => {
@@ -304,7 +476,12 @@ function setupCopyButtons(root: Document | HTMLElement = document): void {
           document.querySelector(".demo-tab.is-active, .tab-btn.is-active")?.getAttribute("data-gateway") || "WOMPI";
         textToCopy = getUnifiedSnippetCode(activeTab);
       } else if (copyTarget === "snippet-rest") {
-        textToCopy = SNIPPET_REST_CURL;
+        const isResActive = document.getElementById("pane-curl-res")?.style.display !== "none";
+        if (isResActive) {
+          textToCopy = document.getElementById("code-snippet-rest-response")?.innerText || "";
+        } else {
+          textToCopy = SNIPPET_REST_CURL;
+        }
       } else if (copyTarget === "snippet-browser") {
         textToCopy = SNIPPET_BROWSER_TOKENIZE;
       }
@@ -378,11 +555,19 @@ function init(): void {
     });
   });
 
-  // Render inicial del sandbox explorer
+  // Render inicial del sandbox explorer si no estuviera ya montado
   renderSandboxContent("wompi");
+
+  // Configurar runner en vivo y pestañas de terminal
+  setupLiveRunner();
 
   // Configurar botones de copia
   setupCopyButtons();
+
+  // Comprobar estado de salud inicial y mantener despierto el contenedor en Render
+  // mediante un keep-alive cada 10 min mientras el usuario tenga abierta la pestaña
+  checkRenderHealth();
+  setInterval(checkRenderHealth, 10 * 60 * 1000);
 
   // Menú móvil toggle
   const toggleBtn = document.getElementById("menu-toggle");
