@@ -91,14 +91,15 @@ describe("PSE through /v1/api, the same code for the four gateways", () => {
     ]);
   });
 
-  it("sends no credentials and no Authorization header", async () => {
+  it("sends no credentials and no Authorization header, only the environment", async () => {
     const { fetchFn } = createFakeApi();
     const spy = vi.fn(fetchFn);
     await payWithPse(createKitPagosApi(API, spy), orderFor("wompi"), "1", NO_WAIT);
 
+    expect(spy.mock.calls.length).toBeGreaterThan(0);
     for (const [, init] of spy.mock.calls) {
       const headers = new Headers(init?.headers);
-      expect([...headers.keys()].filter((name) => name !== "content-type")).toEqual([]);
+      expect([...headers.keys()].filter((name) => name !== "content-type").sort()).toEqual(["x-kit-pagos-environment"]);
     }
   });
 
@@ -132,7 +133,7 @@ describe("card payments", () => {
         api: createKitPagosApi(API, fetchFn),
         loadTokenizer: async () => tokenizer,
         publicKeys: { wompi: "pub_test_placeholder" },
-        tokenizationEnvironment: "simulator",
+        environment: "simulator",
       },
       orderFor("wompi"),
       CARD,
@@ -163,7 +164,7 @@ describe("card payments", () => {
 
     await expect(
       payWithCard(
-        { api: createKitPagosApi(API, fetchFn), loadTokenizer: async () => tokenizer, publicKeys: {}, tokenizationEnvironment: "simulator" },
+        { api: createKitPagosApi(API, fetchFn), loadTokenizer: async () => tokenizer, publicKeys: {}, environment: "simulator" },
         orderFor("kushki"),
         CARD,
         NO_WAIT,
@@ -177,7 +178,7 @@ describe("card payments", () => {
     const { fetchFn } = createFakeApi();
 
     await payWithCard(
-      { api: createKitPagosApi(API, fetchFn), loadTokenizer: async () => tokenizer, publicKeys: {}, tokenizationEnvironment: "simulator" },
+      { api: createKitPagosApi(API, fetchFn), loadTokenizer: async () => tokenizer, publicKeys: {}, environment: "simulator" },
       orderFor("mercadopago"),
       CARD,
       NO_WAIT,
@@ -194,7 +195,7 @@ describe("card payments", () => {
     const { tokenizer } = tokenizerSpy(Promise.resolve({ token: "tok" }));
 
     const step = await payWithCard(
-      { api: createKitPagosApi(API, fetchFn), loadTokenizer: async () => tokenizer, publicKeys: {}, tokenizationEnvironment: "simulator" },
+      { api: createKitPagosApi(API, fetchFn), loadTokenizer: async () => tokenizer, publicKeys: {}, environment: "simulator" },
       orderFor("wompi"),
       CARD,
       NO_WAIT,
@@ -286,6 +287,91 @@ describe("pending payment storage", () => {
 
     storage.setItem(PENDING_STORAGE_KEY, JSON.stringify({ gateway: "g" }));
     expect(takePending(storage)).toBeUndefined();
+  });
+});
+
+describe("the environment of the calls", () => {
+  it("sends x-kit-pagos-environment on every call, GET and POST, with the environment of the config", async () => {
+    for (const environment of ["simulator", "sandbox"] as const) {
+      const { fetchFn } = createFakeApi();
+      const spy = vi.fn(fetchFn);
+      const api = createKitPagosApi(API, spy, { environment });
+
+      await api.listGateways();
+      await payWithPse(api, orderFor("wompi"), "1", NO_WAIT);
+
+      expect(spy.mock.calls.map(([, init]) => (init?.headers as Record<string, string>)["x-kit-pagos-environment"])).toEqual(
+        Array(spy.mock.calls.length).fill(environment),
+      );
+      expect(spy.mock.calls.map(([input, init]) => `${init?.method ?? "GET"} ${new URL(input).pathname}`)).toEqual([
+        "GET /v1/api/gateways",
+        "POST /v1/api/payments",
+      ]);
+    }
+  });
+
+  it("defaults to simulator, which is also the default of the API", async () => {
+    const spy = vi.fn(createFakeApi().fetchFn);
+
+    await createKitPagosApi(API, spy).listGateways();
+
+    expect((spy.mock.calls[0][1]?.headers as Record<string, string>)["x-kit-pagos-environment"]).toBe("simulator");
+  });
+
+  it("tokenizes the card in the same environment it charges in", async () => {
+    const { fetchFn } = createFakeApi();
+    const tokenizeCard = vi.fn<CardTokenizer["tokenizeCard"]>(async () => ({ token: "tok" }));
+
+    await payWithCard(
+      {
+        api: createKitPagosApi(API, fetchFn, { environment: "sandbox" }),
+        loadTokenizer: async () => ({ tokenizeCard }),
+        publicKeys: { wompi: "pub_test_placeholder" },
+        environment: "sandbox",
+      },
+      orderFor("wompi"),
+      CARD,
+      NO_WAIT,
+    );
+
+    expect(tokenizeCard.mock.calls[0][0].environment).toBe("sandbox");
+  });
+
+  it("hands the x-kit-pagos-warning header to the caller, which is how sandbox warns", async () => {
+    const warning = "Se usaron las credenciales de sandbox del servidor.";
+    const onWarning = vi.fn();
+    const api = createKitPagosApi(
+      API,
+      async () =>
+        new Response(JSON.stringify({ gateways: ["g"] }), { headers: { "x-kit-pagos-warning": warning } }),
+      { environment: "sandbox", onWarning },
+    );
+
+    await api.listGateways();
+
+    expect(onWarning).toHaveBeenCalledWith(warning);
+  });
+
+  it("does not call onWarning when the API sends no warning", async () => {
+    const onWarning = vi.fn();
+    const api = createKitPagosApi(API, createFakeApi().fetchFn, { onWarning });
+
+    await api.listGateways();
+
+    expect(onWarning).not.toHaveBeenCalled();
+  });
+
+  it("says which API it could not reach, instead of the browser's «Failed to fetch»", async () => {
+    const api = createKitPagosApi("https://api.example.com/v1/api", async () => {
+      throw new TypeError("Failed to fetch");
+    });
+
+    const failure = await api.listGateways().catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(KitPagosApiError);
+    expect(failure).toMatchObject({ status: 0, code: "API_UNREACHABLE" });
+    expect((failure as Error).message).toContain("https://api.example.com");
+    expect((failure as Error).message).toContain("Render");
   });
 });
 

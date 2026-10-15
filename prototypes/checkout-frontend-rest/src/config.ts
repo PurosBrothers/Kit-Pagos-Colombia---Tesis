@@ -3,19 +3,35 @@
  * del cliente no trae ninguna llave: la pública de cada pasarela llega aquí, en tiempo de
  * ejecución, y solo hace falta para tokenizar una tarjeta.
  */
+
+/**
+ * El ambiente al que apunta todo el cobro, y el único que entiende el cliente: el mismo valor
+ * va en la cabecera `x-kit-pagos-environment` de cada llamada a `/v1/api` y es el `environment`
+ * con el que `KitPagosBrowser` tokeniza la tarjeta. Si los dos difirieran, el token saldría de
+ * un ambiente y se cobraría en otro. `production` no existe aquí: exigiría llaves privadas.
+ */
+export type KitPagosEnvironment = "simulator" | "sandbox";
+
 export interface ClientConfig {
   apiBaseUrl: string;
-  tokenizationEnvironment: string;
+  environment: KitPagosEnvironment;
   publicKeys: Record<string, string>;
 }
 
+/** La API de Simulación desplegada; es la misma que usa `server.mjs` por omisión. */
+export const DEFAULT_API_URL = "https://kit-pagos-colombia.onrender.com/v1/api";
+
 export const DEFAULT_CONFIG: ClientConfig = {
-  apiBaseUrl: "http://localhost:3000/v1/api",
-  tokenizationEnvironment: "simulator",
+  apiBaseUrl: DEFAULT_API_URL,
+  environment: "simulator",
   publicKeys: {},
 };
 
 type FetchLike = (input: string) => Promise<Response>;
+
+function asEnvironment(value: unknown): KitPagosEnvironment {
+  return value === "sandbox" ? "sandbox" : "simulator";
+}
 
 export async function loadConfig(fetchFn: FetchLike = fetch, url = "./config.json"): Promise<ClientConfig> {
   const response = await fetchFn(url);
@@ -25,7 +41,36 @@ export async function loadConfig(fetchFn: FetchLike = fetch, url = "./config.jso
   const loaded = (await response.json()) as Partial<ClientConfig>;
   return {
     apiBaseUrl: loaded.apiBaseUrl || DEFAULT_CONFIG.apiBaseUrl,
-    tokenizationEnvironment: loaded.tokenizationEnvironment || DEFAULT_CONFIG.tokenizationEnvironment,
+    environment: asEnvironment(loaded.environment),
     publicKeys: { ...loaded.publicKeys },
   };
+}
+
+/**
+ * Dónde tokeniza `KitPagosBrowser` en el ambiente `simulator`: un valor fijo del SDK, que no
+ * deja pasar otro host para que la tarjeta no pueda mandarse a donde no es.
+ */
+const SIMULATOR_TOKENIZATION_PORT = "3000";
+const LOCAL_HOSTS = ["localhost", "127.0.0.1"];
+
+/**
+ * Con el ambiente `simulator`, el SDK manda la tarjeta a `localhost:3000`. Si la API no es esa,
+ * el token lo emitió un proceso y lo cobraría otro que no lo conoce, y la tarjeta habría ido a
+ * lo que haya escuchando en el puerto 3000 de la máquina del pagador. Devuelve por qué la
+ * tarjeta no se puede cobrar con esta configuración, o `undefined` si se puede.
+ */
+export function cardTokenizationProblem(config: Pick<ClientConfig, "apiBaseUrl" | "environment">): string | undefined {
+  if (config.environment !== "simulator") {
+    return undefined;
+  }
+  const api = new URL(config.apiBaseUrl);
+  if (LOCAL_HOSTS.includes(api.hostname) && api.port === SIMULATOR_TOKENIZATION_PORT) {
+    return undefined;
+  }
+  return (
+    `Con el ambiente simulator, el SDK tokeniza la tarjeta contra localhost:${SIMULATOR_TOKENIZATION_PORT}, ` +
+    `y esta API está en ${api.origin}: el token no serviría y la tarjeta no se envía. ` +
+    "Pague con PSE, arranque con «npm run start:local» y la API de Simulación en localhost:3000, " +
+    "o con «npm run start:sandbox» y la llave pública de la pasarela."
+  );
 }

@@ -11,12 +11,16 @@
       input, select, button { font: inherit; }
       button[type="submit"] { padding: 0.4rem 1.2rem; }
       #status { font-weight: 600; }
+      #target { font-size: 0.85rem; color: #52606d; }
+      #warning { background: #fff8e1; border: 1px solid #f0c36d; border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.9rem; }
       #trace { background: #f5f7fa; padding: 0.75rem; white-space: pre-wrap; font-size: 0.85rem; min-height: 3rem; }
     </style>
   </head>
   <body>
     <h1>Checkout C</h1>
     <p>Cobra contra <code>/v1/api</code> sin instalar <code>kit-pagos-colombia</code>. La pasarela es solo un valor del formulario.</p>
+    <p id="target">Cargando la configuración…</p>
+    <p id="warning" hidden></p>
 
     <form id="checkout">
       <fieldset>

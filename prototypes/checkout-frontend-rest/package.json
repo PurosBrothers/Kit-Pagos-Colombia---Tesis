@@ -8,7 +8,9 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "start:local": "node server.mjs --api-url=http://localhost:3000/v1/api",
+    "start:sandbox": "node server.mjs --environment=sandbox"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

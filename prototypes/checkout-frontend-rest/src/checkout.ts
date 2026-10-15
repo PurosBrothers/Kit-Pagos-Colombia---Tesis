@@ -123,7 +123,8 @@ export interface CardDependencies {
   api: KitPagosApi;
   loadTokenizer: () => Promise<CardTokenizer>;
   publicKeys: Record<string, string>;
-  tokenizationEnvironment: string;
+  /** El mismo ambiente de las llamadas a `/v1/api`: el token y el cobro tienen que coincidir. */
+  environment: string;
 }
 
 /**
@@ -143,7 +144,7 @@ export async function payWithCard(
   const { token } = await tokenizer.tokenizeCard({
     gateway: order.gateway,
     publicKey: deps.publicKeys[order.gateway] ?? "",
-    environment: deps.tokenizationEnvironment,
+    environment: deps.environment,
     card,
   });
   return startPayment(deps.api, order, { type: "CARD", token, installments: 1 }, poll);

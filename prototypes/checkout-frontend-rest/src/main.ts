@@ -10,7 +10,7 @@ import {
   type CheckoutStep,
   type Order,
 } from "./checkout";
-import { loadConfig } from "./config";
+import { cardTokenizationProblem, loadConfig } from "./config";
 import { loadCardTokenizer } from "./tokenizer";
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -26,6 +26,8 @@ const statusLine = byId<HTMLParagraphElement>("status");
 const redirectLink = byId<HTMLAnchorElement>("redirect-link");
 const returnButton = byId<HTMLButtonElement>("return-button");
 const trace = byId<HTMLPreElement>("trace");
+const target = byId<HTMLParagraphElement>("target");
+const warningLine = byId<HTMLParagraphElement>("warning");
 
 const returnUrl = `${location.origin}${location.pathname}?retorno=1`;
 
@@ -96,7 +98,20 @@ function showError(error: unknown): void {
 
 async function main(): Promise<void> {
   const config = await loadConfig();
-  const api = createKitPagosApi(config.apiBaseUrl, tracingFetch);
+  target.textContent = `API: ${config.apiBaseUrl} · ambiente: ${config.environment}`;
+  note(`config: API ${config.apiBaseUrl}, ambiente ${config.environment}`);
+  const warnings = new Set<string>();
+  const api = createKitPagosApi(config.apiBaseUrl, tracingFetch, {
+    environment: config.environment,
+    onWarning: (message) => {
+      if (!warnings.has(message)) {
+        warnings.add(message);
+        warningLine.hidden = false;
+        warningLine.textContent = `Aviso de la API: ${message}`;
+        note(`aviso de la API: ${message}`);
+      }
+    },
+  });
 
   async function refreshBanks(): Promise<void> {
     const banks = await api.listPseBanks(gatewaySelect.value);
@@ -122,6 +137,14 @@ async function main(): Promise<void> {
     event.preventDefault();
     const data = new FormData(form);
     const order = orderFrom(data);
+    // El enlace de un intento anterior no debe quedar a la vista junto al resultado de este.
+    redirectLink.hidden = true;
+    const cardProblem = data.get("method") === "CARD" ? cardTokenizationProblem(config) : undefined;
+    if (cardProblem) {
+      statusLine.textContent = cardProblem;
+      note("tarjeta no enviada: el ambiente y la API no coinciden con el destino del SDK");
+      return;
+    }
     statusLine.textContent = "Procesando…";
     const step =
       data.get("method") === "PSE"
@@ -131,7 +154,7 @@ async function main(): Promise<void> {
               api,
               loadTokenizer: loadCardTokenizer,
               publicKeys: config.publicKeys,
-              tokenizationEnvironment: config.tokenizationEnvironment,
+              environment: config.environment,
             },
             order,
             {
