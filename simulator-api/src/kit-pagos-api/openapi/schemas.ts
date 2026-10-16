@@ -216,6 +216,34 @@ const TRANSACTION_STATUS_ENUM = [
   "UNKNOWN",
 ] as const;
 
+/**
+ * El `RejectionReason` del SDK con sus mismos campos. La respuesta se serializa con este
+ * esquema y lo que no declara se descarta: con otros nombres, el motivo sale como `{}`
+ * (`test/rejection-reason.test.ts`).
+ */
+const RejectionReasonSchema = {
+  type: "object",
+  description: "Motivo del rechazo. Solo existe cuando el estado es DECLINED y la pasarela envió un código; Wompi no lo envía.",
+  required: ["rejectionCode", "rejectionCategory"],
+  properties: {
+    rejectionCode: {
+      type: "string",
+      description:
+        "Código nativo del rechazo, tal como lo envía la pasarela: el status_detail en Mercado Pago, " +
+        "el failure_code en Rapyd y el responseCode en Kushki.",
+      example: "rejected_by_issuer",
+    },
+    rejectionCategory: {
+      type: "string",
+      description:
+        "Categoría normalizada por el SDK: INSUFFICIENT_FUNDS, INVALID_CARD_DATA, CARD_RESTRICTED, " +
+        "FRAUD_SUSPICION, NETWORK_ERROR, AUTHENTICATION_FAILED, DUPLICATED_PAYMENT o UNKNOWN. " +
+        "Es UNKNOWN cuando no hay una fuente para la correspondencia.",
+      example: "UNKNOWN",
+    },
+  },
+} as const;
+
 /** Respuesta cuando el cobro se completó en línea (tarjeta aprobada). */
 const TransactionOutcomeSchema = {
   type: "object",
@@ -243,14 +271,7 @@ const TransactionOutcomeSchema = {
         isPending: { type: "boolean" },
         isFinal: { type: "boolean" },
         authorizationCode: { type: "string" },
-        rejectionReason: {
-          type: "object",
-          properties: {
-            code: { type: "string" },
-            category: { type: "string" },
-            message: { type: "string" },
-          },
-        },
+        rejectionReason: RejectionReasonSchema,
       },
     },
     warnings: {
@@ -479,14 +500,7 @@ export const GetPaymentStatusSchema = {
             isPending: { type: "boolean" },
             isFinal: { type: "boolean" },
             authorizationCode: { type: "string" },
-            rejectionReason: {
-              type: "object",
-              properties: {
-                code: { type: "string" },
-                category: { type: "string" },
-                message: { type: "string" },
-              },
-            },
+            rejectionReason: RejectionReasonSchema,
           },
         },
         warnings: {
