@@ -226,14 +226,27 @@ describe("Mercado Pago card orders in the simulator", () => {
       expect(created.json()).toMatchObject({ status: "processing", status_detail: "in_process" });
     });
 
-    it.each([
-      ["10102", "EXPIRED"],
-      ["10409", "DUPLICATE_PAYMENT"],
-    ])("%s answers 501 because %s was not measured in card orders", async (amount, scenario) => {
-      const created = await cardOrder("tok_unknown", { amount });
+    it("10102 is created expired / expired with 201, and the query answers the same", async () => {
+      const created = await cardOrder("tok_unknown", { amount: "10102" });
+
+      expect(created.statusCode).toBe(201);
+      const order = created.json();
+      expect(order).toMatchObject({ status: "expired", status_detail: "expired" });
+      expect(order.transactions.payments[0]).toMatchObject({
+        status: "expired",
+        status_detail: "expired",
+      });
+
+      const queried = await queryOrder(order.id);
+      expect(queried.statusCode).toBe(200);
+      expect(queried.json()).toEqual(order);
+    });
+
+    it("10409 answers 501 because DUPLICATE_PAYMENT was not measured in card orders", async () => {
+      const created = await cardOrder("tok_unknown", { amount: "10409" });
 
       expect(created.statusCode).toBe(501);
-      expect(created.json().error).toContain(scenario);
+      expect(created.json().error).toContain("DUPLICATE_PAYMENT");
     });
 
     it("10600 creates the order and makes its query fail", async () => {

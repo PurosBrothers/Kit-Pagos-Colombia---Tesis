@@ -274,8 +274,8 @@ const ORDER_SCENARIOS: ReadonlySet<string> = new Set([
  * - **Dos APIs distintas, no dos payloads:** PSE va por `/orders`, con otro vocabulario de
  *   estados (`action_required`) y el monto como string sin decimales. Esto no es una
  *   simplificación del mock: es lo que se midió contra la API real (issue #64). La tarjeta va
- *   por `/payments` en la versión 0.5.0 del SDK, que es la que usa `/v1/api`, y por `/orders`
- *   desde la 0.6.0, así que el simulador atiende los dos caminos.
+ *   por `/payments` en la versión 0.5.0 del SDK y por `/orders` desde la 0.6.0, que es la que
+ *   usa `/v1/api`, así que el simulador atiende los dos caminos.
  */
 export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   const mockFactory = new GatewayMockFactory();
@@ -350,8 +350,14 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
    * Nivel 1 — medido el 15 de octubre de 2026: aprobada en `processed / accredited` con `201`,
    * pendiente en `processing / in_process` con `201` (titular `CONT`) y rechazada en `failed /
    * failed` con `402`. El rechazo por monto o cabecera usa `rejected_by_issuer`, el detalle
-   * medido para `OTHE`, el titular del «error general». `EXPIRED` y `DUPLICATE_PAYMENT` no se
-   * midieron en órdenes de tarjeta y responden `501`, como en las de PSE.
+   * medido para `OTHE`, el titular del «error general».
+   *
+   * Nivel 3 — `EXPIRED` crea la orden ya en `expired / expired` con `201`, para que el monto
+   * 10 102 siga dando la expiración nativa con tarjeta. No se midió una orden de tarjeta
+   * vencida: en modo automático resolvió en la misma respuesta. El par sale de la tabla
+   * oficial de estados de la orden, y es `expired` y no `canceled` por el punto 80 del
+   * `architecture-log.md`: el SDK traduce `canceled` a `VOIDED`. `DUPLICATE_PAYMENT` responde
+   * `501`, como en las de PSE: el `409` de pagos no está medido para la Orders API.
    */
   function cardOrderFor(
     scenario: string,
@@ -372,6 +378,11 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
           order: mockFactory.buildCardOrderResponse(requestBody, "processing", detail),
         };
       }
+      case "EXPIRED":
+        return {
+          httpStatus: 201,
+          order: mockFactory.buildCardOrderResponse(requestBody, "expired", "expired"),
+        };
       case "REJECTED":
       case "DECLINED":
         return {

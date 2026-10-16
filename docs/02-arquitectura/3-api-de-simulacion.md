@@ -140,7 +140,7 @@ Son **un almacén por pasarela y por recurso**, en `src/store/GatewayStores.ts`,
 
 `POST /tokens/cards` de Wompi y `POST /card_tokens` de Mercado Pago son las rutas de tokenización que llama `KitPagosBrowser` con el ambiente `simulator`. Son también el único lugar donde el simulador ve los datos de la tarjeta, y por eso es ahí donde se leen los datos de prueba de las dos pasarelas (sección 4).
 
-**Mercado Pago tiene dos caminos de tarjeta, y el simulador atiende los dos.** El SDK 0.5.0, que es la versión que usa `/v1/api`, cobra la tarjeta por `POST /payments`. Desde la 0.6.0 la cobra por `POST /orders`, la misma ruta de PSE, porque con las credenciales del vendedor de prueba la Payments API responde `401 "Unauthorized use of live credentials"` (`docs/testing-data/mercado-pago.md`, sección 1.3). La ruta distingue la orden de tarjeta por el medio de pago: `credit_card` o `debit_card`, o un `token`. Antes de cobrar, el SDK 0.6.0 deduce la marca y el tipo de la tarjeta, que la Orders API exige, con dos lecturas: `GET /card_tokens/:id`, con el access token, devuelve el BIN en `first_six_digits`, y `GET /payment_methods/search?public_key=…&bins=…` devuelve el `id` y el `payment_type_id`. Las dos rutas existen en el simulador para eso.
+**Mercado Pago tiene dos caminos de tarjeta, y el simulador atiende los dos.** El SDK 0.5.0 cobra la tarjeta por `POST /payments`. Desde la 0.6.0 —`/v1/api` usa la 0.6.0-rc.1— la cobra por `POST /orders`, la misma ruta de PSE, porque con las credenciales del vendedor de prueba la Payments API responde `401 "Unauthorized use of live credentials"` (`docs/testing-data/mercado-pago.md`, sección 1.3). La ruta distingue la orden de tarjeta por el medio de pago: `credit_card` o `debit_card`, o un `token`. Antes de cobrar, el SDK 0.6.0 deduce la marca y el tipo de la tarjeta, que la Orders API exige, con dos lecturas: `GET /card_tokens/:id`, con el access token, devuelve el BIN en `first_six_digits`, y `GET /payment_methods/search?public_key=…&bins=…` devuelve el `id` y el `payment_type_id`. Las dos rutas existen en el simulador para eso.
 
 La asimetría en el número de rutas no es descuido: es el reflejo directo de que cada pasarela necesita una cantidad distinta de llamadas para el mismo flujo. Rapyd tiene nueve porque su tarjeta va por checkout alojado y su PSE necesita crear un cliente primero.
 
@@ -188,13 +188,13 @@ El simulador recuerda, por token, el desenlace que deriva de la tarjeta (`src/st
 
 Son una convención del simulador, sin equivalente en ninguna pasarela. Están en pesos enteros, porque el PSE de Mercado Pago no admite centavos, y cada ruta normaliza su monto antes de buscarlo: los centavos de Wompi (`amount_in_cents`), el decimal de Mercado Pago y de Rapyd, y la suma del desglose de Kushki. Un monto con centavos distintos de cero no es un monto reservado. Se reconocen al crear un cobro con tarjeta o con PSE en las cuatro pasarelas, y la falla elegida se guarda con la transacción.
 
-La columna del SDK es lo que reporta `kit-pagos-colombia` 0.4.0, que es la versión que usa `/v1/api` (`simulator-api/package.json` pide `^0.4.0`), comprobado en `test/scenario-through-sdk.test.ts`.
+La columna del SDK es lo que reporta `kit-pagos-colombia` 0.6.0-rc.1, que es la versión que usa `/v1/api` (`simulator-api/package.json` pide `0.6.0-rc.1`), comprobado en `test/scenario-through-sdk.test.ts`.
 
-| Monto (COP) | Escenario | Lo que responde el simulador | Con el SDK 0.4.0 |
+| Monto (COP) | Escenario | Lo que responde el simulador | Con el SDK 0.6.0-rc.1 |
 |---|---|---|---|
 | 10 100 | `DECLINED` | El rechazo nativo de la pasarela | `DECLINED` en las tarjetas de Wompi, Mercado Pago y Kushki; en el PSE de Wompi, que cierra con la URL en la primera consulta; en el PSE de Mercado Pago, cuyo `402` trae la orden en `data` y sale con su id; y, al consultar, en los PSE de Rapyd y Kushki. Rapyd tarjeta devuelve la redirección a su página de pago |
 | 10 101 | `PENDING` | El pendiente nativo | `PENDING`, al crear o al consultar |
-| 10 102 | `EXPIRED` | La expiración nativa | `VOIDED` en las tarjetas de Wompi y Mercado Pago; `EXPIRED`, al consultar, en los PSE de Mercado Pago y Rapyd. Rapyd tarjeta y el PSE de Kushki responden `501` (ver «Lo que responde 501, a propósito»), que llega como `GATEWAY_SERVER_ERROR` |
+| 10 102 | `EXPIRED` | La expiración nativa | `VOIDED` en la tarjeta de Wompi; `EXPIRED` en la tarjeta de Mercado Pago, cuya orden nace `expired / expired` (con el SDK 0.5.0, el pago de la Payments API nace `cancelled / expired` y llega como `VOIDED`); `EXPIRED`, al consultar, en los PSE de Mercado Pago y Rapyd. Rapyd tarjeta y el PSE de Kushki responden `501` (ver «Lo que responde 501, a propósito»), que llega como `GATEWAY_SERVER_ERROR` |
 | 10 409 | `DUPLICATE_PAYMENT` | El primer cobro se crea; el segundo con la misma referencia (en Kushki tarjeta, el mismo token) recibe el `409` nativo | `INVALID_REQUEST` en el segundo |
 | 10 429 | `RATE_LIMIT` | `429` | `RATE_LIMIT_EXCEEDED` |
 | 10 500, 10 502, 10 503 | `SERVER_ERROR`, `BAD_GATEWAY`, `SERVICE_UNAVAILABLE` | `500`, `502`, `503` con el cuerpo nativo | `GATEWAY_SERVER_ERROR` |
@@ -210,7 +210,7 @@ Las combinaciones de ruta y monto que responden `501` están al final de esta se
 
 Los montos de la consulta hacen que la creación salga bien y que falle el `GET` de estado, que es la operación que el SDK sí reintenta:
 
-| Monto (COP) | Lo que responde la consulta | Con el SDK 0.4.0 |
+| Monto (COP) | Lo que responde la consulta | Con el SDK 0.6.0-rc.1 |
 |---|---|---|
 | 10 602 | `503` en las dos primeras consultas y la transacción en la tercera. El contador vuelve a cero al recuperarse, así que cada `getPaymentStatus()` muestra su propio reintento | `getPaymentStatus()` reintenta y termina con la transacción |
 | 10 600 | `500` en cada consulta | `MAX_RETRIES_EXCEEDED` después de los reintentos, con el último `GATEWAY_SERVER_ERROR` en `cause` |
@@ -276,7 +276,7 @@ La lista de bancos de PSE no tiene monto ni datos de prueba, así que se control
 | Rapyd tarjeta, `POST /checkout` | `PENDING` por cabecera, `EXPIRED` (10 102), `DUPLICATE_PAYMENT` (10 409) | Un checkout pendiente es el que nadie visitó, y con el monto 10 101 se queda en `NEW`, que está medido. De una página vencida no hay medición |
 | Rapyd, `POST /payments` con tarjeta | `PENDING` | Ese pago nace cerrado |
 | Mercado Pago PSE, `POST /orders` | `DUPLICATE_PAYMENT` (10 409) | El `409` de pagos no está medido para la Orders API |
-| Mercado Pago tarjeta, `POST /orders` | `EXPIRED` (10 102), `DUPLICATE_PAYMENT` (10 409) | Ninguno de los dos se midió en órdenes de tarjeta |
+| Mercado Pago tarjeta, `POST /orders` | `DUPLICATE_PAYMENT` (10 409) | Igual que en la orden de PSE: el `409` de pagos no está medido para la Orders API |
 | Kushki PSE, `POST /transfer/v1/tokens` | `EXPIRED` (10 102), `DUPLICATE_PAYMENT` (10 409) | `expiredTransaction` «solo aplica a México» (`docs/testing-data/kushki.md`, sección 5.4), y no hay medición de un duplicado en Transfer In |
 
 El `init` de la transferencia de Kushki aplica los escenarios de negocio de la cabecera, que reemplazan el que quedó al pedir el token. Antes del issue #122 los ignoraba. Los que la transferencia no sabe producir —`EXPIRED`, `FLAPPING`, `DUPLICATE_PAYMENT`— responden `501` sin moverla de `requestedToken`. En el `init`, el monto y el documento no eligen escenario: esos ya decidieron al pedir el token.
@@ -442,12 +442,16 @@ stateDiagram-v2
     [*] --> processed : POST /orders con tarjeta (201)
     [*] --> processing : POST /orders con CONT o PENDING (201)
     [*] --> failed : POST /orders con rechazo (402)
+    [*] --> expired : POST /orders con EXPIRED (201)
     processed --> [*]
     processing --> [*]
     failed --> [*]
+    expired --> [*]
 ```
 
 Una orden de tarjeta nace resuelta y ninguna consulta la mueve: el registro se guarda tal como se respondió, y la consulta devuelve la misma orden, también la fallida. Está medido el 15 de octubre de 2026 con el vendedor de prueba (`docs/testing-data/mercado-pago.md`, sección 1.3): la aprobada sale `processed / accredited` con `201`, la del titular `CONT` sale `processing / in_process` y seguía así en la consulta 1,5 s después, y la rechazada sale con `402`, el sobre `errors[]` y la orden `failed / failed` en `data`, con el motivo en el pago. A diferencia del PSE fallido, la orden de tarjeta fallida trae `total_paid_amount` igual al total, y ninguna trae `payer`. Un rechazo pedido por monto o por cabecera usa `rejected_by_issuer`, el motivo medido para `OTHE`. La orden de tarjeta no registra destinos: `processing` no tiene salida medida, igual que el `in_process` de la Payments API.
+
+Con `EXPIRED` (el monto 10 102 o la cabecera), la orden nace `expired / expired` con `201`, y su pago también. Es una convención del simulador (nivel 3) para que el monto siga dando la expiración nativa con tarjeta: no se midió una orden de tarjeta vencida, y en modo automático las órdenes medidas resolvieron en la misma respuesta. El par `expired | expired` sale de la tabla oficial de estados de la orden, y es `expired` y no `canceled` por la misma razón que en la orden de PSE (punto 80 del `architecture-log.md`): el SDK traduce `canceled` a `VOIDED`, y el comercio recibiría una anulación en vez de un vencimiento. Por eso el mismo monto da `VOIDED` con el SDK 0.5.0 y `EXPIRED` con la 0.6.0: en la Payments API el simulador vence el pago como `cancelled / expired` (`buildExpiredResponse`), y el SDK traduce `cancelled` a `VOIDED`.
 
 La ruta valida lo medido antes de crear: sin `payment_method.id`, `type` o `token` responde `400 required_properties` nombrando lo que falta, y una tarjeta de débito con más de una cuota responde `400 property_value`.
 
@@ -569,7 +573,7 @@ La convención de escenarios del issue #122 agrega sus propios apartamientos, ta
   - `GET /payment_methods/search` devuelve una entrada con cuatro campos (`id`, `name`, `payment_type_id`, `status`). La API real devuelve dos entradas iguales con decenas de campos. Los BIN que no están medidos (todos salvo `401354`, `525413` y `491511`) caen en Visa o Mastercard crédito si empiezan con 4 o con 5, y en una lista vacía si no.
   - Los ids de orden empiezan con `ORD01`, como los de las mediciones anteriores; los del vendedor de prueba empiezan con `ORDTST01`. El SDK reconoce los dos por el prefijo `ORD`.
   - El token se guarda sin el titular: la API real devuelve `cardholder` en `GET /card_tokens/:id`, y el simulador no guarda el nombre ni el documento (`CardTokenOutcomes.ts`).
-  - `EXPIRED` y `DUPLICATE_PAYMENT` responden `501` (sección 4, «Lo que responde 501, a propósito»).
+  - `EXPIRED` crea la orden ya `expired / expired` con `201` (sección 4.1), un desenlace que no se midió al crear, y `DUPLICATE_PAYMENT` responde `501` (sección 4, «Lo que responde 501, a propósito»).
 - **Wompi documenta que cualquier otra tarjeta termina `ERROR`, y el simulador la aprueba.** Solo la `4111` cambia el desenlace. La nota de `ERROR` es documentación oficial sin medir (`docs/testing-data/wompi.md`, sección 1).
 - **Kushki documenta que cualquier otro documento termina `Failed`, y el simulador no lo imita**, para no cambiar los cobros que ya usan otros documentos (`src/routes/kushki.ts`). Solo `123456789`, `999999990` y `100000002` eligen el desenlace.
 - **El PSE aprobado de Wompi necesita dos consultas**, aunque el sandbox publica la URL y el desenlace juntos (sección 4.1). La URL del banco que publica el simulador conserva la forma medida, `<host>/v1/sim/wompi/pse/redirect?ticket_id=<id sin guiones>` (`docs/testing-data/wompi.md`, sección 3), con el host de la petición que creó la transacción. Esa ruta responde una página HTML mínima que avisa que la redirección es simulada, con el enlace de vuelta a la `redirect_url` del comercio; no es la de Wompi ni la de un banco, y no mueve la transacción. Detrás de un proxy que termina el TLS, como Render, el origen se fija con `SIMULATOR_PUBLIC_ORIGIN` (sección 8); sin esa variable, la URL tomaría el `http://` interno de la petición.
