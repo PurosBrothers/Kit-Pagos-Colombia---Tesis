@@ -101,11 +101,14 @@ async function mercadopagoRedirect(
   return { url, identifier: payment.id, returnHref: `${callbackUrl}${separator}payment_id=${bankId}` };
 }
 
-async function kushkiRedirect(app: FastifyInstance): Promise<BankRedirect> {
+async function kushkiRedirect(
+  app: FastifyInstance,
+  callbackUrl: string = RETURN_URL,
+): Promise<BankRedirect> {
   const issued = await app.inject({
     method: "POST",
     url: "/v1/sim/kushki/transfer/v1/tokens",
-    payload: { bankId: "007", callbackUrl: RETURN_URL },
+    payload: { bankId: "007", callbackUrl },
   });
   const { token } = issued.json();
   const init = await app.inject({
@@ -117,7 +120,8 @@ async function kushkiRedirect(app: FastifyInstance): Promise<BankRedirect> {
       amount: { subtotalIva: 0, subtotalIva0: 150000, iva: 0, currency: "COP" },
     },
   });
-  return { url: init.json().redirectUrl, identifier: token };
+  const separator = callbackUrl.includes("?") ? "&" : "?";
+  return { url: init.json().redirectUrl, identifier: token, returnHref: `${callbackUrl}${separator}token=${token}` };
 }
 
 async function rapydRedirect(app: FastifyInstance): Promise<BankRedirect> {
@@ -194,12 +198,14 @@ describe("the PSE bank page", () => {
       expect(page.body).toContain(`<a href="${returnHref ?? RETURN_URL}">Volver al comercio</a>`);
     });
 
-    it("does not echo the identifier that came in the URL", async () => {
-      const { url, identifier } = await redirectFor(app);
+    it("does not echo the identifier that came in the URL, outside the return link it registered", async () => {
+      const { url, identifier, returnHref } = await redirectFor(app);
+      const link = `<a href="${returnHref ?? RETURN_URL}">Volver al comercio</a>`;
 
       const page = await app.inject({ method: "GET", url: pathAndQuery(url) });
 
-      expect(page.body).not.toContain(identifier);
+      expect(page.body).toContain(link);
+      expect(page.body.replace(link, "")).not.toContain(identifier);
     });
 
     it("answers a page without a link for a payment it does not know", async () => {
@@ -213,6 +219,7 @@ describe("the PSE bank page", () => {
       expect(page.statusCode).toBe(200);
       expect(page.body).toContain("El comercio no indicó a dónde devolver al pagador");
       expect(page.body).not.toContain("<a ");
+      expect(page.body).not.toContain("desconocido");
     });
 
     it("is published on SIMULATOR_PUBLIC_ORIGIN when it is configured", async () => {
@@ -255,6 +262,37 @@ describe("the PSE bank page", () => {
 
     it("does not link a callback_url that is not http or https, even with payment_id added", async () => {
       const { url } = await mercadopagoRedirect(app, "javascript:alert(1)");
+
+      const page = await app.inject({ method: "GET", url: pathAndQuery(url) });
+
+      expect(page.body).not.toContain("<a ");
+      expect(page.body).not.toContain("javascript:");
+    });
+  });
+
+  describe("kushki", () => {
+    it("adds the transfer token to the callbackUrl, as the real return does", async () => {
+      const { url, identifier, returnHref } = await kushkiRedirect(app);
+
+      const page = await app.inject({ method: "GET", url: pathAndQuery(url) });
+
+      expect(returnHref).toBe(`https://comercio.example.com/retorno?token=${identifier}`);
+      expect(identifier).toMatch(/^[0-9a-f]{32}$/);
+      expect(page.body).toContain(`<a href="${returnHref}">Volver al comercio</a>`);
+    });
+
+    it("keeps the query the merchant already had on the callbackUrl", async () => {
+      const { url, returnHref } = await kushkiRedirect(app, "http://localhost:4102/?retorno=1");
+
+      const page = await app.inject({ method: "GET", url: pathAndQuery(url) });
+
+      expect(returnHref).toMatch(/^http:\/\/localhost:4102\/\?retorno=1&token=[0-9a-f]{32}$/);
+      // En el atributo HTML el `&` va escapado, y el navegador lo lee como `&`.
+      expect(page.body).toContain(`<a href="${returnHref?.replace("&", "&amp;")}">Volver al comercio</a>`);
+    });
+
+    it("does not link a callbackUrl that is not http or https, even with the token added", async () => {
+      const { url } = await kushkiRedirect(app, "javascript:alert(1)");
 
       const page = await app.inject({ method: "GET", url: pathAndQuery(url) });
 

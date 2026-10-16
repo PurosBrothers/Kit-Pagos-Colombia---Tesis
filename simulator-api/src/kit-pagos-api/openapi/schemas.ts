@@ -331,6 +331,8 @@ export const PostPaymentsSchema = {
         description:
           "IP del pagador. Opcional: si no llega, la API usa la de la petición, o la primera de " +
           "X-Forwarded-For si el servidor tiene SIMULATOR_TRUST_FORWARDED_FOR=true. " +
+          "En los dos casos se envía sin espacios, y ::ffff:a.b.c.d y ::1 como IPv4 (a.b.c.d y " +
+          "127.0.0.1), que Mercado Pago sí acepta. " +
           "Mercado Pago la exige para PSE. Un backend que llama a la API debe enviarla.",
         example: "186.84.90.1",
       },

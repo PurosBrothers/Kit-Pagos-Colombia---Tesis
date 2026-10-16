@@ -164,8 +164,11 @@ export class GatewayMockFactory {
    * pertenece al vocabulario de tarjeta.
    *
    * La `redirectUrl` imita la forma real, que apunta a un agente de Kushki con el token en
-   * la query. A donde lleve despues —portal de PSE o banco directo— depende de si el
-   * comercio tiene PSE 1.0 o PSE Avanza 2.0.
+   * la query: medida el 14 de octubre de 2026 (punto 94), es
+   * `https://api-uat.kushkipagos.com/transfer/v1/agent?token=…&mid=…`, y el simulador no agrega
+   * el `mid`. A donde lleve despues —portal de PSE o banco directo— depende, segun la
+   * documentacion, de si el comercio tiene PSE 1.0 o PSE Avanza 2.0; en UAT llevo a la pagina
+   * «Kushki Bank» de `uat-sandbox.kushkipagos.com/checkout/transfer`.
    *
    * `origin` es el `protocolo://host` de la peticion que hace el `init` (`requestOrigin()`):
    * el agente es la pagina de banco del propio simulador, bajo `/v1/sim/kushki`. Antes

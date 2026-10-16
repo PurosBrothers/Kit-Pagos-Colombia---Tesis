@@ -6,9 +6,10 @@ import { FastifyReply } from "fastify";
  * Nivel 3 — convención del simulador, igual para las cuatro pasarelas. Existe porque antes
  * tres de ellas publicaban una URL del dominio real de la pasarela con un identificador
  * inventado, y abrirla daba «Esta página no existe» (Mercado Pago), un error de DNS (Kushki)
- * o una página que no reconocía el pago (Rapyd). Las rutas conservan la forma que el simulador
- * ya publicaba, y solo la de Rapyd está medida (`docs/testing-data/rapyd.md`, sección 5.7); el
- * contenido de la página del banco no se imita.
+ * o una página que no reconocía el pago (Rapyd). Las rutas conservan la forma de la pasarela, y
+ * tres están medidas: la de Rapyd (`docs/testing-data/rapyd.md`, sección 5.7), y la de Mercado
+ * Pago y la de Kushki el 14 de octubre de 2026 (puntos 93 y 94). El contenido de la página del
+ * banco no se imita.
  *
  * No decide el resultado: en las cuatro, el desenlace del PSE lo fija el banco de prueba o el
  * escenario al crear el cobro y se ve al consultarlo. La página solo devuelve al pagador a la

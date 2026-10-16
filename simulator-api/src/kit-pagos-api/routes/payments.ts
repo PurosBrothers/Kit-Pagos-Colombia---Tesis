@@ -15,7 +15,7 @@ import {
 } from "kit-pagos-colombia";
 import { gatewayClientFor } from "../gateway-client";
 import { parseGateway, unsupportedGatewayBody } from "../gateway-param";
-import { payerIpOf } from "../payer-ip";
+import { normalizePayerIp, payerIpOf } from "../payer-ip";
 import { GetPaymentStatusSchema, PostPaymentsSchema } from "../openapi/schemas";
 
 export interface CreatePaymentBodyDTO {
@@ -350,7 +350,7 @@ export async function paymentsRoute(app: FastifyInstance): Promise<void> {
         paymentMethod,
         returnUrlConfig,
         taxBreakdown,
-        ipAddress: body.ipAddress?.trim() || payerIpOf(request, app.trustForwardedFor),
+        ipAddress: normalizePayerIp(body.ipAddress) ?? payerIpOf(request, app.trustForwardedFor),
       };
 
       // Delegar la creación del pago al SDK. La validación de faltantes
