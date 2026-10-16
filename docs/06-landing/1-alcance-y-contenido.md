@@ -79,7 +79,7 @@ Que el Kit Pagos son tres cosas y no una es la idea que más se pierde cuando al
 | Componente | Qué es | Para qué sirve |
 |---|---|---|
 | **SDK** | El paquete npm con la arquitectura hexagonal | Integrar una vez y cambiar de pasarela por configuración |
-| **API de Simulación** | Cuatro mocks locales con 23 rutas y capa REST | Probar flujos que los sandboxes reales no permiten probar y evaluar cobros vía HTTP |
+| **API de Simulación** | Cuatro mocks locales con 32 rutas y capa REST | Probar flujos que los sandboxes reales no permiten probar y evaluar cobros vía HTTP |
 | **Documentación de datos** | Las tarjetas, bancos y credenciales de prueba | Reproducir cualquiera de los flujos sin adivinar |
 
 El tercero es el que más se subestima y el que más tiempo ahorra: es el que responde "¿qué número de tarjeta pongo para que me rechace el pago en Kushki?". Además, la página documenta para cada pasarela sus peculiaridades de sandbox (URL oficial de sandbox, números de tarjetas de prueba, credenciales y trampas operativas).
