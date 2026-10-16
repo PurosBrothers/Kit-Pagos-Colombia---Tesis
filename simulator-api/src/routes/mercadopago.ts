@@ -37,6 +37,13 @@ import {
   mercadopagoPayments,
 } from "../store/GatewayStores";
 import {
+  bodyFingerprint,
+  claimIdempotencyKey,
+  idempotencyEntryKey,
+  releaseIdempotencyKey,
+  rememberIdempotentResponse,
+} from "../store/IdempotencyKeys";
+import {
   hasDuplicateMark,
   markDuplicate,
   nextFlappingAttempt,
@@ -246,6 +253,30 @@ const CARD_TOKEN_INVALID_ACCESS = {
  */
 const UNKNOWN_TOKEN_CARD = { firstSixDigits: "401354", lastFourDigits: "6260" } as const;
 
+/**
+ * Las respuestas de una llave de idempotencia ya usada. Nivel 1 — medidas en `POST /v1/orders`
+ * el 15 de octubre de 2026 (`IdempotencyKeys.ts`).
+ */
+const IDEMPOTENCY_KEY_ALREADY_USED = {
+  errors: [
+    {
+      code: "idempotency_key_already_used",
+      message: "X-Idempotency-Key already used. Please retry with a different value.",
+    },
+  ],
+} as const;
+
+const IDEMPOTENCY_KEY_LOCKED = {
+  errors: [
+    {
+      code: "resource_locked",
+      message: "Idempotency key locked. Please retry after some time.",
+    },
+  ],
+} as const;
+
+const JSON_CONTENT_TYPE = "application/json; charset=utf-8";
+
 /** Los escenarios de negocio que una orden de PSE sabe producir al crearse. */
 const ORDER_SCENARIOS: ReadonlySet<string> = new Set([
   "APPROVED",
@@ -356,8 +387,8 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
    * 10 102 siga dando la expiración nativa con tarjeta. No se midió una orden de tarjeta
    * vencida: en modo automático resolvió en la misma respuesta. El par sale de la tabla
    * oficial de estados de la orden, y es `expired` y no `canceled` por el punto 80 del
-   * `architecture-log.md`: el SDK traduce `canceled` a `VOIDED`. `DUPLICATE_PAYMENT` responde
-   * `501`, como en las de PSE: el `409` de pagos no está medido para la Orders API.
+   * `architecture-log.md`: el SDK traduce `canceled` a `VOIDED`. `DUPLICATE_PAYMENT` no llega
+   * aquí: la ruta lo convierte en aprobado (ver `POST /orders`).
    */
   function cardOrderFor(
     scenario: string,
@@ -412,6 +443,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
     scenario: string,
     resolved: ResolvedScenario,
     statusDetail: string | undefined,
+    idempotencyEntry: string,
   ) {
     const built = cardOrderFor(scenario, requestBody, statusDetail);
     if (built === undefined) {
@@ -424,9 +456,25 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       rememberQueryFailure("mercadopago", "order", order.id, resolved.queryFailure);
     }
 
-    return httpStatus === 402
-      ? reply.code(402).send(failedOrderEnvelope(order))
-      : reply.code(httpStatus).send(order);
+    const body = httpStatus === 402 ? failedOrderEnvelope(order) : order;
+    return sendRemembered(reply, idempotencyEntry, httpStatus, body);
+  }
+
+  /**
+   * Responde una orden creada y la recuerda bajo su llave de idempotencia.
+   *
+   * Se serializa aquí, y no en Fastify, para que la repetición con la misma llave devuelva
+   * los mismos bytes, que es lo medido (`IdempotencyKeys.ts`).
+   */
+  function sendRemembered(
+    reply: FastifyReply,
+    idempotencyEntry: string,
+    statusCode: number,
+    body: unknown,
+  ) {
+    const payload = JSON.stringify(body);
+    rememberIdempotentResponse(idempotencyEntry, statusCode, payload);
+    return reply.code(statusCode).type(JSON_CONTENT_TYPE).send(payload);
   }
 
   // 1. Creación de pago (POST /v1/sim/mercadopago/payments)
@@ -653,121 +701,159 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(401).send(INVALID_ACCESS_TOKEN);
       }
 
-      const requestBody = request.body as MercadoPagoCreateOrderRequestBody;
-      const cardMethod = cardPaymentMethodOf(requestBody);
-
-      if (cardMethod !== undefined) {
-        const missing = CARD_METHOD_REQUIRED.filter((property) => !cardMethod[property]);
-        if (missing.length > 0) {
-          return reply.code(400).send(missingCardPropertiesError(missing));
-        }
-        if (cardMethod.type === "debit_card" && (cardMethod.installments ?? 1) !== 1) {
-          return reply.code(400).send(DEBIT_INSTALLMENTS_ERROR);
-        }
-      }
-
-      // En PSE no hay dato de prueba que llegue aquí: el desenlace real lo decide el banco. En
-      // tarjeta lo decide el titular, recordado al tokenizar.
-      const fromToken = cardTokenOutcomeFor("mercadopago", cardMethod?.token);
-      const resolved = resolveScenario(request, {
-        gatewayData: fromToken?.scenario,
-        wholePesos: wholePesosFromDecimal(requestBody?.total_amount),
-      });
-      let scenario = resolved.scenario;
-
-      const failure = await technicalFailure(scenario, request, reply, mockFactory);
-
-      if (failure !== undefined) {
-        return failure;
-      }
-
-      // Igual que en `POST /payments`: falla la primera petición y la siguiente con la misma
-      // referencia crea la orden. Es una falla de transporte, así que tampoco guarda nada.
-      if (scenario === "FLAPPING") {
-        const key = `mp_order_${requestBody?.external_reference ?? "flapping"}`;
-        if (nextFlappingAttempt(key)) {
-          return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
-        }
-        scenario = DEFAULT_SCENARIO;
-      }
-
-      if (cardMethod !== undefined) {
-        const statusDetail =
-          resolved.source === "gateway_data" ? fromToken?.orderStatusDetail : undefined;
-        return sendCardOrder(reply, requestBody, scenario, resolved, statusDetail);
-      }
-
-      /*
-       * Un escenario que la orden no sabe producir responde `501` antes de crear nada,
-       * como en las demás rutas de creación. Antes `FLAPPING`, `DUPLICATE_PAYMENT` o un
-       * nombre inventado se aceptaban con `201` y la consulta respondía `processed`: un
-       * escenario aceptado e ignorado. `DUPLICATE_PAYMENT` no se imita en órdenes porque el
-       * `409` de pagos no está medido para la Orders API.
-       */
-      if (!ORDER_SCENARIOS.has(scenario)) {
-        return reply
-          .code(501)
-          .send({ error: `Escenario aún no soportado: ${scenario}` });
-      }
-
-      if (scenario === "REJECTED" || scenario === "DECLINED") {
-        /*
-         * Nivel 1 — medido el 7 de octubre de 2026 (`docs/testing-data/mercado-pago.md`,
-         * «El `402` de una orden de PSE que falla»). La orden se crea y su pago falla en la
-         * misma petición: la respuesta es `402` con el sobre `errors[]` —`details` en el
-         * formato `"<id del pago>: <status_detail>"`— y la orden entera en `data`.
-         *
-         * La orden existe: la consulta responde `200` con ella en `failed / failed`, suelta y
-         * sin la llave `payer`. Por eso se guarda sin `payer`, y no se registra desenlace:
-         * `failed` no tiene transición de salida en `mpOrderMachine`.
-         */
-        const failed = mockFactory.buildFailedOrderResponse(requestBody);
-        const { payer: _payer, ...queried } = failed;
-        mercadopagoOrders.save(String(failed.id), queried);
-
-        return reply.code(402).send(failedOrderEnvelope(failed));
-      }
-
-      const bankPaymentId = mockFactory.generateBankPaymentId();
-      const response = mockFactory.buildPendingOrderResponse(
-        requestBody,
-        requestOrigin(request),
-        bankPaymentId,
+      // La llave se revisa después de la credencial y antes del cuerpo (`IdempotencyKeys.ts`).
+      const idempotencyEntry = idempotencyEntryKey(
+        request.headers.authorization,
+        String(request.headers["x-idempotency-key"]),
       );
-      mercadopagoOrders.save(String(response.id), response);
-
-      // La página de banco devuelve al pagador a la `callback_url` de la orden, que viaja en
-      // la creación y no en ninguna consulta, con `payment_id` agregado como lo hace Mercado
-      // Pago al volver (nivel 1, medido el 14 de octubre de 2026).
-      rememberBankReturnUrl(
-        "mercadopago",
-        bankPaymentId,
-        withQueryParam(requestBody.config?.online?.callback_url, "payment_id", bankPaymentId),
-      );
-
-      /*
-       * El escenario se registra aquí y la consulta lo aplica.
-       *
-       * El rechazo no pasa por aquí: contra la API real, un PSE que falla devuelve `402` con
-       * la orden entera en `failed` dentro de `data` en el momento de crearla, y eso es lo que
-       * responde la rama de arriba. Lo que sí queda para después de la redirección es la expiración
-       * —`expired`, que la Orders API distingue de `canceled`— y el pagador que nunca
-       * vuelve del banco, que deja la orden en `action_required`. Sin registrarlos,
-       * `EXPIRED` y `PENDING` se aceptaban con `201` y la consulta respondía `processed`.
-       */
-      const target = orderTargetFor(scenario);
-
-      if (target !== undefined) {
-        rememberScenarioTarget("mercadopago", "order", String(response.id), target);
+      const claim = claimIdempotencyKey(idempotencyEntry, bodyFingerprint(request.body));
+      if (claim.outcome === "locked") {
+        return reply.code(423).send(IDEMPOTENCY_KEY_LOCKED);
+      }
+      if (claim.outcome === "conflict") {
+        return reply.code(409).send(IDEMPOTENCY_KEY_ALREADY_USED);
+      }
+      if (claim.outcome === "replay") {
+        return reply.code(claim.statusCode).type(JSON_CONTENT_TYPE).send(claim.payload);
       }
 
-      if (resolved.queryFailure !== undefined) {
-        rememberQueryFailure("mercadopago", "order", String(response.id), resolved.queryFailure);
+      try {
+        return await createOrder(request, reply, idempotencyEntry);
+      } finally {
+        releaseIdempotencyKey(idempotencyEntry);
       }
-
-      return reply.code(201).send(response);
     },
   );
+
+  /** Crea la orden de PSE o de tarjeta que pidió `POST /orders`, ya con la llave reservada. */
+  async function createOrder(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    idempotencyEntry: string,
+  ) {
+    const requestBody = request.body as MercadoPagoCreateOrderRequestBody;
+    const cardMethod = cardPaymentMethodOf(requestBody);
+
+    if (cardMethod !== undefined) {
+      const missing = CARD_METHOD_REQUIRED.filter((property) => !cardMethod[property]);
+      if (missing.length > 0) {
+        return reply.code(400).send(missingCardPropertiesError(missing));
+      }
+      if (cardMethod.type === "debit_card" && (cardMethod.installments ?? 1) !== 1) {
+        return reply.code(400).send(DEBIT_INSTALLMENTS_ERROR);
+      }
+    }
+
+    // En PSE no hay dato de prueba que llegue aquí: el desenlace real lo decide el banco. En
+    // tarjeta lo decide el titular, recordado al tokenizar.
+    const fromToken = cardTokenOutcomeFor("mercadopago", cardMethod?.token);
+    const resolved = resolveScenario(request, {
+      gatewayData: fromToken?.scenario,
+      wholePesos: wholePesosFromDecimal(requestBody?.total_amount),
+    });
+    let scenario = resolved.scenario;
+
+    const failure = await technicalFailure(scenario, request, reply, mockFactory);
+
+    if (failure !== undefined) {
+      return failure;
+    }
+
+    // Igual que en `POST /payments`: falla la primera petición y la siguiente con la misma
+    // referencia crea la orden. Es una falla de transporte, así que tampoco guarda nada.
+    if (scenario === "FLAPPING") {
+      const key = `mp_order_${requestBody?.external_reference ?? "flapping"}`;
+      if (nextFlappingAttempt(key)) {
+        return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+      }
+      scenario = DEFAULT_SCENARIO;
+    }
+
+    /*
+     * Nivel 1 — medido el 15 de octubre de 2026 (`docs/testing-data/mercado-pago.md`,
+     * «Duplicados e idempotencia en la Orders API»): la misma `external_reference` con otra
+     * llave crea otra orden y la cobra, en tarjeta y en PSE. Mercado Pago no rechaza el
+     * duplicado, así que el monto 10 409 crea la orden aprobada cada vez.
+     */
+    if (scenario === "DUPLICATE_PAYMENT") {
+      scenario = DEFAULT_SCENARIO;
+    }
+
+    if (cardMethod !== undefined) {
+      const statusDetail =
+        resolved.source === "gateway_data" ? fromToken?.orderStatusDetail : undefined;
+      return sendCardOrder(reply, requestBody, scenario, resolved, statusDetail, idempotencyEntry);
+    }
+
+    /*
+     * Un escenario que la orden no sabe producir responde `501` antes de crear nada,
+     * como en las demás rutas de creación. Antes `FLAPPING`, `DUPLICATE_PAYMENT` o un
+     * nombre inventado se aceptaban con `201` y la consulta respondía `processed`: un
+     * escenario aceptado e ignorado.
+     */
+    if (!ORDER_SCENARIOS.has(scenario)) {
+      return reply
+        .code(501)
+        .send({ error: `Escenario aún no soportado: ${scenario}` });
+    }
+
+    if (scenario === "REJECTED" || scenario === "DECLINED") {
+      /*
+       * Nivel 1 — medido el 7 de octubre de 2026 (`docs/testing-data/mercado-pago.md`,
+       * «El `402` de una orden de PSE que falla»). La orden se crea y su pago falla en la
+       * misma petición: la respuesta es `402` con el sobre `errors[]` —`details` en el
+       * formato `"<id del pago>: <status_detail>"`— y la orden entera en `data`.
+       *
+       * La orden existe: la consulta responde `200` con ella en `failed / failed`, suelta y
+       * sin la llave `payer`. Por eso se guarda sin `payer`, y no se registra desenlace:
+       * `failed` no tiene transición de salida en `mpOrderMachine`.
+       */
+      const failed = mockFactory.buildFailedOrderResponse(requestBody);
+      const { payer: _payer, ...queried } = failed;
+      mercadopagoOrders.save(String(failed.id), queried);
+
+      return sendRemembered(reply, idempotencyEntry, 402, failedOrderEnvelope(failed));
+    }
+
+    const bankPaymentId = mockFactory.generateBankPaymentId();
+    const response = mockFactory.buildPendingOrderResponse(
+      requestBody,
+      requestOrigin(request),
+      bankPaymentId,
+    );
+    mercadopagoOrders.save(String(response.id), response);
+
+    // La página de banco devuelve al pagador a la `callback_url` de la orden, que viaja en
+    // la creación y no en ninguna consulta, con `payment_id` agregado como lo hace Mercado
+    // Pago al volver (nivel 1, medido el 14 de octubre de 2026).
+    rememberBankReturnUrl(
+      "mercadopago",
+      bankPaymentId,
+      withQueryParam(requestBody.config?.online?.callback_url, "payment_id", bankPaymentId),
+    );
+
+    /*
+     * El escenario se registra aquí y la consulta lo aplica.
+     *
+     * El rechazo no pasa por aquí: contra la API real, un PSE que falla devuelve `402` con
+     * la orden entera en `failed` dentro de `data` en el momento de crearla, y eso es lo que
+     * responde la rama de arriba. Lo que sí queda para después de la redirección es la expiración
+     * —`expired`, que la Orders API distingue de `canceled`— y el pagador que nunca
+     * vuelve del banco, que deja la orden en `action_required`. Sin registrarlos,
+     * `EXPIRED` y `PENDING` se aceptaban con `201` y la consulta respondía `processed`.
+     */
+    const target = orderTargetFor(scenario);
+
+    if (target !== undefined) {
+      rememberScenarioTarget("mercadopago", "order", String(response.id), target);
+    }
+
+    if (resolved.queryFailure !== undefined) {
+      rememberQueryFailure("mercadopago", "order", String(response.id), resolved.queryFailure);
+    }
+
+    return sendRemembered(reply, idempotencyEntry, 201, response);
+  }
 
   // 4. Consulta de orden (GET /v1/sim/mercadopago/orders/:id)
   //

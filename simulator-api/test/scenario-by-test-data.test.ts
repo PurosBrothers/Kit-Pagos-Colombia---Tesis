@@ -460,7 +460,19 @@ describe("reserved amounts at creation, without a scenario header", () => {
 
   describe("10409 (DUPLICATE_PAYMENT)", () => {
     const modelled = [wompiCard, wompiPse, mercadoPagoCard, rapydPse, kushkiCard];
-    const notModelled = [mercadoPagoPse, rapydCard, kushkiPse];
+    const notModelled = [rapydCard, kushkiPse];
+
+    // Medido el 15 de octubre de 2026: la Orders API no rechaza una referencia repetida.
+    it("Mercado Pago PSE: both charges with the same reference are created, as two orders", async () => {
+      const ref = nextRef("DUP");
+
+      const first = await mercadoPagoPse.create(app, 10409, {}, ref);
+      const second = await mercadoPagoPse.create(app, 10409, {}, ref);
+
+      expect(first.statusCode).toBe(201);
+      expect(second.statusCode).toBe(201);
+      expect(mercadoPagoPse.idOf(second.json())).not.toBe(mercadoPagoPse.idOf(first.json()));
+    });
 
     it.each(modelled.map((flow) => [flow.name, flow] as const))(
       "%s: the first charge is created and the second with the same reference answers 409",

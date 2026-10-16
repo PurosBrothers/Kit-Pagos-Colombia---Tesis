@@ -54,6 +54,8 @@ async function wompiRedirect(app: FastifyInstance, redirectUrl: string | null = 
   };
 }
 
+let mercadopagoKey = 0;
+
 async function mercadopagoRedirect(
   app: FastifyInstance,
   callbackUrl: string = RETURN_URL,
@@ -61,7 +63,7 @@ async function mercadopagoRedirect(
   const created = await app.inject({
     method: "POST",
     url: "/v1/sim/mercadopago/orders",
-    headers: { host: HOST, "x-idempotency-key": "prueba-pagina-banco" },
+    headers: { host: HOST, "x-idempotency-key": `prueba-pagina-banco-${++mercadopagoKey}` },
     payload: {
       type: "online",
       total_amount: "150000",

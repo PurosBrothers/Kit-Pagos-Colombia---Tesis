@@ -242,11 +242,26 @@ describe("Mercado Pago card orders in the simulator", () => {
       expect(queried.json()).toEqual(order);
     });
 
-    it("10409 answers 501 because DUPLICATE_PAYMENT was not measured in card orders", async () => {
-      const created = await cardOrder("tok_unknown", { amount: "10409" });
+    // Medido el 15 de octubre de 2026: la misma referencia con otra llave crea y cobra otra orden.
+    it("10409 creates both charges with the same reference, as two approved orders", async () => {
+      const reference = nextRef();
 
-      expect(created.statusCode).toBe(501);
-      expect(created.json().error).toContain("DUPLICATE_PAYMENT");
+      const first = await cardOrder("tok_unknown", {
+        amount: "10409",
+        reference,
+        headers: { "x-idempotency-key": "dup-1" },
+      });
+      const second = await cardOrder("tok_unknown", {
+        amount: "10409",
+        reference,
+        headers: { "x-idempotency-key": "dup-2" },
+      });
+
+      expect(first.statusCode).toBe(201);
+      expect(second.statusCode).toBe(201);
+      expect(first.json().status).toBe("processed");
+      expect(second.json().status).toBe("processed");
+      expect(second.json().id).not.toBe(first.json().id);
     });
 
     it("10600 creates the order and makes its query fail", async () => {

@@ -9,6 +9,7 @@ import { WompiTransaction } from "../gateways/wompi/types";
 import { clearBankRedirectOrigins } from "./BankRedirectOrigins";
 import { clearBankReturnUrls } from "./BankReturnUrls";
 import { clearCardTokenOutcomes } from "./CardTokenOutcomes";
+import { clearIdempotencyKeys } from "./IdempotencyKeys";
 import { clearScenarioMarks } from "./ScenarioMarks";
 import { clearScenarioTargets } from "../state/scenarioTarget";
 import { TransactionStore } from "./TransactionStore";
@@ -89,4 +90,5 @@ export function resetSimulatorState(): void {
   clearBankRedirectOrigins();
   clearBankReturnUrls();
   clearTraceabilityCodes();
+  clearIdempotencyKeys();
 }

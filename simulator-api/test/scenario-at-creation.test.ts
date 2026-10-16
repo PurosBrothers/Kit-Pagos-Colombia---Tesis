@@ -882,20 +882,29 @@ describe("the scenario fixes the outcome at creation", () => {
         payload: TOKEN_KUSHKI,
       });
 
-    it.each(["FOO", "DUPLICATE_PAYMENT"])(
-      "Mercado Pago: an order with %s answers 501 and leaves no order",
-      async (scenario) => {
-        const app = buildApp();
+    // `DUPLICATE_PAYMENT` crea la orden: Mercado Pago no rechaza el duplicado (medido).
+    it("Mercado Pago: an order with FOO answers 501 and leaves no order", async () => {
+      const app = buildApp();
 
-        const response = await createOrder(app, scenario);
+      const response = await createOrder(app, "FOO");
 
-        expect(response.statusCode).toBe(501);
-        expect(response.json().error).toContain(scenario);
-        expect(mercadopagoOrders.size()).toBe(0);
+      expect(response.statusCode).toBe(501);
+      expect(response.json().error).toContain("FOO");
+      expect(mercadopagoOrders.size()).toBe(0);
 
-        await app.close();
-      },
-    );
+      await app.close();
+    });
+
+    it("Mercado Pago: an order with DUPLICATE_PAYMENT is created like an approved one", async () => {
+      const app = buildApp();
+
+      const response = await createOrder(app, "DUPLICATE_PAYMENT");
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json().status).toBe("action_required");
+
+      await app.close();
+    });
 
     it.each(["FOO", "DUPLICATE_PAYMENT"])(
       "Kushki: a PSE token with %s answers 501 and leaves no transfer",

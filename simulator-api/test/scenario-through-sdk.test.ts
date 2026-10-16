@@ -317,6 +317,21 @@ describe("POST /v1/api/payments with a reserved amount and no scenario header", 
     expect(second.statusCode).toBe(400);
     expect(second.json().code).toBe("INVALID_REQUEST");
   });
+
+  // Mercado Pago no rechaza una referencia repetida (medido el 15 de octubre de 2026).
+  it.each(["mercadopago card", "mercadopago pse"])(
+    "%s: 10409 creates both charges with the same reference, as two orders",
+    async (path) => {
+      const ref = nextRef("DUP-MP");
+
+      const first = await pay(path, 10409, ref);
+      const second = await pay(path, 10409, ref);
+
+      expect(first.statusCode).toBe(201);
+      expect(second.statusCode).toBe(201);
+      expect(createdId(second.json())).not.toBe(createdId(first.json()));
+    },
+  );
 });
 
 describe("GET /v1/api/payments/:id with a query failure chosen at creation", () => {
