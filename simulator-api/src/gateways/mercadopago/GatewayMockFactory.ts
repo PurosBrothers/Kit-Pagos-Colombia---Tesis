@@ -4,9 +4,30 @@ import {
   MercadoPagoCreatePaymentRequestBody,
   MercadoPagoOrderResponse,
   MercadoPagoOrderStatus,
+  MercadoPagoPaymentMethodResult,
+  MercadoPagoPaymentMethodSearchResponse,
   MercadoPagoPaymentResponse,
   MercadoPagoTokenizeCardRequestBody,
 } from "./types";
+
+/**
+ * Los medios de pago de las tarjetas de prueba, por BIN.
+ *
+ * Nivel 1 — medido con `GET /v1/payment_methods/search` el 15 de octubre de 2026: `401354`
+ * (Visa crédito), `525413` (Mastercard crédito) y `491511` (Visa débito) son los BIN de las
+ * tres tarjetas de `docs/testing-data/mercado-pago.md`. Los demás BIN que empiezan con 4 o con
+ * 5 caen en Visa o Mastercard crédito, que es una convención del simulador sin medir.
+ */
+const PAYMENT_METHODS_BY_BIN: ReadonlyMap<string, MercadoPagoPaymentMethodResult> = new Map([
+  ["401354", { id: "visa", name: "Visa", payment_type_id: "credit_card", status: "active" }],
+  ["525413", { id: "master", name: "Mastercard", payment_type_id: "credit_card", status: "active" }],
+  ["491511", { id: "debvisa", name: "Visa Débito", payment_type_id: "debit_card", status: "active" }],
+]);
+
+const PAYMENT_METHODS_BY_FIRST_DIGIT: ReadonlyMap<string, MercadoPagoPaymentMethodResult> = new Map([
+  ["4", PAYMENT_METHODS_BY_BIN.get("401354")!],
+  ["5", PAYMENT_METHODS_BY_BIN.get("525413")!],
+]);
 
 /** Algoritmo de Luhn (ISO/IEC 7812-1) sobre una cadena de solo dígitos. */
 function passesLuhn(digits: string): boolean {
@@ -285,6 +306,85 @@ export class GatewayMockFactory {
       financialInstitution:
         requestBody.transactions?.payments?.[0]?.payment_method?.financial_institution,
     });
+  }
+
+  /**
+   * Construye una orden de tarjeta, la que cobra la versión 0.6.0 del SDK.
+   *
+   * Nivel 1 — medido contra `api.mercadopago.com` el 15 de octubre de 2026, con 20 000 COP
+   * (`docs/testing-data/mercado-pago.md`). La forma es la misma en los tres desenlaces:
+   * `processed / accredited` aprobada, `processing / in_process` pendiente y `failed /
+   * failed` rechazada, con el motivo solo en el pago. A diferencia de la orden de PSE fallida,
+   * la de tarjeta trae `total_paid_amount` y `paid_amount` iguales al total aunque falle, y
+   * no trae `payer` ni al crear ni al consultar. `transaction_security.validation` llegó
+   * siempre en `never`. El id real de un vendedor de prueba empieza con `ORDTST`; aquí se
+   * usa `ORD`, que el SDK reconoce igual (`isOrderId()`).
+   *
+   * `installment_amount` es el total entre las cuotas, redondeado: con 20 000 en 3 cuotas
+   * la API real respondió `"6667"`.
+   */
+  buildCardOrderResponse(
+    requestBody: MercadoPagoCreateOrderRequestBody,
+    status: MercadoPagoOrderStatus,
+    statusDetail: string,
+    paymentStatusDetail = statusDetail,
+  ): MercadoPagoOrderResponse {
+    const now = new Date().toISOString();
+    const total = requestBody.total_amount;
+    const requested = requestBody.transactions?.payments?.[0]?.payment_method;
+    const installments = requested?.installments ?? 1;
+    const transactionSecurity = { validation: "never" };
+
+    return {
+      id: this.generateOrderId("ORD"),
+      type: requestBody.type ?? "online",
+      processing_mode: requestBody.processing_mode ?? "automatic",
+      external_reference: requestBody.external_reference,
+      total_amount: total,
+      total_paid_amount: total,
+      country_code: "COL",
+      status,
+      status_detail: statusDetail,
+      capture_mode: "automatic_async",
+      currency: "COP",
+      created_date: now,
+      last_updated_date: now,
+      config: { online: { transaction_security: transactionSecurity } },
+      transactions: {
+        payments: [
+          {
+            id: this.generateOrderId("PAY"),
+            amount: total,
+            paid_amount: total,
+            reference_id: Math.random().toString(36).slice(2, 12),
+            status,
+            status_detail: paymentStatusDetail,
+            payment_method: {
+              id: requested?.id ?? "",
+              type: requested?.type ?? "",
+              token: requested?.token,
+              installments,
+              installment_amount: String(Math.round(Number(total) / installments)),
+              transaction_security: transactionSecurity,
+            },
+          },
+        ],
+      },
+    };
+  }
+
+  /**
+   * Construye la respuesta de `GET /v1/payment_methods/search` para un BIN.
+   *
+   * Nivel 1 para la forma (`paging` y `results`) y para el BIN sin medio de pago: `999999`
+   * respondió `results: []` con `total: 0` el 15 de octubre de 2026. La API real devuelve dos
+   * entradas iguales para cada BIN medido y decenas de campos por entrada; aquí va una, con
+   * los campos que lee el SDK.
+   */
+  buildPaymentMethodSearchResponse(bin: string): MercadoPagoPaymentMethodSearchResponse {
+    const match = PAYMENT_METHODS_BY_BIN.get(bin) ?? PAYMENT_METHODS_BY_FIRST_DIGIT.get(bin.charAt(0));
+    const results = match ? [match] : [];
+    return { paging: { total: results.length, limit: 30, offset: 0 }, results };
   }
 
   /**

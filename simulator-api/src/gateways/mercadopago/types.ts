@@ -67,7 +67,9 @@ export interface MercadoPagoPaymentResponse {
 }
 
 /**
- * Contratos de la Orders API (`/v1/orders`), que es por donde se cobra PSE.
+ * Contratos de la Orders API (`/v1/orders`), que es por donde se cobra PSE y, desde la
+ * versión 0.6.0 del SDK, tarjeta. La 0.5.0 sigue cobrando tarjeta por `/v1/payments`, así
+ * que el simulador atiende los dos caminos.
  *
  * No es una variante del cuerpo de `/v1/payments`: es otra API, con otro
  * vocabulario de estados y con los montos como **string sin decimales**. Todo lo
@@ -93,11 +95,19 @@ export interface MercadoPagoCreateOrderRequestBody {
         id: string;
         type: string;
         financial_institution?: string;
+        /** Solo en tarjeta, por donde la cobra el SDK desde la versión 0.6.0. */
+        token?: string;
+        installments?: number;
       };
     }>;
   };
   additional_info?: Record<string, unknown>;
   config?: { online?: { callback_url?: string } };
+}
+
+/** La validación de 3DS que la orden de tarjeta devuelve; medida siempre en `never`. */
+export interface MercadoPagoTransactionSecurity {
+  validation: string;
 }
 
 /**
@@ -128,18 +138,24 @@ export interface MercadoPagoOrderResponse {
   status: MercadoPagoOrderStatus;
   status_detail: string;
   currency: string;
+  /** Solo en las órdenes de tarjeta medidas el 15 de octubre de 2026: `automatic_async`. */
+  capture_mode?: string;
   created_date: string;
   last_updated_date: string;
   /**
    * La API real solo devuelve `entity_type` aquí; no repite el email del pagador. Falta en la
-   * consulta de una orden fallida (medido el 7 de octubre de 2026).
+   * consulta de una orden fallida (medido el 7 de octubre de 2026) y en toda orden de tarjeta
+   * (medido el 15 de octubre de 2026).
    */
   payer?: { entity_type?: string };
-  config?: { online?: { callback_url?: string } };
+  config?: {
+    online?: { callback_url?: string; transaction_security?: MercadoPagoTransactionSecurity };
+  };
   transactions: {
     payments: Array<{
       id: string;
       amount: string;
+      paid_amount?: string;
       reference_id: string;
       status: MercadoPagoOrderStatus;
       status_detail: string;
@@ -148,6 +164,10 @@ export interface MercadoPagoOrderResponse {
         type: string;
         redirect_url?: string;
         financial_institution?: string;
+        token?: string;
+        installments?: number;
+        installment_amount?: string;
+        transaction_security?: MercadoPagoTransactionSecurity;
       };
     }>;
   };
@@ -206,4 +226,26 @@ export interface MercadoPagoCardTokenResponse {
       number?: string;
     };
   };
+}
+
+/**
+ * El token que responde `GET /v1/card_tokens/{id}`, sin el titular.
+ *
+ * La API real lo devuelve con `cardholder`; el simulador no guarda el nombre ni el documento,
+ * por lo mismo que `CardTokenOutcomes.ts` no los guarda. El SDK solo lee `first_six_digits`.
+ */
+export type MercadoPagoStoredCardToken = Omit<MercadoPagoCardTokenResponse, "cardholder">;
+
+/** Un medio de pago de `GET /v1/payment_methods/search`, con los campos que lee el SDK. */
+export interface MercadoPagoPaymentMethodResult {
+  id: string;
+  name: string;
+  payment_type_id: string;
+  status: string;
+}
+
+/** Respuesta de `GET /v1/payment_methods/search?public_key=…&bins=…`. */
+export interface MercadoPagoPaymentMethodSearchResponse {
+  paging: { total: number; limit: number; offset: number };
+  results: MercadoPagoPaymentMethodResult[];
 }

@@ -9,13 +9,18 @@ import {
 import {
   MercadoPagoCreateOrderRequestBody,
   MercadoPagoCreatePaymentRequestBody,
+  MercadoPagoOrderResponse,
   MercadoPagoOrderStatus,
   MercadoPagoTokenizeCardRequestBody,
 } from "../gateways/mercadopago/types";
 import { sendBankPage } from "../gateways/bankPage";
 import { getSimulatorScenario } from "../scenarios/ScenarioEngine";
-import { invalidCredentialRequested } from "../scenarios/invalidCredential";
-import { resolveScenario, wholePesosFromDecimal } from "../scenarios/scenarioFromRequest";
+import { invalidCredentialIn, invalidCredentialRequested } from "../scenarios/invalidCredential";
+import {
+  ResolvedScenario,
+  resolveScenario,
+  wholePesosFromDecimal,
+} from "../scenarios/scenarioFromRequest";
 import { bankListFailure, queryFailure, technicalFailure } from "../scenarios/technicalFailure";
 import { mpOrderMachine, mpPaymentMachine } from "../state/mercadopagoStateMachine";
 import { rememberScenarioTarget } from "../state/scenarioTarget";
@@ -26,7 +31,11 @@ import {
   cardTokenOutcomeFor,
   rememberCardTokenOutcome,
 } from "../store/CardTokenOutcomes";
-import { mercadopagoOrders, mercadopagoPayments } from "../store/GatewayStores";
+import {
+  mercadopagoCardTokens,
+  mercadopagoOrders,
+  mercadopagoPayments,
+} from "../store/GatewayStores";
 import {
   hasDuplicateMark,
   markDuplicate,
@@ -68,23 +77,174 @@ const INVALID_TOKEN_ON_PAYMENT_METHODS = {
  * (https://www.mercadopago.com.co/developers/en/docs/checkout-api-payments/response-handling/collection-results,
  * consultada el 6 de octubre de 2026).
  *
- * Lo medido no coincide con esta tabla. El 6 de octubre de 2026, la cuenta de prueba real
- * respondió `rejected / cc_rejected_high_risk` para `APRO`, `OTHE` y `CONT`
+ * Lo medido en la Payments API no coincide con esta tabla. El 6 de octubre de 2026, la cuenta
+ * de prueba real respondió `rejected / cc_rejected_high_risk` para `APRO`, `OTHE` y `CONT`
  * (`docs/testing-data/mercado-pago.md`, sección 1.2), igual que `APRO` el 19 de septiembre.
  * Mercado Pago no informa la causa. El simulador sigue la tabla oficial por decisión de
  * Joan: es el comportamiento documentado que un comercio espera, y esta cuenta no permite
  * observarlo.
+ *
+ * En la Orders API sí coincide. Nivel 1 — medido el 15 de octubre de 2026 con las credenciales
+ * del vendedor de prueba: cada titular dio el desenlace de la tabla, con el `status_detail` de
+ * `orderStatusDetail`, y la regla es de **prefijo**: `APRO Ruiz` aprobó igual que `APRO`. Por
+ * eso la búsqueda es por prefijo en los dos caminos, distinguiendo mayúsculas como en lo
+ * medido. Un nombre fuera de la tabla, como `Felipe Ruiz`, dio `rejected_by_issuer` en la API
+ * real; el simulador no lo imita y lo deja en el escenario del monto o de la cabecera, para
+ * que esas dos convenciones sigan sirviendo con cualquier titular.
  */
-const CARDHOLDER_OUTCOMES: ReadonlyMap<string, CardTokenOutcome> = new Map([
+const CARDHOLDER_OUTCOMES: ReadonlyArray<readonly [string, CardTokenOutcome]> = [
   ["APRO", { scenario: "APPROVED" }],
-  ["CONT", { scenario: "PENDING", statusDetail: "pending_contingency" }],
-  ["OTHE", { scenario: "DECLINED", statusDetail: "cc_rejected_other_reason" }],
-  ["CALL", { scenario: "DECLINED", statusDetail: "cc_rejected_call_for_authorize" }],
-  ["FUND", { scenario: "DECLINED", statusDetail: "cc_rejected_insufficient_amount" }],
-  ["SECU", { scenario: "DECLINED", statusDetail: "cc_rejected_bad_filled_security_code" }],
-  ["EXPI", { scenario: "DECLINED", statusDetail: "cc_rejected_bad_filled_date" }],
-  ["FORM", { scenario: "DECLINED", statusDetail: "cc_rejected_bad_filled_other" }],
-]);
+  [
+    "CONT",
+    { scenario: "PENDING", statusDetail: "pending_contingency", orderStatusDetail: "in_process" },
+  ],
+  [
+    "OTHE",
+    {
+      scenario: "DECLINED",
+      statusDetail: "cc_rejected_other_reason",
+      orderStatusDetail: "rejected_by_issuer",
+    },
+  ],
+  [
+    "CALL",
+    {
+      scenario: "DECLINED",
+      statusDetail: "cc_rejected_call_for_authorize",
+      orderStatusDetail: "required_call_for_authorize",
+    },
+  ],
+  [
+    "FUND",
+    {
+      scenario: "DECLINED",
+      statusDetail: "cc_rejected_insufficient_amount",
+      orderStatusDetail: "insufficient_amount",
+    },
+  ],
+  [
+    "SECU",
+    {
+      scenario: "DECLINED",
+      statusDetail: "cc_rejected_bad_filled_security_code",
+      orderStatusDetail: "bad_filled_card_data",
+    },
+  ],
+  [
+    "EXPI",
+    {
+      scenario: "DECLINED",
+      statusDetail: "cc_rejected_bad_filled_date",
+      orderStatusDetail: "bad_filled_card_data",
+    },
+  ],
+  [
+    "FORM",
+    {
+      scenario: "DECLINED",
+      statusDetail: "cc_rejected_bad_filled_other",
+      orderStatusDetail: "bad_filled_card_data",
+    },
+  ],
+];
+
+/** El desenlace del primer titular de la tabla con el que empieza el nombre, si hay uno. */
+function cardholderOutcomeFor(name: string | undefined): CardTokenOutcome | undefined {
+  const trimmed = name?.trim() ?? "";
+  return CARDHOLDER_OUTCOMES.find(([prefix]) => trimmed.startsWith(prefix))?.[1];
+}
+
+/**
+ * Los cuerpos de error de la Orders API con tarjeta. Nivel 1 — medidos el 15 de octubre de
+ * 2026: una orden sin `payment_method.id`, sin `type` o sin `token` responde `400
+ * required_properties` nombrando lo que falta, y una tarjeta de débito con más de una cuota
+ * responde `400 property_value`.
+ */
+const CARD_METHOD_REQUIRED = ["id", "type", "token"] as const;
+
+function missingCardPropertiesError(missing: readonly string[]) {
+  return {
+    errors: [
+      {
+        code: "required_properties",
+        message: "Missing properties",
+        details: [
+          `'$.transactions.payments[0].payment_method' - missing properties: ${missing
+            .map((property) => `'${property}'`)
+            .join(", ")}`,
+        ],
+      },
+    ],
+  };
+}
+
+const DEBIT_INSTALLMENTS_ERROR = {
+  errors: [
+    {
+      code: "property_value",
+      message: "Invalid value for property",
+      details: ["'$.transactions.payments[0].payment_method.installments' - value must be '1'"],
+    },
+  ],
+} as const;
+
+/** Las tarjetas de la Orders API; con cualquiera de los dos tipos, o con token, es tarjeta. */
+const CARD_PAYMENT_TYPES: ReadonlySet<string> = new Set(["credit_card", "debit_card"]);
+
+/** El medio de pago de una orden de tarjeta, o `undefined` si la orden es de PSE. */
+function cardPaymentMethodOf(requestBody: MercadoPagoCreateOrderRequestBody | undefined) {
+  const method = requestBody?.transactions?.payments?.[0]?.payment_method;
+  if (method === undefined) return undefined;
+  return method.token !== undefined || CARD_PAYMENT_TYPES.has(method.type) ? method : undefined;
+}
+
+/**
+ * El `402` de una orden cuyo pago falló: el sobre `errors[]` —`details` en el formato
+ * `"<id del pago>: <status_detail>"`— y la orden entera en `data`. Medido en PSE el 7 de
+ * octubre de 2026 y en tarjeta el 15 de octubre de 2026, con la misma forma.
+ */
+function failedOrderEnvelope(order: MercadoPagoOrderResponse) {
+  return {
+    errors: [
+      {
+        code: "failed",
+        message: "The following transactions failed",
+        details: order.transactions.payments.map(
+          (payment) => `${payment.id}: ${payment.status_detail}`,
+        ),
+      },
+    ],
+    data: order,
+  };
+}
+
+/*
+ * `GET /v1/card_tokens/{id}`. Nivel 1 — medido el 15 de octubre de 2026: sin `Authorization`
+ * responde `401` con la causa `E212`, y con un access token inexistente `401` con la causa
+ * vacía. Un token que no existe responde `404 "could not get a Cardtoken with the following
+ * id: …"` en la API real; el simulador no lo imita (ver la ruta).
+ */
+const CARD_TOKEN_WITHOUT_ACCESS = {
+  message: "access is unauthorized",
+  status: 401,
+  error: "unauthorized",
+  code: "unauthorized_access",
+  cause: [{ description: "access_parameters is required", code: "E212" }],
+} as const;
+
+const CARD_TOKEN_INVALID_ACCESS = {
+  message: "access is unauthorized",
+  status: 401,
+  error: "unauthorized",
+  code: "unauthorized_access",
+  cause: [{ description: "", code: "" }],
+} as const;
+
+/**
+ * La tarjeta de prueba Visa crédito de `docs/testing-data/mercado-pago.md`, para el token que
+ * el simulador no emitió.
+ */
+const UNKNOWN_TOKEN_CARD = { firstSixDigits: "401354", lastFourDigits: "6260" } as const;
 
 /** Los escenarios de negocio que una orden de PSE sabe producir al crearse. */
 const ORDER_SCENARIOS: ReadonlySet<string> = new Set([
@@ -102,17 +262,20 @@ const ORDER_SCENARIOS: ReadonlySet<string> = new Set([
  * Expone:
  * 1. POST /v1/sim/mercadopago/payments: simula la creación de un pago (status 201).
  * 2. GET /v1/sim/mercadopago/payments/:id: simula la consulta del estado de un pago (status 200).
- * 3. POST /v1/sim/mercadopago/orders: simula la creación de una orden de PSE (status 201).
+ * 3. POST /v1/sim/mercadopago/orders: simula la creación de una orden de PSE o de tarjeta.
  * 4. GET /v1/sim/mercadopago/orders/:id: simula la consulta de una orden (status 200).
+ * 5. GET /v1/sim/mercadopago/card_tokens/:id y GET /v1/sim/mercadopago/payment_methods/search:
+ *    las dos lecturas con las que la versión 0.6.0 del SDK deduce la marca de la tarjeta.
  *
  * Particularidades de Mercado Pago:
  * - El monto se procesa en pesos (`transaction_amount`).
  * - Los estados son en minúsculas (`approved`, `rejected`, `pending`).
  * - Respuesta JSON plana sin envoltorio `data`.
- * - **Dos APIs distintas, no dos payloads:** la tarjeta va por `/payments` y PSE
- *   por `/orders`, con otro vocabulario de estados (`action_required`) y el monto
- *   como string sin decimales. Esto no es una simplificación del mock: es lo que
- *   se midió contra la API real (issue #64).
+ * - **Dos APIs distintas, no dos payloads:** PSE va por `/orders`, con otro vocabulario de
+ *   estados (`action_required`) y el monto como string sin decimales. Esto no es una
+ *   simplificación del mock: es lo que se midió contra la API real (issue #64). La tarjeta va
+ *   por `/payments` en la versión 0.5.0 del SDK, que es la que usa `/v1/api`, y por `/orders`
+ *   desde la 0.6.0, así que el simulador atiende los dos caminos.
  */
 export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   const mockFactory = new GatewayMockFactory();
@@ -179,6 +342,80 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return undefined;
+  }
+
+  /**
+   * La orden de tarjeta del escenario pedido, o `undefined` si el escenario no es de negocio.
+   *
+   * Nivel 1 — medido el 15 de octubre de 2026: aprobada en `processed / accredited` con `201`,
+   * pendiente en `processing / in_process` con `201` (titular `CONT`) y rechazada en `failed /
+   * failed` con `402`. El rechazo por monto o cabecera usa `rejected_by_issuer`, el detalle
+   * medido para `OTHE`, el titular del «error general». `EXPIRED` y `DUPLICATE_PAYMENT` no se
+   * midieron en órdenes de tarjeta y responden `501`, como en las de PSE.
+   */
+  function cardOrderFor(
+    scenario: string,
+    requestBody: MercadoPagoCreateOrderRequestBody,
+    statusDetail: string | undefined,
+  ): { httpStatus: number; order: MercadoPagoOrderResponse } | undefined {
+    switch (scenario) {
+      case "APPROVED":
+      case "APPROVAL":
+        return {
+          httpStatus: 201,
+          order: mockFactory.buildCardOrderResponse(requestBody, "processed", "accredited"),
+        };
+      case "PENDING": {
+        const detail = statusDetail ?? "in_process";
+        return {
+          httpStatus: 201,
+          order: mockFactory.buildCardOrderResponse(requestBody, "processing", detail),
+        };
+      }
+      case "REJECTED":
+      case "DECLINED":
+        return {
+          httpStatus: 402,
+          order: mockFactory.buildCardOrderResponse(
+            requestBody,
+            "failed",
+            "failed",
+            statusDetail ?? "rejected_by_issuer",
+          ),
+        };
+      default:
+        return undefined;
+    }
+  }
+
+  /**
+   * Crea la orden de tarjeta y la responde.
+   *
+   * Se guarda tal como se responde, porque la consulta medida devolvió la misma orden que la
+   * creación, también la fallida. `processing` no tiene transición en `mpOrderMachine`: la
+   * consulta 1,5 s después seguía en `processing / in_process`.
+   */
+  function sendCardOrder(
+    reply: FastifyReply,
+    requestBody: MercadoPagoCreateOrderRequestBody,
+    scenario: string,
+    resolved: ResolvedScenario,
+    statusDetail: string | undefined,
+  ) {
+    const built = cardOrderFor(scenario, requestBody, statusDetail);
+    if (built === undefined) {
+      return reply.code(501).send({ error: `Escenario aún no soportado: ${scenario}` });
+    }
+
+    const { order, httpStatus } = built;
+    mercadopagoOrders.save(order.id, order);
+    if (resolved.queryFailure !== undefined) {
+      rememberQueryFailure("mercadopago", "order", order.id, resolved.queryFailure);
+    }
+
+    return httpStatus === 402
+      ? reply.code(402).send(failedOrderEnvelope(order))
+      : reply.code(httpStatus).send(order);
   }
 
   // 1. Creación de pago (POST /v1/sim/mercadopago/payments)
@@ -406,8 +643,23 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const requestBody = request.body as MercadoPagoCreateOrderRequestBody;
-      // PSE no tiene dato de prueba que llegue aquí: el desenlace real lo decide el banco.
+      const cardMethod = cardPaymentMethodOf(requestBody);
+
+      if (cardMethod !== undefined) {
+        const missing = CARD_METHOD_REQUIRED.filter((property) => !cardMethod[property]);
+        if (missing.length > 0) {
+          return reply.code(400).send(missingCardPropertiesError(missing));
+        }
+        if (cardMethod.type === "debit_card" && (cardMethod.installments ?? 1) !== 1) {
+          return reply.code(400).send(DEBIT_INSTALLMENTS_ERROR);
+        }
+      }
+
+      // En PSE no hay dato de prueba que llegue aquí: el desenlace real lo decide el banco. En
+      // tarjeta lo decide el titular, recordado al tokenizar.
+      const fromToken = cardTokenOutcomeFor("mercadopago", cardMethod?.token);
       const resolved = resolveScenario(request, {
+        gatewayData: fromToken?.scenario,
         wholePesos: wholePesosFromDecimal(requestBody?.total_amount),
       });
       let scenario = resolved.scenario;
@@ -426,6 +678,12 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
           return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
         }
         scenario = DEFAULT_SCENARIO;
+      }
+
+      if (cardMethod !== undefined) {
+        const statusDetail =
+          resolved.source === "gateway_data" ? fromToken?.orderStatusDetail : undefined;
+        return sendCardOrder(reply, requestBody, scenario, resolved, statusDetail);
       }
 
       /*
@@ -456,18 +714,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         const { payer: _payer, ...queried } = failed;
         mercadopagoOrders.save(String(failed.id), queried);
 
-        return reply.code(402).send({
-          errors: [
-            {
-              code: "failed",
-              message: "The following transactions failed",
-              details: failed.transactions.payments.map(
-                (payment) => `${payment.id}: ${payment.status_detail}`,
-              ),
-            },
-          ],
-          data: failed,
-        });
+        return reply.code(402).send(failedOrderEnvelope(failed));
       }
 
       const bankPaymentId = mockFactory.generateBankPaymentId();
@@ -746,12 +993,75 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       const response = mockFactory.buildTokenCardResponse(body, publicKey);
 
       // Se recuerda el desenlace que fuerza el nombre, no el nombre (`CardTokenOutcomes.ts`).
-      const outcome = CARDHOLDER_OUTCOMES.get(body.cardholder?.name?.trim() ?? "");
+      const outcome = cardholderOutcomeFor(body.cardholder?.name);
       if (outcome !== undefined) {
         rememberCardTokenOutcome("mercadopago", response.id, outcome);
       }
+      const { cardholder: _cardholder, ...stored } = response;
+      mercadopagoCardTokens.save(response.id, stored);
 
       return reply.code(201).send(response);
+    },
+  );
+
+  /**
+   * El token emitido, leído con el access token: de aquí saca el SDK 0.6.0 el BIN.
+   *
+   * Nivel 1 — medido el 15 de octubre de 2026: con el Bearer del mismo comercio responde `200`
+   * con `first_six_digits`, y leerlo no consume el token. Un token que el simulador no emitió
+   * no responde el `404` de la API real sino la tarjeta de prueba Visa crédito, a propósito:
+   * `POST /payments` ya aceptaba cualquier token, y los ejemplos de `examples/` cobran con
+   * tokens inventados.
+   */
+  app.get(
+    "/v1/sim/mercadopago/card_tokens/:id",
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      if (!request.headers.authorization) {
+        return reply.code(401).send(CARD_TOKEN_WITHOUT_ACCESS);
+      }
+      if (invalidCredentialRequested(request, ["authorization"])) {
+        return reply.code(401).send(CARD_TOKEN_INVALID_ACCESS);
+      }
+
+      const { id } = request.params;
+      const stored = mercadopagoCardTokens.findById(id);
+      if (stored !== undefined) {
+        return reply.code(200).send(stored);
+      }
+
+      const { cardholder: _cardholder, ...unknown } = mockFactory.buildTokenCardResponse(
+        {
+          card_number: `${UNKNOWN_TOKEN_CARD.firstSixDigits}000000${UNKNOWN_TOKEN_CARD.lastFourDigits}`,
+        },
+        "",
+      );
+      return reply.code(200).send({ ...unknown, id });
+    },
+  );
+
+  /**
+   * Los medios de pago de un BIN, la segunda lectura del SDK 0.6.0 antes de cobrar.
+   *
+   * Nivel 1 — medido el 15 de octubre de 2026: sin `public_key` responde `400 "public_key is
+   * required"` aunque llegue el Bearer, y con una llave pública inexistente `404 "public key
+   * not found"`. La llave inválida se pide con las marcas de `invalidCredential.ts`.
+   */
+  app.get(
+    "/v1/sim/mercadopago/payment_methods/search",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const query = request.query as { public_key?: string; bins?: string } | undefined;
+      const publicKey = query?.public_key?.trim();
+
+      if (!publicKey) {
+        return reply.code(400).send({ code: 400, message: "public_key is required" });
+      }
+      if (invalidCredentialIn(request, [publicKey])) {
+        return reply.code(404).send({ code: 404, message: "public key not found" });
+      }
+
+      return reply
+        .code(200)
+        .send(mockFactory.buildPaymentMethodSearchResponse(query?.bins?.trim() ?? ""));
     },
   );
 }
