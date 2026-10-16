@@ -512,6 +512,23 @@ la Orders API:
 `::`. Por eso `/v1/api` y, desde la versión 0.6.0, el SDK quitan los espacios y reescriben esas dos
 formas como `127.0.0.1` (o `a.b.c.d`) antes de enviarlas (`normalizePayerIp()`).
 
+### La orden de PSE que nace sin URL (noche del 15 de octubre de 2026)
+
+> **Medido entre las 21:33 y las 21:44 (UTC−5) con las credenciales del vendedor de prueba**, en la
+> misma tanda que la sección 4. Lo registra el informe de esa medición, que resume los resultados;
+> los cuerpos completos de las respuestas no quedaron guardados en el repositorio.
+
+Las 12 órdenes de PSE creadas en ese intervalo, con varios pagadores y bancos, nacieron
+`processing / in_process` con `201` y **sin `redirect_url`**, y unos 4 segundos después estaban en
+`failed / processing_error`. A las 13:12 del mismo día, el mismo cuerpo había nacido
+`action_required` con la URL (sección anterior). La medición no permite saber por qué cambió: no se
+afirma una causa.
+
+Para el comercio, una orden sin URL no tiene adónde mandar al pagador, pero existe y tiene
+identificador. Desde la versión 0.6.0-rc.2, `createPayment()` la devuelve como una transacción
+`PENDING` con `rawStatus` `processing`, y la consulta posterior da `DECLINED` con `rejectionCode`
+`processing_error`. Antes fallaba con `MALFORMED_RESPONSE`. El simulador no reproduce estas órdenes.
+
 ### Paso a paso de implementación en Sandbox (Orders API)
 
 1. **Crear la Orden:** Envía la solicitud a `POST /v1/orders` utilizando tu `Access Token` de prueba:
@@ -634,3 +651,35 @@ y responde a la segunda como a la primera, y a la cuarta como a la tercera.
 ### Reembolsos de Prueba
 
 Si necesitas realizar un reembolso de prueba (`POST /v1/orders/{id}/refund`), ejecuta el llamado a la API utilizando únicamente tu **`Access Token` de prueba** (`APP_USR-`).
+
+---
+
+## 4. Duplicados e idempotencia en la Orders API (15 de octubre de 2026)
+
+> **Medido entre las 21:37 y las 21:45 (UTC−5) contra `POST /v1/orders`, con las credenciales del
+> vendedor de prueba**, con tarjeta y con PSE. Lo registra el informe de esa medición, que resume
+> los resultados; los cuerpos completos no quedaron guardados en el repositorio, salvo los dos
+> sobres de error de la tabla, que se copian textuales.
+
+| Caso | Respuesta |
+| --- | --- |
+| Misma `external_reference`, distinta `X-Idempotency-Key` | `201` y `201`: dos órdenes y dos cobros aprobados (tarjeta 2 de 2, PSE 2 de 2). Mercado Pago **no rechaza** una referencia repetida |
+| Misma llave, mismo cuerpo | `201` con una copia byte a byte de la respuesta original, aunque la orden haya cambiado de estado desde entonces, y una sola orden. Tardó unos 200–300 ms, frente a 1,1–1,5 s de la creación |
+| Misma llave, otro cuerpo (monto, token o referencia) | `409 {"errors":[{"code":"idempotency_key_already_used","message":"X-Idempotency-Key already used. Please retry with a different value."}]}`, sin crear orden |
+| Misma llave, dos peticiones en paralelo | `201` y `423 {"errors":[{"code":"resource_locked","message":"Idempotency key locked. Please retry after some time."}]}` |
+| Rechazo (titular `OTHE`, `402`) y reintento con otra tarjeta y la **misma** llave | `409` |
+| El mismo token del rechazo con una llave nueva | La segunda orden responde `402 invalid_card_token`: no hay segundo cobro |
+
+Ninguna cabecera de la respuesta repite la llave, y `x-request-id` cambia en cada petición.
+
+**La documentación oficial.** La referencia de creación de órdenes
+([create-order](https://www.mercadopago.com.uy/developers/en/reference/online-payments/checkout-api/create-order/post))
+describe la llave con 1 a 128 caracteres, lista `409`, `423` y `500` entre las respuestas, y da
+`external_reference` como opcional, de hasta 64 caracteres y sin unicidad. La vigencia de 24 horas de
+la llave aparece solo en la documentación de Point y no se midió.
+
+**Lo que se hizo con esto.** El SDK sigue mandando una llave nueva en cada `createPayment()`: con una
+llave derivada de la referencia, un rechazo no se podría reintentar con otra tarjeta (daría `409`). El
+`423` llega como `RESOURCE_LOCKED`, un error transitorio, desde la 0.6.0-rc.2. La API de Simulación
+imita la idempotencia medida en `POST /v1/sim/mercadopago/orders` y, con el monto 10 409, crea las dos
+órdenes (`docs/02-arquitectura/3-api-de-simulacion.md`).

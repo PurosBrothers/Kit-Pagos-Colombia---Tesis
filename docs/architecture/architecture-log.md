@@ -3317,6 +3317,48 @@ Para que Joshua probara el cliente C contra los sandboxes reales hubo que medir 
 
 **Estado:** Resuelto en `prototypes/checkout-frontend-rest/`.
 
+### 100. Mercado Pago no rechaza un cobro duplicado, el PSE sin URL de banco es un pago pendiente y el `423` se reintenta (SDK 0.6.0-rc.2, issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.** El monto reservado 10 409 (`DUPLICATE_PAYMENT`) respondía `501` en las órdenes de Mercado Pago porque nadie había medido qué hace la Orders API con un cobro repetido (punto 96). Se midió el 15 de octubre de 2026 entre las 21:37 y las 21:45 (UTC−5) con el vendedor de prueba del punto 95 (`docs/testing-data/mercado-pago.md`, sección 4):
+
+- **La misma referencia con llaves distintas** crea dos órdenes y cobra dos veces, en tarjeta (2 de 2) y en PSE (2 de 2). Mercado Pago no deduplica por `external_reference`, y su referencia no dice que deba ser única.
+- **La única protección es `X-Idempotency-Key`.** La misma llave con el mismo cuerpo devuelve una copia de la respuesta original, aunque la orden haya cambiado de estado; con otro cuerpo, `409 idempotency_key_already_used`; mandada en paralelo, `423 resource_locked`.
+- **Derivar la llave de la referencia bloquearía el reintento legítimo.** Después de un rechazo, reintentar con otra tarjeta y la misma llave dio `409` (2 de 2).
+
+En la misma noche, las doce órdenes de PSE creadas entre las 21:33 y las 21:44 nacieron `processing / in_process` sin `redirect_url` y en unos 4 segundos terminaron `failed / processing_error`, con varios pagadores y bancos, por Render y en local. A las 13:12 el mismo cuerpo había entregado la URL. El SDK lo trataba como `MALFORMED_RESPONSE`, como si la respuesta estuviera mal formada. Repetido el 16 de octubre a las 09:07, pasó lo mismo.
+
+**Decisión 1: el SDK mantiene una llave de idempotencia aleatoria por cobro.** La documentación del SDK dice que Mercado Pago no protege contra un cobro duplicado y que el comercio debe consultar antes de reintentar. *Descartado:* derivarla de la referencia, por el `409` medido; y un `idempotencyKey` opcional, que cambia la API pública.
+
+**Decisión 2: `423` es `RESOURCE_LOCKED`, un error transitorio que `RetryHandler` reintenta.** Es un código nuevo de `KitPagosErrorCode`, un cambio aditivo. Con la llave aleatoria el SDK no lo provoca; aparece si dos procesos mandan la misma llave a la vez.
+
+**Decisión 3: una orden de PSE que nace `processing` sin URL de banco es una transacción `PENDING`** con el id de la orden y el estado nativo `processing`. Al consultarla, el comercio recibe `DECLINED` con `processing_error`. `MALFORMED_RESPONSE` queda para las respuestas que de verdad no se pueden leer.
+
+**Decisión 4: el simulador imita lo medido.** Con 10 409, el segundo cobro con la misma referencia también sale `201` con otra orden, en tarjeta y en PSE. `POST /v1/sim/mercadopago/orders` imita la idempotencia: por credencial y llave guarda la huella del cuerpo y la respuesta, devuelve la respuesta guardada al mismo cuerpo, `409` a otro cuerpo y `423` mientras la primera petición sigue en curso, con los sobres medidos (nivel 1). La vigencia de 24 horas es una convención: Mercado Pago solo la menciona en la documentación de Point y no se midió.
+
+**Lo medido** (16 de octubre de 2026). SDK: 55 suites y 938 pruebas, sentencias 97,81 % y ramas 91,04 %; lint, tipos, `metrics`, build, `check:readme` y los ejemplos, en verde a las 09:04. Prueba de contrato contra la API real de Mercado Pago: 7 de 7 a las 09:07. Simulador: 47 suites y 1189 pruebas, líneas 97,29 % y ramas 88,79 %, a las 09:10. Mutaciones: sin el mapeo del `423`, sin reintentarlo y con la orden sin URL de vuelta a error, en el SDK; sin el `423`, sin recordar el `402` de un PSE fallido y las demás reglas de la idempotencia, en el simulador. Todas las detectó alguna prueba.
+
+**Estado:** Resuelto en `sdk/` (se publica como `0.6.0-rc.2`) y en el simulador. El PSE de Mercado Pago en el sandbox queda como comportamiento de la pasarela por aclarar: falla con este vendedor de prueba desde el 15 de octubre a las 21:33.
+
+### 101. Lo que la corrida contra los sandboxes reales encontró en nuestro código (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.** El 15 de octubre de 2026 entre las 21:47 y las 22:12 (UTC−5) se corrió el cliente C de punta a punta contra los sandboxes oficiales, con la API de la rama detrás de un túnel de Cloudflare (`.cursor/evidencia/109/sandbox-completo/`, fuera del repositorio). Wompi (PSE con los bancos `1`, `2` y `3`, y tarjeta), Rapyd (PSE con «Success» y con «Error») y la tarjeta de Mercado Pago funcionaron. El PSE de Kushki llegó a la página real y volvió, pero quedó pendiente (`docs/testing-data/kushki.md`, 5.2.2), y el de Mercado Pago no entregó URL de banco (punto 100). La corrida encontró además cuatro defectos nuestros.
+
+**Defecto 1: el motivo del rechazo llegaba vacío por `/v1/api`.** El esquema de la respuesta declaraba `code`, `category` y `message`, y el `RejectionReason` del SDK trae `rejectionCode` y `rejectionCategory`. `fast-json-stringify` descarta lo que el esquema no declara, así que a todo cliente le llegaba `{}`. **Decisión:** la API devuelve los campos del SDK; el esquema OpenAPI, la documentación y el cliente C se alinearon con ellos. Una prueba nueva (`simulator-api/test/rejection-reason.test.ts`) pasa por la ruta real y el SDK instalado, y falla si el motivo sale vacío.
+
+**Defecto 2: el mensaje `API_UNREACHABLE` decía que la API estaba apagada cuando estaba encendida.** Un túnel de Cloudflare cambió un `502` de la API por su propia página, sin CORS, y `fetch` falló igual que si no hubiera respuesta: el estándar Fetch trata los dos casos como error de red, y la página no los puede distinguir. **Decisión:** el mensaje nombra las dos causas posibles y conserva el origen y el error original.
+
+**Defecto 3: después de una vuelta que terminaba «pendiente», la página no dejaba consultar otra vez.** Decía «Consulte de nuevo más tarde», pero ya había borrado el pago pendiente y ocultaba «Ya pagué: consultar el estado». **Decisión:** el pago pendiente se conserva hasta un estado final, y el botón se muestra mientras siga pendiente.
+
+**Defecto 4 (menor): al volver del banco, el formulario mostraba los valores por omisión** junto al resultado de otra pasarela. **Decisión:** al volver, el formulario muestra la pasarela y el método del pago; una carga normal empieza un pedido nuevo.
+
+**Lo medido** (16 de octubre de 2026). En el navegador, entre las 09:42 y las 09:45, contra el simulador: una tarjeta de Mercado Pago con titular `OTHE` muestra «Motivo: rejected_by_issuer (categoría UNKNOWN)»; un PSE de Kushki que queda pendiente después de «Volver al comercio» sigue ofreciendo «Ya pagué», con el formulario en `kushki` y PSE (`.cursor/evidencia/109/defectos-corregidos/`). Cliente C: 96 pruebas, typecheck, build y `check:sri`. Simulador: 48 suites y 1194 pruebas, lint y tipos. Mutaciones: el esquema sin `rejectionCode` hace fallar 4 de 5 pruebas; olvidar siempre el pago pendiente, 2 de 32; ocultar «Ya pagué» con el pago pendiente, 2 de 32.
+
+**Estado:** Resuelto en `simulator-api/` y en `prototypes/checkout-frontend-rest/`.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd

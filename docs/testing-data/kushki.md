@@ -365,7 +365,25 @@ opción porque es la que el simulador implementa.
 `declinedTransaction` exige que una persona autorice en el portal del banco simulado, y los números
 de documento de prueba de la sección 5.4 **no cambian el estado por sí solos** —los cuatro quedan en
 `initializedTransaction` hasta que alguien complete la autorización—. Los estados finales de la tabla
-del SDK vienen de la documentación de Kushki y están marcados como tales.
+del SDK vienen de la documentación de Kushki y están marcados como tales. *(Desde el 14 de octubre
+de 2026 la página de UAT no ofrece autorizar ni elegir el desenlace: ver 5.2.2.)*
+
+### 5.2.2. La página del PSE en UAT, la vuelta al comercio y el estado que no cambia (14 al 16 de octubre de 2026)
+
+> **Medido contra UAT a través de `/v1/api` en `sandbox`, para el issue #109** (puntos 94 y 97 del
+> `architecture-log.md`). Las capturas están en la evidencia del #109 (`ambiente-y-render/` y
+> `sandbox-completo/`).
+
+- **La URL del banco.** El `init` devolvió `https://api-uat.kushkipagos.com/transfer/v1/agent?token=<token>&mid=<id del comercio>`, que redirige a `https://uat-sandbox.kushkipagos.com/checkout/transfer?status=pending&…` con los datos del cobro en la query (tipo y número de documento, referencia, banco, monto, CUS).
+- **La página.** «Kushki Bank»: «Transacción pendiente. El banco está validando su transacción, esto puede tardar unos minutos», los datos de la transacción y el botón «Volver al comercio». No ofrece autorizar ni elegir un desenlace.
+- **La vuelta.** «Volver al comercio» lleva a la `callbackUrl` del comercio con `token=<token de la transferencia>` agregado, sin tocar la query que ya traía (`…/?retorno=1&token=4a8532b1…`, 14 de octubre a las 22:50). El primer «Atrás» del navegador desde esa página cae en `api-uat…/transfer/v1/agent`, que vuelve a redirigir a la página.
+- **El estado no cambia.** El 15 de octubre, entre las 21:56 y las 22:02, se creó una transferencia por cada documento de la sección 5.4 (`1020304050`, `123456789`, `100000002` y `999999990`): la página fue la misma y las cuatro quedaron `initializedTransaction`. Consultadas otra vez el 16 de octubre a las 09:24, junto con la del 14 de octubre, las cinco seguían `initializedTransaction`, entre 11 y 35 horas después de creadas.
+
+**Hipótesis, sin confirmar con Kushki.** La investigación del 15 de octubre encontró en la documentación
+de Kushki que la simulación de estados de las transferencias la activa Kushki para cada comercio; el
+enlace no quedó registrado. Con este comercio de UAT, el desenlace de un PSE de Kushki no se alcanza.
+El simulador responde `approvedTransaction` en la primera consulta: es una diferencia con este sandbox,
+no con la documentación de Kushki.
 
 ### 5.3. Tipos de documento válidos en Colombia
 
