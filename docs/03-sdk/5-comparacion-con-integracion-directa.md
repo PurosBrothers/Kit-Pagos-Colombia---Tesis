@@ -89,7 +89,7 @@ Esto es la variable 4 del experimento de la Fase 5, y es contable: cuántos iden
 | La fórmula exacta de la firma de integridad | Hay que implementarla | No aparece |
 | El token de aceptación y que es de un solo uso | Hay que pedirlo y no reutilizarlo | No aparece |
 | `APPROVED`, `DECLINED`, `VOIDED`, `PENDING` de Wompi | Hay que traducirlos | No aparecen |
-| `transaction_amount` y `X-Idempotency-Key` de Mercado Pago | Hay que conocerlos | No aparecen |
+| `total_amount` en pesos enteros, la marca y el tipo de la tarjeta (`payment_method.id` y `type`) y `X-Idempotency-Key` de Mercado Pago | Hay que conocerlos, y deducir la marca del BIN | No aparecen |
 | Que el PSE de Mercado Pago está en otra API | Hay que descubrirlo | No aparece |
 | El objeto de desglose de IVA de Kushki | Hay que armarlo | No aparece |
 | Los dos vocabularios de estado de Kushki | Hay que manejar los dos | No aparecen |

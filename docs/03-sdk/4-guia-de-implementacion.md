@@ -41,14 +41,14 @@ Los cuatro son valores distintos. Confundir el de integridad con el de eventos p
 ### Mercado Pago
 
 ```bash
-MERCADOPAGO_PUBLIC_KEY=TEST-xxxxxxxx
-MERCADOPAGO_ACCESS_TOKEN=TEST-xxxxxxxx
+MERCADOPAGO_PUBLIC_KEY=APP_USR-xxxxxxxx
+MERCADOPAGO_ACCESS_TOKEN=APP_USR-xxxxxxxx
 MERCADOPAGO_WEBHOOK_SECRET=xxxxxxxx
 ```
 
-El *access token* va como `privateKey` en el SDK. La clave secreta de webhooks se genera en la configuración de notificaciones del panel, y es un valor distinto del token.
+El *access token* va como `privateKey` en el SDK y la llave pública como `publicKey`. Desde la versión 0.6.0 la llave pública no es decorativa en el servidor: el SDK la usa para deducir la marca de la tarjeta antes de cobrar (`GET /v1/payment_methods/search` no responde sin ella), y sin ella el cobro con tarjeta falla con `INVALID_REQUEST`. La clave secreta de webhooks se genera en la configuración de notificaciones del panel, y es un valor distinto del token.
 
-**Advertencia de alcance:** el PSE de Mercado Pago necesita la Orders API, que **responde `401` con credenciales de prueba**. Para probar PSE de Mercado Pago hacen falta credenciales de producción, o el simulador del proyecto.
+**Advertencia de alcance:** desde la versión 0.6.0 tarjeta y PSE van por la Orders API, que **responde `401` con credenciales `TEST-`** (punto 45). Para probar en sandbox hacen falta las credenciales `APP_USR-` de un vendedor de prueba de una aplicación «Checkout API via Orders», con las que se cobró tarjeta el 15 de octubre de 2026, o el simulador del proyecto. Con esas credenciales la Payments API, por donde cobraba la 0.5.0, responde `401 "Unauthorized use of live credentials"`.
 
 ### Kushki
 
