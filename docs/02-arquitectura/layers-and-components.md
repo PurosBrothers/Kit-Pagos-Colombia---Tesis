@@ -104,10 +104,10 @@ Kit-Pagos-Colombia---Tesis/
 │   ├── app.ts                                  <-- buildApp(): instancia Fastify sin abrir puerto
 │   ├── routes/
 │   │   ├── health.ts                           <-- GET /health
-│   │   ├── wompi.ts                            <-- 5 rutas bajo /v1/sim/wompi/
-│   │   ├── mercadopago.ts                      <-- 6 rutas bajo /v1/sim/mercadopago/
-│   │   ├── rapyd.ts                            <-- 7 rutas bajo /v1/sim/rapyd/
-│   │   ├── kushki.ts                           <-- 6 rutas bajo /v1/sim/kushki/
+│   │   ├── wompi.ts                            <-- 7 rutas bajo /v1/sim/wompi/
+│   │   ├── mercadopago.ts                      <-- 9 rutas bajo /v1/sim/mercadopago/
+│   │   ├── rapyd.ts                            <-- 9 rutas bajo /v1/sim/rapyd/
+│   │   ├── kushki.ts                           <-- 7 rutas bajo /v1/sim/kushki/
 │   │   └── webhooks.ts                         <-- POST /v1/sim/webhooks/trigger (RF-12)
 │   ├── gateways/                               <-- Una GatewayMockFactory + types.ts por pasarela
 │   │   ├── wompi/  mercadopago/  rapyd/  kushki/
@@ -340,7 +340,7 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 ### 3.1. HTTP Routers por pasarela (`simulator-api/src/routes/*.ts`)
 
 - **Responsabilidad:** Son la puerta de entrada del simulador, un plugin Fastify por pasarela registrado desde `app.ts`: `wompi.ts`, `rapyd.ts`, `mercadopago.ts`, `kushki.ts`, `webhooks.ts` y `health.ts`.
-- **Enrutamiento:** Cada router replica la forma de las rutas nativas de su pasarela bajo `/v1/sim/<pasarela>/*` — 32 endpoints en total (7 de Wompi, 9 de Rapyd, 7 de Mercado Pago, 7 de Kushki, el trigger de webhooks y `health`), enumerados en [3-api-de-simulacion.md](3-api-de-simulacion.md). **No existe `/v1/sim/payu/*`**: PayU no es pasarela del proyecto (ver sección 2.6 y `architecture-log.md`, punto 15).
+- **Enrutamiento:** Cada router replica la forma de las rutas nativas de su pasarela bajo `/v1/sim/<pasarela>/*` — 34 endpoints en total (7 de Wompi, 9 de Rapyd, 9 de Mercado Pago, 7 de Kushki, el trigger de webhooks y `health`), enumerados en [3-api-de-simulacion.md](3-api-de-simulacion.md). **No existe `/v1/sim/payu/*`**: PayU no es pasarela del proyecto (ver sección 2.6 y `architecture-log.md`, punto 15).
 - **Cómo se elige el escenario** (issue #122, punto 83 del `architecture-log.md`):
   - `x-simulator-scenario` y `x-simulate-scenario`: escenario a ejecutar. Son equivalentes y ambas se aceptan; por defecto el escenario es `APPROVED`. Las sigue usando quien llama a `/v1/sim` directamente; el SDK no las envía.
   - Sin cabecera, deciden en este orden una marca en la credencial (`invalid`, `inexistente`, `not_found`), el dato de prueba de la pasarela (la tarjeta `4111` de Wompi, el titular de Mercado Pago, el documento de PSE de Kushki, el banco de Wompi) y un monto reservado (10 100 a 10 604 COP). Las tablas completas están en la sección 4 de [3-api-de-simulacion.md](3-api-de-simulacion.md).

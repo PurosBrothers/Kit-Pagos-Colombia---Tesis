@@ -7,7 +7,7 @@
 La **API de Simulación** es el segundo componente del artefacto de Kit Pagos Colombia. Desarrollada sobre [Fastify](https://fastify.dev/) en TypeScript, cumple dos funciones arquitectónicas desacopladas:
 
 1. **Capa REST de Kit Pagos (`/v1/api`)**: Expone las capacidades del SDK a través de una interfaz HTTP unificada, permitiendo procesar cobros, consultar estados, listar bancos PSE y verificar firmas de webhooks sin necesidad de instalar el paquete npm.
-2. **Servidor Mock de Pasarelas (`/v1/sim`)**: Provee 30 rutas simuladas con fidelidad a los contratos de **Wompi**, **Mercado Pago**, **Kushki** y **Rapyd**, permitiendo ejercitar flujos completos (incluyendo escenarios de rechazo, timeout, errores de red y desenlaces de PSE) sin depender de conexión a internet ni incurrir en bloqueos de sandboxes reales.
+2. **Servidor Mock de Pasarelas (`/v1/sim`)**: Provee 32 rutas simuladas con fidelidad a los contratos de **Wompi**, **Mercado Pago**, **Kushki** y **Rapyd**, permitiendo ejercitar flujos completos (incluyendo escenarios de rechazo, timeout, errores de red y desenlaces de PSE) sin depender de conexión a internet ni incurrir en bloqueos de sandboxes reales.
 
 Servicio desplegado en vivo en Render: [https://kit-pagos-colombia.onrender.com](https://kit-pagos-colombia.onrender.com)
 
@@ -69,7 +69,7 @@ Mapeo formal a códigos de estado HTTP según el estándar del proyecto (RF-08):
 
 ## 2. Servidor Mock de Simulación (`/v1/sim`)
 
-El servidor provee 30 rutas organizadas por pasarela que emulan el comportamiento y formato de carga de cada sandbox oficial, más el disparador de webhooks y `GET /health`. Las rutas se enumeran con su nivel de evidencia en [`docs/02-arquitectura/3-api-de-simulacion.md`](../docs/02-arquitectura/3-api-de-simulacion.md).
+El servidor provee 32 rutas organizadas por pasarela que emulan el comportamiento y formato de carga de cada sandbox oficial, más el disparador de webhooks y `GET /health`. Las rutas se enumeran con su nivel de evidencia en [`docs/02-arquitectura/3-api-de-simulacion.md`](../docs/02-arquitectura/3-api-de-simulacion.md).
 
 ### Rutas por Pasarela
 
@@ -81,13 +81,15 @@ El servidor provee 30 rutas organizadas por pasarela que emulan el comportamient
   - `GET /v1/sim/wompi/pse/financial_institutions` — Lista de instituciones financieras PSE.
   - `GET /v1/sim/wompi/pse/redirect` — Página de banco del PSE (ver abajo).
   - `GET /v1/sim/wompi/terms` — Términos y condiciones del simulador.
-- **Mercado Pago (`/v1/sim/mercadopago`)** — 7:
-  - `POST /v1/sim/mercadopago/payments` — Cobro directo con tarjeta (exige idempotencia).
+- **Mercado Pago (`/v1/sim/mercadopago`)** — 9:
+  - `POST /v1/sim/mercadopago/payments` — Cobro directo con tarjeta por la Payments API, el camino del SDK 0.5.0 (exige idempotencia).
   - `GET /v1/sim/mercadopago/payments/:id` — Consulta de pago con tarjeta por ID.
   - `POST /v1/sim/mercadopago/card_tokens` — Emisión de token de tarjeta.
-  - `POST /v1/sim/mercadopago/orders` — Creación de orden PSE.
+  - `GET /v1/sim/mercadopago/card_tokens/:id` — Lectura del token con el access token: el BIN en `first_six_digits`.
+  - `POST /v1/sim/mercadopago/orders` — Creación de orden de PSE o de tarjeta (la tarjeta, desde el SDK 0.6.0).
   - `GET /v1/sim/mercadopago/orders/:id` — Consulta de orden.
   - `GET /v1/sim/mercadopago/payment_methods` — Catálogo de medios de pago, con los bancos PSE.
+  - `GET /v1/sim/mercadopago/payment_methods/search` — Marca y tipo de tarjeta por BIN (`?public_key=…&bins=…`).
   - `GET /v1/sim/mercadopago/payments/:paymentId/bank_transfer` — Página de banco del PSE (ver abajo).
 - **Kushki (`/v1/sim/kushki`)** — 7:
   - `POST /v1/sim/kushki/card/v1/charges` — Cobro directo con tarjeta.
@@ -164,9 +166,13 @@ Consulte [`postman/README.md`](./postman/README.md) para instrucciones de import
 
 | Variable | Descripción | Valor por Defecto |
 |---|---|---|
-| `PORT` | Puerto HTTP en el que escucha el servidor Fastify. | `3000` |
-| `SIMULATOR_PUBLIC_ORIGIN` | Origen público para construir URLs de retorno, checkout y bancos PSE (esencial tras proxies como Render). | `http://localhost:3000` |
-| `SIMULATOR_SDK_BASE_URL` | URL base que el SDK interno utiliza para alcanzar el simulador. | Mismo que `SIMULATOR_PUBLIC_ORIGIN` |
+| `PORT` | Puerto HTTP en el que escucha el servidor Fastify, y el de las URL que la API arma hacia sí misma cuando no hay `SIMULATOR_SDK_BASE_URL`. Un valor que no es un entero entre 1 y 65535 detiene el arranque. | `3000` |
+| `HOST` | Interfaz en la que escucha. | `0.0.0.0` |
+| `SIMULATOR_PUBLIC_ORIGIN` | Origen público (`protocolo://host`) de las URL que el simulador entrega: las páginas de banco del PSE, el checkout de Rapyd y los términos de Wompi. Hace falta detrás de un proxy que termina TLS, como Render. Un valor con ruta, credenciales u otro protocolo detiene el arranque. | Sin valor: el protocolo y el `Host` de cada petición |
+| `SIMULATOR_SDK_BASE_URL` | URL a la que el SDK interno llama en el ambiente `simulator`; se le agrega `/v1/sim/<pasarela>`. En Render es la URL pública del servicio. | Sin valor: el propio proceso, `http://localhost:<PORT>` |
+| `SIMULATOR_TRUST_FORWARDED_FOR` | Con `true`, la IP del pagador que `POST /v1/api/payments` completa cuando el cuerpo no trae `ipAddress` sale de la primera dirección de `X-Forwarded-For`. Solo detrás de un proxy que escriba esa cabecera, como Render. | Apagada |
+
+La lista completa, con las credenciales de cada pasarela, está en [`.env.example`](../.env.example) y en la sección 4.4 de [`4-despliegue-en-render-y-coleccion-postman.md`](../docs/02-arquitectura/4-despliegue-en-render-y-coleccion-postman.md), que explica además de qué archivos se leen y cuál gana.
 
 ---
 
