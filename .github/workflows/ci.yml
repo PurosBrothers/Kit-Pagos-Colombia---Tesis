@@ -130,4 +130,44 @@ jobs:
         run: npm run check:snippets
 
       - name: Build landing static site
-        run: npm run build
+        run: npm run build
+
+  prototypes:
+    name: Prototypes (${{ matrix.prototype }}, Typecheck, Tests and Coverage)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        prototype: [checkout-directo, checkout-con-sdk]
+    defaults:
+      run:
+        working-directory: ./prototypes/${{ matrix.prototype }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: prototypes/${{ matrix.prototype }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run test with coverage
+        run: npm test -- --coverage
+
+  prototypes-parity:
+    name: Prototypes (Skeleton parity)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check that only the payments module differs and that A does not use the SDK
+        run: ./prototypes/check-skeleton-parity.sh

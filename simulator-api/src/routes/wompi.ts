@@ -20,6 +20,11 @@ import {
 } from "../gateways/wompi/integritySignature";
 import { wompiIntegritySecret } from "../auth/merchantSecrets";
 import {
+  allowAnyOrigin,
+  registerTokenizationPreflight,
+  WOMPI_TOKENIZATION_PREFLIGHT_HEADERS,
+} from "../gateways/tokenizationCors";
+import {
   WompiCreateTransactionRequestBody,
   WompiTokenizeCardRequestBody,
 } from "../gateways/wompi/types";
@@ -439,8 +444,10 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── POST /v1/sim/wompi/tokens/cards (issue #126) ─────────────────────────
+  registerTokenizationPreflight(app, "/v1/sim/wompi/tokens/cards", WOMPI_TOKENIZATION_PREFLIGHT_HEADERS);
   app.post(
     "/v1/sim/wompi/tokens/cards",
+    { onSend: allowAnyOrigin },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const authHeader = request.headers.authorization;
       if (!authHeader || !authHeader.startsWith("Bearer ")) {

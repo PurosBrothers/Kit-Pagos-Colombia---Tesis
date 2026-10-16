@@ -74,7 +74,7 @@ describe("REST module /v1/api", () => {
       await app.close();
     });
 
-    it("should not add CORS headers to the /v1/sim simulation routes", async () => {
+    it("should not add CORS headers to the backend-only /v1/sim simulation routes", async () => {
       const app = buildApp();
 
       const res = await app.inject({

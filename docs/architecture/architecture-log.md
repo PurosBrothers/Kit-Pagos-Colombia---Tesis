@@ -1844,6 +1844,8 @@ Para prevenir fugas accidentales de secretos en terminales, consolas de Render o
 
 **Estado:** Resuelto en código (`simulator-api/src/kit-pagos-api/`, `simulator-api/src/app.ts`, `simulator-api/src/auth/authHook.ts`). El origen permitido por CORS queda en el valor por defecto (`*`); restringirlo por variable de entorno se decide cuando exista el cliente de frontend del issue #109.
 
+> **Revisado en el punto 89.** La decisión 3 dejó de valer para dos rutas de `/v1/sim`: desde el #126 y el #127, el navegador del pagador llama a `POST /v1/sim/wompi/tokens/cards` y `POST /v1/sim/mercadopago/card_tokens`. Esas dos responden el preflight y abren el origen con las cabeceras medidas en cada pasarela; el resto de `/v1/sim` sigue sin CORS.
+
 ---
 
 ### 65. Exposición REST de creación de pagos: preservación del discriminador de outcome, escala decimal exacta y validación originada en el SDK (issue #102)
@@ -2973,6 +2975,76 @@ Se documentó `RENDER_DEPLOY_HOOK_URL` en `.env.example`, permitiendo invocar `c
 - **Guía completa:** Documentada formalmente en `docs/02-arquitectura/4-despliegue-en-render-y-coleccion-postman.md`.
 
 **Estado:** Resuelto en infraestructura, código, pruebas y documentación (`render.yaml`, `simulator-api/postman/`, `CredentialResolver.ts`, `authHook.ts`, `docs/02-arquitectura/4-despliegue-en-render-y-coleccion-postman.md`).
+
+### 89. Las dos rutas de tokenización del simulador responden CORS, como las pasarelas reales (issue #130)
+
+**Responsable:** Joan (issue #130).
+
+**Contexto.**
+El punto 64 (decisión 3) dejó todo `/v1/sim` sin cabeceras CORS, porque entonces solo lo consumía el SDK desde un backend. Desde el #126 y el #127 eso dejó de ser cierto para dos rutas: con el ambiente `simulator`, `KitPagosBrowser` tokeniza la tarjeta desde el navegador del pagador contra `POST /v1/sim/wompi/tokens/cards` y `POST /v1/sim/mercadopago/card_tokens`. Al diseñar el esqueleto de los prototipos (punto 90), que cobran con tarjeta desde una página servida en otro origen, un sondeo con `app.inject()` mostró que el preflight de las dos rutas respondía `404` sin cabeceras CORS: ningún navegador podía tokenizar contra el simulador. Las pruebas del #126 y el #127 no lo detectaban porque `inject()` no envía preflight, el mismo punto ciego que encontró el punto 64.
+
+**Lo medido** (13 de octubre de 2026, 12:22, UTC−5, con `Origin: http://localhost:4000`).
+
+| Petición | Respuesta |
+|---|---|
+| `OPTIONS https://sandbox.wompi.co/v1/tokens/cards`, pidiendo `authorization,content-type` | `200`. `access-control-allow-origin: *`, `access-control-allow-methods: DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT`, `access-control-allow-headers: Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token` |
+| `POST https://sandbox.wompi.co/v1/tokens/cards` sin llave | `401`, con `access-control-allow-origin: *` |
+| `OPTIONS https://api.mercadopago.com/v1/card_tokens?public_key=…`, pidiendo `content-type` | `200`. `access-control-allow-origin: *`, `access-control-allow-credentials: true`, `access-control-allow-headers: accept, content-type, x-request-id, x-product-id, authorization`, `access-control-allow-methods: POST, PUT, GET, OPTIONS, PATCH`, `access-control-max-age: 10` |
+| `POST https://api.mercadopago.com/v1/card_tokens` con una llave inexistente | `404`, con `access-control-allow-origin: *` |
+
+El preflight de Mercado Pago coincide con lo medido el 30 de septiembre (punto 78).
+
+**Decisión: CORS solo en esas dos rutas, con las cabeceras medidas.**
+`src/gateways/tokenizationCors.ts` registra el `OPTIONS` de cada ruta con las cabeceras de su pasarela, y agrega `access-control-allow-origin: *` a toda respuesta del `POST`, también a los errores, como las pasarelas reales. El resto de `/v1/sim` sigue igual: un preflight a `/v1/sim/wompi/transactions` sigue respondiendo `404` sin cabeceras, y una prueba lo comprueba.
+
+*Alternativa descartada.* Registrar `@fastify/cors` en la raíz, o en los plugins de Wompi y de Mercado Pago. Abre todas sus rutas, que solo consume un backend, y responde cabeceras distintas de las medidas.
+
+**Lo verificado.** `test/tokenization-cors.test.ts`, 8 pruebas. Dos mutaciones: sin el `onSend` de Wompi fallan 2, y sin el preflight de Mercado Pago falla 1.
+
+**Estado:** Resuelto en código (`simulator-api/src/gateways/tokenizationCors.ts`, `src/routes/wompi.ts`, `src/routes/mercadopago.ts`).
+
+### 90. El esqueleto común de los prototipos A y B (issue #130, bloque 4)
+
+**Responsable:** Joan (issue #130).
+
+**Contexto.**
+El plan de evaluación (§2) exige que todo lo que no es integración de pagos sea idéntico en los dos prototipos, y propone construir primero un esqueleto común, copiarlo a las dos carpetas y tocar después solo el módulo de pagos. El esqueleto queda fuera del conteo de líneas. El 13 de octubre de 2026 Joan decidió:
+
+- separar el prototipo A (David) y el B (Andrés) en issues propios, cada uno hasta su commit de cierre con Wompi, y dejar en el #130 el esqueleto;
+- construirlo con Fastify y TypeScript, con el HTML servido por el mismo servidor y Jest, como `simulator-api`;
+- cobrar con tarjeta y con PSE.
+
+**Decisión 1: el contrato vive en el esqueleto, fuera del módulo de pagos.**
+`src/checkout/PaymentsPort.ts` es lo único que el esqueleto sabe de pagos, y la comprobación de paridad lo cubre: si estuviera en `src/payments/`, cada prototipo podría acomodarlo a su integración. Reparte las seis funciones del plan (§2):
+
+- `createPayment()` crea el pago (función 1).
+- El `status` de cada respuesta es el estado del comercio: `APPROVED`, `DECLINED` o `PENDING` (función 2).
+- Un rechazo de negocio vuelve como `DECLINED`. Un fallo técnico se reintenta dentro del módulo y, si persiste, sale como `PaymentTechnicalError`; el esqueleto deja la orden en `ERROR` (función 3). El reintento queda dentro del módulo a propósito: B lo hereda del SDK y A lo tiene que escribir, y esa diferencia es parte de lo que se mide.
+- `verifyWebhook()` verifica la firma, y el esqueleto actualiza la orden (función 4).
+- `getPaymentStatus()` consulta el estado (función 5).
+- El `nativeStatus` de cada respuesta va al historial de la orden (función 6).
+
+El monto llega en pesos enteros, porque convertirlo a la unidad de cada pasarela es trabajo de integración. `verifyWebhook()` recibe el cuerpo tal como llegó por la red, las cabeceras y la query: Mercado Pago firma con el `data.id` de la URL (`KitPagos.validateWebhook()`, opción `query`), y el contrato tiene que servir sin cambios para la migración del #133. Por la misma razón es asíncrono: el webhook de Mercado Pago solo trae el identificador, y el estado exige una segunda petición (plan de evaluación, §3).
+
+**Decisión 2: qué es el módulo de pagos.**
+Es `src/payments/` y `test/payments/`. Incluye `src/payments/browser/client.js`, la tokenización de la tarjeta en el navegador: el número va del navegador a la pasarela y nunca pasa por el servidor del comercio, así que esa parte también es integración y se cuenta. Esa llamada desde el navegador es la que destapó el defecto de CORS del punto 89. `prototypes/check-skeleton-parity.sh` compara las dos carpetas sin las carpetas `payments`, y el job `prototypes-parity` de la CI lo corre en cada PR.
+
+**Decisión 3: `kit-pagos-colombia` va en los dos `package.json`.**
+Así el diff entre las carpetas queda vacío también en las dependencias, como pide el criterio del #130, y el esqueleto puede servir el módulo de navegador del SDK en `/vendor/kit-pagos-colombia/browser.js` en los dos. El mismo script falla si el módulo de pagos de A menciona el SDK.
+
+*Alternativa descartada.* Que solo B declare la dependencia y que `package.json` y `package-lock.json` cuenten como parte del módulo de pagos. Exigía una excepción a la regla de paridad que cada lector tendría que recordar.
+
+**Decisión 4: `light-my-request` queda fijado en 6.6.0.**
+Con la instalación nueva, Fastify 5.12.5 resolvió `light-my-request` 6.8.0, que exige `cookie` 2, publicado solo como ESM. Jest en Node 20, la versión de la CI, no lo puede cargar con `require`, y fallaban todas las pruebas que usan `app.inject()` («Must use import to load ES Module»). Un `overrides` deja el mismo árbol que tiene `simulator-api` (`light-my-request` 6.6.0 con `cookie` 1.1.1).
+
+**Lo verificado** (13 de octubre de 2026).
+
+- 42 pruebas en cada prototipo, con un módulo de pagos falso. Tienen 100 % de líneas y 89,58 % de ramas, y el umbral es 80 %, como en el SDK y el simulador.
+- `npm run typecheck` en los dos.
+- El servidor compilado arranca y sirve las páginas y los tres scripts del navegador.
+- `check-skeleton-parity.sh` pasa. Falla con un cambio en el esqueleto de B y con un import del SDK en el módulo de A, y deja pasar el import en el de B.
+
+**Estado:** Resuelto en código (`prototypes/`). Los módulos de pagos de A y B, y sus commits de cierre con Wompi, van en los issues de cada prototipo.
 
 ---
 
