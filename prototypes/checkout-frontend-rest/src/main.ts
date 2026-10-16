@@ -91,9 +91,9 @@ function show(step: CheckoutStep): void {
 }
 
 function showError(error: unknown): void {
-  const { code, message } = error as { code?: string; message?: string };
+  const { code, message, cause } = error as { code?: string; message?: string; cause?: unknown };
   statusLine.textContent = `${code ?? "ERROR"}: ${message ?? String(error)}`;
-  note(`error ${code ?? "ERROR"}`);
+  note(`error ${code ?? "ERROR"}${cause === undefined ? "" : ` (causa: ${String(cause)})`}`);
 }
 
 async function main(): Promise<void> {

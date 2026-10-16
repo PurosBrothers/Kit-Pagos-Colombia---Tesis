@@ -15,6 +15,14 @@
       #warning { background: #fff8e1; border: 1px solid #f0c36d; border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.9rem; }
       #trace { background: #f5f7fa; padding: 0.75rem; white-space: pre-wrap; font-size: 0.85rem; min-height: 3rem; }
     </style>
+    <!-- El hash es el del archivo de esa URL exacta, la de src/tokenizer.ts: si cambia la versión, «npm run check:sri» da el nuevo. -->
+    <script type="importmap">
+      {
+        "integrity": {
+          "https://cdn.jsdelivr.net/npm/kit-pagos-colombia@0.5.0/dist/browser/index.js": "sha384-fBNjpSYaWu2O9yBwClka3kUJEthDPcuWccw4U6RPB56e6j/WKzRkncPclFJ+bxfd"
+        }
+      }
+    </script>
   </head>
   <body>
     <h1>Checkout C</h1>
@@ -62,7 +70,7 @@
         <label>CVC <input name="cvc" value="123" autocomplete="cc-csc" /></label>
         <label>Mes <input name="expMonth" value="12" autocomplete="cc-exp-month" /></label>
         <label>Año <input name="expYear" value="2030" autocomplete="cc-exp-year" /></label>
-        <label>Titular <input name="cardHolder" value="APRO" autocomplete="cc-name" /></label>
+        <label>Titular <input name="cardHolder" value="APRO Ruiz" autocomplete="cc-name" /></label>
       </fieldset>
 
       <button type="submit">Pagar</button>

@@ -11,7 +11,7 @@ export default defineConfig({
     include: ["test/**/*.test.ts"],
     coverage: {
       provider: "v8",
-      include: ["src/**/*.ts", "server.mjs"],
+      include: ["src/**/*.ts", "server.mjs", "scripts/**/*.mjs"],
       // `main.ts` solo conecta el DOM con `checkout.ts`; lo ejercita la medición en el navegador.
       exclude: ["src/main.ts"],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },

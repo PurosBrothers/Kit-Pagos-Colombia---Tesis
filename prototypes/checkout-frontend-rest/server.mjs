@@ -1,6 +1,6 @@
 // @ts-check
 import { createServer } from "node:http";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +28,16 @@ const CONTENT_TYPES = {
 
 const PUBLIC_KEY_PREFIX = "CHECKOUT_PUBLIC_KEY_";
 
+/**
+ * Lo único que se lee del `.env`: `<PASARELA>_PUBLIC_KEY`, con la pasarela en una sola palabra,
+ * que es como la API nombra las llaves públicas. El mismo archivo guarda llaves privadas y
+ * secretos, y ninguno tiene esa forma; un valor que no se lee no puede llegar a `/config.json`.
+ */
+const ENV_FILE_PUBLIC_KEY = /^([A-Z][A-Z0-9]*)_PUBLIC_KEY$/;
+
+/** El `.env` de la raíz del repositorio, el mismo que lee la API de Simulación. */
+export const DEFAULT_ENV_FILE = fileURLToPath(new URL("../../.env", import.meta.url));
+
 /** La API de Simulación desplegada. Con ella el prototipo corre sin encender nada en local. */
 export const DEFAULT_API_URL = "https://kit-pagos-colombia.onrender.com/v1/api";
 
@@ -45,11 +55,18 @@ export const USAGE = `Uso: npm start -- [opciones]
   --public-key=<pasarela>:<llave>
                                 La llave pública que hace falta para tokenizar una tarjeta.
                                 Se puede repetir, una vez por pasarela
+  --dotenv=<ruta>               El .env del que se leen las llaves públicas. Por omisión, el
+                                de la raíz del repositorio: ${DEFAULT_ENV_FILE}
   --port=<puerto>               Puerto de este servidor (por omisión 4100)
   --help                        Esta ayuda
 
 Las mismas opciones, como variables de entorno: KIT_PAGOS_API_URL, KIT_PAGOS_ENVIRONMENT,
-CHECKOUT_PUBLIC_KEY_<PASARELA> y PORT. Un argumento gana sobre su variable.`;
+CHECKOUT_PUBLIC_KEY_<PASARELA>, KIT_PAGOS_DOTENV y PORT. Un argumento gana sobre su variable.
+
+Del .env solo se leen las variables <PASARELA>_PUBLIC_KEY, con los nombres que usa la API; el
+resto del archivo no se lee. Por cada pasarela, --public-key gana sobre
+CHECKOUT_PUBLIC_KEY_<PASARELA>, y esa variable sobre el archivo. Si el .env de la raíz no existe,
+el servidor arranca sin él; si no existe el que se pidió con --dotenv, no arranca.`;
 
 /** @param {string | undefined} value */
 function resolveEnvironment(value) {
@@ -81,12 +98,17 @@ function resolveApiUrl(value) {
  * @property {string} [environment]
  * @property {number} [port]
  * @property {Record<string, string>} [publicKeys]
+ * @property {string} [dotenv]
  * @property {boolean} [help]
  */
 
 /**
  * Lee `--opción=valor` y `--opción valor`. Lo que no reconoce es un error y no se ignora: una
  * opción mal escrita que se descarta deja el servidor apuntando a donde no se quería.
+ *
+ * La del `.env` se llama `--dotenv` y no `--env-file` porque Node revisa por su cuenta un
+ * `--env-file` aunque vaya después del script, y si el archivo no existe termina con código 9
+ * antes de llegar aquí (medido el 15 de octubre de 2026 en Node 20.20.2, 22.22.3 y 24.19.0).
  *
  * @param {string[]} argv
  * @returns {CliOptions}
@@ -102,7 +124,7 @@ export function parseArguments(argv) {
       options.help = true;
       continue;
     }
-    const match = /^--(api-url|environment|public-key|port)(?:=(.*))?$/.exec(argument);
+    const match = /^--(api-url|environment|public-key|dotenv|port)(?:=(.*))?$/.exec(argument);
     if (!match) {
       throw new Error(`Argumento desconocido: ${argument}. Use --help para ver las opciones.`);
     }
@@ -120,6 +142,8 @@ export function parseArguments(argv) {
       options.apiUrl = value;
     } else if (name === "environment") {
       options.environment = value;
+    } else if (name === "dotenv") {
+      options.dotenv = value;
     } else if (name === "port") {
       const port = Number(value);
       if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -140,35 +164,117 @@ export function parseArguments(argv) {
 }
 
 /**
- * `/config.json`, armado de los argumentos y del entorno. Cada `CHECKOUT_PUBLIC_KEY_<PASARELA>`
- * se entrega con el nombre de la pasarela en minúsculas, que es el valor que usa la API.
+ * Las llaves públicas de un `.env`, y nada más del archivo. Se lee como lo leen
+ * `loadServerEnv()` de la API y `sandbox-env.ts` del SDK —corta en el primer `=`, recorta
+ * espacios, salta comentarios y líneas vacías, no quita comillas, y si un nombre se repite vale
+ * el primero, como en la API— para que el mismo archivo dé la misma llave aquí y allí.
+ *
+ * @param {string} content
+ * @returns {Record<string, string>}
+ */
+export function publicKeysFromEnvFile(content) {
+  /** @type {Record<string, string>} */
+  const firstValues = {};
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    const separator = trimmed.indexOf("=");
+    if (!trimmed || trimmed.startsWith("#") || separator < 0) {
+      continue;
+    }
+    const match = ENV_FILE_PUBLIC_KEY.exec(trimmed.slice(0, separator).trim());
+    const gateway = match?.[1].toLowerCase();
+    if (gateway && !(gateway in firstValues)) {
+      firstValues[gateway] = trimmed.slice(separator + 1).trim();
+    }
+  }
+  return Object.fromEntries(Object.entries(firstValues).filter(([, value]) => value));
+}
+
+/**
+ * @typedef {object} EnvFile
+ * @property {string} path
+ * @property {boolean} found
+ * @property {Record<string, string>} publicKeys
+ */
+
+/**
+ * Lee el `.env` de `--dotenv`, de `KIT_PAGOS_DOTENV` o, sin ninguno, el de la raíz. Que
+ * falte el de la raíz no es un error: un clon sin credenciales también arranca. Que falte uno
+ * pedido sí lo es, porque arrancar sin sus llaves no es lo que se pidió.
+ *
+ * Se lee también con el ambiente `simulator`: las rutas de tokenización del simulador aceptan
+ * cualquier llave pública que no esté vacía ni lleve una marca de credencial inválida, aunque
+ * no sea la que él tiene configurada (medido el 15 de octubre de 2026).
+ *
+ * @param {NodeJS.ProcessEnv} env
+ * @param {CliOptions} options
+ * @param {string} defaultPath
+ * @returns {EnvFile}
+ */
+export function readEnvFile(env, options, defaultPath) {
+  const requestedBy = options.dotenv ? "--dotenv" : env.KIT_PAGOS_DOTENV ? "KIT_PAGOS_DOTENV" : undefined;
+  const path = resolve(options.dotenv || env.KIT_PAGOS_DOTENV || defaultPath);
+  if (!existsSync(path)) {
+    if (requestedBy) {
+      throw new Error(`El archivo «${path}» de ${requestedBy} no existe.`);
+    }
+    return { path, found: false, publicKeys: {} };
+  }
+  return { path, found: true, publicKeys: publicKeysFromEnvFile(readFileSync(path, "utf8")) };
+}
+
+/** @typedef {"argumento" | "variable" | "archivo"} KeySource */
+
+/**
+ * La llave pública de cada pasarela y de dónde salió. Por pasarela, el argumento gana sobre
+ * `CHECKOUT_PUBLIC_KEY_<PASARELA>` y esa variable sobre el `.env`. La pasarela va en minúsculas,
+ * que es el valor que usa la API.
+ *
+ * @param {NodeJS.ProcessEnv} env
+ * @param {CliOptions} [options]
+ * @param {Record<string, string>} [fileKeys]
+ * @returns {Record<string, { key: string, source: KeySource }>}
+ */
+export function resolvePublicKeys(env, options = {}, fileKeys = {}) {
+  /** @type {Record<string, { key: string, source: KeySource }>} */
+  const resolved = {};
+  for (const [gateway, key] of Object.entries(fileKeys)) {
+    resolved[gateway] = { key, source: "archivo" };
+  }
+  for (const [name, value] of Object.entries(env)) {
+    if (name.startsWith(PUBLIC_KEY_PREFIX) && value) {
+      resolved[name.slice(PUBLIC_KEY_PREFIX.length).toLowerCase()] = { key: value, source: "variable" };
+    }
+  }
+  for (const [gateway, key] of Object.entries(options.publicKeys ?? {})) {
+    resolved[gateway] = { key, source: "argumento" };
+  }
+  return resolved;
+}
+
+/**
+ * `/config.json`, armado de los argumentos, del entorno y de las llaves del `.env`.
  * Un valor inválido lanza un error: el servidor no arranca con una configuración a medias.
  *
  * @param {NodeJS.ProcessEnv} env
  * @param {CliOptions} [options]
+ * @param {Record<string, string>} [fileKeys]
  */
-export function clientConfigFrom(env, options = {}) {
-  /** @type {Record<string, string>} */
-  const publicKeys = {};
-  for (const [name, value] of Object.entries(env)) {
-    if (name.startsWith(PUBLIC_KEY_PREFIX) && value) {
-      publicKeys[name.slice(PUBLIC_KEY_PREFIX.length).toLowerCase()] = value;
-    }
-  }
-  Object.assign(publicKeys, options.publicKeys);
+export function clientConfigFrom(env, options = {}, fileKeys = {}) {
+  const resolved = resolvePublicKeys(env, options, fileKeys);
   return {
     apiBaseUrl: resolveApiUrl(options.apiUrl || env.KIT_PAGOS_API_URL),
     environment: resolveEnvironment(options.environment || env.KIT_PAGOS_ENVIRONMENT),
-    publicKeys,
+    publicKeys: Object.fromEntries(Object.entries(resolved).map(([gateway, { key }]) => [gateway, key])),
   };
 }
 
 /**
- * @param {{ root: string, env?: NodeJS.ProcessEnv, options?: CliOptions }} settings
+ * @param {{ root: string, env?: NodeJS.ProcessEnv, options?: CliOptions, fileKeys?: Record<string, string> }} settings
  */
-export function createStaticServer({ root, env = process.env, options = {} }) {
+export function createStaticServer({ root, env = process.env, options = {}, fileKeys = {} }) {
   const rootDir = resolve(root);
-  const config = JSON.stringify(clientConfigFrom(env, options));
+  const config = JSON.stringify(clientConfigFrom(env, options, fileKeys));
 
   return createServer(async (request, response) => {
     const { pathname } = new URL(request.url ?? "/", "http://localhost");
@@ -209,27 +315,50 @@ export function createStaticServer({ root, env = process.env, options = {} }) {
 
 /**
  * Todo lo que hace `npm start` salvo escuchar en el puerto, para poder probarlo: lee los
- * argumentos, comprueba que el build existe y arma el servidor. Cualquier problema sale como
- * un `Error` con un mensaje que dice qué corregir.
+ * argumentos y el `.env`, comprueba que el build existe y arma el servidor. Cualquier problema
+ * sale como un `Error` con un mensaje que dice qué corregir.
  *
  * @param {string[]} argv
  * @param {NodeJS.ProcessEnv} env
  * @param {string} root
+ * @param {string} [defaultEnvFile]
  */
-export function prepareServer(argv, env, root) {
+export function prepareServer(argv, env, root, defaultEnvFile = DEFAULT_ENV_FILE) {
   const options = parseArguments(argv);
   if (options.help) {
     return { help: USAGE };
   }
-  const config = clientConfigFrom(env, options);
+  const envFile = readEnvFile(env, options, defaultEnvFile);
+  const config = clientConfigFrom(env, options, envFile.publicKeys);
   if (!existsSync(join(root, "index.html"))) {
     throw new Error("Falta el build del cliente: corra «npm run build» antes de «npm start».");
   }
+  const sources = Object.fromEntries(
+    Object.entries(resolvePublicKeys(env, options, envFile.publicKeys)).map(([gateway, { source }]) => [gateway, source]),
+  );
   return {
     config,
+    sources,
+    envFile: { path: envFile.path, found: envFile.found },
     port: options.port ?? (Number(env.PORT) || 4100),
-    server: createStaticServer({ root, env, options }),
+    server: createStaticServer({ root, env, options, fileKeys: envFile.publicKeys }),
   };
+}
+
+/**
+ * Lo que imprime `npm start` al arrancar: de dónde salió cada llave pública, nunca su valor.
+ *
+ * @param {{ config: { apiBaseUrl: string, environment: string }, port: number, sources: Record<string, KeySource>, envFile: { path: string, found: boolean } }} prepared
+ */
+export function startupSummary({ config, port, sources, envFile }) {
+  const withKey = Object.entries(sources).map(([gateway, source]) => `${gateway} (${source})`);
+  return [
+    `Prototipo C en http://localhost:${port}`,
+    `  API:      ${config.apiBaseUrl}`,
+    `  Ambiente: ${config.environment}`,
+    `  Llaves públicas para tarjeta: ${withKey.length ? withKey.join(", ") : "ninguna"}`,
+    `  Archivo .env: ${envFile.path}${envFile.found ? "" : " (no existe; no se leyó)"}`,
+  ].join("\n");
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -242,13 +371,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if ("help" in prepared) {
       console.log(prepared.help);
     } else {
-      const { config, port, server } = prepared;
-      server.listen(port, "127.0.0.1", () => {
-        console.log(`Prototipo C en http://localhost:${port}`);
-        console.log(`  API:      ${config.apiBaseUrl}`);
-        console.log(`  Ambiente: ${config.environment}`);
-        const withKey = Object.keys(config.publicKeys);
-        console.log(`  Llaves públicas para tarjeta: ${withKey.length ? withKey.join(", ") : "ninguna"}`);
+      prepared.server.listen(prepared.port, "127.0.0.1", () => {
+        console.log(startupSummary(prepared));
       });
     }
   } catch (error) {

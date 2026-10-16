@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createKitPagosApi, KitPagosApiError } from "../src/api";
 import {
+  CardModuleError,
   describeOutcome,
   payWithCard,
   payWithPse,
@@ -13,7 +14,7 @@ import {
   type Order,
   type PollOptions,
 } from "../src/checkout";
-import type { CardTokenizer } from "../src/tokenizer";
+import { KIT_PAGOS_BROWSER_URL, loadCardTokenizer, type CardTokenizer } from "../src/tokenizer";
 import { createFakeApi, FIXTURES, GATEWAYS, transaction } from "./helpers/fakeApi";
 
 const API = "http://localhost:3000/v1/api";
@@ -51,7 +52,7 @@ function memoryStorage(): KeyValueStorage & { data: Map<string, string> } {
   };
 }
 
-const CARD = { number: CARD_NUMBER, cvc: "123", expMonth: "12", expYear: "2030", cardHolder: "APRO", docType: "CC", docNumber: "1020304050" };
+const CARD = { number: CARD_NUMBER, cvc: "123", expMonth: "12", expYear: "2030", cardHolder: "APRO Ruiz", docType: "CC", docNumber: "1020304050" };
 
 describe("PSE through /v1/api, the same code for the four gateways", () => {
   it.each(GATEWAYS)("%s: lists the banks, redirects and reads the final status after the return", async (gateway) => {
@@ -170,6 +171,35 @@ describe("card payments", () => {
         NO_WAIT,
       ),
     ).rejects.toMatchObject({ code: "UNSUPPORTED_OPERATION" });
+    expect(calls).toEqual([]);
+  });
+
+  it("says the card module did not load or failed integrity, keeps the browser's error, and calls nothing", async () => {
+    const { fetchFn, calls } = createFakeApi();
+    const browserError = new TypeError(`Failed to fetch dynamically imported module: ${KIT_PAGOS_BROWSER_URL}`);
+    const importer = vi.fn(async () => {
+      throw browserError;
+    });
+
+    const paying = payWithCard(
+      {
+        api: createKitPagosApi(API, fetchFn),
+        loadTokenizer: () => loadCardTokenizer(importer),
+        publicKeys: { wompi: "pub_test_placeholder" },
+        environment: "simulator",
+      },
+      orderFor("wompi"),
+      CARD,
+      NO_WAIT,
+    );
+
+    await expect(paying).rejects.toBeInstanceOf(CardModuleError);
+    await expect(paying).rejects.toMatchObject({
+      code: "CARD_MODULE_UNAVAILABLE",
+      message: "No se pudo cargar el módulo de tarjeta o no pasó la verificación de integridad. La tarjeta no se envió.",
+      cause: browserError,
+    });
+    expect(importer).toHaveBeenCalledWith(KIT_PAGOS_BROWSER_URL);
     expect(calls).toEqual([]);
   });
 

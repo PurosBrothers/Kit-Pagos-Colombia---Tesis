@@ -128,6 +128,22 @@ export interface CardDependencies {
 }
 
 /**
+ * El módulo de tarjeta no se pudo importar. El navegador rechaza igual, con un `TypeError`, la
+ * descarga fallida y el archivo que no coincide con el hash del import map, así que el mensaje
+ * nombra las dos causas; el error original queda en `cause` para la traza.
+ */
+export class CardModuleError extends Error {
+  readonly code = "CARD_MODULE_UNAVAILABLE";
+
+  constructor(cause: unknown) {
+    super("No se pudo cargar el módulo de tarjeta o no pasó la verificación de integridad. La tarjeta no se envió.", {
+      cause,
+    });
+    this.name = "CardModuleError";
+  }
+}
+
+/**
  * Tokeniza en el navegador y cobra con el token. La tarjeta solo entra en `tokenizeCard()`,
  * que la manda a la ruta de tokenización de la pasarela; a `/v1/api` llega el token.
  *
@@ -140,7 +156,12 @@ export async function payWithCard(
   card: CardInput,
   poll: PollOptions = DEFAULT_POLL,
 ): Promise<CheckoutStep> {
-  const tokenizer = await deps.loadTokenizer();
+  let tokenizer: CardTokenizer;
+  try {
+    tokenizer = await deps.loadTokenizer();
+  } catch (error) {
+    throw new CardModuleError(error);
+  }
   const { token } = await tokenizer.tokenizeCard({
     gateway: order.gateway,
     publicKey: deps.publicKeys[order.gateway] ?? "",
