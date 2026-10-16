@@ -707,6 +707,49 @@ describe("MercadoPagoAdapter PSE", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * La orden que nace `processing` sin URL (15 de octubre de 2026, 21:33–21:44) vuelve como
+   * transacción pendiente, y la consulta de unos segundos después la da rechazada con el
+   * motivo `processing_error`, que es como terminaron las 12 órdenes medidas.
+   */
+  it("should return an order born processing without a URL as PENDING, and read it back DECLINED", async () => {
+    const processingPayment = {
+      id: "PAY01M2V7ZQHMX28P0086V5NZ9QRM",
+      status: "processing",
+      status_detail: "in_process",
+      payment_method: { id: "pse", type: "bank_transfer", financial_institution: "1051" },
+    };
+    const processingOrder = {
+      ...createdOrder,
+      status: "processing",
+      status_detail: "in_process",
+      transactions: { payments: [processingPayment] },
+    };
+    const failedOrder = {
+      ...processingOrder,
+      status: "failed",
+      status_detail: "failed",
+      transactions: {
+        payments: [{ ...processingPayment, status: "failed", status_detail: "processing_error" }],
+      },
+    };
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 201, json: async () => processingOrder })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => failedOrder });
+    const adapter = new MercadoPagoAdapter();
+
+    const result = await adapter.createPayment(pseRequest);
+    expect(result.outcome).toBe("TRANSACTION");
+    if (result.outcome !== "TRANSACTION") return;
+    expect(result.transaction.getStatus()).toBe("PENDING");
+    expect(result.transaction.rawStatus).toBe("processing");
+
+    const read = await adapter.getStatus(result.transaction.gatewayTransactionId.value);
+    expect(read.getStatus()).toBe("DECLINED");
+    expect(read.rejectionReason?.rejectionCode).toBe("processing_error");
+  });
+
   it("should send whole pesos because the Orders API rejects decimals", async () => {
     const mockFetch = mockCreatedOrder();
 

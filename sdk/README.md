@@ -306,6 +306,14 @@ async function pagarConPSE() {
 > orden se crea con el pago fallido. En los dos casos `createPayment()` devuelve la transacción
 > normalizada (en Mercado Pago, `DECLINED` con el identificador de la orden) en vez de una
 > redirección hacia un pago que ya terminó.
+>
+> En Mercado Pago, la orden también puede nacer `processing` sin URL del banco: el 15 de octubre
+> de 2026, entre las 21:33 y las 21:44, pasó con 12 de 12 órdenes, que unos 4 segundos después
+> estaban rechazadas con `processing_error`. Desde la 0.6.0-rc.2, `createPayment()` la devuelve
+> como una transacción `PENDING` con el identificador de la orden y `rawStatus` `processing`, en
+> vez de fallar con `MALFORMED_RESPONSE`. Consulte su estado con `getPaymentStatus()` para
+> conocer el desenlace: esas órdenes terminaron en `failed / processing_error`, que el SDK
+> entrega como `DECLINED` con `rejectionCode` `processing_error`.
 
 > Mercado Pago exige además `ipAddress`, la IP del pagador. Desde la versión 0.6.0 el SDK la
 > normaliza antes de enviarla: quita los espacios, convierte `::ffff:a.b.c.d` en `a.b.c.d` y
@@ -334,7 +342,8 @@ async function verificarEstado(transactionId: string) {
 `rejectionReason` solo existe cuando el estado es `DECLINED`. `rejectionCode` es el código nativo tal como lo envía la pasarela: el `status_detail` en Mercado Pago, el `failure_code` en Rapyd y el `responseCode` en Kushki. Wompi no envía un código de rechazo, así que en Wompi `rejectionReason` queda vacío. `rejectionCategory` es una categoría normalizada solo cuando hay una fuente para la correspondencia; en los demás casos es `UNKNOWN`, y conviene decidir con el código nativo.
 
 `getPaymentStatus()` y `getPseBanks()` se reintentan solos ante fallos transitorios
-(`CONNECTION_FAILED`, `GATEWAY_TIMEOUT`, `GATEWAY_SERVER_ERROR`, `RATE_LIMIT_EXCEEDED`), hasta
+(`CONNECTION_FAILED`, `GATEWAY_TIMEOUT`, `GATEWAY_SERVER_ERROR`, `RATE_LIMIT_EXCEEDED`,
+`RESOURCE_LOCKED`), hasta
 `maxRetries` veces (3 por omisión) con retroceso exponencial. Si el fallo persiste en todos los
 intentos, la operación termina en `MAX_RETRIES_EXCEEDED`, con el último error en `cause`:
 
@@ -459,6 +468,12 @@ async function cobrarConDiagnostico(request: CreatePaymentRequest) {
 > no haya llegado a tiempo no prueba que la pasarela no haya creado el cobro, y repetirlo podría
 > cobrar dos veces. Antes de volver a cobrar, confirme el estado con `getPaymentStatus()` o
 > espere el webhook.
+>
+> La pasarela tampoco lo evita por usted. Medido en Mercado Pago el 15 de octubre de 2026: dos
+> cobros con la misma `orderReference` crearon dos órdenes y se cobraron los dos, con tarjeta y
+> con PSE. El SDK manda una llave de idempotencia nueva en cada llamada, a propósito: con la
+> misma llave, Mercado Pago responde una copia del primer resultado, y reintentar un rechazo con
+> otra tarjeta daría `409` (`INVALID_REQUEST`).
 
 ---
 
@@ -470,6 +485,7 @@ async function cobrarConDiagnostico(request: CreatePaymentRequest) {
 - `RATE_LIMIT_EXCEEDED`: Límite de tasa de solicitudes superado (HTTP 429).
 - `INVALID_REQUEST`: Parámetros de cobro malformados o rechazados por validación (HTTP 400/409/422).
 - `RESOURCE_NOT_FOUND`: Transacción u orden no encontrada (HTTP 404).
+- `RESOURCE_LOCKED`: La pasarela está procesando otra petición con la misma llave (HTTP 423, medido en la Orders API de Mercado Pago). Es transitorio: se reintenta solo en `getPaymentStatus()` y `getPseBanks()`.
 - `GATEWAY_SERVER_ERROR`: Error interno en los servidores de la pasarela (HTTP 5xx).
 - `MALFORMED_RESPONSE`: Respuesta o webhook no interpretable como JSON válido.
 - `WEBHOOK_SIGNATURE_INVALID`: Firma digital de webhook inválida o timestamp caducado.

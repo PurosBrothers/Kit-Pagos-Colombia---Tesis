@@ -4,7 +4,7 @@ import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode"
 
 /**
  * Familias de error para la política de reintentos (RetryHandler).
- * - RETRIABLE: fallos transitorios de red, socket timeout, HTTP 408, 429 o HTTP 5xx.
+ * - RETRIABLE: fallos transitorios de red, socket timeout, HTTP 408, 423, 429 o HTTP 5xx.
  * - FINAL: errores definitivos que no deben reintentarse (HTTP 4xx, credenciales inválidas, rechazos de negocio).
  */
 export enum ErrorFamily {
@@ -18,6 +18,7 @@ const RETRIABLE_CODES: readonly KitPagosErrorCode[] = [
   KitPagosErrorCode.GATEWAY_TIMEOUT,
   KitPagosErrorCode.GATEWAY_SERVER_ERROR,
   KitPagosErrorCode.RATE_LIMIT_EXCEEDED,
+  KitPagosErrorCode.RESOURCE_LOCKED,
 ];
 
 /**
@@ -209,10 +210,14 @@ function formatGatewayName(gateway: Gateway): string {
  * consistentes en cuál devuelven ante una llave inválida, y para el comercio la
  * acción correctiva es la misma.
  *
- * 409 es INVALID_REQUEST y no UNKNOWN_ERROR (issue #122): un conflicto, como un cobro
- * duplicado, lo corrige el comercio cambiando la petición, y reintentarla igual daría
- * el mismo 409. Que una pasarela real responda 409 no está medido; el que se conoce es
- * el del escenario `DUPLICATE_PAYMENT` de la API de Simulación.
+ * 409 es INVALID_REQUEST y no UNKNOWN_ERROR (issue #122): un conflicto lo corrige el
+ * comercio cambiando la petición, y reintentarla igual daría el mismo 409. Medido en la
+ * Orders API de Mercado Pago el 15 de octubre de 2026: una llave de idempotencia ya usada
+ * con otro cuerpo responde `409 idempotency_key_already_used`.
+ *
+ * 423 es RESOURCE_LOCKED y se reintenta: en la misma medición, la misma llave mandada en
+ * paralelo respondió `423 resource_locked` («retry after some time») mientras la primera
+ * petición seguía en curso.
  */
 function mapHttpStatus(httpStatus: number): KitPagosErrorCode {
   switch (httpStatus) {
@@ -221,6 +226,8 @@ function mapHttpStatus(httpStatus: number): KitPagosErrorCode {
       return KitPagosErrorCode.INVALID_CREDENTIALS;
     case 404:
       return KitPagosErrorCode.RESOURCE_NOT_FOUND;
+    case 423:
+      return KitPagosErrorCode.RESOURCE_LOCKED;
     case 408:
       return KitPagosErrorCode.GATEWAY_TIMEOUT;
     case 429:

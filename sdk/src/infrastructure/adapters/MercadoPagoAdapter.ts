@@ -80,8 +80,8 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
    * Crea un pago con tarjeta o con PSE.
    *
    * Desde la versión 0.6.0 los dos van por la Orders API (`POST /orders`). Tarjeta resuelve en
-   * la misma respuesta; PSE devuelve una redirección. Lo medido está en `mercadopago-card.ts`
-   * y en `mercadopago-pse.ts`.
+   * la misma respuesta; PSE devuelve una redirección, o una transacción si la orden nace sin
+   * URL. Lo medido está en `mercadopago-card.ts` y en `mercadopago-pse.ts`.
    */
   async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
     assertSupportedPaymentMethod(request.paymentMethod, Gateway.MERCADOPAGO, [
@@ -102,8 +102,9 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
       );
 
       // La URL del banco ya viene en la creación, así que no hay sondeo como en
-      // Wompi; y una orden cuyo pago falló llega con 402 y se normaliza DECLINED.
-      // Ver los puntos 3 y 4 de `mercadopago-pse.ts`.
+      // Wompi; una orden cuyo pago falló llega con 402 y se normaliza DECLINED, y
+      // una que nace sin URL vuelve como transacción. Ver los puntos 3, 4 y 7 de
+      // `mercadopago-pse.ts`.
       return resolveOrderOutcome(rawResponse, (raw) =>
         this.normalizer.normalize(raw, Gateway.MERCADOPAGO),
       );
@@ -186,12 +187,17 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
    *
    * Es un valor nuevo por llamada y no derivado de `orderReference`, que era la alternativa
    * tentadora: con la referencia como llave, dos intentos de cobrar la misma orden producirían
-   * un solo cobro, lo cual suena a más seguridad. El problema es que Mercado Pago devuelve la
-   * respuesta original para una llave repetida, así que un cobro rechazado quedaría
-   * incobrable: reintentarlo con otra tarjeta sobre la misma orden devolvería el rechazo
-   * viejo. La protección contra el doble débito en este SDK es otra y ya está tomada:
-   * `createPayment()` es la única operación que **no** se envuelve en `RetryHandler`
-   * (punto 35 del `architecture-log.md`).
+   * un solo cobro, lo cual suena a más seguridad. Medido en la Orders API el 15 de octubre de
+   * 2026 (`docs/testing-data/mercado-pago.md`): con la misma llave y el mismo cuerpo responde
+   * una copia de la respuesta original, y con otro cuerpo responde `409
+   * idempotency_key_already_used`. Así que un cobro rechazado quedaría incobrable:
+   * reintentarlo con otra tarjeta sobre la misma orden daría `409`.
+   *
+   * La llave aleatoria no protege del doble cobro, y Mercado Pago tampoco lo hace por la
+   * referencia: dos órdenes con el mismo `external_reference` y llaves distintas se crearon
+   * y se cobraron las dos. La protección del SDK es que `createPayment()` es la única
+   * operación que **no** se envuelve en `RetryHandler` (punto 35 del `architecture-log.md`);
+   * antes de reintentar un cobro, el comercio confirma que el intento anterior no se cobró.
    */
   private async request(url: string, method: string, body?: string): Promise<unknown> {
     const headers: Record<string, string> = {

@@ -51,6 +51,14 @@
  *    validación y muere después en `processing_error`, igual que en Wompi. Y por
  *    debajo del mínimo de la cuenta (1600 COP) responde 422.
  *
+ * 7. **Una orden puede nacer sin URL.** Medido el 15 de octubre de 2026 con el vendedor de
+ *    prueba (`docs/testing-data/mercado-pago.md`): entre las 21:33 y las 21:44, 12 de 12
+ *    órdenes nacieron `processing / in_process` con `201` y sin `redirect_url`, y pasaron
+ *    a `failed / processing_error` en unos 4 s; a las 13:12 el mismo cuerpo había nacido
+ *    `action_required` con la URL. Por eso una orden que se puede leer y no trae URL se
+ *    devuelve como transacción (`processing` es `PENDING`) y no como error: el comercio
+ *    tiene el identificador y la consulta le dice cómo terminó.
+ *
  * ## Qué es obligatorio, medido por omisión
  *
  * Cada uno de estos campos, quitado por separado, devuelve `400` con
@@ -286,27 +294,50 @@ function firstPayment(rawResponse: unknown): Record<string, unknown> | undefined
   return payment as Record<string, unknown>;
 }
 
+/** La orden de la respuesta, venga suelta o dentro de `data`. */
+function orderOf(rawResponse: unknown): Record<string, unknown> | undefined {
+  return (readObject(rawResponse, "data") ?? rawResponse) as Record<string, unknown> | undefined;
+}
+
+/** La URL del banco del primer pago, o `undefined` si no viene. */
+function redirectUrlOf(rawResponse: unknown): string | undefined {
+  const url = readObject(firstPayment(rawResponse), "payment_method")?.redirect_url;
+  return typeof url === "string" && url.length > 0 ? url : undefined;
+}
+
+/**
+ * Si la respuesta trae una orden con estado, pero sin la URL del banco.
+ *
+ * Es la orden que nace `processing` (punto 7 del encabezado). Sin estado no hay nada que
+ * normalizar, y sin identificador el normalizador lanza `MALFORMED_RESPONSE`: las dos son
+ * respuestas malformadas.
+ */
+function isOrderWithoutRedirect(rawResponse: unknown): boolean {
+  const status = orderOf(rawResponse)?.status;
+  return (
+    typeof status === "string" && status.length > 0 && redirectUrlOf(rawResponse) === undefined
+  );
+}
+
 /**
  * Convierte la respuesta de creación en una redirección pendiente.
  *
  * Lanza si no hay URL, en vez de devolver una redirección vacía, por la misma
  * razón que el sondeo de Wompi lanza (punto 43): el comercio recibiría algo que
  * parece válido, no redirigiría a nadie, y el pago quedaría colgado hasta
- * expirar. El error lleva el identificador porque la orden **ya existe** en la
- * pasarela y perderlo volvería irrastreable un cobro real.
+ * expirar. El error lleva el identificador, si lo hay, porque la orden puede
+ * existir en la pasarela. `resolveOrderOutcome()` no llega aquí con una orden que
+ * se puede leer: esa vuelve como transacción.
  */
 export function extractOrderRedirect(rawResponse: unknown): PendingRedirect {
-  const order = (readObject(rawResponse, "data") ?? rawResponse) as
-    | Record<string, unknown>
-    | undefined;
+  const order = orderOf(rawResponse);
   const payment = firstPayment(rawResponse);
-  const method = readObject(payment, "payment_method");
 
   const orderId = String(order?.id ?? "");
-  const redirectUrl = method?.redirect_url;
+  const redirectUrl = redirectUrlOf(rawResponse);
   const rawStatus = String(order?.status ?? payment?.status ?? "");
 
-  if (typeof redirectUrl !== "string" || redirectUrl.length === 0) {
+  if (redirectUrl === undefined) {
     throw new KitPagosError(
       KitPagosErrorCode.MALFORMED_RESPONSE,
       Gateway.MERCADOPAGO,
@@ -362,15 +393,17 @@ export function acceptFailedOrder(httpStatus: number, failure: KitPagosError): u
 }
 
 /**
- * El resultado de crear una orden de PSE: la orden fallida normalizada, o la redirección.
+ * El resultado de crear una orden de PSE: la orden fallida o sin URL normalizada, o la
+ * redirección.
  *
- * El normalizador lee la orden de `data`, así que recibe el cuerpo del `402` tal cual.
+ * El normalizador lee la orden de `data`, así que recibe el cuerpo del `402` tal cual. Una
+ * orden sin URL sale con el estado que traiga: la medida, `processing`, es `PENDING`.
  */
 export function resolveOrderOutcome(
   rawResponse: unknown,
   normalize: (rawResponse: unknown) => Transaction,
 ): PaymentResult {
-  if (isFailedOrderBody(rawResponse)) {
+  if (isFailedOrderBody(rawResponse) || isOrderWithoutRedirect(rawResponse)) {
     return transactionResult(normalize(rawResponse));
   }
   return redirectRequired(extractOrderRedirect(rawResponse));

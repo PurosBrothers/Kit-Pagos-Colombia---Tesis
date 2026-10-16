@@ -18,6 +18,7 @@ describe("ErrorHandler", () => {
         KitPagosErrorCode.GATEWAY_TIMEOUT,
         KitPagosErrorCode.GATEWAY_SERVER_ERROR,
         KitPagosErrorCode.RATE_LIMIT_EXCEEDED,
+        KitPagosErrorCode.RESOURCE_LOCKED,
       ];
 
       for (const code of retriableCodes) {
@@ -268,6 +269,24 @@ describe("ErrorHandler", () => {
     it("maps 429 to RATE_LIMIT_EXCEEDED", () => {
       const result = errorHandler.handle({ status: 429, body: "Too Many Requests" }, Gateway.WOMPI);
       expect(result.code).toBe(KitPagosErrorCode.RATE_LIMIT_EXCEEDED);
+    });
+
+    /** El cuerpo medido en la Orders API de Mercado Pago el 15 de octubre de 2026. */
+    it("maps 423 to RESOURCE_LOCKED and classifies it as retriable", () => {
+      const locked = {
+        errors: [
+          {
+            code: "resource_locked",
+            message: "Idempotency key locked. Please retry after some time.",
+          },
+        ],
+      };
+
+      const result = errorHandler.handle({ status: 423, body: locked }, Gateway.MERCADOPAGO);
+
+      expect(result.code).toBe(KitPagosErrorCode.RESOURCE_LOCKED);
+      expect(result.originalPayload).toEqual(locked);
+      expect(isRetriable(result)).toBe(true);
     });
 
     it("maps 400 and 422 to INVALID_REQUEST", () => {

@@ -154,6 +154,8 @@ if (resultado.outcome === "REDIRECT_REQUIRED") {
 }
 ```
 
+**Un PSE también puede volver como `TRANSACTION`.** Pasa cuando el desenlace ya existe al crear (un `402` de Mercado Pago llega `DECLINED`) y cuando la orden de Mercado Pago nace `processing` sin URL del banco: medido el 15 de octubre de 2026, esas órdenes terminaron rechazadas con `processing_error` unos 4 segundos después. Desde la 0.6.0-rc.2 llegan como `PENDING` con el identificador de la orden; se guarda igual y se consulta, sin redirigir a nadie.
+
 **Y la advertencia más importante de PSE:** que el pagador vuelva a la URL de retorno **no significa que pagó.** La URL de retorno es una señal de interfaz. El resultado se obtiene por webhook o consultando.
 
 ---
@@ -171,6 +173,8 @@ if (transaccion.isFinal()) {
 `isFinal()` es el método más útil para conciliar: devuelve verdadero para cualquier estado que no sea `PENDING`, y es lo que un trabajo periódico necesita para saber si tiene que volver a preguntar.
 
 Esta operación **sí** se reintenta automáticamente ante fallos transitorios: hasta tres veces, con retroceso exponencial y fluctuación. Crear un pago no, por el riesgo de doble cobro.
+
+**Antes de volver a cobrar, se consulta.** Si `createPayment()` falló sin una respuesta clara —un timeout, una conexión cortada—, el cobro puede haberse creado igual. Las pasarelas no lo evitan por usted: en Mercado Pago, dos cobros con la misma `orderReference` crearon dos órdenes y se cobraron los dos (medido el 15 de octubre de 2026). Antes de reintentar, confirme el desenlace del intento anterior con `getPaymentStatus()`, si tiene su identificador, o con el webhook.
 
 ---
 
@@ -340,7 +344,7 @@ Tenga en cuenta además que Mercado Pago **no firma el cuerpo**: la firma cubre 
 
 ## 10. El catálogo de errores
 
-Los doce códigos, con cuáles se reintentan solos, están en [1-recorrido-de-una-llamada.md](1-recorrido-de-una-llamada.md) §4, y con su descripción en el [README](../../sdk/README.md#catálogo-de-códigos-de-error-kitpagoserrorcode).
+Los trece códigos, con cuáles se reintentan solos, están en [1-recorrido-de-una-llamada.md](1-recorrido-de-una-llamada.md) §4, y con su descripción en el [README](../../sdk/README.md#catálogo-de-códigos-de-error-kitpagoserrorcode).
 
 Lo que conviene recordar al escribir el manejo de errores: cada `KitPagosError` trae `code` para programar, `gateway` para saber quién falló, y `originalPayload` para depurar. Programar contra `code` y no contra `message`: los mensajes pueden cambiar, el catálogo de códigos es estable.
 

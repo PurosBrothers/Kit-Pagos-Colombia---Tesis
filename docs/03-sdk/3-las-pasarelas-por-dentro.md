@@ -128,7 +128,9 @@ El desenlace llega como en PSE: aprobado, `201` con la orden en `processed / acc
 
 **`X-Idempotency-Key` no es opcional.** Sin él, Mercado Pago no crea nada: la Payments API respondía `400 "Header X-Idempotency-Key can't be null"` y la Orders API responde `400 "Missing HTTP header: X-Idempotency-Key."`. El SDK genera un UUID por petición. Otro defecto que vivió en el SDK porque el simulador no lo pedía, y que encontró medir contra la API real (punto 48).
 
-Es también la única de las cuatro con soporte nativo de idempotencia, lo cual es coherente con lo explicado en [01-producto/2-conceptos-tecnicos.md](../01-producto/2-conceptos-tecnicos.md) §3: la pasarela reconoce el reintento y devuelve el resultado original en lugar de crear un segundo cobro.
+Es también la única de las cuatro con soporte nativo de idempotencia, lo cual es coherente con lo explicado en [01-producto/2-conceptos-tecnicos.md](../01-producto/2-conceptos-tecnicos.md) §3: la pasarela reconoce el reintento y devuelve el resultado original en lugar de crear un segundo cobro. Medido en la Orders API el 15 de octubre de 2026 (`docs/testing-data/mercado-pago.md`, «Duplicados e idempotencia en la Orders API»): la misma llave con el mismo cuerpo responde una copia byte a byte de la respuesta original, aunque la orden haya cambiado de estado; con otro cuerpo, `409 idempotency_key_already_used`; y mientras la primera petición sigue en curso, `423 resource_locked`, que el SDK traduce a `RESOURCE_LOCKED`, un error transitorio.
+
+**El SDK no aprovecha esa idempotencia, a propósito.** Como genera una llave por llamada, dos llamadas a `createPayment()` son dos cobros. Con una llave derivada de `orderReference`, un rechazo quedaría incobrable: reintentarlo con otra tarjeta da `409`. Y Mercado Pago no protege por la referencia: dos órdenes con la misma `external_reference` y llaves distintas se crearon y se cobraron las dos, con tarjeta y con PSE. Por eso el comercio confirma el estado del intento anterior antes de volver a cobrar ([4-guia-de-implementacion.md](4-guia-de-implementacion.md), §6).
 
 ### PSE — 1 petición, a la Orders API
 
@@ -153,6 +155,8 @@ PSE nunca vivió en la Payments API sino en la **Orders API**, `POST {baseUrl}/o
 ```
 
 El adaptador valida todo eso **antes** de salir a la red, y si falta algo lanza `INVALID_REQUEST` listando qué falta. Es mejor que mandar la petición y traducir un error remoto que no siempre dice cuál campo era.
+
+La respuesta trae la URL del banco en `transactions.payments[0].payment_method.redirect_url`, con la orden en `action_required / waiting_transfer`, y el SDK la devuelve como `REDIRECT_REQUIRED`. Hay dos excepciones, y las dos vuelven como `TRANSACTION`. La primera es el `402` de una orden cuyo pago falló, que llega `DECLINED`. La segunda es una orden que nace sin URL: el 15 de octubre de 2026, entre las 21:33 y las 21:44, 12 de 12 órdenes nacieron `processing / in_process` sin `redirect_url` y en unos 4 segundos pasaron a `failed / processing_error`; a las 13:12 el mismo cuerpo había nacido con la URL. Desde la 0.6.0-rc.2, esa orden vuelve como una transacción `PENDING` con su identificador, y la consulta da el desenlace. `MALFORMED_RESPONSE` queda para una respuesta sin identificador o sin estado.
 
 Desde la versión 0.6.0 la IP del pagador se normaliza antes de enviarla, con la misma regla que aplica `/v1/api`: se quitan los espacios, `::ffff:a.b.c.d` pasa a `a.b.c.d` y `::1` a `127.0.0.1`. Son las formas en que Node entrega `req.ip` en un servidor que escucha en `::`, y Mercado Pago las rechaza con `400` (medido el 15 de octubre de 2026; ver «La IP del pagador» en [3-api-de-simulacion.md](../02-arquitectura/3-api-de-simulacion.md)). Las demás direcciones pasan sin validar, y una IP en blanco cuenta como faltante.
 

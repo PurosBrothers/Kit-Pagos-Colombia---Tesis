@@ -13,6 +13,7 @@ describe("RetryHandler", () => {
         KitPagosErrorCode.GATEWAY_TIMEOUT,
         KitPagosErrorCode.GATEWAY_SERVER_ERROR,
         KitPagosErrorCode.RATE_LIMIT_EXCEEDED,
+        KitPagosErrorCode.RESOURCE_LOCKED,
       ];
 
       for (const code of transientCodes) {
@@ -138,6 +139,21 @@ describe("RetryHandler", () => {
   });
 
   describe("execute()", () => {
+    it("retries a RESOURCE_LOCKED failure and returns the result once the lock is released", async () => {
+      const sleepMock = jest.fn().mockResolvedValue(undefined);
+      const handler = new RetryHandler({ sleep: sleepMock });
+      const operation = jest
+        .fn()
+        .mockRejectedValueOnce(
+          new KitPagosError(KitPagosErrorCode.RESOURCE_LOCKED, Gateway.MERCADOPAGO, null),
+        )
+        .mockResolvedValue("ORDER");
+
+      await expect(handler.execute(operation)).resolves.toBe("ORDER");
+      expect(operation).toHaveBeenCalledTimes(2);
+      expect(sleepMock).toHaveBeenCalledTimes(1);
+    });
+
     it("returns the result immediately if the first attempt succeeds without calling sleep", async () => {
       const sleepMock = jest.fn().mockResolvedValue(undefined);
       const handler = new RetryHandler({ sleep: sleepMock });

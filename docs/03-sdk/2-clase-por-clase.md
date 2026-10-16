@@ -120,7 +120,7 @@ Kushki pide un objeto con subtotal gravado, subtotal exento, IVA y divisa, en lu
 | `TransactionStatus` | Los seis estados normalizados |
 | `RejectionCategory` | Las categorías de rechazo |
 | `Gateway` | Las cuatro pasarelas |
-| `KitPagosErrorCode` | Los doce códigos de error |
+| `KitPagosErrorCode` | Los trece códigos de error |
 
 ### Los servicios de dominio
 
