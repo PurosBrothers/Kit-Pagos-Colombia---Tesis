@@ -311,9 +311,15 @@ export class GatewayMockFactory {
    *    diferencia de Wompi. Y lleva incrustadas las dos URL de retorno del
    *    comercio como parametros, que es la unica evidencia de que el SDK las
    *    envio de verdad.
+   *
+   * `origin` es el `protocolo://host` de la peticion que crea el pago (`requestOrigin()`):
+   * la ruta `/complete-bank-payment` y sus parametros se midieron en `sandboxcheckout.rapyd.net`,
+   * pero el simulador la sirve bajo `/v1/sim/rapyd`. Contra el dominio real la pagina carga
+   * y no reconoce el token que el simulador invento: «Pay» no devolvia al comercio (issue #109).
    */
   buildPseCreatedResponse(
     requestBody: RapydCreatePaymentRequestBody,
+    origin: string,
   ): RapydPaymentResponse {
     const id = GatewayMockFactory.buildPaymentId();
     const params = new URLSearchParams({ token: id });
@@ -337,7 +343,7 @@ export class GatewayMockFactory {
       failure_message: "",
       created_at: Math.floor(Date.now() / 1000),
       next_action: "pending_confirmation",
-      redirect_url: `https://sandboxcheckout.rapyd.net/complete-bank-payment?${params.toString()}`,
+      redirect_url: `${origin}/v1/sim/rapyd/complete-bank-payment?${params.toString()}`,
       customer: typeof requestBody.customer === "string" ? requestBody.customer : "",
     });
   }

@@ -1,5 +1,5 @@
 import { FastifyRequest } from "fastify";
-import { loadServerEnv } from "../auth/CredentialResolver";
+import { serverPort } from "../serverAddress";
 
 /**
  * El origen (`protocolo://host`) de la petición que creó cada cobro con redirección al banco
@@ -64,16 +64,12 @@ export function rememberBankRedirectOrigin(gateway: string, id: string, origin: 
 }
 
 /**
- * El origen registrado para el cobro o, si no hay ninguno, el del propio proceso, con el
- * mismo criterio que `KitPagosProvider` (`http://localhost:${PORT}`, 3000 sin `PORT`). Sin
- * registro solo queda un cobro que no pasó por la ruta de creación, como en las pruebas de
- * la tabla.
+ * El origen registrado para el cobro o, si no hay ninguno, el del propio proceso, en el puerto
+ * de `serverPort()`, igual que `KitPagosProvider` y el que escucha `server.ts`. Sin registro
+ * solo queda un cobro que no pasó por la ruta de creación, como en las pruebas de la tabla.
  */
 export function bankRedirectOriginFor(gateway: string, id: string): string {
-  return (
-    origins.get(keyFor(gateway, id)) ??
-    `http://localhost:${loadServerEnv().PORT?.trim() || "3000"}`
-  );
+  return origins.get(keyFor(gateway, id)) ?? `http://localhost:${serverPort()}`;
 }
 
 /** Borra los orígenes registrados. Lo llama `resetSimulatorState()`. */

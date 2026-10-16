@@ -45,15 +45,19 @@ describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
   });
 
   /**
-   * El cobro con tarjeta.
+   * El cobro con tarjeta, que desde la versión 0.6.0 es una orden de la Orders API.
    *
-   * No se afirma que quede aprobado, y conviene saber por qué: la cuenta de prueba rechaza por
-   * antifraude (`cc_rejected_high_risk`, `cc_rejected_max_attempts`) con HTTP `201`, así que
-   * exigir `APPROVED` haría fallar la prueba por una decisión de riesgo de Mercado Pago. Lo
-   * que sí es del SDK, y lo que se afirma, es que el cobro se cree y que el SDK pueda leer la
-   * respuesta y construir una `Transaction` con el monto y la referencia que se mandaron.
+   * Sigue sin afirmarse que quede aprobado, aunque con las credenciales del 15 de octubre de
+   * 2026 el titular `APRO` sí aprueba: entre las 13:52 y las 14:00 (UTC−5) de ese día, 12 de 13
+   * órdenes con `APRO` salieron `processed / accredited`, y la otra, a las 13:52, salió
+   * `failed / high_risk` en una tanda en que todos los titulares recibieron `high_risk`. Mercado
+   * Pago no informa la causa, así que exigir `APPROVED` haría fallar la prueba por una decisión
+   * de riesgo de la pasarela.
+   * Lo que sí es del SDK, y lo que se afirma, es que el cobro sea una orden, que el SDK la lea
+   * con el monto y la referencia que se mandaron, y que un rechazo llegue como `DECLINED` con
+   * su motivo y no como una excepción.
    */
-  it("charges a card and returns a readable transaction", async () => {
+  it("charges a card as an order and returns a readable transaction", async () => {
     const reference = uniqueReference("SBX-MP-CARD");
     const { token } = await tokenizeMercadoPagoCard(credentials);
 
@@ -71,7 +75,12 @@ describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
       );
     }
 
-    expect(result.transaction.gatewayTransactionId.value).toBeTruthy();
+    expect(result.transaction.gatewayTransactionId.value).toMatch(/^ORD/);
+    expect(result.transaction.orderReference.getValue()).toBe(reference);
+    if (result.transaction.getStatus() === "DECLINED") {
+      expect(result.transaction.rawStatus).toBe("failed");
+      expect(result.transaction.rejectionReason?.rejectionCode).toBeTruthy();
+    }
     // El monto se compara como número y no como texto a propósito: Wompi trabaja en centavos
     // y el SDK lo reconstruye con dos decimales (`"20000.00"`), mientras que Mercado Pago y
     // Kushki lo devuelven en pesos y el SDK preserva lo que vino (`"20000"`). Son el mismo
@@ -118,7 +127,7 @@ describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
       throw new Error("Mercado Pago devolvió una redirección para tarjeta");
     }
 
-    expect(result.transaction.gatewayTransactionId.value).toBeTruthy();
+    expect(result.transaction.gatewayTransactionId.value).toMatch(/^ORD/);
     expect(Number(result.transaction.amount.getValue())).toBe(20000);
     expect(["APPROVED", "PENDING", "DECLINED"]).toContain(
       result.transaction.getStatus(),
@@ -126,14 +135,46 @@ describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
   });
 
   /**
-   * Las cuotas siguen siendo obligatorias.
+   * Un rechazo es un pago `DECLINED`, no una excepción.
    *
-   * Esta es la razón por la que `installments` vive en `PaymentMethod` y no la resuelve cada
-   * adaptador con un valor por omisión propio. Es la única de las cuatro pasarelas que las
-   * exige siempre, incluso cuando son una, y si algún día dejara de hacerlo, este es el lugar
-   * donde se va a notar.
+   * La Orders API responde el rechazo con `402` y la orden fallida en `data`. Con `FUND` el
+   * motivo medido es `insufficient_amount`, pero no se afirma el código: en la tanda de
+   * `high_risk` del 15 de octubre de 2026 el mismo titular salió con ese otro motivo. Lo
+   * estable es que el SDK convierta el `402` en una transacción rechazada con su motivo.
    */
-  it("still rejects a token charge without installments", async () => {
+  it("returns a declined card order as a DECLINED transaction with its reason", async () => {
+    const { token } = await tokenizeMercadoPagoCard(credentials, "FUND");
+
+    const result = await kitPagos.createPayment({
+      amount: new Amount("20000"),
+      currency: new Currency("COP"),
+      orderReference: new OrderReference(uniqueReference("SBX-MP-CARD-FUND")),
+      payer: new Payer({ email: "jaime.pavlich@example.com" }),
+      paymentMethod: PaymentMethod.card(token, { installments: 1 }),
+    });
+
+    if (result.outcome === "REDIRECT_REQUIRED") {
+      throw new Error("Mercado Pago devolvió una redirección para tarjeta");
+    }
+
+    expect(result.transaction.getStatus()).toBe("DECLINED");
+    expect(result.transaction.rawStatus).toBe("failed");
+    expect(result.transaction.gatewayTransactionId.value).toMatch(/^ORD/);
+    expect(result.transaction.rejectionReason?.rejectionCode).toBeTruthy();
+
+    const queried = await kitPagos.getPaymentStatus(result.transaction.gatewayTransactionId.value);
+    expect(queried.getStatus()).toBe("DECLINED");
+  });
+
+  /**
+   * La Payments API rechaza estas credenciales.
+   *
+   * Es la razón por la que tarjeta pasó a la Orders API en la versión 0.6.0: con las
+   * credenciales del vendedor de prueba de la aplicación «Checkout API via Orders», el cobro
+   * por `POST /v1/payments` responde `401` (medido el 15 de octubre de 2026). Si algún día
+   * deja de hacerlo, la decisión se puede revisar con evidencia.
+   */
+  it("still refuses a card charge through the Payments API with these credentials", async () => {
     const { token } = await tokenizeMercadoPagoCard(credentials);
 
     const response = await fetch(`${baseUrl}/payments`, {
@@ -145,26 +186,30 @@ describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
       },
       body: JSON.stringify({
         transaction_amount: 20000,
-        description: uniqueReference("SBX-MP-NOINST"),
+        description: uniqueReference("SBX-MP-PAYMENTS"),
         token,
+        installments: 1,
+        payment_method_id: "visa",
         payer: { email: "jaime.pavlich@example.com" },
       }),
     });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(401);
     const body = (await response.json()) as { message?: string };
-    expect(body.message).toBe("Invalid installments");
+    expect(body.message).toBe("Unauthorized use of live credentials");
   });
 
   /**
-   * Sin token, la queja es sobre un campo que el comercio no escribe.
+   * La Orders API no deduce la marca del token.
    *
-   * `payment_method_id` lo deduce Mercado Pago del token, así que el SDK no lo manda nunca. El
-   * mensaje nombrando ese campo es lo que hace valioso que el SDK falle antes, con un error
-   * que diga que falta el token y dónde se tokeniza.
+   * Es la razón de las dos consultas que el SDK hace antes de cobrar (`mercadopago-card.ts`):
+   * sin `payment_method.id` ni `payment_method.type` la orden responde `400
+   * required_properties`. Si Mercado Pago empezara a deducirlos, las dos consultas sobrarían.
    */
-  it("still asks for the token naming payment_method_id", async () => {
-    const response = await fetch(`${baseUrl}/payments`, {
+  it("still requires the payment method id and type in a card order", async () => {
+    const { token } = await tokenizeMercadoPagoCard(credentials);
+
+    const response = await fetch(`${baseUrl}/orders`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -172,15 +217,18 @@ describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
         "X-Idempotency-Key": crypto.randomUUID(),
       },
       body: JSON.stringify({
-        transaction_amount: 20000,
-        description: uniqueReference("SBX-MP-NOTOKEN"),
-        installments: 1,
+        type: "online",
+        processing_mode: "automatic",
+        total_amount: "20000",
+        external_reference: uniqueReference("SBX-MP-NOMETHOD"),
         payer: { email: "jaime.pavlich@example.com" },
+        transactions: { payments: [{ amount: "20000", payment_method: { token, installments: 1 } }] },
       }),
     });
 
     expect(response.status).toBe(400);
-    const body = (await response.json()) as { message?: string };
-    expect(body.message).toContain("payment_method_id");
+    const body = (await response.json()) as { errors?: { code?: string; details?: string[] }[] };
+    expect(body.errors?.[0]?.code).toBe("required_properties");
+    expect(body.errors?.[0]?.details?.join(" ")).toContain("'id', 'type'");
   });
 });

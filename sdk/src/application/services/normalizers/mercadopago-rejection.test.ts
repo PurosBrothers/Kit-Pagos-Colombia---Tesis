@@ -42,6 +42,20 @@ describe("readMercadoPagoRejection()", () => {
     );
   });
 
+  /* Medido el 15 de octubre de 2026 con los titulares de prueba, en órdenes de tarjeta. */
+  it.each([
+    ["insufficient_amount", "INSUFFICIENT_FUNDS"],
+    ["bad_filled_card_data", "INVALID_CARD_DATA"],
+    ["rejected_by_issuer", "UNKNOWN"],
+    ["required_call_for_authorize", "UNKNOWN"],
+    ["high_risk", "UNKNOWN"],
+    ["invalid_card_token", "UNKNOWN"],
+  ])("should map the measured card order detail %s to %s", (detail, category) => {
+    expect(readMercadoPagoRejection(orderWithDetail(detail), "DECLINED")).toEqual(
+      new RejectionReason(detail, category as RejectionReason["rejectionCategory"]),
+    );
+  });
+
   it("should not report a rejection when the payment is not declined", () => {
     expect(readMercadoPagoRejection(orderWithDetail("processing_error"), "PENDING")).toBeUndefined();
     expect(readMercadoPagoRejection(cardPayment("pending_contingency"), "PENDING")).toBeUndefined();

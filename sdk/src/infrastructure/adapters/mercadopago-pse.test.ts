@@ -3,6 +3,7 @@ import {
   buildPseOrderPayload,
   extractOrderRedirect,
   isOrderId,
+  normalizePayerIp,
   toWholePesos,
 } from "./mercadopago-pse";
 import { Amount } from "../../domain/value-objects/Amount";
@@ -71,6 +72,32 @@ describe("toWholePesos", () => {
   });
 });
 
+/**
+ * Medido el 15 de octubre de 2026: Mercado Pago rechaza con `400` `::1`, `::ffff:127.0.0.1` y
+ * una IP con un espacio delante, que son las formas en que puede llegar `req.ip` de Node.
+ */
+describe("normalizePayerIp", () => {
+  it.each([
+    ["::1", "127.0.0.1"],
+    ["::ffff:127.0.0.1", "127.0.0.1"],
+    ["::FFFF:186.84.90.12", "186.84.90.12"],
+    ["  200.100.50.25 ", "200.100.50.25"],
+  ])("should rewrite %j as %j", (raw, expected) => {
+    expect(normalizePayerIp(raw)).toBe(expected);
+  });
+
+  it.each([["200.100.50.25"], ["2800:484:1a2b:3c00::20"], ["0:0:0:0:0:0:0:1"]])(
+    "should leave %j as it came",
+    (ip) => {
+      expect(normalizePayerIp(ip)).toBe(ip);
+    },
+  );
+
+  it.each([[undefined], [""], ["   "]])("should not invent an IP from %j", (raw) => {
+    expect(normalizePayerIp(raw)).toBeUndefined();
+  });
+});
+
 describe("assertPseRequirements", () => {
   it("should accept a request that carries everything the Orders API demands", () => {
     expect(() => assertPseRequirements(completeRequest())).not.toThrow();
@@ -136,6 +163,12 @@ describe("assertPseRequirements", () => {
 
     expect(() => assertPseRequirements(request)).toThrow(/phoneAreaCode/);
   });
+
+  it("should treat a blank IP as missing", () => {
+    const request = { ...completeRequest(), ipAddress: "   " };
+
+    expect(() => assertPseRequirements(request)).toThrow(/ipAddress/);
+  });
 });
 
 describe("buildPseOrderPayload", () => {
@@ -186,6 +219,18 @@ describe("buildPseOrderPayload", () => {
     };
 
     expect(payload.additional_info["payer.ip_address"]).toBe("200.100.50.25");
+  });
+
+  /** `req.ip` de un servidor Node que escucha en `::`, que Mercado Pago rechaza tal cual. */
+  it.each([
+    ["::1", "127.0.0.1"],
+    ["::ffff:186.84.90.12", "186.84.90.12"],
+  ])("should send the payer IP %j as %j", (raw, expected) => {
+    const payload = buildPseOrderPayload({ ...completeRequest(), ipAddress: raw }) as {
+      additional_info: Record<string, string>;
+    };
+
+    expect(payload.additional_info["payer.ip_address"]).toBe(expected);
   });
 
   /**

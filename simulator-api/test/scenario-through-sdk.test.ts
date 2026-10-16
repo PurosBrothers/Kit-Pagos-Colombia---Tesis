@@ -286,13 +286,18 @@ describe("POST /v1/api/payments with a reserved amount and no scenario header", 
     expect(res.json().transaction.status).toBe("DECLINED");
   });
 
+  /*
+   * Mercado Pago tarjeta da `EXPIRED` y no `VOIDED` desde el SDK 0.6.0: el cobro es una orden,
+   * y la orden vence como `expired` y no como `canceled`, que el SDK traduce a `VOIDED` (punto
+   * 80 del `architecture-log.md`). Con la 0.5.0, el pago vencía `cancelled`, también `VOIDED`.
+   */
   it.each([
     ["wompi card", 10100, "DECLINED"],
     ["wompi card", 10101, "PENDING"],
     ["wompi card", 10102, "VOIDED"],
     ["mercadopago card", 10100, "DECLINED"],
     ["mercadopago card", 10101, "PENDING"],
-    ["mercadopago card", 10102, "VOIDED"],
+    ["mercadopago card", 10102, "EXPIRED"],
     ["kushki card", 10100, "DECLINED"],
     ["kushki card", 10101, "PENDING"],
   ])("%s: %d is normalized as %s", async (path, amount, status) => {
@@ -405,6 +410,7 @@ describe("business outcomes read back through GET /v1/api/payments/:id", () => {
     ["kushki pse", 10101, "PENDING"],
     ["wompi card", 10100, "DECLINED"],
     ["mercadopago card", 10100, "DECLINED"],
+    ["mercadopago card", 10102, "EXPIRED"],
     ["kushki card", 10100, "DECLINED"],
     ["rapyd card", 10101, "PENDING"],
   ])("%s: %d is read back as %s", async (path, amount, status) => {

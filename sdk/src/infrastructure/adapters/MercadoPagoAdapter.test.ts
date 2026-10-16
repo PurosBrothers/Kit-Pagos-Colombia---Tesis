@@ -21,11 +21,90 @@ describe("MercadoPagoAdapter", () => {
     currency: new Currency("COP"),
     orderReference: new OrderReference("ORDER-MP-123"),
     payer: new Payer({ email: "cliente.mp@example.com" }),
-    // Token y cuotas son obligatorios: medido contra la API real, un cobro sin token
-    // responde `400 "payment_method_id attribute can't be null"` y sin cuotas
-    // `400 "Invalid installments"`.
     paymentMethod: PaymentMethod.card("a1b2c3d4e5f6"),
   };
+
+  const credentials = {
+    publicKey: "APP_USR_pub_123",
+    privateKey: "APP_USR_priv_secret_456",
+  };
+
+  /**
+   * Las tres respuestas de un cobro con tarjeta, con la forma medida el 15 de octubre de 2026
+   * (`mercadopago-card.ts`): el token leído con el access token, la búsqueda por BIN y la orden
+   * aprobada. Los ids son los de la medición; los montos y la referencia, los de la prueba.
+   */
+  const readCardToken = {
+    id: "a1b2c3d4e5f6",
+    public_key: "APP_USR_pub_123",
+    status: "active",
+    first_six_digits: "401354",
+    last_four_digits: "6260",
+  };
+  const binSearch = {
+    paging: { total: 1, limit: 30, offset: 0 },
+    results: [{ id: "visa", name: "Visa", payment_type_id: "credit_card", status: "active" }],
+  };
+  const cardPayment = (status: string, statusDetail: string) => ({
+    id: "PAY01M50EJ7F05THGGT4G9QYVZ4M2",
+    amount: "50000",
+    paid_amount: "50000",
+    reference_id: "000gsvomal",
+    status,
+    status_detail: statusDetail,
+    payment_method: {
+      id: "visa",
+      type: "credit_card",
+      token: "a1b2c3d4e5f6",
+      installments: 1,
+      installment_amount: "50000",
+      transaction_security: { validation: "never" },
+    },
+  });
+  const cardOrder = (status: string, statusDetail: string, paymentDetail = statusDetail) => ({
+    id: "ORDTST01M50EJ7EF1B8E8KAS3T7FK5SW",
+    type: "online",
+    processing_mode: "automatic",
+    external_reference: "ORDER-MP-123",
+    total_amount: "50000",
+    total_paid_amount: "50000",
+    country_code: "COL",
+    status,
+    status_detail: statusDetail,
+    capture_mode: "automatic_async",
+    currency: "COP",
+    config: { online: { transaction_security: { validation: "never" } } },
+    transactions: { payments: [cardPayment(status, paymentDetail)] },
+  });
+
+  const okJson = (status: number, body: unknown) => ({
+    ok: true,
+    status,
+    json: async () => body,
+  });
+
+  /** `fetch` que responde cada una de las tres llamadas del cobro con tarjeta por su URL. */
+  function mockCardFlow(
+    order: unknown = cardOrder("processed", "accredited"),
+    orderHttpStatus = 201,
+    overrides: { token?: unknown; search?: unknown } = {},
+  ): jest.Mock {
+    const mockFetch = jest.fn(async (url: string) => {
+      if (url.includes("/card_tokens/")) return okJson(200, overrides.token ?? readCardToken);
+      if (url.includes("/payment_methods/search")) return okJson(200, overrides.search ?? binSearch);
+      return orderHttpStatus >= 400
+        ? jsonErrorResponse(orderHttpStatus, order)
+        : okJson(orderHttpStatus, order);
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+    return mockFetch;
+  }
+
+  const cardAdapter = () => new MercadoPagoAdapter(undefined, credentials);
+
+  /** La llamada que crea la orden, que es la única con método POST. */
+  const orderCalls = (mockFetch: jest.Mock) =>
+    mockFetch.mock.calls.filter((call) => call[1].method === "POST");
 
   const approvedMpResponse = {
     id: 1234567890,
@@ -47,70 +126,193 @@ describe("MercadoPagoAdapter", () => {
   });
 
   describe("createPayment()", () => {
-    it("creates a payment successfully sending transaction_amount in pesos", async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        status: 201,
-        json: async () => approvedMpResponse,
+    /**
+     * Desde la versión 0.6.0 tarjeta va por la Orders API: con las credenciales de prueba
+     * vigentes, `POST /v1/payments` responde `401 "Unauthorized use of live credentials"`
+     * (medido el 15 de octubre de 2026).
+     */
+    it("charges a card as an order, after resolving the brand from the token", async () => {
+      const mockFetch = mockCardFlow();
+
+      const transaction = expectTransaction(await cardAdapter().createPayment(validRequest));
+
+      expect(mockFetch.mock.calls.map((call) => `${call[1].method} ${call[0]}`)).toEqual([
+        "GET http://localhost:3000/v1/sim/mercadopago/card_tokens/a1b2c3d4e5f6",
+        "GET http://localhost:3000/v1/sim/mercadopago/payment_methods/search?public_key=APP_USR_pub_123&bins=401354",
+        "POST http://localhost:3000/v1/sim/mercadopago/orders",
+      ]);
+      expect(JSON.parse(orderCalls(mockFetch)[0][1].body)).toEqual({
+        type: "online",
+        processing_mode: "automatic",
+        total_amount: "50000",
+        external_reference: "ORDER-MP-123",
+        payer: { email: "cliente.mp@example.com" },
+        transactions: {
+          payments: [
+            {
+              amount: "50000",
+              payment_method: {
+                id: "visa",
+                type: "credit_card",
+                token: "a1b2c3d4e5f6",
+                installments: 1,
+              },
+            },
+          ],
+        },
       });
-      global.fetch = mockFetch;
-
-      const adapter = new MercadoPagoAdapter();
-      const transaction = expectTransaction(await adapter.createPayment(validRequest));
-
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3000/v1/sim/mercadopago/payments",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            // Sin este header Mercado Pago no crea nada; ver el docstring de request().
-            "X-Idempotency-Key": expect.any(String),
-          },
-          body: JSON.stringify({
-            transaction_amount: 50000,
-            description: "ORDER-MP-123",
-            external_reference: "ORDER-MP-123",
-            token: "a1b2c3d4e5f6",
-            installments: 1,
-            payer: { email: "cliente.mp@example.com" },
-          }),
-          signal: expect.any(AbortSignal),
-        }
-      );
 
       expect(transaction.isApproved()).toBe(true);
-      expect(transaction.gatewayTransactionId.value).toBe("1234567890");
+      expect(transaction.rawStatus).toBe("processed");
+      expect(transaction.gatewayTransactionId.value).toBe("ORDTST01M50EJ7EF1B8E8KAS3T7FK5SW");
       expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.MERCADOPAGO);
       expect(transaction.amount.getValue()).toBe("50000.00");
+      expect(transaction.orderReference.getValue()).toBe("ORDER-MP-123");
     });
 
-    it("authenticates with a Bearer token using the credentials privateKey", async () => {
-      const credentials = {
-        publicKey: "APP_USR_pub_123",
-        privateKey: "APP_USR_priv_secret_456",
-      };
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        status: 201,
-        json: async () => approvedMpResponse,
+    it("never charges a card through the Payments API", async () => {
+      const mockFetch = mockCardFlow();
+
+      await cardAdapter().createPayment(validRequest);
+
+      expect(mockFetch.mock.calls.some((call) => String(call[0]).includes("/payments"))).toBe(false);
+    });
+
+    it("sends the brand and type of a debit card, and the requested installments", async () => {
+      const mockFetch = mockCardFlow(undefined, 201, {
+        search: { results: [{ id: "debvisa", payment_type_id: "debit_card" }] },
       });
-      global.fetch = mockFetch;
 
-      const adapter = new MercadoPagoAdapter(undefined, credentials);
-      await adapter.createPayment(validRequest);
+      await cardAdapter().createPayment({
+        ...validRequest,
+        paymentMethod: PaymentMethod.card("a1b2c3d4e5f6", { installments: 3 }),
+      });
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: "Bearer APP_USR_priv_secret_456",
-            "X-Idempotency-Key": expect.any(String),
-          },
-        })
+      const body = JSON.parse(orderCalls(mockFetch)[0][1].body);
+      expect(body.transactions.payments[0].payment_method).toEqual({
+        id: "debvisa",
+        type: "debit_card",
+        token: "a1b2c3d4e5f6",
+        installments: 3,
+      });
+    });
+
+    it("sends the payer document when the merchant provides it", async () => {
+      const mockFetch = mockCardFlow();
+
+      await cardAdapter().createPayment({
+        ...validRequest,
+        payer: new Payer({
+          email: "cliente.mp@example.com",
+          documentType: "CC",
+          documentNumber: "123456789",
+        }),
+      });
+
+      expect(JSON.parse(orderCalls(mockFetch)[0][1].body).payer).toEqual({
+        email: "cliente.mp@example.com",
+        identification: { type: "CC", number: "123456789" },
+      });
+    });
+
+    /**
+     * Medido el 15 de octubre de 2026 con el titular `OTHE`: `402` con el sobre `errors[]` y la
+     * orden en `failed / failed` dentro de `data`, con el motivo en el pago.
+     */
+    it.each([
+      ["rejected_by_issuer", "UNKNOWN"],
+      ["insufficient_amount", "INSUFFICIENT_FUNDS"],
+      ["bad_filled_card_data", "INVALID_CARD_DATA"],
+      ["high_risk", "UNKNOWN"],
+    ])("returns the 402 of a card declined with %s as a DECLINED transaction", async (detail, category) => {
+      mockCardFlow(
+        {
+          errors: [
+            {
+              code: "failed",
+              message: "The following transactions failed",
+              details: [`PAY01M50EKNA4CBANNDD3CFM2HED9: ${detail}`],
+            },
+          ],
+          data: cardOrder("failed", "failed", detail),
+        },
+        402,
       );
+
+      const transaction = expectTransaction(await cardAdapter().createPayment(validRequest));
+
+      expect(transaction.getStatus()).toBe("DECLINED");
+      expect(transaction.rawStatus).toBe("failed");
+      expect(transaction.gatewayTransactionId.value).toBe("ORDTST01M50EJ7EF1B8E8KAS3T7FK5SW");
+      expect(transaction.rejectionReason).toEqual({
+        rejectionCode: detail,
+        rejectionCategory: category,
+      });
+    });
+
+    /** El titular `CONT`, medido el 15 de octubre de 2026: `201` en `processing / in_process`. */
+    it("returns a card order still processing as PENDING", async () => {
+      mockCardFlow(cardOrder("processing", "in_process"));
+
+      const transaction = expectTransaction(await cardAdapter().createPayment(validRequest));
+
+      expect(transaction.getStatus()).toBe("PENDING");
+      expect(transaction.rawStatus).toBe("processing");
+    });
+
+    it("refuses an amount with cents before charging, because total_amount takes whole pesos", async () => {
+      const mockFetch = mockCardFlow();
+
+      await expect(
+        cardAdapter().createPayment({ ...validRequest, amount: new Amount("50000.50") }),
+      ).rejects.toMatchObject({ code: KitPagosErrorCode.INVALID_REQUEST });
+      expect(orderCalls(mockFetch)).toHaveLength(0);
+    });
+
+    it("fails with INVALID_REQUEST before any request when there is no public key", async () => {
+      const mockFetch = mockCardFlow();
+
+      await expect(new MercadoPagoAdapter().createPayment(validRequest)).rejects.toMatchObject({
+        code: KitPagosErrorCode.INVALID_REQUEST,
+        gateway: Gateway.MERCADOPAGO,
+      });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("fails with MALFORMED_RESPONSE when the token comes back without first_six_digits", async () => {
+      const mockFetch = mockCardFlow(undefined, 201, { token: { id: "a1b2c3d4e5f6" } });
+
+      await expect(cardAdapter().createPayment(validRequest)).rejects.toMatchObject({
+        code: KitPagosErrorCode.MALFORMED_RESPONSE,
+      });
+      expect(orderCalls(mockFetch)).toHaveLength(0);
+    });
+
+    /** Medido con el BIN `999999`: `200` con `results: []`. */
+    it("fails with INVALID_REQUEST when no payment method matches the BIN", async () => {
+      const mockFetch = mockCardFlow(undefined, 201, {
+        search: { paging: { total: 0, limit: 30, offset: 0 }, results: [] },
+      });
+
+      await expect(cardAdapter().createPayment(validRequest)).rejects.toMatchObject({
+        code: KitPagosErrorCode.INVALID_REQUEST,
+      });
+      expect(orderCalls(mockFetch)).toHaveLength(0);
+    });
+
+    it("authenticates every call with a Bearer token using the credentials privateKey", async () => {
+      const mockFetch = mockCardFlow();
+
+      await cardAdapter().createPayment(validRequest);
+
+      for (const [, init] of mockFetch.mock.calls) {
+        expect(init.headers.Authorization).toBe("Bearer APP_USR_priv_secret_456");
+      }
+      expect(orderCalls(mockFetch)[0][1].headers).toEqual({
+        "Content-Type": "application/json",
+        Authorization: "Bearer APP_USR_priv_secret_456",
+        "X-Idempotency-Key": expect.any(String),
+      });
     });
 
     /**
@@ -121,16 +323,11 @@ describe("MercadoPagoAdapter", () => {
      * pensarlo y el simulador no lo pedía, así que el SDK no podía cobrar por ningún método.
      */
     it("sends an idempotency key on every creation", async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        status: 201,
-        json: async () => approvedMpResponse,
-      });
-      global.fetch = mockFetch;
+      const mockFetch = mockCardFlow();
 
-      await new MercadoPagoAdapter().createPayment(validRequest);
+      await cardAdapter().createPayment(validRequest);
 
-      const key = mockFetch.mock.calls[0][1].headers["X-Idempotency-Key"];
+      const key = orderCalls(mockFetch)[0][1].headers["X-Idempotency-Key"];
       expect(key).toBeTruthy();
     });
 
@@ -142,51 +339,28 @@ describe("MercadoPagoAdapter", () => {
      * sobre la misma orden repetiría el rechazo viejo.
      */
     it("uses a different key on each attempt of the same order", async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        status: 201,
-        json: async () => approvedMpResponse,
-      });
-      global.fetch = mockFetch;
+      const mockFetch = mockCardFlow();
 
-      const adapter = new MercadoPagoAdapter();
+      const adapter = cardAdapter();
       await adapter.createPayment(validRequest);
       await adapter.createPayment(validRequest);
 
-      const [firstCall, secondCall] = mockFetch.mock.calls.map(
+      const [firstCall, secondCall] = orderCalls(mockFetch).map(
         (call) => call[1].headers["X-Idempotency-Key"],
       );
       expect(firstCall).not.toBe(secondCall);
     });
 
-    it("returns redirectRequired when the card payment requires 3DS authentication", async () => {
-      const response3ds = {
-        id: 987654321,
-        status: "pending",
-        status_detail: "pending_challenge",
-        point_of_interaction: {
-          transaction_data: {
-            ticket_url: "https://www.mercadopago.com.co/payments/987654321/ticket",
-          },
-        },
-      };
+    /** Una lectura no crea nada, así que las dos consultas previas al cobro no llevan llave. */
+    it("does not send an idempotency key on the two reads before the charge", async () => {
+      const mockFetch = mockCardFlow();
 
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: true,
-        status: 201,
-        json: async () => response3ds,
-      });
+      await cardAdapter().createPayment(validRequest);
 
-      const adapter = new MercadoPagoAdapter();
-      const result = await adapter.createPayment(validRequest);
-      expect(result.outcome).toBe("REDIRECT_REQUIRED");
-      if (result.outcome === "REDIRECT_REQUIRED") {
-        expect(result.redirect.redirectUrl).toBe(
-          "https://www.mercadopago.com.co/payments/987654321/ticket",
-        );
-        expect(result.redirect.gatewayTransactionId.value).toBe("987654321");
-        expect(result.redirect.gatewayTransactionId.gateway).toBe(Gateway.MERCADOPAGO);
-        expect(result.redirect.rawStatus).toBe("pending");
+      const reads = mockFetch.mock.calls.filter((call) => call[1].method === "GET");
+      expect(reads).toHaveLength(2);
+      for (const [, init] of reads) {
+        expect(init.headers["X-Idempotency-Key"]).toBeUndefined();
       }
     });
 
@@ -209,7 +383,7 @@ describe("MercadoPagoAdapter", () => {
     it("maps network failures to KitPagosError(CONNECTION_FAILED)", async () => {
       global.fetch = jest.fn().mockRejectedValue(new Error("fetch failed"));
 
-      const adapter = new MercadoPagoAdapter();
+      const adapter = cardAdapter();
       await expect(adapter.createPayment(validRequest)).rejects.toThrow(KitPagosError);
 
       try {
@@ -224,7 +398,7 @@ describe("MercadoPagoAdapter", () => {
     it("maps unsuccessful HTTP errors to KitPagosError", async () => {
       global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(401, { message: "Invalid credentials" }));
 
-      const adapter = new MercadoPagoAdapter();
+      const adapter = cardAdapter();
       try {
         await adapter.createPayment(validRequest);
       } catch (error) {
@@ -244,13 +418,9 @@ describe("MercadoPagoAdapter", () => {
         text: async () => "Internal Server Error Text",
       });
 
-      const adapter = new MercadoPagoAdapter();
-      try {
-        await adapter.createPayment(validRequest);
-      } catch (error) {
-        const sdkError = error as KitPagosError;
-        expect(sdkError.code).toBe(KitPagosErrorCode.GATEWAY_SERVER_ERROR);
-      }
+      await expect(cardAdapter().createPayment(validRequest)).rejects.toMatchObject({
+        code: KitPagosErrorCode.GATEWAY_SERVER_ERROR,
+      });
     });
 
     it("maps a response with malformed JSON to MALFORMED_RESPONSE", async () => {
@@ -262,13 +432,9 @@ describe("MercadoPagoAdapter", () => {
         },
       });
 
-      const adapter = new MercadoPagoAdapter();
-      try {
-        await adapter.createPayment(validRequest);
-      } catch (error) {
-        const sdkError = error as KitPagosError;
-        expect(sdkError.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
-      }
+      await expect(cardAdapter().createPayment(validRequest)).rejects.toMatchObject({
+        code: KitPagosErrorCode.MALFORMED_RESPONSE,
+      });
     });
   });
 
@@ -402,6 +568,24 @@ describe("MercadoPagoAdapter", () => {
 
       const isValid = adapter.verifySignature(payload, headers, secret);
       expect(isValid).toBe(true);
+    });
+
+    /**
+     * Desde 0.6.0 el cobro con tarjeta también es una orden: su notificación trae el id
+     * alfanumérico (`ORDTST…` con credenciales de vendedor de prueba), que el manifiesto firma
+     * en minúsculas.
+     */
+    it("validates the notification of a card order, signed with its id in lowercase", () => {
+      const secret = "test_mp_secret_key";
+      const orderId = "ORDTST01M50EJ7EF1B8E8KAS3T7FK5SW";
+      const requestId = "req-uuid-456";
+      const ts = String(Math.floor(Date.now() / 1000));
+      const manifest = `id:${orderId.toLowerCase()};request-id:${requestId};ts:${ts};`;
+      const v1 = crypto.createHmac("sha256", secret).update(manifest).digest("hex");
+      const payload = JSON.stringify({ action: "order.processed", type: "order", data: { id: orderId } });
+      const headers = { "x-signature": `ts=${ts},v1=${v1}`, "x-request-id": requestId };
+
+      expect(new MercadoPagoAdapter().verifySignature(payload, headers, secret)).toBe(true);
     });
   });
 });
@@ -552,6 +736,18 @@ describe("MercadoPagoAdapter PSE", () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         "http://localhost:3000/v1/sim/mercadopago/orders/ORD01M2V7ZQH9BAZ57V99VG1NY0K1",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    /** El prefijo de las órdenes de un vendedor de prueba, medido el 15 de octubre de 2026. */
+    it("should query a test seller order identifier against the orders endpoint", async () => {
+      const mockFetch = mockOk(createdOrder);
+
+      await new MercadoPagoAdapter().getStatus("ORDTST01M50EJ7EF1B8E8KAS3T7FK5SW");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3000/v1/sim/mercadopago/orders/ORDTST01M50EJ7EF1B8E8KAS3T7FK5SW",
         expect.objectContaining({ method: "GET" }),
       );
     });

@@ -85,11 +85,14 @@ export const KUSHKI_NATIVE_STATUS: Readonly<Record<string, TransactionStatus>> =
 /**
  * Estados de Mercado Pago, de sus **dos** APIs.
  *
- * Los primeros son de la Payments API, que cobra con tarjeta; los segundos de la
- * Orders API, que cobra PSE. No son variantes de lo mismo: son dos vocabularios
- * distintos de la misma pasarela, y por eso la tabla es más larga que las otras.
- * `action_required` es el estado de una orden de PSE esperando la transferencia,
- * medido junto a `status_detail: "waiting_transfer"` (punto 45).
+ * Los primeros son de la Payments API, por donde se cobraba tarjeta antes de la
+ * versión 0.6.0 y que todavía responde la consulta de esos pagos; los segundos de la
+ * Orders API, que cobra PSE y, desde 0.6.0, tarjeta. No son variantes de lo mismo: son
+ * dos vocabularios distintos de la misma pasarela, y por eso la tabla es más larga que
+ * las otras. `action_required` es el estado de una orden de PSE esperando la
+ * transferencia, medido junto a `status_detail: "waiting_transfer"` (punto 45). Con
+ * tarjeta, medido el 15 de octubre de 2026: `processed` es el cobro aprobado,
+ * `processing` el del titular de prueba `CONT` (con `in_process`) y `failed` el rechazo.
  *
  * `failed` es `DECLINED` y no `ERROR` (issue #122): es la orden cuyo pago falló, que la
  * creación entrega en un `402` con la orden en `data` y que la consulta devuelve en
@@ -99,13 +102,13 @@ export const KUSHKI_NATIVE_STATUS: Readonly<Record<string, TransactionStatus>> =
  * comercio es un pago rechazado, y debe verla igual al crearla que al consultarla.
  */
 export const MERCADOPAGO_NATIVE_STATUS: Readonly<Record<string, TransactionStatus>> = {
-  // Payments API (tarjeta).
+  // Payments API (tarjeta antes de 0.6.0).
   approved: "APPROVED",
   rejected: "DECLINED",
   pending: "PENDING",
   in_process: "PENDING",
   cancelled: "VOIDED",
-  // Orders API (PSE).
+  // Orders API (PSE y, desde 0.6.0, tarjeta).
   processed: "APPROVED",
   action_required: "PENDING",
   created: "PENDING",

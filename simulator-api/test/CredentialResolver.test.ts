@@ -49,6 +49,33 @@ describe("CredentialResolver", () => {
     expect(rapydResult.credentials.webhookSecret).toBe("rapyd_secret_server");
   });
 
+  describe("KUSHKI_WEBHOOK_SIGNATURE_ID, the other name of KUSHKI_WEBHOOK_SECRET", () => {
+    const kushkiKeys = {
+      KUSHKI_PUBLIC_MERCHANT_ID: "kushki_public_merchant_server",
+      KUSHKI_PRIVATE_MERCHANT_ID: "kushki_private_merchant_server",
+    };
+    const webhookSecretWith = (env: Record<string, string>) =>
+      new CredentialResolver({ ...kushkiKeys, ...env }).resolve(Gateway.KUSHKI).credentials.webhookSecret;
+
+    it.each([
+      ["missing", {}],
+      ["empty, as the line of .env.example leaves it", { KUSHKI_WEBHOOK_SECRET: "" }],
+      ["blank", { KUSHKI_WEBHOOK_SECRET: "   " }],
+    ])("should be used when KUSHKI_WEBHOOK_SECRET is %s", (_case, env) => {
+      expect(webhookSecretWith({ ...env, KUSHKI_WEBHOOK_SIGNATURE_ID: " alias_secret " })).toBe("alias_secret");
+    });
+
+    it("should lose against a KUSHKI_WEBHOOK_SECRET with a value", () => {
+      expect(webhookSecretWith({ KUSHKI_WEBHOOK_SECRET: "main_secret", KUSHKI_WEBHOOK_SIGNATURE_ID: "alias_secret" })).toBe(
+        "main_secret",
+      );
+    });
+
+    it("should leave the webhook secret out when both are empty", () => {
+      expect(webhookSecretWith({ KUSHKI_WEBHOOK_SECRET: "", KUSHKI_WEBHOOK_SIGNATURE_ID: " " })).toBeUndefined();
+    });
+  });
+
   it("prioritizes the client headers when they are complete", () => {
     const resolver = new CredentialResolver(mockServerEnv);
 

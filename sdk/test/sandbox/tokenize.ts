@@ -81,10 +81,12 @@ export async function tokenizeWompiCard(
  * Mercado Pago: `POST /v1/card_tokens`, con la llave pública **en la query**.
  *
  * El nombre del titular no es decorativo: `APRO` fuerza la aprobación y otros valores fuerzan
- * cada rechazo, así que es el campo con el que se elige el desenlace.
+ * cada rechazo, así que es el campo con el que se elige el desenlace. Basta con que empiece
+ * así: `APRO Ruiz` también aprobó en la Orders API (medido el 15 de octubre de 2026).
  */
 export async function tokenizeMercadoPagoCard(
   credentials: Credentials,
+  holder = "APRO",
 ): Promise<CardToken> {
   const { status, json } = await postJson(
     `${SANDBOX_BASE_URL[Gateway.MERCADOPAGO]}/card_tokens?public_key=${credentials.publicKey}`,
@@ -95,7 +97,7 @@ export async function tokenizeMercadoPagoCard(
       expiration_year: 2030,
       security_code: "123",
       cardholder: {
-        name: "APRO",
+        name: holder,
         identification: { type: "CC", number: "19119119100" },
       },
     },

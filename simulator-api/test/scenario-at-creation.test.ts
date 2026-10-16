@@ -799,16 +799,19 @@ describe("the scenario fixes the outcome at creation", () => {
         })
       ).json().data;
 
-      const visit = await app.inject({
+      await app.inject({
         method: "GET",
         url: new URL(created.redirect_url).pathname,
       });
+      const checkout = (
+        await app.inject({ method: "GET", url: `/v1/sim/rapyd/checkout/${created.id}` })
+      ).json().data;
 
-      expect(visit.json().paid).toBe(false);
+      expect(checkout.payment.paid).toBe(false);
 
       const payment = await app.inject({
         method: "GET",
-        url: `/v1/sim/rapyd/payments/${visit.json().payment_id}`,
+        url: `/v1/sim/rapyd/payments/${checkout.payment.id}`,
       });
 
       expect(payment.json().data.status).toBe("ERR");

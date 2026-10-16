@@ -6,7 +6,6 @@ import {
 import { Transaction } from "../../domain/entities/Transaction";
 import {
   PaymentResult,
-  redirectRequired,
   transactionResult,
 } from "../../domain/value-objects/PaymentResult";
 import { Gateway } from "../../domain/value-objects/Gateway";
@@ -18,17 +17,16 @@ import { httpFailure } from "./http-failure";
 import {
   assertSupportedPaymentMethod,
   requireCardToken,
-  resolveInstallments,
 } from "./payment-method-support";
 import {
   acceptFailedOrder,
   assertPseRequirements,
   buildPseOrderPayload,
-  extractPaymentRedirect,
   isOrderId,
   parseMercadoPagoPseBanks,
   resolveOrderOutcome,
 } from "./mercadopago-pse";
+import { buildCardOrderPayload, resolveCardPaymentMethod } from "./mercadopago-card";
 import type { PseBank } from "../../domain/value-objects/PseBank";
 import { DEFAULT_REQUEST_TIMEOUT_MS, withRequestTimeout } from "../config/request-timeout";
 
@@ -56,7 +54,7 @@ const DEFAULT_MERCADOPAGO_BASE_URL = "http://localhost:3000/v1/sim/mercadopago";
  * - Arquitectura Hexagonal (ADR-01): ningún detalle nativo de Mercado Pago sale del adaptador.
  * - Métrica CBO <= 5: ErrorHandler se instancia en el cuerpo de los métodos en caso de error.
  * - RF-08: Delegación a ErrorHandler para sanitizar tokens y credenciales.
- * - Monto en pesos decimales (`transaction_amount`), sin llamar a toMinorUnits().
+ * - Monto en pesos enteros (`total_amount`), sin llamar a toMinorUnits().
  */
 export class MercadoPagoAdapter implements PaymentGatewayPort {
   private readonly baseUrl: string;
@@ -81,10 +79,9 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
   /**
    * Crea un pago con tarjeta o con PSE.
    *
-   * Los dos caminos usan APIs distintas de Mercado Pago, no solo payloads
-   * distintos: tarjeta va por la Payments API y resuelve en la misma respuesta,
-   * PSE va por la Orders API y devuelve una redirección. El detalle de por qué,
-   * con lo que se midió contra la API real, está en `mercadopago-pse.ts`.
+   * Desde la versión 0.6.0 los dos van por la Orders API (`POST /orders`). Tarjeta resuelve en
+   * la misma respuesta; PSE devuelve una redirección. Lo medido está en `mercadopago-card.ts`
+   * y en `mercadopago-pse.ts`.
    */
   async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
     assertSupportedPaymentMethod(request.paymentMethod, Gateway.MERCADOPAGO, [
@@ -112,42 +109,26 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
       );
     }
 
-    // Mapeo de objetos de valor del dominio a campos nativos de Mercado Pago.
-    // A diferencia de Wompi, el monto viaja en pesos en `transaction_amount`,
-    // por lo que se usa getValue() en lugar de toMinorUnits().
-    //
-    // `token` e `installments` son obligatorios y están medidos contra la API real: sin
-    // token responde `400 "payment_method_id attribute can't be null"` y sin cuotas
-    // `400 "Invalid installments"`. Lo que **no** hace falta es `payment_method_id`: con
-    // el token, Mercado Pago deduce la marca y la devuelve resuelta en la respuesta
-    // (`"visa"`). Por eso el SDK no le pide al comercio un dato de pasarela que la
-    // pasarela ya sabe: sería el primer campo específico de proveedor en la API pública.
-    const payload = {
-      transaction_amount: Number(request.amount.getValue()),
-      description: request.orderReference.getValue(),
-      external_reference: request.orderReference.getValue(),
-      token: requireCardToken(
-        request.paymentMethod,
-        Gateway.MERCADOPAGO,
-        "POST /v1/card_tokens",
-      ),
-      installments: resolveInstallments(request.paymentMethod),
-      payer: {
-        email: request.payer.email,
-      },
-    };
-
-    const rawResponse = await this.request(
-      `${this.baseUrl}/payments`,
-      "POST",
-      JSON.stringify(payload),
+    const cardToken = requireCardToken(
+      request.paymentMethod,
+      Gateway.MERCADOPAGO,
+      "POST /v1/card_tokens",
+    );
+    // La Orders API exige la marca y el tipo de la tarjeta, que el token no trae.
+    const method = await resolveCardPaymentMethod(
+      cardToken,
+      this.credentials?.publicKey,
+      (path) => this.request(`${this.baseUrl}${path}`, "GET"),
     );
 
-    const redirect = extractPaymentRedirect(rawResponse);
-    if (redirect) {
-      return redirectRequired(redirect);
-    }
+    const rawResponse = await this.request(
+      `${this.baseUrl}/orders`,
+      "POST",
+      JSON.stringify(buildCardOrderPayload(request, cardToken, method)),
+    );
 
+    // Un rechazo llega como el 402 de una orden fallida, que `request()` deja pasar y el
+    // normalizador lee como DECLINED, igual que en PSE.
     return transactionResult(
       this.normalizer.normalize(rawResponse, Gateway.MERCADOPAGO),
     );
@@ -157,8 +138,9 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
    * Consulta el estado de un pago existente.
    *
    * Elige el endpoint según la forma del identificador porque Mercado Pago tiene
-   * dos familias de recursos: las órdenes de PSE se consultan en `/orders/{id}` y
-   * los pagos con tarjeta en `/payments/{id}`. Ver `isOrderId()`.
+   * dos familias de recursos: las órdenes (PSE y, desde 0.6.0, tarjeta) se consultan en
+   * `/orders/{id}`, y los pagos con tarjeta creados por la Payments API antes de 0.6.0 en
+   * `/payments/{id}`. Ver `isOrderId()`.
    */
   async getStatus(gatewayTransactionId: string): Promise<Transaction> {
     const root = this.baseUrl.replace(/\/+$/, "");
@@ -197,10 +179,10 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
    *
    * Mercado Pago **no crea nada sin ese header**, y es la única de las cuatro que lo exige.
    * Medido con las pruebas de contra sandbox (`test/sandbox/`): `POST /v1/payments` responde
-   * `400 "Header X-Idempotency-Key can't be null"` y `POST /v1/orders`, que es por donde va
-   * PSE, `400 "Missing HTTP header: X-Idempotency-Key."`. O sea que sin esto el SDK no podía
-   * cobrar en Mercado Pago **por ningún método**, y no se había visto porque las mediciones a
-   * mano mandaban el header y el simulador no lo pedía.
+   * `400 "Header X-Idempotency-Key can't be null"` y `POST /v1/orders`, que es por donde van
+   * PSE y, desde 0.6.0, tarjeta, `400 "Missing HTTP header: X-Idempotency-Key."`. O sea que
+   * sin esto el SDK no podía cobrar en Mercado Pago **por ningún método**, y no se había visto
+   * porque las mediciones a mano mandaban el header y el simulador no lo pedía.
    *
    * Es un valor nuevo por llamada y no derivado de `orderReference`, que era la alternativa
    * tentadora: con la referencia como llave, dos intentos de cobrar la misma orden producirían
@@ -233,8 +215,8 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
         }
 
         if (!response.ok) {
-          // Lanza salvo en el 402 de una orden de PSE que se creó y falló, cuyo cuerpo
-          // `createPayment` normaliza como DECLINED (punto 3 de `mercadopago-pse.ts`).
+          // Lanza salvo en el 402 de una orden que se creó y falló, cuyo cuerpo `createPayment`
+          // normaliza como DECLINED (punto 3 de `mercadopago-pse.ts` y `mercadopago-card.ts`).
           return acceptFailedOrder(
             response.status,
             await httpFailure(response, Gateway.MERCADOPAGO, this.credentials),

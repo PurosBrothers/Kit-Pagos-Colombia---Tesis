@@ -228,7 +228,7 @@ Su valor está en esa unicidad: **es el único lugar que hay que tocar para agre
 | Adaptador | Módulos auxiliares |
 |---|---|
 | `WompiAdapter` | `wompi-pse.ts` (flujo PSE y firma de integridad) |
-| `MercadoPagoAdapter` | `mercadopago-pse.ts` (Orders API) |
+| `MercadoPagoAdapter` | `mercadopago-pse.ts` (PSE por la Orders API), `mercadopago-card.ts` (tarjeta por la Orders API, desde la versión 0.6.0) |
 | `KushkiAdapter` | `kushki-charge.ts`, `kushki-pse.ts`, `kushki-amount.ts` |
 | `RapydAdapter` | `rapyd-signature.ts`, `rapyd-checkout.ts`, `rapyd-pse.ts`, `rapyd-payload.ts` |
 | Compartido | `payment-method-support.ts` |

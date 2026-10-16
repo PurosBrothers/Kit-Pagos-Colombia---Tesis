@@ -164,6 +164,28 @@ async function cobrarConTarjeta() {
 > Con tarjeta también puede recibir `REDIRECT_REQUIRED`: Rapyd cobra en su página alojada, y
 > cualquiera de las cuatro puede pedir autenticación 3DS. Trate siempre las dos ramas.
 
+> **Mercado Pago cobra la tarjeta por la Orders API desde la versión 0.6.0.** Hasta la 0.5.0
+> usaba la Payments API (`POST /v1/payments`), que con las credenciales `APP_USR-` del vendedor
+> de prueba de una aplicación «Checkout API via Orders» responde `401 "Unauthorized use of live
+> credentials"` (medido el 15 de octubre de 2026). Ahora tarjeta y PSE usan la misma pareja de
+> credenciales y la misma API, sin cambios en su código: `PaymentMethod.card(token, {
+> installments })` sigue igual. Lo que sí cambia:
+>
+> - El SDK hace dos lecturas antes de cobrar (`GET /v1/card_tokens/{token}` y
+>   `GET /v1/payment_methods/search`) para deducir la marca y el tipo de la tarjeta, que la
+>   Orders API exige. Por eso necesita `publicKey` en las credenciales de Mercado Pago.
+> - El identificador de la transacción es el de la orden (`ORD…`, o `ORDTST…` con un vendedor
+>   de prueba) y no un número. `getPaymentStatus()` sigue consultando los ids numéricos de los
+>   pagos creados con versiones anteriores.
+> - Un rechazo llega como una transacción `DECLINED` con `rejectionReason` (por ejemplo
+>   `insufficient_amount`), igual que en PSE, y no como un error.
+> - El monto no admite centavos: `total_amount` solo acepta pesos enteros, así que un monto con
+>   decimales distintos de cero falla con `INVALID_REQUEST` antes de cobrar.
+> - La respuesta de la orden no trae el email del pagador, así que `transaction.payer.email`
+>   lleva un valor de relleno; conserve el email en su propio registro.
+> - El cobro con tarjeta de Mercado Pago no devuelve redirección: la orden llega con
+>   `transaction_security.validation: "never"` y el SDK no pide 3DS.
+
 #### 2.1 Tokenización en el Navegador (`kit-pagos-colombia/browser`)
 
 Para cumplir con **PCI DSS**, los datos sensibles de la tarjeta (número PAN, CVC, fecha de expiración) **nunca deben entrar al backend del comercio ni al SDK de servidor**.
@@ -284,6 +306,12 @@ async function pagarConPSE() {
 > orden se crea con el pago fallido. En los dos casos `createPayment()` devuelve la transacción
 > normalizada (en Mercado Pago, `DECLINED` con el identificador de la orden) en vez de una
 > redirección hacia un pago que ya terminó.
+
+> Mercado Pago exige además `ipAddress`, la IP del pagador. Desde la versión 0.6.0 el SDK la
+> normaliza antes de enviarla: quita los espacios, convierte `::ffff:a.b.c.d` en `a.b.c.d` y
+> `::1` en `127.0.0.1`, que son las formas en que Node entrega `req.ip` en un servidor que
+> escucha en `::` y que Mercado Pago rechaza con `400` (medido el 15 de octubre de 2026). Las
+> demás direcciones pasan tal cual, y una IP en blanco cuenta como faltante.
 
 ---
 

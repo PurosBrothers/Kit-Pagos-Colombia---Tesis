@@ -20,12 +20,19 @@ import {
 } from "../gateways/wompi/integritySignature";
 import { wompiIntegritySecret } from "../auth/merchantSecrets";
 import {
+  allowAnyOrigin,
+  registerTokenizationPreflight,
+  WOMPI_TOKENIZATION_PREFLIGHT_HEADERS,
+} from "../gateways/tokenizationCors";
+import {
   WompiCreateTransactionRequestBody,
   WompiTokenizeCardRequestBody,
 } from "../gateways/wompi/types";
 import { rememberScenarioTarget } from "../state/scenarioTarget";
 import { wompiStateMachine } from "../state/wompiStateMachine";
+import { sendBankPage } from "../gateways/bankPage";
 import { rememberBankRedirectOrigin, requestOrigin } from "../store/BankRedirectOrigins";
+import { bankReturnUrlFor, rememberBankReturnUrl } from "../store/BankReturnUrls";
 import { wompiTransactions } from "../store/GatewayStores";
 import { cardTokenOutcomeFor, rememberCardTokenOutcome } from "../store/CardTokenOutcomes";
 import {
@@ -90,16 +97,6 @@ const INVALID_KEY_ON_QUERY = {
 const NOT_FOUND = {
   error: { type: "NOT_FOUND_ERROR", reason: "La entidad solicitada no existe" },
 } as const;
-
-/** La página de `GET /v1/sim/wompi/pse/redirect`. La lee una persona, así que va en español. */
-const PSE_REDIRECT_PAGE =
-  '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
-  "<title>Redirección simulada al banco (PSE)</title></head><body>" +
-  "<h1>Redirección simulada al banco</h1>" +
-  "<p>Esta página es de la API de Simulación de Kit Pagos Colombia. No es de Wompi ni de " +
-  "un banco, y no imita la página real del banco.</p>" +
-  "<p>El resultado del pago quedó decidido al crear la transacción. " +
-  "Consulte la transacción para conocerlo.</p></body></html>";
 
 /** La página de `GET /v1/sim/wompi/terms`. La lee una persona, así que va en español. */
 const TERMS_PAGE =
@@ -248,6 +245,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         // La URL del banco se publica en una consulta, que no sabe con qué host se creó el PSE.
         if (response.data.payment_method?.type === "PSE") {
           rememberBankRedirectOrigin("wompi", response.data.id, requestOrigin(request));
+          rememberBankReturnUrl("wompi", response.data.id.replace(/-/g, ""), requestBody.redirect_url);
         }
 
         // `PENDING` nace igual que el aprobado; lo que lo distingue es que la consulta no lo
@@ -416,14 +414,16 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
    * Nivel 3 — convención del simulador. La ruta existe en Wompi (medida como URL el 6 de
    * octubre de 2026, `docs/testing-data/wompi.md`, sección 3), pero el contenido de la página
    * del banco no se imita. Antes la URL apuntaba aquí y la ruta no estaba registrada: abrirla
-   * daba 404.
+   * daba 404. Desde el issue #109 la página devuelve al pagador a la `redirect_url` que mandó
+   * el comercio, y es la misma de las otras tres pasarelas (`gateways/bankPage.ts`).
    *
    * No mueve la transacción: en Wompi el desenlace lo decide el banco de prueba elegido al
    * crearla y se ve al consultarla (`wompiStateMachine.ts`). Tampoco repite `ticket_id` en
    * la página, para no devolver en HTML algo que vino en la URL.
    */
-  app.get("/v1/sim/wompi/pse/redirect", async (_request: FastifyRequest, reply: FastifyReply) => {
-    return reply.code(200).header("content-type", "text/html; charset=utf-8").send(PSE_REDIRECT_PAGE);
+  app.get("/v1/sim/wompi/pse/redirect", async (request: FastifyRequest, reply: FastifyReply) => {
+    const { ticket_id: ticketId } = request.query as { ticket_id?: string };
+    return sendBankPage(reply, "wompi", ticketId ? bankReturnUrlFor("wompi", ticketId) : undefined);
   });
 
   /**
@@ -439,8 +439,10 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── POST /v1/sim/wompi/tokens/cards (issue #126) ─────────────────────────
+  registerTokenizationPreflight(app, "/v1/sim/wompi/tokens/cards", WOMPI_TOKENIZATION_PREFLIGHT_HEADERS);
   app.post(
     "/v1/sim/wompi/tokens/cards",
+    { onSend: allowAnyOrigin },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const authHeader = request.headers.authorization;
       if (!authHeader || !authHeader.startsWith("Bearer ")) {

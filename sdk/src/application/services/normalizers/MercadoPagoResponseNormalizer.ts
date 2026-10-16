@@ -40,7 +40,8 @@ export class MercadoPagoResponseNormalizer implements GatewayResponseNormalizer 
 
     const rawStatus = String(data.status ?? "");
     // `currency_id` es de la Payments API y `currency` de la Orders API, que es
-    // la que usa PSE. Las dos traen el codigo ISO, solo cambia el nombre.
+    // la que usan PSE y, desde 0.6.0, tarjeta. Las dos traen el codigo ISO, solo
+    // cambia el nombre.
     const currency = new Currency(String(data.currency_id ?? data.currency ?? "COP"));
 
     // Las dos APIs expresan el monto en pesos y no en centavos, asi que se

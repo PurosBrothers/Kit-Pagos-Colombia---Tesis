@@ -18,6 +18,13 @@ El experimento de la Fase 5 compara dos prototipos funcionalmente idénticos: un
 
 La forma práctica de garantizarlo: construir un **esqueleto común**, copiarlo a las dos carpetas, y de ahí en adelante tocar **únicamente** el módulo de pagos de cada uno. **Ese esqueleto queda fuera del conteo de líneas.**
 
+El esqueleto está en `prototypes/` desde el issue #130 (punto 90 del `architecture-log.md`, y [`prototypes/README.md`](../../prototypes/README.md)):
+
+- **El módulo de pagos de cada prototipo** es `src/payments/` y `test/payments/`. Incluye `src/payments/browser/client.js`, que tokeniza la tarjeta en el navegador.
+- **Lo demás es el esqueleto**, incluido el contrato `src/checkout/PaymentsPort.ts`. `prototypes/check-skeleton-parity.sh` comprueba en la CI que sea idéntico en los dos.
+- **Los dos `package.json` traen `kit-pagos-colombia`**, para que también las dependencias sean idénticas. El mismo script falla si el módulo de pagos de A menciona el SDK.
+- **La línea base del conteo** es el commit que agrega el esqueleto.
+
 Y la otra mitad de la regla, la que es fácil de olvidar: los dos tienen que cubrir la misma funcionalidad, incluidos los tres puntos que un prototipo apurado omitiría —distinguir rechazo de fallo técnico, verificar la firma del webhook, y registrar el estado nativo para auditoría—. Un prototipo A que solo llame al endpoint de cobro no es una integración real: es la mitad de una, y compararla contra el framework completo **infla artificialmente la diferencia** a favor de la tesis.
 
 ---
@@ -26,7 +33,7 @@ Y la otra mitad de la regla, la que es fácil de olvidar: los dos tienen que cub
 
 | # | Variable | Cómo |
 |---|---|---|
-| 1 | Líneas de integración | Conteo sobre el módulo de pagos de cada prototipo, excluyendo el esqueleto común |
+| 1 | Líneas de integración | Conteo sobre el módulo de pagos de cada prototipo (`src/payments/`), excluyendo el esqueleto común |
 | 2 | Diff de migración | `git diff --stat` entre el commit de Wompi y el de Mercado Pago |
 | 3 | **Métricas CK** | `npm run metrics -- --root <prototipo>/src --tsconfig <prototipo>/tsconfig.json --json <archivo>` sobre las clases de pago de cada prototipo — ver §3 |
 | 4 | Conceptos nativos expuestos | Conteo de identificadores propios de pasarela en el código del prototipo |
@@ -46,7 +53,7 @@ Es un conteo de identificadores nativos en el código del prototipo:
 ```bash
 # Sobre el módulo de pagos de cada prototipo
 grep -rcoE "amount_in_cents|transaction_amount|acceptance_token|integrity|APPROVAL|CLO|x-signature|x-event-checksum|Private-Merchant-Id|access_key" \
-  prototypes/checkout-directo/src/pagos/
+  prototypes/checkout-directo/src/payments/
 ```
 
 **En el prototipo B ese conteo debería ser cero**, y si no lo es, la abstracción tiene una fuga. El plan de evaluación es explícito: eso sería un hallazgo negativo y hay que reportarlo igual.

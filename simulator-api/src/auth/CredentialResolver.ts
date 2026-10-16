@@ -226,9 +226,9 @@ export class CredentialResolver {
         if (!publicKey || !privateKey) return undefined;
 
         const creds: Credentials = { publicKey, privateKey };
-        const webhookSecret = (
-          this.env.KUSHKI_WEBHOOK_SECRET ?? this.env.KUSHKI_WEBHOOK_SIGNATURE_ID
-        )?.trim();
+        // Una línea `KUSHKI_WEBHOOK_SECRET=` vacía, como la de `.env.example`, no tapa el alias.
+        const webhookSecret =
+          this.env.KUSHKI_WEBHOOK_SECRET?.trim() || this.env.KUSHKI_WEBHOOK_SIGNATURE_ID?.trim();
         if (webhookSecret) creds.webhookSecret = webhookSecret;
 
         return creds;

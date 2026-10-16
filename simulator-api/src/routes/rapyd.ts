@@ -1,4 +1,5 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { sendBankPage } from "../gateways/bankPage";
 import { GatewayMockFactory } from "../gateways/rapyd/GatewayMockFactory";
 import {
   RapydCreateCheckoutRequestBody,
@@ -21,6 +22,7 @@ import {
 } from "../state/rapydStateMachine";
 import { rememberScenarioTarget } from "../state/scenarioTarget";
 import { requestOrigin } from "../store/BankRedirectOrigins";
+import { bankReturnUrlFor, rememberBankReturnUrl } from "../store/BankReturnUrls";
 import { rapydCheckouts, rapydPayments } from "../store/GatewayStores";
 import {
   hasDuplicateMark,
@@ -61,6 +63,16 @@ const HOSTED_PAGE_NOT_FOUND = {
   },
 } as const;
 
+/** La página de `GET /v1/sim/rapyd/checkout/:checkoutId/pay`. La lee una persona, así que va en español. */
+const CHECKOUT_PAY_PAGE =
+  '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
+  "<title>Página de pago simulada (Rapyd)</title></head><body>" +
+  "<h1>Página de pago simulada</h1>" +
+  "<p>Esta página es de la API de Simulación de Kit Pagos Colombia. No es de Rapyd, y no " +
+  "imita su página de pago alojada.</p>" +
+  "<p>La visita completó la página de pago. Consulte el checkout para conocer el " +
+  "resultado.</p></body></html>";
+
 /**
  * Router HTTP de Rapyd (issue #52).
  * Router HTTP de Rapyd (issue #52 & #65).
@@ -75,7 +87,8 @@ const HOSTED_PAGE_NOT_FOUND = {
  * 4. `GET  /v1/sim/rapyd/checkout/:checkoutId` — consulta de la pagina (200).
  * 5. `GET  /v1/sim/rapyd/checkout/:checkoutId/pay` — la visita del pagador a la pagina,
  *    que es el unico punto donde el cobro se concreta. No es una ruta de la API de Rapyd:
- *    es el destino de `redirect_url`. La ruta vieja, `/pagar`, responde `308` hacia esta.
+ *    es el destino de `redirect_url`, y responde una pagina HTML del simulador. La ruta
+ *    vieja, `/pagar`, responde `308` hacia esta.
  *
  * Sigue el mismo reparto que la ruta de Mercado Pago: instancia su propia
  * fabrica y resuelve el escenario aquí, sin pasar por `ScenarioEngine`. Ese
@@ -300,9 +313,10 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
          * tabla cuando el comercio consulta, salvo que la creación haya pedido que siga
          * pendiente.
          */
-        const pse = mockFactory.buildPseCreatedResponse(requestBody);
+        const pse = mockFactory.buildPseCreatedResponse(requestBody, requestOrigin(request));
         rapydPayments.save(pse.data.id, pse.data);
         rememberFailure(pse.data.id);
+        rememberBankReturnUrl("rapyd", pse.data.id, requestBody.complete_payment_url);
 
         if (wantsPending) {
           rememberScenarioTarget("rapyd", "payment", pse.data.id, "ACT");
@@ -318,6 +332,21 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(201).send(approved);
     },
   );
+
+  /**
+   * El destino de `redirect_url` de un PSE: la página de banco de Rapyd (issue #109).
+   *
+   * Nivel 3 — convención del simulador. La ruta (`/complete-bank-payment?token=`) se midió en
+   * el sandbox de Rapyd, donde la página real ofrece «Success», «Error» y «Pay»; aquí no se
+   * imita. Devuelve al pagador a la `complete_payment_url` que el comercio mandó al crear el
+   * pago (la lee del registro y no de la query) y no mueve el pago: el desenlace lo decide el
+   * escenario y se ve al consultarlo, a diferencia del checkout de tarjeta, que sí avanza con
+   * la visita.
+   */
+  app.get("/v1/sim/rapyd/complete-bank-payment", async (request: FastifyRequest, reply: FastifyReply) => {
+    const { token } = request.query as { token?: string };
+    return sendBankPage(reply, "rapyd", token ? bankReturnUrlFor("rapyd", token) : undefined);
+  });
 
   /**
    * Página de pago alojada: el camino de tarjeta de Rapyd.
@@ -529,9 +558,13 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
-      return reply
-        .code(200)
-        .send({ paid: paidCheckout.payment.paid === true, payment_id: paidCheckout.payment.id });
+      /*
+       * Nivel 3 — convención del simulador, no una medición (punto 92). La responde un
+       * navegador, así que es HTML, como la del banco de Wompi. No imita la página real de
+       * Rapyd ni dice si el pago se aprobó: eso se lee consultando el checkout, igual que contra
+       * la API real.
+       */
+      return reply.code(200).header("content-type", "text/html; charset=utf-8").send(CHECKOUT_PAY_PAGE);
     },
   );
 

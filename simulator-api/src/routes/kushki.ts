@@ -1,4 +1,5 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { sendBankPage } from "../gateways/bankPage";
 import { GatewayMockFactory } from "../gateways/kushki/GatewayMockFactory";
 import {
   KushkiChargeResponse,
@@ -19,6 +20,8 @@ import {
   kushkiTransferMachine,
 } from "../state/kushkiStateMachine";
 import { rememberScenarioTarget } from "../state/scenarioTarget";
+import { requestOrigin } from "../store/BankRedirectOrigins";
+import { bankReturnUrlFor, rememberBankReturnUrl, withQueryParam } from "../store/BankReturnUrls";
 import { kushkiCharges, kushkiTransfers } from "../store/GatewayStores";
 import { rememberTraceabilityCode } from "../store/TransferTraceability";
 import {
@@ -543,12 +546,37 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
 
       kushkiTransfers.save(body.token, moved);
 
-      const initResponse = mockFactory.buildTransferInit(body.token);
+      const initResponse = mockFactory.buildTransferInit(body.token, requestOrigin(request));
       rememberTraceabilityCode(body.token, initResponse.trazabilityCode);
+      /*
+       * Nivel 1 — medido el 14 de octubre de 2026 contra el sandbox UAT: al volver de la página
+       * real, el pagador llegó al `callbackUrl` con `token=<token de la transferencia>` agregado
+       * (`docs/05-ejemplos/checkout-frontend-rest.md`, «En Render y en el sandbox, medido en el
+       * navegador»). Se agrega al registrar la URL, no al servir la página, como en Mercado Pago.
+       */
+      rememberBankReturnUrl("kushki", body.token, withQueryParam(transfer.callbackUrl, "token", body.token));
 
       return reply.code(201).send(initResponse);
     },
   );
+
+  /**
+   * El destino de `redirectUrl`: el agente de PSE de una transferencia (issue #109).
+   *
+   * La ruta es la real. Nivel 1 — medido contra el sandbox UAT el 14 de octubre de 2026 (punto
+   * 94): la `redirectUrl` es `https://api-uat.kushkipagos.com/transfer/v1/agent?token=…&mid=…`,
+   * que redirige a `uat-sandbox.kushkipagos.com/checkout/transfer?status=pending&…`, y al volver
+   * agrega `token=` a la URL del comercio. La del simulador no lleva `mid`, y no puede apuntar al
+   * dominio real porque allí no existe un token que el simulador inventó.
+   *
+   * Nivel 3 — convención del simulador: el contenido de la página no se imita. Devuelve al
+   * pagador al `callbackUrl` que el comercio mandó al pedir el token, con `token=` agregado, y no
+   * mueve la transferencia: el desenlace lo decide el escenario y se ve al consultar el estado.
+   */
+  app.get("/v1/sim/kushki/transfer/v1/agent", async (request: FastifyRequest, reply: FastifyReply) => {
+    const { token } = request.query as { token?: string };
+    return sendBankPage(reply, "kushki", token ? bankReturnUrlFor("kushki", token) : undefined);
+  });
 
   /**
    * Consulta de estado de una transferencia.

@@ -77,8 +77,9 @@ function kushkiPse(amount: string) {
  *
  * - **Wompi, tarjeta:** nace `PENDING` y resuelve en la *primera* consulta
  *   (`advanceCardTransaction`, `routes/wompi.ts`).
- * - **Mercado Pago, tarjeta:** la consulta devuelve aprobado por omisión
- *   (`buildApprovedResponse`), en minúsculas.
+ * - **Mercado Pago, tarjeta:** desde el SDK 0.6.0 el cobro es una orden, y la orden aprobada
+ *   es `processed`, no el `approved` de la Payments API (`buildCardOrderResponse`, medido el
+ *   15 de octubre de 2026).
  * - **Rapyd, tarjeta:** la tarjeta va por la página de pago alojada, y el `id` que se
  *   devuelve es el del *checkout*, no el de un pago. Mientras nadie paga, el checkout
  *   queda en `NEW` con `payment.id` en `null` (`rapyd-checkout.ts`), que es una
@@ -96,7 +97,7 @@ const READ_CASES = [
     idOf: (body: { transaction?: { gatewayTransactionId: string } }) =>
       body.transaction!.gatewayTransactionId,
     status: "APPROVED",
-    rawStatus: "approved",
+    rawStatus: "processed",
   },
   {
     gateway: "rapyd",
