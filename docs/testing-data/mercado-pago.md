@@ -518,11 +518,38 @@ formas como `127.0.0.1` (o `a.b.c.d`) antes de enviarlas (`normalizePayerIp()`).
 > misma tanda que la sección 4. Lo registra el informe de esa medición, que resume los resultados;
 > los cuerpos completos de las respuestas no quedaron guardados en el repositorio.
 
-Las 12 órdenes de PSE creadas en ese intervalo, con varios pagadores y bancos, nacieron
+Las 18 órdenes de PSE creadas en ese intervalo (la búsqueda de órdenes del vendedor las cuenta todas;
+el informe de esa noche contaba 12), con varios pagadores y bancos, nacieron
 `processing / in_process` con `201` y **sin `redirect_url`**, y unos 4 segundos después estaban en
 `failed / processing_error`. A las 13:12 del mismo día, el mismo cuerpo había nacido
-`action_required` con la URL (sección anterior). La medición no permite saber por qué cambió: no se
-afirma una causa.
+`action_required` con la URL (sección anterior).
+
+**Lo que se descartó el 16 de octubre de 2026** (15:09–15:23, mismas credenciales):
+
+- **No es nuestra petición.** El ejemplo de la [compra de prueba con PSE](https://www.mercadopago.com.co/developers/es/docs/checkout-api-orders/integration-test/pse), enviado tal cual (CC, `test@testuser.com`, banco `1051`, `expiration_time` en la raíz), falla igual, y también el de la [integración de PSE](https://www.mercadopago.com.co/developers/es/docs/checkout-api-orders/payment-integration/websites/pse) (NIT), el cuerpo del SDK con y sin `expiration_time` en el pago, otro banco y otro monto, un pagador nunca usado, y una orden en modo `manual` procesada después con `POST /v1/orders/{id}/process`. La IP anidada en `additional_info.payer.ip_address`, como la muestra la [referencia de crear order](https://www.mercadopago.com.co/developers/es/reference/online-payments/checkout-api/create-order/post), responde `400`; la clave plana `additional_info["payer.ip_address"]`, la del SDK, es la que acepta la API.
+- **Mercado Pago no llega a crear la transferencia.** Las dos órdenes buenas de las 13:12 tenían su pago en la Payments API (`pending_waiting_transfer`, con `bank_transfer_id`); ninguna de las fallidas lo tiene, y ninguna respuesta trae `cause` ni otra pista. Una tarjeta con las mismas credenciales sigue saliendo `processed / accredited`.
+- **Una pista sin confirmar.** Las URL de banco de las dos órdenes de las 13:12, que nadie pagó, llevan al simulador de bancos (`bc_pse_sim/login`), y este responde «¡Lo sentimos! No se puede continuar con el pago, ya tienes una transacción en curso.» Se cancelaron las dos (`200 canceled`) y el PSE siguió fallando.
+- **Sin incidentes publicados.** [status.mercadopago.com](https://status.mercadopago.com/) decía «All Systems Operational» a las 14:54, sin incidentes de PSE ni de Orders entre el 13 y el 16 de octubre; esa página no cubre el sandbox. `/users/me` del vendedor no muestra restricciones (`site_status: active`), y la documentación de [cuentas de prueba](https://www.mercadopago.com.co/developers/es/docs/checkout-api-orders/resources/test-accounts) no menciona límites de órdenes.
+
+**Era la cuenta de prueba** (16 de octubre de 2026, 15:37–15:44). Con el vendedor de prueba de una
+**segunda** aplicación de Checkout API vía Orders, la misma petición del SDK nació
+`action_required / waiting_transfer` con la `redirect_url`, que llevó a «Banco Prueba PSE»
+(`api.mercadopago.com/beta/bc_pse_sim/login`). El recorrido completo:
+
+1. Iniciar sesión con un usuario y una contraseña cualesquiera.
+2. «Información de Pago»: el documento, el `Payment ID` (el id de 12 dígitos de la URL) y un desplegable de 30 escenarios. El primero es «APROBAR PAGO»; le siguen «USUARIO ABANDONÓ TRANSACCION EN BANCO», «CUENTA INACTIVA», «CUENTA NO EXISTE», «FALLAS TECNICAS» y otros.
+3. Con «APROBAR PAGO» y «Enviar»: «Estado de la Transacción: OK».
+4. «Volver al comercio» llevó a la `callback_url` con `?payment_id=<id de 12 dígitos>`.
+5. `getPaymentStatus()` del SDK sobre el id de la orden: `APPROVED`, nativo `processed`, final.
+
+Con el mismo par, la tarjeta con titular `APRO Ruiz` salió `APPROVED` (`processed`) y con `OTHE Ruiz`,
+`DECLINED` con `rejected_by_issuer`.
+
+**Hipótesis sobre la primera cuenta, sin confirmar.** Su simulador de bancos respondía «ya tienes una
+transacción en curso» para las dos órdenes de las 13:12, que nadie terminó en el banco simulado.
+Puede que eso haya bloqueado el PSE de ese vendedor; cancelar las órdenes no lo desbloqueó. La
+primera aplicación queda sin usar. **En este sandbox, cada PSE se termina en el banco simulado**,
+aprobándolo o eligiendo «USUARIO ABANDONÓ TRANSACCION EN BANCO», en vez de dejarlo abierto.
 
 Para el comercio, una orden sin URL no tiene adónde mandar al pagador, pero existe y tiene
 identificador. Desde la versión 0.6.0-rc.2, `createPayment()` la devuelve como una transacción
