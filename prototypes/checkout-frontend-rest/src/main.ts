@@ -1,14 +1,15 @@
 import { createKitPagosApi } from "./api";
 import {
   describeOutcome,
+  offersStatusQuery,
   payWithCard,
   payWithPse,
   peekPending,
-  pollUntilFinal,
+  queryPending,
   rememberPending,
-  takePending,
   type CheckoutStep,
   type Order,
+  type PendingPayment,
 } from "./checkout";
 import { cardTokenizationProblem, loadConfig } from "./config";
 import { loadCardTokenizer } from "./tokenizer";
@@ -76,11 +77,12 @@ function orderFrom(data: FormData): Order {
 
 function show(step: CheckoutStep): void {
   statusLine.textContent = describeOutcome(step);
-  const redirecting = step.kind === "redirect";
-  redirectLink.hidden = !redirecting;
-  returnButton.hidden = !redirecting;
-  if (step.kind === "redirect") {
+  redirectLink.hidden = step.kind !== "redirect";
+  returnButton.hidden = !offersStatusQuery(step);
+  if (step.kind !== "final") {
     rememberPending(sessionStorage, step.pending);
+  }
+  if (step.kind === "redirect") {
     redirectLink.href = step.redirectUrl;
     redirectLink.textContent = `Ir a ${new URL(step.redirectUrl).host} para pagar`;
     note(`redirectUrl ${step.redirectUrl}`);
@@ -128,6 +130,20 @@ async function main(): Promise<void> {
   gatewaySelect.replaceChildren(...gateways.map((gateway) => new Option(gateway, gateway)));
   gatewaySelect.addEventListener("change", () => void refreshBanks().catch(showError));
   form.addEventListener("change", showMethodFields);
+
+  /** Deja en el formulario la pasarela y el método del pago que se está consultando. */
+  function restoreForm(pending: PendingPayment): void {
+    if (gateways.includes(pending.gateway)) {
+      gatewaySelect.value = pending.gateway;
+    }
+    (form.elements.namedItem("method") as RadioNodeList).value = pending.method;
+  }
+
+  const returning = new URLSearchParams(location.search).has("retorno");
+  const pending = peekPending(sessionStorage);
+  if (returning && pending) {
+    restoreForm(pending);
+  }
   showMethodFields();
   await refreshBanks();
 
@@ -170,22 +186,20 @@ async function main(): Promise<void> {
     step.then(show).catch(showError);
   });
 
-  if (new URLSearchParams(location.search).has("retorno")) {
-    const pending = takePending(sessionStorage);
+  if (returning) {
     if (pending) {
       note(`retorno del pagador, orden ${pending.orderReference}`);
       statusLine.textContent = "Consultando el estado del pago…";
-      show(await pollUntilFinal(api, pending));
+      show(await queryPending(api, sessionStorage, pending));
     } else {
       statusLine.textContent = "No hay un pago pendiente que consultar.";
     }
     return;
   }
 
-  const waiting = peekPending(sessionStorage);
-  returnButton.hidden = waiting === undefined;
-  statusLine.textContent = waiting
-    ? `Hay un pago pendiente (orden ${waiting.orderReference}). Si ya pagó en el banco, vuelva al comercio.`
+  returnButton.hidden = pending === undefined;
+  statusLine.textContent = pending
+    ? `Hay un pago pendiente (orden ${pending.orderReference}). Si ya pagó en el banco, vuelva al comercio.`
     : "Elija la pasarela y el método de pago.";
 }
 

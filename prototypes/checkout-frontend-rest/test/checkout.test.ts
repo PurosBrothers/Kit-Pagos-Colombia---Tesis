@@ -3,15 +3,18 @@ import { createKitPagosApi, KitPagosApiError } from "../src/api";
 import {
   CardModuleError,
   describeOutcome,
+  forgetPending,
+  offersStatusQuery,
   payWithCard,
   payWithPse,
   peekPending,
   PENDING_STORAGE_KEY,
   pollUntilFinal,
+  queryPending,
   rememberPending,
-  takePending,
   type KeyValueStorage,
   type Order,
+  type PendingPayment,
   type PollOptions,
 } from "../src/checkout";
 import { KIT_PAGOS_BROWSER_URL, loadCardTokenizer, type CardTokenizer } from "../src/tokenizer";
@@ -67,13 +70,15 @@ describe("PSE through /v1/api, the same code for the four gateways", () => {
     if (step.kind !== "redirect") return;
     expect(step.redirectUrl).toBe((FIXTURES[gateway].pseCreated as { redirect: { redirectUrl: string } }).redirect.redirectUrl);
 
+    expect(step.pending.method).toBe("PSE");
     rememberPending(storage, step.pending);
-    const pending = takePending(storage);
+    const pending = peekPending(storage);
     expect(pending).toEqual(step.pending);
 
-    const final = await pollUntilFinal(api, pending!, NO_WAIT);
+    const final = await queryPending(api, storage, pending!, NO_WAIT);
     expect(final.kind).toBe("final");
     expect(final.kind !== "redirect" && final.transaction.status).toBe("APPROVED");
+    expect(peekPending(storage)).toBeUndefined();
 
     const sent = JSON.parse(calls.find((call) => call.method === "POST")!.body!);
     expect(sent).toEqual({
@@ -234,10 +239,30 @@ describe("card payments", () => {
     expect(step.kind === "final" && step.transaction.status).toBe("APPROVED");
     expect(calls.filter((call) => call.method === "GET")).toHaveLength(1);
   });
+
+  it("keeps a card payment that stays PENDING as the payment to query again, with its method", async () => {
+    const stuck = transaction("w-2", "PENDING", "PENDING", false);
+    const { fetchFn } = createFakeApi({ cardCreated: { outcome: "TRANSACTION", transaction: stuck }, statusSequence: [stuck, stuck] });
+    const { tokenizer } = tokenizerSpy(Promise.resolve({ token: "tok" }));
+
+    const step = await payWithCard(
+      { api: createKitPagosApi(API, fetchFn), loadTokenizer: async () => tokenizer, publicKeys: {}, environment: "simulator" },
+      orderFor("wompi"),
+      CARD,
+      { ...NO_WAIT, maxAttempts: 2 },
+    );
+
+    expect(step).toEqual({
+      kind: "pending",
+      transaction: stuck,
+      pending: { gateway: "wompi", gatewayTransactionId: "w-2", orderReference: "C109-wompi", method: "CARD" },
+    });
+    expect(offersStatusQuery(step)).toBe(true);
+  });
 });
 
 describe("pollUntilFinal", () => {
-  const pending = { gateway: "rapyd", gatewayTransactionId: "payment_1", orderReference: "C109" };
+  const pending: PendingPayment = { gateway: "rapyd", gatewayTransactionId: "payment_1", orderReference: "C109", method: "PSE" };
 
   it("waits between queries and stops at the first final status", async () => {
     const sleep = vi.fn(async () => undefined);
@@ -259,9 +284,61 @@ describe("pollUntilFinal", () => {
 
     const step = await pollUntilFinal(createKitPagosApi(API, fetchFn), pending, { ...NO_WAIT, maxAttempts: 3 });
 
-    expect(step).toEqual({ kind: "pending", transaction: stuck });
+    expect(step).toEqual({ kind: "pending", transaction: stuck, pending });
     expect(calls).toHaveLength(3);
     expect(describeOutcome(step)).toContain("sigue pendiente");
+  });
+});
+
+describe("the payer's return: the pending payment lives until a final status", () => {
+  const pending: PendingPayment = { gateway: "kushki", gatewayTransactionId: "token-1", orderReference: "C109-k", method: "PSE" };
+  const stuck = transaction("token-1", "PENDING", "initializedTransaction", false);
+
+  it("keeps a payment that is still pending and offers to query it again (Kushki sandbox, measured)", async () => {
+    const storage = memoryStorage();
+    rememberPending(storage, pending);
+    const { fetchFn } = createFakeApi({ statusSequence: [stuck, stuck] });
+
+    const step = await queryPending(createKitPagosApi(API, fetchFn), storage, pending, { ...NO_WAIT, maxAttempts: 2 });
+
+    expect(step.kind).toBe("pending");
+    expect(offersStatusQuery(step)).toBe(true);
+    expect(peekPending(storage)).toEqual(pending);
+  });
+
+  it("queries again with «Ya pagué» and forgets the payment once it is final", async () => {
+    const storage = memoryStorage();
+    rememberPending(storage, pending);
+    const { fetchFn, calls } = createFakeApi({
+      statusSequence: [stuck, transaction("token-1", "APPROVED", "approvedTransaction")],
+    });
+    const api = createKitPagosApi(API, fetchFn);
+
+    const first = await queryPending(api, storage, peekPending(storage)!, { ...NO_WAIT, maxAttempts: 1 });
+    const second = await queryPending(api, storage, peekPending(storage)!, { ...NO_WAIT, maxAttempts: 1 });
+
+    expect(first.kind).toBe("pending");
+    expect(second.kind).toBe("final");
+    expect(offersStatusQuery(second)).toBe(false);
+    expect(peekPending(storage)).toBeUndefined();
+    expect(calls).toHaveLength(2);
+  });
+
+  it("does not forget another payment the payer started while the query was running", async () => {
+    const storage = memoryStorage();
+    const other: PendingPayment = { ...pending, gatewayTransactionId: "token-2", orderReference: "C109-otra" };
+    rememberPending(storage, other);
+    const { fetchFn } = createFakeApi({ statusSequence: [transaction("token-1", "DECLINED", "declinedTransaction")] });
+
+    const step = await queryPending(createKitPagosApi(API, fetchFn), storage, pending, NO_WAIT);
+
+    expect(step.kind).toBe("final");
+    expect(peekPending(storage)).toEqual(other);
+  });
+
+  it("offers the query while the payer is at the bank too, but not after a final status", () => {
+    expect(offersStatusQuery({ kind: "redirect", redirectUrl: "u", pending })).toBe(true);
+    expect(offersStatusQuery({ kind: "final", transaction: transaction("t", "APPROVED", "APPROVED") })).toBe(false);
   });
 });
 
@@ -292,31 +369,42 @@ describe("the API client", () => {
 });
 
 describe("pending payment storage", () => {
-  it("reads the pending payment once", () => {
-    const storage = memoryStorage();
-    rememberPending(storage, { gateway: "g", gatewayTransactionId: "id", orderReference: "o" });
-
-    expect(takePending(storage)).toEqual({ gateway: "g", gatewayTransactionId: "id", orderReference: "o" });
-    expect(takePending(storage)).toBeUndefined();
-  });
+  const stored: PendingPayment = { gateway: "g", gatewayTransactionId: "id", orderReference: "o", method: "CARD" };
 
   it("peeks at the pending payment without removing it, for a payer who came back with Back", () => {
     const storage = memoryStorage();
     expect(peekPending(storage)).toBeUndefined();
 
-    rememberPending(storage, { gateway: "g", gatewayTransactionId: "id", orderReference: "o" });
+    rememberPending(storage, stored);
 
-    expect(peekPending(storage)).toEqual({ gateway: "g", gatewayTransactionId: "id", orderReference: "o" });
-    expect(takePending(storage)).toEqual({ gateway: "g", gatewayTransactionId: "id", orderReference: "o" });
+    expect(peekPending(storage)).toEqual(stored);
+    expect(peekPending(storage)).toEqual(stored);
   });
 
-  it("ignores a corrupt or incomplete value", () => {
+  it("forgets the pending payment only if it is the same one", () => {
+    const storage = memoryStorage();
+    rememberPending(storage, stored);
+
+    forgetPending(storage, { ...stored, gatewayTransactionId: "otro" });
+    expect(peekPending(storage)).toEqual(stored);
+
+    forgetPending(storage, stored);
+    expect(peekPending(storage)).toBeUndefined();
+  });
+
+  it("ignores a corrupt or incomplete value, and one without a known method", () => {
     const storage = memoryStorage();
     storage.setItem(PENDING_STORAGE_KEY, "{no es json");
-    expect(takePending(storage)).toBeUndefined();
+    expect(peekPending(storage)).toBeUndefined();
 
     storage.setItem(PENDING_STORAGE_KEY, JSON.stringify({ gateway: "g" }));
-    expect(takePending(storage)).toBeUndefined();
+    expect(peekPending(storage)).toBeUndefined();
+
+    storage.setItem(PENDING_STORAGE_KEY, JSON.stringify({ ...stored, method: undefined }));
+    expect(peekPending(storage)).toBeUndefined();
+
+    storage.setItem(PENDING_STORAGE_KEY, JSON.stringify({ ...stored, method: "NEQUI" }));
+    expect(peekPending(storage)).toBeUndefined();
   });
 });
 
@@ -391,7 +479,12 @@ describe("the environment of the calls", () => {
     expect(onWarning).not.toHaveBeenCalled();
   });
 
-  it("says which API it could not reach, instead of the browser's «Failed to fetch»", async () => {
+  /*
+   * El mismo `TypeError` sale con la API apagada y con una respuesta que el navegador no deja
+   * leer por CORS: medido el 15 de octubre de 2026, un túnel de Cloudflare cambió un 502 de la
+   * API por su página sin `access-control-allow-origin`, y la página decía que la API estaba apagada.
+   */
+  it("names the API's origin, both possible causes and the browser's error", async () => {
     const api = createKitPagosApi("https://api.example.com/v1/api", async () => {
       throw new TypeError("Failed to fetch");
     });
@@ -400,20 +493,38 @@ describe("the environment of the calls", () => {
 
     expect(failure).toBeInstanceOf(KitPagosApiError);
     expect(failure).toMatchObject({ status: 0, code: "API_UNREACHABLE" });
-    expect((failure as Error).message).toContain("https://api.example.com");
-    expect((failure as Error).message).toContain("Render");
+    expect((failure as Error).message).toBe(
+      "No se pudo leer la respuesta de la API en https://api.example.com. Hay dos causas posibles: " +
+        "la API no respondió (verifique que esté encendida; si es la desplegada en Render, puede estar despertando), " +
+        "o respondió y el navegador no pudo leer la respuesta, como pasa cuando un proxy (un túnel de Cloudflare, " +
+        "por ejemplo) reemplaza un error de la API por una página propia sin CORS. " +
+        "El registro de la API dice si la petición llegó. (TypeError: Failed to fetch)",
+    );
   });
 });
 
 describe("describeOutcome", () => {
-  it("names the final status, the native one and the rejection reason", () => {
-    const declined = { ...transaction("t", "DECLINED", "DECLINED"), rejectionReason: { message: "Fondos insuficientes" } };
+  it("names the final status, the native one and the rejection reason with the SDK's fields", () => {
+    const declined = {
+      ...transaction("t", "DECLINED", "failed"),
+      rejectionReason: { rejectionCode: "rejected_by_issuer", rejectionCategory: "UNKNOWN" },
+    };
 
     expect(describeOutcome({ kind: "final", transaction: declined })).toBe(
-      "Estado final: DECLINED (nativo DECLINED). Motivo: Fondos insuficientes.",
+      "Estado final: DECLINED (nativo failed). Motivo: rejected_by_issuer (categoría UNKNOWN).",
     );
-    expect(describeOutcome({ kind: "redirect", redirectUrl: "u", pending: { gateway: "g", gatewayTransactionId: "i", orderReference: "o" } })).toContain(
-      "redirigir",
+    expect(
+      describeOutcome({
+        kind: "redirect",
+        redirectUrl: "u",
+        pending: { gateway: "g", gatewayTransactionId: "i", orderReference: "o", method: "PSE" },
+      }),
+    ).toContain("redirigir");
+  });
+
+  it("says nothing about a reason when the API sends none (Wompi)", () => {
+    expect(describeOutcome({ kind: "final", transaction: transaction("t", "DECLINED", "DECLINED") })).toBe(
+      "Estado final: DECLINED (nativo DECLINED).",
     );
   });
 });

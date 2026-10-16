@@ -22,17 +22,21 @@ export interface Order {
   returnUrl: string;
 }
 
-/** Lo que hay que recordar mientras el pagador está en el banco o en el checkout alojado. */
+/**
+ * Lo que hay que recordar mientras el pago no tenga estado final: el pagador está en el banco o
+ * en el checkout alojado, o ya volvió y el pago sigue pendiente.
+ */
 export interface PendingPayment {
   gateway: string;
   gatewayTransactionId: string;
   orderReference: string;
+  method: PaymentMethodBody["type"];
 }
 
 export type CheckoutStep =
   | { kind: "redirect"; redirectUrl: string; pending: PendingPayment }
   | { kind: "final"; transaction: TransactionView }
-  | { kind: "pending"; transaction: TransactionView };
+  | { kind: "pending"; transaction: TransactionView; pending: PendingPayment };
 
 export interface PollOptions {
   maxAttempts: number;
@@ -73,7 +77,7 @@ export async function pollUntilFinal(
     await options.sleep(options.intervalMs);
     transaction = await api.getPaymentStatus(pending.gateway, pending.gatewayTransactionId);
   }
-  return transaction.isFinal ? { kind: "final", transaction } : { kind: "pending", transaction };
+  return transaction.isFinal ? { kind: "final", transaction } : { kind: "pending", transaction, pending };
 }
 
 export async function startPayment(
@@ -92,6 +96,7 @@ export async function startPayment(
         gateway: order.gateway,
         gatewayTransactionId: created.redirect.gatewayTransactionId,
         orderReference: order.orderReference,
+        method: paymentMethod.type,
       },
     };
   }
@@ -105,6 +110,7 @@ export async function startPayment(
       gateway: order.gateway,
       gatewayTransactionId: created.transaction.gatewayTransactionId,
       orderReference: order.orderReference,
+      method: paymentMethod.type,
     },
     poll,
   );
@@ -192,11 +198,36 @@ export function peekPending(storage: KeyValueStorage): PendingPayment | undefine
   return parsePending(storage.getItem(PENDING_STORAGE_KEY));
 }
 
-/** Lee y borra el pago pendiente: una recarga de la página de retorno no lo vuelve a consultar. */
-export function takePending(storage: KeyValueStorage): PendingPayment | undefined {
-  const raw = storage.getItem(PENDING_STORAGE_KEY);
-  storage.removeItem(PENDING_STORAGE_KEY);
-  return parsePending(raw);
+/**
+ * Borra el pago pendiente si sigue siendo el mismo. Mientras se consultaba, el pagador pudo
+ * empezar otro cobro desde la misma página, y ese no se borra.
+ */
+export function forgetPending(storage: KeyValueStorage, pending: PendingPayment): void {
+  if (peekPending(storage)?.gatewayTransactionId === pending.gatewayTransactionId) {
+    storage.removeItem(PENDING_STORAGE_KEY);
+  }
+}
+
+/**
+ * Consulta el pago pendiente y lo olvida solo con un estado final. Si sigue pendiente queda
+ * guardado, y «Ya pagué: consultar el estado» lo puede volver a consultar.
+ */
+export async function queryPending(
+  api: KitPagosApi,
+  storage: KeyValueStorage,
+  pending: PendingPayment,
+  poll: PollOptions = DEFAULT_POLL,
+): Promise<CheckoutStep> {
+  const step = await pollUntilFinal(api, pending, poll);
+  if (step.kind === "final") {
+    forgetPending(storage, pending);
+  }
+  return step;
+}
+
+/** Si la página ofrece consultar el estado de nuevo: mientras el pago no tenga estado final. */
+export function offersStatusQuery(step: CheckoutStep): boolean {
+  return step.kind !== "final";
 }
 
 function parsePending(raw: string | null): PendingPayment | undefined {
@@ -205,7 +236,12 @@ function parsePending(raw: string | null): PendingPayment | undefined {
   }
   try {
     const parsed = JSON.parse(raw) as Partial<PendingPayment>;
-    if (parsed.gateway && parsed.gatewayTransactionId && parsed.orderReference) {
+    if (
+      parsed.gateway &&
+      parsed.gatewayTransactionId &&
+      parsed.orderReference &&
+      (parsed.method === "PSE" || parsed.method === "CARD")
+    ) {
       return parsed as PendingPayment;
     }
   } catch {
@@ -219,7 +255,9 @@ export function describeOutcome(step: CheckoutStep): string {
     return "La pasarela pide redirigir al pagador para completar el pago.";
   }
   const { status, rawStatus, rejectionReason } = step.transaction;
-  const reason = rejectionReason?.message ? ` Motivo: ${rejectionReason.message}.` : "";
+  const reason = rejectionReason
+    ? ` Motivo: ${rejectionReason.rejectionCode} (categoría ${rejectionReason.rejectionCategory}).`
+    : "";
   if (step.kind === "pending") {
     return `El pago sigue pendiente (${status}, nativo ${rawStatus}). Consulte de nuevo más tarde.`;
   }

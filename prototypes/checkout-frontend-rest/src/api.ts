@@ -60,7 +60,8 @@ export interface TransactionView {
   isPending: boolean;
   isFinal: boolean;
   authorizationCode?: string;
-  rejectionReason?: { code?: string; category?: string; message?: string };
+  /** El `RejectionReason` del SDK, con sus mismos campos. Solo en un rechazo con código. */
+  rejectionReason?: { rejectionCode: string; rejectionCategory: string };
 }
 
 export type CreatePaymentResponse =
@@ -131,14 +132,18 @@ export function createKitPagosApi(
     try {
       response = await fetchFn(`${root}${path}`, { ...init, headers });
     } catch (error) {
-      // `fetch` solo rechaza con un `TypeError` cuando no hubo respuesta: la API apagada, un
-      // nombre que no resuelve o una URL equivocada. El mensaje del navegador («Failed to
-      // fetch») no dice a dónde se intentó llegar.
+      // `fetch` rechaza con el mismo `TypeError` cuando no hubo respuesta y cuando la hubo pero
+      // el navegador no la deja leer por CORS: el estándar Fetch trata los dos como error de red,
+      // y la página no puede distinguirlos. Medido el 15 de octubre de 2026: un túnel de
+      // Cloudflare cambió un 502 de la API por su propia página, sin CORS.
       throw new KitPagosApiError(
         0,
         "API_UNREACHABLE",
-        `No se pudo conectar con la API en ${new URL(root).origin}. Verifique que esté encendida; ` +
-          `si es la desplegada en Render, puede estar despertando. (${String(error)})`,
+        `No se pudo leer la respuesta de la API en ${new URL(root).origin}. Hay dos causas posibles: ` +
+          `la API no respondió (verifique que esté encendida; si es la desplegada en Render, puede estar despertando), ` +
+          `o respondió y el navegador no pudo leer la respuesta, como pasa cuando un proxy (un túnel de Cloudflare, ` +
+          `por ejemplo) reemplaza un error de la API por una página propia sin CORS. ` +
+          `El registro de la API dice si la petición llegó. (${String(error)})`,
       );
     }
 
