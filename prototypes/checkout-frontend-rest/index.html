@@ -3,18 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Prototipo C · Checkout hacia la API REST de Kit Pagos</title>
-    <style>
-      body { font-family: system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; color: #1f2933; }
-      fieldset { border: 1px solid #cbd2d9; border-radius: 6px; margin: 0 0 1rem; }
-      label { display: inline-block; margin: 0.25rem 1rem 0.25rem 0; }
-      input, select, button { font: inherit; }
-      button[type="submit"] { padding: 0.4rem 1.2rem; }
-      #status { font-weight: 600; }
-      #target { font-size: 0.85rem; color: #52606d; }
-      #warning { background: #fff8e1; border: 1px solid #f0c36d; border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.9rem; }
-      #trace { background: #f5f7fa; padding: 0.75rem; white-space: pre-wrap; font-size: 0.85rem; min-height: 3rem; }
-    </style>
+    <title>Tostadero Ceiba · Café de origen</title>
     <!-- El hash es el del archivo de esa URL exacta, la de src/tokenizer.ts: si cambia la versión, «npm run check:sri» da el nuevo. -->
     <script type="importmap">
       {
@@ -25,65 +14,154 @@
     </script>
   </head>
   <body>
-    <h1>Checkout C</h1>
-    <p>Cobra contra <code>/v1/api</code> sin instalar <code>kit-pagos-colombia</code>. La pasarela es solo un valor del formulario.</p>
-    <p id="target">Cargando la configuración…</p>
-    <p id="warning" hidden></p>
+    <svg class="sprite" aria-hidden="true">
+      <symbol id="art-grano" viewBox="0 0 200 160">
+        <ellipse cx="100" cy="146" rx="62" ry="6" fill="#d9cbb6" />
+        <path d="M58 40 L142 40 L150 142 L50 142 Z" fill="#c9a77c" />
+        <path d="M58 40 L142 40 L139 30 L61 30 Z" fill="#b8915f" />
+        <path d="M61 30 L68 20 L132 20 L139 30 Z" fill="#a67f4f" />
+        <rect x="72" y="70" width="56" height="44" rx="3" fill="#f6efe3" />
+        <rect x="80" y="80" width="40" height="5" rx="2" fill="#7a4b2a" />
+        <rect x="84" y="91" width="32" height="3" rx="1.5" fill="#b5532b" />
+        <rect x="88" y="99" width="24" height="3" rx="1.5" fill="#c9b79c" />
+        <ellipse cx="160" cy="134" rx="8" ry="5.5" fill="#5a3825" transform="rotate(-25 160 134)" />
+        <path d="M155 136 Q160 133 165 131" stroke="#3b2417" stroke-width="1.5" fill="none" />
+        <ellipse cx="38" cy="138" rx="7" ry="5" fill="#6b4430" transform="rotate(20 38 138)" />
+        <path d="M33 136 Q38 138 43 140" stroke="#3b2417" stroke-width="1.5" fill="none" />
+      </symbol>
+      <symbol id="art-molido" viewBox="0 0 200 160">
+        <ellipse cx="100" cy="146" rx="52" ry="6" fill="#d9cbb6" />
+        <path d="M66 48 Q100 36 134 48 L138 142 L62 142 Z" fill="#5b6b4e" />
+        <path d="M66 48 Q100 36 134 48 L132 40 Q100 28 68 40 Z" fill="#4a5940" />
+        <rect x="80" y="64" width="40" height="40" rx="20" fill="#f6efe3" />
+        <circle cx="100" cy="84" r="14" fill="#6b4430" />
+        <circle cx="94" cy="80" r="2" fill="#8a5b3d" />
+        <circle cx="104" cy="88" r="2.4" fill="#4d2f1f" />
+        <circle cx="101" cy="78" r="1.6" fill="#8a5b3d" />
+        <rect x="78" y="114" width="44" height="4" rx="2" fill="#e7dcc6" />
+        <rect x="86" y="123" width="28" height="3" rx="1.5" fill="#c9b79c" />
+      </symbol>
+      <symbol id="art-taza" viewBox="0 0 200 160">
+        <ellipse cx="96" cy="146" rx="64" ry="7" fill="#d9cbb6" />
+        <ellipse cx="96" cy="140" rx="56" ry="7" fill="#cdbca3" />
+        <path d="M54 66 L138 66 L132 132 Q96 142 60 132 Z" fill="#e8dcc8" />
+        <path d="M54 66 L138 66 L136 84 Q96 92 56 84 Z" fill="#b5532b" opacity="0.85" />
+        <ellipse cx="96" cy="66" rx="42" ry="8" fill="#d8c8ae" />
+        <ellipse cx="96" cy="66" rx="36" ry="5.5" fill="#4d2f1f" />
+        <path d="M137 80 Q162 82 160 102 Q158 120 134 118" stroke="#e8dcc8" stroke-width="9" fill="none" stroke-linecap="round" />
+        <path d="M84 48 Q78 38 86 30 Q92 24 86 14" stroke="#c9b79c" stroke-width="3" fill="none" stroke-linecap="round" />
+        <path d="M104 50 Q98 40 106 32 Q112 26 106 16" stroke="#c9b79c" stroke-width="3" fill="none" stroke-linecap="round" />
+      </symbol>
+    </svg>
 
-    <form id="checkout">
-      <fieldset>
-        <legend>Pedido</legend>
-        <label>Pasarela <select id="gateway" name="gateway"></select></label>
-        <label>Monto (COP) <input name="amount" value="50000.00" inputmode="decimal" required /></label>
-      </fieldset>
+    <p class="demo-ribbon" id="demo-ribbon">Tienda de demostración</p>
 
-      <fieldset>
-        <legend>Pagador</legend>
-        <label>Correo <input name="email" type="email" value="pagador.c@example.com" required /></label>
-        <label>Nombre <input name="firstName" value="Felipe" required /></label>
-        <label>Apellido <input name="lastName" value="Ruiz" required /></label>
-        <label>Documento <select name="documentType"><option>CC</option><option>CE</option><option>NIT</option></select></label>
-        <label>Número <input name="documentNumber" value="1020304050" required /></label>
-        <label>Teléfono <input name="phone" value="3001234567" required /></label>
-        <label>Calle <input name="streetName" value="Carrera 7" required /></label>
-        <label>Número <input name="streetNumber" value="71-21" required /></label>
-        <label>Ciudad <input name="city" value="Bogota" required /></label>
-        <label>Código postal <input name="zipCode" value="110221" required /></label>
-        <label>Barrio <input name="neighborhood" value="Chapinero" required /></label>
-      </fieldset>
+    <header class="masthead">
+      <div class="masthead__inner">
+        <a class="brand" href="./">
+          <span class="brand__mark" aria-hidden="true">C</span>
+          <span>
+            <span class="brand__name">Tostadero Ceiba</span>
+            <span class="brand__tagline">Café de origen, tostado en Bogotá</span>
+          </span>
+        </a>
+        <a class="cart-link" href="#pedido">Tu pedido <span class="cart-link__count" id="cart-count">0</span></a>
+      </div>
+    </header>
 
-      <fieldset>
-        <legend>Método</legend>
-        <label><input type="radio" name="method" value="PSE" checked /> PSE</label>
-        <label><input type="radio" name="method" value="CARD" /> Tarjeta</label>
-      </fieldset>
+    <main class="shop" id="shop">
+      <section class="catalog" aria-labelledby="catalog-title">
+        <div class="catalog__intro">
+          <h1 id="catalog-title">Esta semana en el tostador</h1>
+          <p>Lotes pequeños de fincas que conocemos. Tostamos los martes y despachamos a todo el país.</p>
+        </div>
+        <ul class="products" id="products"></ul>
+      </section>
 
-      <fieldset id="pse-fields">
-        <legend>PSE</legend>
-        <label>Banco <select id="bank" name="bank"></select></label>
-      </fieldset>
+      <aside class="order" id="pedido" aria-labelledby="order-title">
+        <h2 id="order-title">Tu pedido</h2>
+        <p class="notice" id="pending-notice" hidden>
+          <span id="pending-text"></span>
+          <button type="button" class="link-button" id="pending-check">Consultar el estado</button>
+        </p>
+        <p class="order__empty" id="cart-empty">Todavía no has agregado nada. Elige un café de la izquierda.</p>
+        <ul class="lines" id="cart-lines"></ul>
+        <dl class="totals" id="cart-totals" hidden>
+          <div><dt>Subtotal</dt><dd id="subtotal"></dd></div>
+          <div><dt>Envío</dt><dd>Gratis</dd></div>
+          <div class="totals__grand"><dt>Total</dt><dd id="total"></dd></div>
+        </dl>
 
-      <fieldset id="card-fields" hidden>
-        <legend>Tarjeta</legend>
-        <p>El número va del navegador a la ruta de tokenización de la pasarela; a <code>/v1/api</code> solo llega el token.</p>
-        <label>Número <input name="cardNumber" value="4242424242424242" autocomplete="cc-number" /></label>
-        <label>CVC <input name="cvc" value="123" autocomplete="cc-csc" /></label>
-        <label>Mes <input name="expMonth" value="12" autocomplete="cc-exp-month" /></label>
-        <label>Año <input name="expYear" value="2030" autocomplete="cc-exp-year" /></label>
-        <label>Titular <input name="cardHolder" value="APRO Ruiz" autocomplete="cc-name" /></label>
-      </fieldset>
+        <form id="checkout" class="checkout" hidden>
+          <details class="buyer">
+            <summary>
+              <span class="buyer__title">Datos de envío</span>
+              <span class="buyer__summary" id="buyer-summary"></span>
+            </summary>
+            <div class="grid">
+              <label>Correo <input name="email" type="email" value="pagador.c@example.com" required /></label>
+              <label>Nombre <input name="firstName" value="Felipe" required /></label>
+              <label>Apellido <input name="lastName" value="Ruiz" required /></label>
+              <label>Documento
+                <select name="documentType"><option>CC</option><option>CE</option><option>NIT</option></select>
+              </label>
+              <label>Número de documento <input name="documentNumber" value="1020304050" required /></label>
+              <label>Celular <input name="phone" value="3001234567" required /></label>
+              <label>Calle <input name="streetName" value="Carrera 7" required /></label>
+              <label>Número <input name="streetNumber" value="71-21" required /></label>
+              <label>Barrio <input name="neighborhood" value="Chapinero" required /></label>
+              <label>Ciudad <input name="city" value="Bogota" required /></label>
+              <label>Código postal <input name="zipCode" value="110221" required /></label>
+            </div>
+          </details>
 
-      <button type="submit">Pagar</button>
-    </form>
+          <fieldset class="methods">
+            <legend>¿Cómo quieres pagar?</legend>
+            <label class="method"><input type="radio" name="method" value="PSE" checked /><span>PSE</span><small>Débito desde tu banco</small></label>
+            <label class="method" id="card-method"><input type="radio" name="method" value="CARD" /><span>Tarjeta</span><small>Crédito o débito</small></label>
+          </fieldset>
+          <p class="hint" id="card-unavailable" hidden>El pago con tarjeta no está disponible en este modo de la tienda.</p>
 
-    <section>
-      <h2>Resultado</h2>
-      <p id="status">Cargando pasarelas…</p>
-      <p><a id="redirect-link" hidden></a></p>
-      <p><button id="return-button" type="button" hidden>Ya pagué: consultar el estado</button></p>
-      <h3>Traza de llamadas a la API</h3>
-      <pre id="trace"></pre>
-    </section>
+          <div id="pse-fields">
+            <label>Tu banco <select id="bank" name="bank"></select></label>
+          </div>
+
+          <div id="card-fields" class="grid" hidden>
+            <label class="grid__wide">Número de la tarjeta <input name="cardNumber" value="4242424242424242" inputmode="numeric" autocomplete="cc-number" /></label>
+            <label>Mes <input name="expMonth" value="12" inputmode="numeric" autocomplete="cc-exp-month" /></label>
+            <label>Año <input name="expYear" value="2030" inputmode="numeric" autocomplete="cc-exp-year" /></label>
+            <label>CVC <input name="cvc" value="123" inputmode="numeric" autocomplete="cc-csc" /></label>
+            <label class="grid__wide">Nombre en la tarjeta <input name="cardHolder" value="APRO Ruiz" autocomplete="cc-name" /></label>
+            <p class="hint grid__wide">La tarjeta va directo a la pasarela; la tienda solo recibe un token.</p>
+          </div>
+
+          <label class="gateway">Pasarela <select id="gateway" name="gateway"></select></label>
+          <p class="hint">En la demo puedes cambiarla; en una tienda real la define el comercio.</p>
+
+          <button type="submit" class="pay" id="pay-button">Pagar</button>
+          <p class="form-error" id="form-error" role="alert" hidden></p>
+        </form>
+      </aside>
+    </main>
+
+    <main class="result" id="result" hidden>
+      <article class="result__card" id="result-card">
+        <div class="result__icon" id="result-icon" aria-hidden="true"></div>
+        <h1 id="result-title"></h1>
+        <p id="result-detail"></p>
+        <p class="result__ref" id="result-ref"></p>
+        <ul class="lines lines--summary" id="result-lines"></ul>
+        <div class="result__actions">
+          <button type="button" class="pay" id="result-check" hidden>Consultar de nuevo</button>
+          <a class="secondary" id="result-back" href="./">Seguir comprando</a>
+        </div>
+      </article>
+    </main>
+
+    <footer class="footer">
+      <p>Tostadero Ceiba · Calle 69 #11-22, Bogotá · hola@tostaderoceiba.co</p>
+      <p class="footer__small">Tienda de ejemplo del prototipo C de Kit Pagos Colombia. Los cobros van por la API REST <code>/v1/api</code>.</p>
+    </footer>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
