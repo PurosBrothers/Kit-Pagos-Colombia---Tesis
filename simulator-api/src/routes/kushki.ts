@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { sendBankPage } from "../gateways/bankPage";
 import { GatewayMockFactory } from "../gateways/kushki/GatewayMockFactory";
 import {
+  KushkiCardTokenRequestBody,
   KushkiChargeResponse,
   KushkiCreateChargeRequestBody,
   KushkiTransferInitRequestBody,
@@ -9,10 +10,17 @@ import {
   KushkiTransferTokenRequestBody,
 } from "../gateways/kushki/types";
 import {
+  centsFromKushkiAmount,
   headerScenario,
   resolveScenario,
   wholePesosFromKushkiAmount,
 } from "../scenarios/scenarioFromRequest";
+import { getSimulatorScenario } from "../scenarios/ScenarioEngine";
+import {
+  allowAnyOriginExceptUnauthorized,
+  KUSHKI_TOKENIZATION_PREFLIGHT_HEADERS,
+  registerTokenizationPreflight,
+} from "../gateways/tokenizationCors";
 import { bankListFailure, queryFailure, technicalFailure } from "../scenarios/technicalFailure";
 import { invalidCredentialRequested } from "../scenarios/invalidCredential";
 import {
@@ -22,7 +30,7 @@ import {
 import { rememberScenarioTarget } from "../state/scenarioTarget";
 import { requestOrigin } from "../store/BankRedirectOrigins";
 import { bankReturnUrlFor, rememberBankReturnUrl, withQueryParam } from "../store/BankReturnUrls";
-import { kushkiCharges, kushkiTransfers } from "../store/GatewayStores";
+import { kushkiCardTokens, kushkiCharges, kushkiTransfers } from "../store/GatewayStores";
 import { rememberTraceabilityCode } from "../store/TransferTraceability";
 import {
   hasDuplicateMark,
@@ -63,6 +71,14 @@ const CARD_INVALID_CREDENTIAL = {
   code: "K004",
 } as const;
 
+const CARD_AMOUNT_MISMATCH = {
+  code: "K220",
+  message: "Monto de la transacción es diferente al monto de la venta inicial",
+} as const;
+
+/** Un número de tarjeta de 13 a 19 dígitos; Kushki respondió `K001` a uno de 4 (medido). */
+const CARD_NUMBER_PATTERN = /^\d{13,19}$/;
+
 const DOCUMENT_OUTCOMES: ReadonlyMap<string, string> = new Map([
   ["123456789", "APPROVED"],
   ["999999990", "PENDING"],
@@ -81,6 +97,8 @@ const DOCUMENT_OUTCOMES: ReadonlyMap<string, string> = new Map([
  *    candidatas de consulta de cobros con tarjeta y ninguna existe. Se conserva para que
  *    el ejemplo pueda mostrar el ciclo de vida completo, y está declarado en el punto 50.
  * 3-6. El ciclo de Transfer In: `bankList`, emisión del token, `init` y consulta de estado.
+ * 7. POST /v1/sim/kushki/card/v1/tokens: la tokenización de tarjeta desde el navegador, con
+ *    CORS (punto 106).
  *
  * Punto crítico del cobro con tarjeta, explícito en el issue: un **rechazo** viaja con el
  * mismo código HTTP que una aprobación, y la decisión de éxito o fallo vive únicamente en
@@ -153,6 +171,60 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
     return undefined;
   }
 
+  /**
+   * `POST /v1/sim/kushki/card/v1/tokens`: la tokenización de tarjeta que hace el navegador del
+   * pagador con `KitPagosBrowser` (punto 106). Es la única ruta de Kushki que llama un
+   * navegador, y por eso la única con CORS.
+   *
+   * Nivel 1 — medido contra UAT el 17 de octubre de 2026: sin `Public-Merchant-Id`, `401
+   * Unauthorized` sin CORS; con uno inexistente, `400 K004`; sin monto o con un número corto,
+   * `400 K001`; sin moneda, `400 K055`; si no, `201 { token }`. El desenlace del cobro no se
+   * decide aquí sino en `card/v1/charges`, por el monto, así que solo aplica el escenario de
+   * la cabecera, como la tokenización de Wompi.
+   */
+  registerTokenizationPreflight(app, "/v1/sim/kushki/card/v1/tokens", KUSHKI_TOKENIZATION_PREFLIGHT_HEADERS);
+  app.post(
+    "/v1/sim/kushki/card/v1/tokens",
+    { onSend: allowAnyOriginExceptUnauthorized },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      if (!request.headers["public-merchant-id"]) {
+        return reply.code(401).send({ message: "Unauthorized" });
+      }
+      if (invalidCredentialRequested(request, ["public-merchant-id"])) {
+        return reply.code(400).send(CARD_INVALID_CREDENTIAL);
+      }
+
+      const failure = await technicalFailure(getSimulatorScenario(request), request, reply, mockFactory);
+      if (failure !== undefined) {
+        return failure;
+      }
+
+      const body = request.body as KushkiCardTokenRequestBody | undefined;
+      const card = body?.card;
+      const complete =
+        typeof card?.name === "string" &&
+        card.name.trim() !== "" &&
+        typeof card.number === "string" &&
+        CARD_NUMBER_PATTERN.test(card.number) &&
+        typeof card.cvv === "string" &&
+        card.cvv !== "" &&
+        typeof card.expiryMonth === "string" &&
+        card.expiryMonth !== "" &&
+        typeof card.expiryYear === "string" &&
+        card.expiryYear !== "";
+      if (!complete || typeof body?.totalAmount !== "number" || !(body.totalAmount > 0)) {
+        return reply.code(400).send({ code: "K001", message: "Cuerpo de la petición inválido." });
+      }
+      if (!body.currency) {
+        return reply.code(400).send({ code: "K055", message: "Tipo de moneda no permitido" });
+      }
+
+      const { token } = mockFactory.buildTransferToken();
+      kushkiCardTokens.save(token, { totalAmountCents: Math.round(body.totalAmount * 100) });
+      return reply.code(201).send({ token });
+    },
+  );
+
   app.post(
     "/v1/sim/kushki/card/v1/charges",
     async (request: FastifyRequest, reply: FastifyReply) => {
@@ -179,6 +251,16 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
         return reply
           .code(400)
           .send({ code: "K001", message: "Cuerpo de la petición inválido." });
+      }
+
+      /*
+       * Nivel 1 — medido contra UAT el 17 de octubre de 2026: un token emitido por 48 000 y
+       * cobrado por 50 000 responde `400 K220`. Solo se revisa con los tokens que emitió este
+       * simulador, porque de los demás no se sabe el monto.
+       */
+      const issued = kushkiCardTokens.findById(requestBody.token);
+      if (issued && issued.totalAmountCents !== centsFromKushkiAmount(requestBody.amount)) {
+        return reply.code(400).send(CARD_AMOUNT_MISMATCH);
       }
 
       const failure = await technicalFailure(scenario, request, reply, mockFactory);

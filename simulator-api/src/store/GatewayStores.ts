@@ -69,6 +69,12 @@ export const kushkiCharges = new TransactionStore<KushkiChargeResponse>();
 export const kushkiTransfers = new TransactionStore<KushkiTransferStatusResponse>();
 
 /**
+ * El monto por el que se emitió cada token de tarjeta de Kushki: el cobro de otro monto
+ * responde `400 K220`, como en UAT (punto 106). Se guarda sin la tarjeta.
+ */
+export const kushkiCardTokens = new TransactionStore<{ totalAmountCents: number }>();
+
+/**
  * Deja el simulador como recién arrancado.
  *
  * Lo usan los ganchos `beforeEach` / `afterEach` de las pruebas. Borra las transacciones
@@ -84,6 +90,7 @@ export function resetSimulatorState(): void {
   mercadopagoCardTokens.clear();
   kushkiCharges.clear();
   kushkiTransfers.clear();
+  kushkiCardTokens.clear();
   clearScenarioMarks();
   clearScenarioTargets();
   clearCardTokenOutcomes();

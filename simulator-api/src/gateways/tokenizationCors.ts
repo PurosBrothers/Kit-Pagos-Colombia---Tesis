@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 /**
- * CORS de las dos rutas de tokenización de tarjeta, las únicas de `/v1/sim` que llama un
+ * CORS de las tres rutas de tokenización de tarjeta, las únicas de `/v1/sim` que llama un
  * navegador: `KitPagosBrowser` y el checkout de los prototipos tokenizan desde la página del
  * comercio, en otro origen que el simulador.
  *
@@ -27,6 +27,33 @@ export const MERCADOPAGO_TOKENIZATION_PREFLIGHT_HEADERS: Readonly<Record<string,
   "access-control-allow-methods": "POST, PUT, GET, OPTIONS, PATCH",
   "access-control-max-age": "10",
 };
+
+/**
+ * Nivel 1 — medido contra `https://api-uat.kushkipagos.com/card/v1/tokens` el 17 de octubre de
+ * 2026 (UTC−5), con `Origin: https://tienda-prueba.trycloudflare.com` (punto 106).
+ */
+export const KUSHKI_TOKENIZATION_PREFLIGHT_HEADERS: Readonly<Record<string, string>> = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-headers":
+    "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent,Public-Merchant-Id,KSH-Authorization,X-Amz-Meta-Kushki-Info",
+  "access-control-allow-methods": "OPTIONS,POST",
+};
+
+/**
+ * `onSend` de la tokenización de Kushki: como `allowAnyOrigin`, salvo el `401` de una petición
+ * sin `Public-Merchant-Id`, que Kushki responde sin `access-control-allow-origin` (medido el
+ * mismo día), así que un navegador no puede leerlo.
+ */
+export async function allowAnyOriginExceptUnauthorized(
+  _request: FastifyRequest,
+  reply: FastifyReply,
+  payload: unknown,
+): Promise<unknown> {
+  if (reply.statusCode !== 401) {
+    reply.header("access-control-allow-origin", "*");
+  }
+  return payload;
+}
 
 /** `onSend` de la ruta de tokenización: toda respuesta, también los errores, lleva el origen abierto. */
 export async function allowAnyOrigin(
