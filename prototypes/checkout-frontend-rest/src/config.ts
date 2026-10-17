@@ -47,6 +47,37 @@ export async function loadConfig(fetchFn: FetchLike = fetch, url = "./config.jso
 }
 
 /**
+ * Por qué la tienda no ofrece tarjeta con esta pasarela, o `undefined` si la ofrece. La tarjeta se
+ * tokeniza en el navegador con la llave pública de la pasarela, y sin llave no hay tokenización
+ * posible. Falta por una de dos causas que el cliente no distingue sin nombrar pasarelas: el `.env`
+ * solo trae llaves de las pasarelas que `KitPagosBrowser` tokeniza, o el servidor arrancó sin él.
+ */
+export function cardUnavailableFor(config: Pick<ClientConfig, "publicKeys">, gateway: string): string | undefined {
+  if (config.publicKeys[gateway]) {
+    return undefined;
+  }
+  return (
+    "Con esta pasarela no ofrecemos tarjeta: la tarjeta se tokeniza en tu navegador con la llave pública " +
+    "de la pasarela, y esta tienda no la tiene, porque el SDK de Kit Pagos todavía no tokeniza con ella " +
+    "o porque la tienda arrancó sin esa llave. Paga con PSE o elige otra pasarela."
+  );
+}
+
+/**
+ * Si la página no recibió ninguna llave pública, la segunda causa de `cardUnavailableFor()` es la
+ * probable: el aviso va a la consola, para quien prueba, y no al comprador.
+ */
+export function missingPublicKeysProblem(config: Pick<ClientConfig, "publicKeys">): string | undefined {
+  if (Object.keys(config.publicKeys).length > 0) {
+    return undefined;
+  }
+  return (
+    "la página no recibió ninguna llave pública en /config.json: la tarjeta queda deshabilitada con " +
+    "todas las pasarelas. Arranque el servidor con --dotenv=<ruta del .env> (guía de prueba)."
+  );
+}
+
+/**
  * Dónde tokeniza `KitPagosBrowser` en el ambiente `simulator`: un valor fijo del SDK, que no
  * deja pasar otro host para que la tarjeta no pueda mandarse a donde no es.
  */

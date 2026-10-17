@@ -360,7 +360,7 @@ export function startupSummary({ config, port, sources, envFile }) {
     `Prototipo C en http://localhost:${port}`,
     `  API:      ${config.apiBaseUrl}`,
     `  Ambiente: ${config.environment}`,
-    `  Llaves públicas para tarjeta: ${withKey.length ? withKey.join(", ") : "ninguna"}`,
+    `  Llaves públicas para tarjeta: ${withKey.length ? withKey.join(", ") : "ninguna; la tarjeta queda deshabilitada (pase el .env con --dotenv=<ruta>)"}`,
     `  Archivo .env: ${envFile.path}${envFile.found ? "" : " (no existe; no se leyó)"}`,
     ...(config.environment === "sandbox"
       ? ["  En sandbox, alguna pasarela no deja volver a localhost: sirva la página por un túnel (guía de prueba)."]

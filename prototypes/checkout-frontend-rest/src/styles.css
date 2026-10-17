@@ -146,6 +146,36 @@ select {
   }
 }
 
+.about {
+  margin: 0 0 1.75rem;
+  padding: 0.9rem 1.1rem;
+  border-left: 3px solid var(--clay);
+  border-radius: 0 10px 10px 0;
+  background: var(--card);
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.about p {
+  margin: 0 0 0.45rem;
+}
+
+.about p:last-child {
+  margin-bottom: 0;
+}
+
+.about__title {
+  color: var(--clay-dark);
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.about strong {
+  color: var(--ink);
+}
+
 .catalog__intro h1 {
   margin: 0 0 0.4rem;
   font-size: 2rem;
@@ -490,7 +520,7 @@ select {
 }
 
 .gateway {
-  margin-top: 0.25rem;
+  margin-top: 0.15rem;
 }
 
 .hint {

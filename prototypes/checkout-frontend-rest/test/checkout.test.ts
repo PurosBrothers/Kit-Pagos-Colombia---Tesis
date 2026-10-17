@@ -288,6 +288,20 @@ describe("pollUntilFinal", () => {
     expect(calls).toHaveLength(3);
     expect(describeOutcome(step)).toContain("sigue pendiente");
   });
+
+  it("reports each attempt before making it, so the page can show the wait", async () => {
+    const stuck = transaction("p", "PENDING", "ACT", false);
+    const { fetchFn } = createFakeApi({ statusSequence: [stuck, stuck, transaction("p", "APPROVED", "CLO")] });
+    const onAttempt = vi.fn();
+
+    await pollUntilFinal(createKitPagosApi(API, fetchFn), pending, { ...NO_WAIT, onAttempt });
+
+    expect(onAttempt.mock.calls).toEqual([
+      [1, 5],
+      [2, 5],
+      [3, 5],
+    ]);
+  });
 });
 
 describe("the payer's return: the pending payment lives until a final status", () => {

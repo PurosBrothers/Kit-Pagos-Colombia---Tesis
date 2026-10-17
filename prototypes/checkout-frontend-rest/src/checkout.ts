@@ -42,6 +42,8 @@ export interface PollOptions {
   maxAttempts: number;
   intervalMs: number;
   sleep: (ms: number) => Promise<void>;
+  /** Antes de cada consulta, para que la página muestre el avance de la espera. */
+  onAttempt?: (attempt: number, maxAttempts: number) => void;
 }
 
 export const DEFAULT_POLL: PollOptions = {
@@ -72,9 +74,11 @@ export async function pollUntilFinal(
   pending: PendingPayment,
   options: PollOptions = DEFAULT_POLL,
 ): Promise<CheckoutStep> {
+  options.onAttempt?.(1, options.maxAttempts);
   let transaction = await api.getPaymentStatus(pending.gateway, pending.gatewayTransactionId);
   for (let attempt = 1; !transaction.isFinal && attempt < options.maxAttempts; attempt += 1) {
     await options.sleep(options.intervalMs);
+    options.onAttempt?.(attempt + 1, options.maxAttempts);
     transaction = await api.getPaymentStatus(pending.gateway, pending.gatewayTransactionId);
   }
   return transaction.isFinal ? { kind: "final", transaction } : { kind: "pending", transaction, pending };

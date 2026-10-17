@@ -15,6 +15,7 @@ import {
   type CartLine,
 } from "./catalog";
 import {
+  DEFAULT_POLL,
   describeOutcome,
   offersStatusQuery,
   payWithCard,
@@ -24,8 +25,9 @@ import {
   rememberPending,
   type CheckoutStep,
   type Order,
+  type PollOptions,
 } from "./checkout";
-import { cardTokenizationProblem, loadConfig } from "./config";
+import { cardTokenizationProblem, cardUnavailableFor, loadConfig, missingPublicKeysProblem } from "./config";
 import { gatewayLabel, shopperError, shopperMessage, type ShopperMessage } from "./messages";
 import { loadCardTokenizer } from "./tokenizer";
 
@@ -65,6 +67,14 @@ const resultCheck = byId<HTMLButtonElement>("result-check");
 const resultBack = byId<HTMLAnchorElement>("result-back");
 
 const returnUrl = `${location.origin}${location.pathname}?retorno=1`;
+
+/** Las consultas de estado, con el avance de la espera a la vista del comprador. */
+function pollShowing(show: (text: string) => void): PollOptions {
+  return {
+    ...DEFAULT_POLL,
+    onAttempt: (attempt, maxAttempts) => show(`Consultando con la pasarela (${attempt} de ${maxAttempts})…`),
+  };
+}
 const CHOICE_STORAGE_KEY = "kit-pagos-checkout-c:choice";
 
 /**
@@ -303,7 +313,8 @@ async function main(): Promise<void> {
       cartLines(cart),
     );
     resultCheck.hidden = true;
-    handle(await queryPending(api, sessionStorage, pending), pending.orderReference);
+    const poll = pollShowing((text) => (resultDetail.textContent = text));
+    handle(await queryPending(api, sessionStorage, pending, poll), pending.orderReference);
     return;
   }
   if (returning) {
@@ -311,11 +322,14 @@ async function main(): Promise<void> {
   }
 
   const cardProblem = cardTokenizationProblem(config);
+  const keysProblem = missingPublicKeysProblem(config);
   if (cardProblem) {
-    (cardMethod.querySelector("input") as HTMLInputElement).disabled = true;
-    cardUnavailable.hidden = false;
     log("tarjeta deshabilitada:", cardProblem);
+  } else if (keysProblem) {
+    console.warn("[tienda C]", keysProblem);
   }
+  const cardInput = cardMethod.querySelector("input") as HTMLInputElement;
+  const methodInput = form.elements.namedItem("method") as RadioNodeList;
 
   function showMethodFields(): void {
     const method = new FormData(form).get("method");
@@ -323,9 +337,33 @@ async function main(): Promise<void> {
     cardFields.hidden = method !== "CARD";
   }
 
+  /** La tarjeta se ofrece solo si la pasarela elegida la puede tokenizar en este modo. */
+  function updateCardAvailability(): void {
+    const reason = cardProblem
+      ? "El pago con tarjeta no está disponible en este modo de la tienda. Paga con PSE."
+      : cardUnavailableFor(config, gatewaySelect.value);
+    if (reason && !cardProblem) {
+      log(`sin tarjeta con ${gatewaySelect.value}: /config.json no trae su llave pública`);
+    }
+    cardInput.disabled = reason !== undefined;
+    cardUnavailable.hidden = reason === undefined;
+    cardUnavailable.textContent = reason ?? "";
+    if (reason && methodInput.value === "CARD") {
+      methodInput.value = "PSE";
+    }
+    showMethodFields();
+  }
+
+  /** Mientras llega la lista de la pasarela nueva no se puede pagar con un banco de la anterior. */
   async function refreshBanks(): Promise<void> {
-    const banks = await api.listPseBanks(gatewaySelect.value);
-    bankSelect.replaceChildren(...banks.map((bank) => new Option(bank.name, bank.code)));
+    bankSelect.replaceChildren(new Option("Cargando bancos…", ""));
+    bankSelect.disabled = payButton.disabled = true;
+    try {
+      const banks = await api.listPseBanks(gatewaySelect.value);
+      bankSelect.replaceChildren(...banks.map((bank) => new Option(bank.name, bank.code)));
+    } finally {
+      bankSelect.disabled = payButton.disabled = false;
+    }
   }
 
   const gateways = await api.listGateways();
@@ -334,12 +372,15 @@ async function main(): Promise<void> {
   if (choice?.gateway && gateways.includes(choice.gateway)) {
     gatewaySelect.value = choice.gateway;
   }
-  if (choice?.method === "PSE" || (choice?.method === "CARD" && !cardProblem)) {
-    (form.elements.namedItem("method") as RadioNodeList).value = choice.method;
+  if (choice?.method === "PSE" || choice?.method === "CARD") {
+    methodInput.value = choice.method;
   }
-  gatewaySelect.addEventListener("change", () => void refreshBanks().catch(showFormError));
+  gatewaySelect.addEventListener("change", () => {
+    updateCardAvailability();
+    void refreshBanks().catch(showFormError);
+  });
   form.addEventListener("change", showMethodFields);
-  showMethodFields();
+  updateCardAvailability();
   await refreshBanks();
 
   if (pending) {
@@ -359,9 +400,10 @@ async function main(): Promise<void> {
     payButton.disabled = true;
     payButton.textContent = "Procesando tu pago…";
     log(`pedido ${order.orderReference}`, { pasarela: order.gateway, metodo: data.get("method"), monto: order.amount });
+    const poll = pollShowing((text) => (payButton.textContent = text));
     const step =
       data.get("method") === "PSE"
-        ? payWithPse(api, order, field(data, "bank"))
+        ? payWithPse(api, order, field(data, "bank"), poll)
         : payWithCard(
             {
               api,
@@ -379,6 +421,7 @@ async function main(): Promise<void> {
               docType: order.payer.documentType,
               docNumber: order.payer.documentNumber,
             },
+            poll,
           );
     step.then((outcome) => handle(outcome, order.orderReference)).catch(showFormError);
   });

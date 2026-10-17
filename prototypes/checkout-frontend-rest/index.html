@@ -71,6 +71,20 @@
 
     <main class="shop" id="shop">
       <section class="catalog" aria-labelledby="catalog-title">
+        <aside class="about" aria-label="Sobre este prototipo">
+          <p class="about__title">Este prototipo es</p>
+          <p>
+            El <strong>prototipo C de Kit Pagos Colombia</strong>: una tienda de ejemplo que cobra desde el
+            navegador contra la API REST <code>/v1/api</code>, sin instalar el SDK ni guardar llaves privadas en la
+            página. La API arma el SDK y habla con la pasarela.
+          </p>
+          <p>
+            Muestra que el mismo código cobra con las cuatro pasarelas del framework cambiando un solo valor, el
+            selector «Pasarela»: PSE con todas y tarjeta con las que tokenizan en el navegador. Los pagos van a los
+            sandboxes oficiales o al simulador, sin dinero real, y la traza técnica queda en la consola del navegador
+            (F12).
+          </p>
+        </aside>
         <div class="catalog__intro">
           <h1 id="catalog-title">Esta semana en el tostador</h1>
           <p>Lotes pequeños de fincas que conocemos. Tostamos los martes y despachamos a todo el país.</p>
@@ -115,12 +129,15 @@
             </div>
           </details>
 
+          <label class="gateway">Pasarela <select id="gateway" name="gateway"></select></label>
+          <p class="hint">En la demo puedes cambiarla; en una tienda real la define el comercio.</p>
+
           <fieldset class="methods">
             <legend>¿Cómo quieres pagar?</legend>
             <label class="method"><input type="radio" name="method" value="PSE" checked /><span>PSE</span><small>Débito desde tu banco</small></label>
             <label class="method" id="card-method"><input type="radio" name="method" value="CARD" /><span>Tarjeta</span><small>Crédito o débito</small></label>
           </fieldset>
-          <p class="hint" id="card-unavailable" hidden>El pago con tarjeta no está disponible en este modo de la tienda.</p>
+          <p class="hint" id="card-unavailable" hidden></p>
 
           <div id="pse-fields">
             <label>Tu banco <select id="bank" name="bank"></select></label>
@@ -134,9 +151,6 @@
             <label class="grid__wide">Nombre en la tarjeta <input name="cardHolder" value="APRO Ruiz" autocomplete="cc-name" /></label>
             <p class="hint grid__wide">La tarjeta va directo a la pasarela; la tienda solo recibe un token.</p>
           </div>
-
-          <label class="gateway">Pasarela <select id="gateway" name="gateway"></select></label>
-          <p class="hint">En la demo puedes cambiarla; en una tienda real la define el comercio.</p>
 
           <button type="submit" class="pay" id="pay-button">Pagar</button>
           <p class="form-error" id="form-error" role="alert" hidden></p>

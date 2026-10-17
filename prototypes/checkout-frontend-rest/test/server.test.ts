@@ -335,7 +335,8 @@ describe("prepareServer", () => {
     const prepared = prepareServer([], {}, root, noEnvFile);
     if ("help" in prepared) throw new Error("no se esperaba la ayuda");
 
-    expect(startupSummary(prepared)).toContain("Llaves públicas para tarjeta: ninguna");
+    expect(startupSummary(prepared)).toContain("Llaves públicas para tarjeta: ninguna; la tarjeta queda deshabilitada");
+    expect(startupSummary(prepared)).toContain("--dotenv=<ruta>");
     expect(startupSummary(prepared)).toContain(`Archivo .env: ${noEnvFile} (no existe; no se leyó)`);
   });
 
