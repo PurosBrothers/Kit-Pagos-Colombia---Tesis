@@ -578,7 +578,8 @@ esos cobros.
 tercera aplicación, ya en las líneas principales del `.env`, el PSE 4 entregó la URL a las 15:12 con el
 mismo cuerpo, y el PSE 5, a las 15:23, desde la tienda del prototipo C y con su propio pagador
 (`pagador.c@example.com`, 84 000 COP, banco 1051): «Banco Prueba PSE», «APROBAR PAGO», el comprobante de
-Mercado Pago y la vuelta a la tienda con `payment_id=184734495674`, `APPROVED`. A la segunda aplicación,
+Mercado Pago y la vuelta a la tienda con `payment_id=184734495674`, `APPROVED`. El PSE 6, a las 15:46, también
+desde la tienda (65 000 COP, Bancolombia), terminó igual: `payment_id=184739554282`, `APPROVED`. A la segunda aplicación,
 creada hacia las 15:30 del 16, se le cortó antes de las 19:07, unas tres horas y media después y con
 cobros con tarjeta en medio. Con la tercera no se ha cobrado ninguna tarjeta.
 
