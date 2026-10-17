@@ -2,7 +2,7 @@
 
 El patrón de integración 2, frontend hacia REST, vuelto ejecutable. Es el cliente del issue #109 y también el prototipo C de `docs/project-management/thesis-objectives.md` (§5.1): una página que cobra contra `/v1/api` sin instalar `kit-pagos-colombia` y sin saber qué pasarela hay detrás.
 
-**Carpeta:** [prototypes/checkout-frontend-rest/](../../prototypes/checkout-frontend-rest/) · **Comandos:** `npm run build` y, para correrlo, `npm start`, `npm run start:local` o `npm run start:sandbox`
+**Carpeta:** [prototypes/checkout-frontend-rest/](../../prototypes/checkout-frontend-rest/) · **Comandos:** `npm run build` y, para correrlo, `npm start` (los sandboxes oficiales) o `npm run start:local` (un simulador en la máquina)
 
 ## Qué demuestra
 
@@ -13,9 +13,17 @@ Los doce ejemplos de este capítulo sirven al patrón 1: un backend que importa 
 - **CORS de verdad.** La página se sirve desde `localhost:4100` y la API está en otro origen, `localhost:3000` o la de Render: el navegador hace el preflight de `POST /v1/api/payments` antes de cada cobro.
 - **Sin simulador local.** Por omisión la página cobra contra la API de Simulación desplegada en Render, y con una opción contra el sandbox real de cada pasarela. Encender el simulador en la máquina es una tercera opción, no un requisito (punto 94).
 
+## Cómo se ve
+
+Desde el 17 de octubre de 2026 la página es una tienda pequeña, «Tostadero Ceiba», con tres productos (dos cafés y una taza), un carrito y el checkout al lado (punto 103). El comprador elige productos, revisa sus datos de envío, que vienen precargados con datos de prueba, elige PSE o tarjeta y paga. La pasarela sigue siendo un valor del formulario («Pasarela»), con una nota que dice que en una tienda real la define el comercio. Ninguno de los precios cae en los montos que la API de Simulación reserva para escenarios de fallo, ni sumados (`test/store.test.ts`).
+
+La tienda no muestra datos técnicos. Lo que antes era la «Traza de llamadas a la API» va a la consola del navegador con el prefijo `[tienda C]`: la API y el ambiente, cada llamada a `/v1/api` con su código, los avisos de la API, el estado nativo de cada pago con su motivo de rechazo y la URL a la que se redirige. El comprador lee mensajes de tienda (`src/messages.ts`): «¡Gracias! Tu pago fue aprobado», «Tu pago fue rechazado» con una pista según la categoría del motivo, «Tu pago está en proceso». Una franja arriba dice si los pagos son simulados o del sandbox.
+
+Cuando la pasarela devuelve una URL de banco o de pago, la tienda lleva al comprador ahí directamente, sin mostrar un enlace.
+
 ## Cómo correrlo
 
-El cliente no necesita encender nada en la máquina. Desde el punto 94, el servidor estático decide al arrancar a qué API y a qué ambiente apunta, y por omisión apunta a la API de Simulación desplegada en Render:
+El cliente no necesita encender nada en la máquina. Desde el punto 94, el servidor estático decide al arrancar a qué API y a qué ambiente apunta. Por omisión, desde el punto 104, cobra en el sandbox oficial de cada pasarela a través de la API desplegada en Render:
 
 ```bash
 cd prototypes/checkout-frontend-rest
@@ -24,19 +32,21 @@ npm run build
 npm start
 ```
 
-Y se abre `http://localhost:4100`. La página dice arriba a qué API y con qué ambiente está hablando. Hay tres modos:
+Y se abre `http://localhost:4100`. La franja de arriba dice si los pagos son simulados o del sandbox; la API y el ambiente quedan en la consola del navegador. Hay dos modos:
 
 | Comando | API | Ambiente | Para qué sirve |
 |---|---|---|---|
-| `npm start` | `https://kit-pagos-colombia.onrender.com/v1/api` | `simulator` | Probar el PSE de las cuatro pasarelas sin encender nada. La primera consulta puede tardar mientras Render despierta |
-| `npm run start:sandbox` | La de Render | `sandbox` | Cobrar contra el sandbox oficial de cada pasarela: la API usa las credenciales de sandbox de su servidor y avisa con la cabecera `x-kit-pagos-warning`, que la página muestra |
-| `npm run start:local` | `http://localhost:3000/v1/api` | `simulator` | Trabajar contra un simulador encendido en la máquina (sección siguiente) |
+| `npm start` | `https://kit-pagos-colombia.onrender.com/v1/api` | `sandbox` | Cobrar contra el sandbox oficial de cada pasarela sin encender nada: la API usa las credenciales de sandbox de su servidor y avisa con la cabecera `x-kit-pagos-warning`, que la página registra en la consola. La primera consulta puede tardar mientras Render despierta |
+| `npm run start:local` | `http://localhost:3000/v1/api` | `simulator` | Trabajar contra un simulador encendido en la máquina (sección siguiente), tarjeta incluida |
+
+El simulador de Render sigue disponible con `npm start -- --environment=simulator`, para el PSE de las cuatro pasarelas con las páginas de banco del simulador.
 
 Las opciones se pasan como argumentos, que funcionan igual en bash, PowerShell y cmd. Con `npm run`, después de `--`:
 
 ```bash
 npm start -- --api-url=https://otra-api.example/v1/api
-npm run start:sandbox -- --port=4200 --public-key=wompi:pub_test_…
+npm start -- --port=4200 --public-key=wompi:pub_test_…
+npm start -- --environment=simulator
 npm start -- --help
 ```
 
@@ -48,10 +58,10 @@ Para probar este cliente contra los sandboxes reales, con los resultados que se 
 
 ### Lo que cada modo no puede hacer
 
-- **Tarjeta con el simulador de Render.** El tokenizador de navegador del SDK tiene fijo `http://localhost:3000` como destino del ambiente `simulator`, a propósito: así una página no puede mandar un número de tarjeta a un host que ella elija. Con `npm start`, la tarjeta no puede tokenizarse contra Render, y la página lo dice antes de enviar nada («Con el ambiente simulator, el SDK tokeniza la tarjeta contra localhost:3000, y esta API está en…») en vez de fallar con «Failed to fetch». Con Render se paga con PSE; con tarjeta, `start:local` o `start:sandbox`.
+- **Tarjeta con el simulador de Render.** El tokenizador de navegador del SDK tiene fijo `http://localhost:3000` como destino del ambiente `simulator`, a propósito: así una página no puede mandar un número de tarjeta a un host que ella elija. Con `npm start -- --environment=simulator`, la tarjeta no puede tokenizarse contra Render: la tienda la muestra deshabilitada y la consola dice por qué («Con el ambiente simulator, el SDK tokeniza la tarjeta contra localhost:3000, y esta API está en…»), en vez de fallar con «Failed to fetch». Con el simulador de Render se paga con PSE; con tarjeta, `npm start` (sandbox) o `start:local`.
 - **Tarjeta en `sandbox`.** El número va del navegador a la ruta de tokenización real de la pasarela, con la llave pública de sandbox que sale del `.env`. El formulario trae el titular `APRO Ruiz`: Mercado Pago aprueba en su sandbox los titulares que empiezan por `APRO`, y Wompi exige al menos cinco caracteres (medido el 15 de octubre de 2026). La tarjeta de Mercado Pago necesita que la API use el SDK 0.6.0, que la cobra por la Orders API (punto 96).
-- **PSE de Mercado Pago en `sandbox`.** Mercado Pago rechaza una `callback_url` que apunta a `localhost`, y el cliente manda la suya: hay que servirlo por un túnel público (ver la guía de prueba). Con las credenciales de prueba de la segunda aplicación del proyecto, el PSE llegó a «Banco Prueba PSE» y se aprobó el 16 de octubre de 2026 a las 15:44; a las 19:07 dejó de entregar la URL, como la primera aplicación. Cuando eso pasa, la orden nace en `processing` sin URL de banco y termina `failed / processing_error` (punto 100), y la página lo muestra como un pago pendiente que, al consultarlo, sale `DECLINED`.
-- **PSE de Kushki en `sandbox`.** La página real del banco y la vuelta funcionan, pero en este comercio de UAT ninguna transferencia sale de `initializedTransaction`, ni con los documentos de prueba (`docs/testing-data/kushki.md`, 5.2.2). La página sigue ofreciendo «Ya pagué: consultar el estado».
+- **PSE de Mercado Pago en `sandbox`.** Mercado Pago rechaza una `callback_url` que apunta a `localhost`, y el cliente manda la suya: hay que servirlo por un túnel público (ver la guía de prueba). Con las credenciales de prueba de la segunda aplicación del proyecto, el PSE llegó a «Banco Prueba PSE» y se aprobó el 16 de octubre de 2026 a las 15:44; a las 19:07 dejó de entregar la URL, como la primera aplicación. Con la tercera, el 17 de octubre a las 15:23, el PSE desde la tienda terminó aprobado (punto 103). Cuando la URL no llega, la orden nace en `processing` sin URL de banco y termina `failed / processing_error` (punto 100), y la página lo muestra como un pago pendiente que, al consultarlo, sale `DECLINED`.
+- **PSE de Kushki en `sandbox`.** La página real del banco y la vuelta funcionan, pero en este comercio de UAT ninguna transferencia sale de `initializedTransaction`, ni con los documentos de prueba (`docs/testing-data/kushki.md`, 5.2.2). La confirmación dice «Tu pago está en proceso» y ofrece «Consultar de nuevo».
 - **PSE de Rapyd en `sandbox`.** El sandbox de Rapyd solo cobra 9 de sus 50 bancos; con los otros 41 responde `400 ERROR_GET_GATEWAY`. Desde la 0.6.0-rc.3 el SDK los quita de la lista contra el sandbox, así que el selector muestra solo esos 9 (`docs/testing-data/rapyd.md`, 5.8; punto 102).
 - **Producción.** No está entre los ambientes del cliente: exigiría llaves privadas del comercio, y un navegador no debe tenerlas.
 
@@ -97,11 +107,11 @@ Las variables `KIT_PAGOS_API_URL` y `TOKENIZATION_ENVIRONMENT` existían antes d
 
 1. La página pide las pasarelas y, para la elegida, sus bancos de PSE.
 2. `POST /v1/api/payments` con un solo cuerpo para las cuatro: monto, divisa, referencia, el pagador completo (con documento, teléfono y dirección, que Mercado Pago exige para PSE), el método y `returnUrlConfig.returnUrl`. No lleva `ipAddress`: el navegador no conoce su IP pública, y la API toma la de la petición (ver «La IP del pagador»).
-3. Si la respuesta es `REDIRECT_REQUIRED`, la página guarda el pago pendiente en `sessionStorage` (pasarela, identificador, referencia y método) y muestra el enlace a `redirectUrl`. Al volver a la URL de retorno (`/?retorno=1`), lee el pago pendiente, deja en el formulario su pasarela y su método, y consulta. El enlace «Volver al comercio» de la página de banco del simulador lleva ahí. El botón «Ya pagué: consultar el estado» hace lo mismo sin pasar por el banco, para el pagador que cerró la pestaña del banco o regresó con «Atrás»: el navegador puede recargar la página en vez de restaurarla, y la página encuentra el pago pendiente y vuelve a ofrecer el botón.
+3. Si la respuesta es `REDIRECT_REQUIRED`, la página guarda en `sessionStorage` el pago pendiente (pasarela, identificador, referencia y método) y el carrito, y lleva al comprador a `redirectUrl` con `location.assign`, sin mostrar el enlace. Al volver a la URL de retorno (`/?retorno=1`), lee el pago pendiente, muestra «Confirmando tu pago…» y consulta. El enlace «Volver al comercio» de la página de banco del simulador lleva ahí. Si el comprador vuelve a la tienda sin pasar por la URL de retorno, porque cerró la pestaña del banco o regresó con «Atrás», un aviso «Tienes un pago en proceso» ofrece «Consultar el estado», que hace lo mismo. La tienda recuerda la pasarela y el método del último intento para el siguiente.
 4. Si es `TRANSACTION` y el estado no es final, consulta. En los dos casos, `GET /v1/api/payments/:id?gateway=` se repite hasta `isFinal`, con un tope de diez consultas.
-5. El pago queda guardado hasta que una consulta da un estado final. Si después del tope sigue pendiente, como pasa con el PSE de Kushki en su sandbox, la página lo dice y sigue ofreciendo «Ya pagué: consultar el estado», que vuelve a consultar. Con el estado final, la página lo olvida y deja de ofrecer el botón.
+5. El pago queda guardado hasta que una consulta da un estado final. Si después del tope sigue pendiente, como pasa con el PSE de Kushki en su sandbox, la confirmación dice «Tu pago está en proceso» y ofrece «Consultar de nuevo». Con el estado final, la página lo olvida. Con un pago aprobado, además, vacía el carrito; con uno rechazado lo conserva para intentar con otro medio.
 
-Si `fetch` falla, la página muestra `API_UNREACHABLE` con el origen de la API, el error del navegador y las dos causas posibles: que la API no haya respondido, o que haya respondido y el navegador no pueda leer la respuesta por CORS. Desde la página no se distinguen, porque el navegador rechaza los dos casos con el mismo error. El segundo se midió el 15 de octubre de 2026: un túnel de Cloudflare reemplazó un `502` de la API por su propia página, sin `access-control-allow-origin`.
+Si `fetch` falla, el comprador lee «No pudimos conectar con el servicio de pagos» y la consola registra `API_UNREACHABLE` con el origen de la API, el error del navegador y las dos causas posibles: que la API no haya respondido, o que haya respondido y el navegador no pueda leer la respuesta por CORS. Desde la página no se distinguen, porque el navegador rechaza los dos casos con el mismo error. El segundo se midió el 15 de octubre de 2026: un túnel de Cloudflare reemplazó un `502` de la API por su propia página, sin `access-control-allow-origin`.
 
 Lo que cambia entre pasarelas está en las respuestas, no en el código. Medido el 13 de octubre de 2026 en memoria, con `buildApp()` y `app.inject()` sobre `kit-pagos-colombia@0.5.0`, el perfil de prueba de arriba y un cuerpo que sí llevaba `ipAddress` (punto 91 del [architecture-log](../architecture/architecture-log.md)):
 
@@ -175,7 +185,7 @@ El valor que llegó a Mercado Pago no se ve desde afuera, porque el simulador no
 
 El 14 de octubre de 2026 Joshua probó el cliente y encontró que mandaba siempre a `localhost`, que no había forma de ir al sandbox oficial y que no funcionaba contra la API de Render sin encender el simulador. Era cierto en tres cosas. El cliente apuntaba por omisión a `localhost:3000`. Nunca mandaba `x-kit-pagos-environment`, así que no podía pedir el sandbox, y el ambiente de la tokenización (`TOKENIZATION_ENVIRONMENT`) era una variable aparte de las llamadas a la API. Y cuando la API no respondía, la página mostraba «Failed to fetch». El punto 94 lo arregla: la API de Render y el ambiente se eligen al arrancar (sección «Cómo correrlo»), la página dice a qué está hablando y los errores dicen qué hacer.
 
-Corrida entre las 22:47 y las 22:55 (UTC−5), con el navegador de Cursor, sobre la API desplegada en Render y con la rama del issue. Las horas de la traza de la página están en UTC. Las capturas están en `.cursor/evidencia/109/ambiente-y-render/`, fuera del repositorio.
+Corrida entre las 22:47 y las 22:55 (UTC−5), con el navegador de Cursor, sobre la API desplegada en Render y con la rama del issue. Entonces `npm start` era el simulador de Render y `start:sandbox` el sandbox; desde el punto 104, el sandbox es `npm start`. Las horas de la traza de la página están en UTC. Las capturas están en `.cursor/evidencia/109/ambiente-y-render/`, fuera del repositorio.
 
 | Modo | Pasarela y método | Hora | Lo que respondió | Resultado |
 |---|---|---|---|---|
@@ -208,9 +218,9 @@ La corrida del 15 de octubre de 2026, entre las 21:47 y las 22:12, cubrió lo qu
 
 Por eso la página tokeniza en el navegador con `KitPagosBrowser.tokenizeCard()`: el número va de la página a la ruta de tokenización de la pasarela, cuyo host sale de un catálogo cerrado del SDK (puntos 77 y 78), y a `/v1/api` solo llega el token. El módulo se carga desde jsDelivr con la versión fija, `kit-pagos-colombia@0.5.0`, y solo al pagar con tarjeta: el cobro con PSE no descarga código del SDK. Dos pruebas lo sostienen, y las dos fallan con su mutación: una revisa que ninguna petición a la API lleve el número, y otra que el código no nombre pasarelas.
 
-La página protege ese módulo con integridad de subrecurso (punto 99): un import map en `index.html` fija el hash sha384 del archivo de esa URL exacta, y el navegador rechaza un archivo distinto antes de ejecutarlo. Si el módulo no se puede cargar o no pasa esa verificación, la página dice «No se pudo cargar el módulo de tarjeta o no pasó la verificación de integridad. La tarjeta no se envió.», y la traza guarda el error del navegador. Medido el 15 de octubre de 2026 con un hash alterado: el navegador bloqueó el módulo y no hubo tokenización ni cobro. Lo soportan Chrome y Edge desde la versión 127, Firefox desde la 138 y Safari desde la 18, según MDN. Al cambiar la versión del SDK, `npm run check:sri` compara el hash con el archivo que sirve jsDelivr.
+La página protege ese módulo con integridad de subrecurso (punto 99): un import map en `index.html` fija el hash sha384 del archivo de esa URL exacta, y el navegador rechaza un archivo distinto antes de ejecutarlo. Si el módulo no se puede cargar o no pasa esa verificación, el comprador lee «No se pudo cargar el formulario seguro de la tarjeta. La tarjeta no se envió.», y la consola guarda el mensaje completo («No se pudo cargar el módulo de tarjeta o no pasó la verificación de integridad») con el error del navegador. Medido el 15 de octubre de 2026 con un hash alterado: el navegador bloqueó el módulo y no hubo tokenización ni cobro. Lo soportan Chrome y Edge desde la versión 127, Firefox desde la 138 y Safari desde la 18, según MDN. Al cambiar la versión del SDK, `npm run check:sri` compara el hash con el archivo que sirve jsDelivr.
 
-La traza de la página registra solo el método, la ruta y el código de cada llamada a `/v1/api`, nunca el cuerpo.
+La traza de la consola registra solo el método, la ruta y el código de cada llamada a `/v1/api`, nunca el cuerpo.
 
 ## Lo que el simulador no puede mostrar
 
@@ -220,7 +230,7 @@ La traza de la página registra solo el método, la ruta y el código de cada ll
 
 ## Insumo para la Prioridad 3: Kushki y Rapyd no tokenizan en el navegador
 
-`KitPagosBrowser` tokeniza solo con Wompi y Mercado Pago. Con Kushki y con Rapyd lanza `UNSUPPORTED_OPERATION` antes de enviar nada, y la página muestra ese error: el cliente no decide qué pasarela tokeniza, lo decide el SDK.
+`KitPagosBrowser` tokeniza solo con Wompi y Mercado Pago. Con Kushki y con Rapyd lanza `UNSUPPORTED_OPERATION` antes de enviar nada; el comprador lee que esa pasarela no recibe ese medio de pago desde el navegador, y la consola registra el error: el cliente no decide qué pasarela tokeniza, lo decide el SDK.
 
 - **Kushki** exige un token emitido por su propia ruta de tokenización (`POST /card/v1/tokens`, según el mensaje del SDK). Cobrar con tarjeta desde este cliente obligaría a agregar un tokenizador de Kushki al módulo de navegador o a cargar el script de Kushki en la página. No se comprobó qué ofrece Kushki para el navegador.
 - **Rapyd** cobra la tarjeta en su página alojada. Medido el mismo día: `POST /v1/api/payments` con tarjeta y sin token responde `REDIRECT_REQUIRED` hacia `/v1/sim/rapyd/checkout/:id/pay`, y después de la visita la consulta da `APPROVED` (`CLO`). Este cliente no usa ese camino, por decisión de Joan del 13 de octubre de 2026: el criterio de tarjeta del issue aplica a las pasarelas que tokenizan en el navegador, y la de Rapyd queda fuera del prototipo C.

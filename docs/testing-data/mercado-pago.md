@@ -572,7 +572,22 @@ poco después de crearla, entregaron URL (dos el 15 de octubre a las 13:12 con l
 15:38 y 15:41 con la segunda, tres el 17 entre las 12:41 y las 12:44 con la tercera), y en las dos
 primeras, horas después, ninguna orden la entregaba. En esas dos, entre los PSE que funcionaron y los que
 fallaron hubo cobros con tarjeta de la misma aplicación. Falta medir si el corte depende del tiempo o de
-esos cobros. Cancelar las órdenes abiertas no cambió nada. Por precaución, **en este sandbox cada PSE se
+esos cobros.
+
+**Tres horas después, sin cobros con tarjeta, seguía funcionando** (17 de octubre de 2026). Con la
+tercera aplicación, ya en las líneas principales del `.env`, el PSE 4 entregó la URL a las 15:12 con el
+mismo cuerpo, y el PSE 5, a las 15:23, desde la tienda del prototipo C y con su propio pagador
+(`pagador.c@example.com`, 84 000 COP, banco 1051): «Banco Prueba PSE», «APROBAR PAGO», el comprobante de
+Mercado Pago y la vuelta a la tienda con `payment_id=184734495674`, `APPROVED`. A la segunda aplicación,
+creada hacia las 15:30 del 16, se le cortó antes de las 19:07, unas tres horas y media después y con
+cobros con tarjeta en medio. Con la tercera no se ha cobrado ninguna tarjeta.
+
+**Sin «Volver al comercio», el pago no se confirma.** El PSE 4 se aprobó en el banco simulado a las
+15:12 y la consulta siguió dando `action_required` a las 15:13 y a las 15:14. Segundos después de pulsar
+«Volver al comercio», que pasa por el comprobante de Mercado Pago («Tu pago a Test Test está en proceso»,
+con una cuenta regresiva), dio `APPROVED`. Los otros cuatro pasaron por ese botón antes de consultarse.
+Es una sola comparación, pero coincide con la documentación: el comprobante es el paso que lleva a la
+`callback_url`. Cancelar las órdenes abiertas no cambió nada. Por precaución, **en este sandbox cada PSE se
 termina en el banco simulado**, aprobándolo o eligiendo «USUARIO ABANDONÓ TRANSACCION EN BANCO», en vez
 de dejarlo abierto.
 

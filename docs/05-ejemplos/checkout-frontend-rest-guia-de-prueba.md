@@ -2,7 +2,7 @@
 
 Para quien revisa el issue #109 o quiere ver el prototipo C funcionando. Dice cómo correrlo en cada modo y qué tiene que salir en cada pasarela, con lo que se midió el 15 y el 16 de octubre de 2026. Lo que no sale igual no es necesariamente un defecto: la última sección separa lo que depende de cada sandbox.
 
-El recorrido completo del cliente está en [checkout-frontend-rest.md](checkout-frontend-rest.md), y las decisiones en los puntos 91 a 102 del [architecture-log](../architecture/architecture-log.md).
+El recorrido completo del cliente está en [checkout-frontend-rest.md](checkout-frontend-rest.md), y las decisiones en los puntos 91 a 104 del [architecture-log](../architecture/architecture-log.md).
 
 ## 1. Antes de empezar
 
@@ -21,11 +21,12 @@ El recorrido completo del cliente está en [checkout-frontend-rest.md](checkout-
 
 | Comando | API | Ambiente | Qué se prueba |
 |---|---|---|---|
-| `npm start` | La de Render | `simulator` | El PSE de las cuatro pasarelas con las páginas de banco del simulador. La tarjeta queda bloqueada a propósito: el SDK solo tokeniza contra `localhost:3000` en `simulator` |
-| `npm run start:sandbox` | La de Render | `sandbox` | Los sandboxes oficiales, con las credenciales del servidor de Render |
+| `npm start` | La de Render | `sandbox` | Los sandboxes oficiales, con las credenciales del servidor de Render. Es el modo por omisión |
 | `npm run start:local` | `localhost:3000` | `simulator` | Todo contra un simulador encendido en la máquina, tarjeta incluida |
 
-Se abre `http://localhost:4100`. Arriba, la página dice a qué API y con qué ambiente habla; en `sandbox` muestra además el aviso de que la API usa sus propias credenciales. Las opciones (`--api-url`, `--environment`, `--dotenv`, `--public-key`, `--port`) se pasan después de `--`, y funcionan igual en bash, PowerShell y cmd. En PowerShell, `set VARIABLE=valor` no define una variable de entorno: use los argumentos.
+El simulador de Render queda como opción: `npm start -- --environment=simulator` prueba el PSE de las cuatro pasarelas con las páginas de banco del simulador, con la tarjeta deshabilitada, porque en `simulator` el SDK solo tokeniza contra `localhost:3000`.
+
+Se abre `http://localhost:4100`: la tienda «Tostadero Ceiba». La franja de arriba dice si los pagos son simulados o del sandbox. La API, el ambiente y, en `sandbox`, el aviso de que la API usa sus propias credenciales van a la consola del navegador (F12), con el prefijo `[tienda C]`. Las opciones (`--api-url`, `--environment`, `--dotenv`, `--public-key`, `--port`) se pasan después de `--`, y funcionan igual en bash, PowerShell y cmd. En PowerShell, `set VARIABLE=valor` no define una variable de entorno: use los argumentos.
 
 **Si la API es la de Render**, tiene que correr el código del #109. Mientras el PR no esté integrado, el cuerpo del PR dice cómo desplegar temporalmente su commit en Render y cómo volver a `devops`.
 
@@ -54,14 +55,14 @@ Medido el 15 de octubre de 2026 entre las 21:47 y las 22:12 (UTC−5) con la API
 | Wompi | PSE con el banco `3` | `ERROR` |
 | Wompi | Tarjeta `4242 4242 4242 4242` | `APPROVED` |
 | Wompi | Tarjeta `4111 1111 1111 1111` | `DECLINED` |
-| Rapyd | PSE con cualquier banco de la lista, abrir el enlace, «Success» y «Pay» | La lista trae 9 bancos, los que el sandbox cobra. La página real «Rapyd Bank Payment Simulation», la vuelta al cliente y `APPROVED` (`CLO`) |
-| Rapyd | PSE, abrir el enlace, «Error» y «Pay» | La misma página, la vuelta y `ERROR` (`ERR`) |
+| Rapyd | PSE con cualquier banco de la lista; la tienda lleva a la página del banco. «Success» y «Pay» | La lista trae 9 bancos, los que el sandbox cobra. La página real «Rapyd Bank Payment Simulation», la vuelta al cliente y `APPROVED` (`CLO`) |
+| Rapyd | PSE; en la página del banco, «Error» y «Pay» | La misma página, la vuelta y `ERROR` (`ERR`) |
 | Rapyd | Tarjeta | `UNSUPPORTED_OPERATION`, sin ninguna petición: la tarjeta de Rapyd está fuera del prototipo C (insumo de la Prioridad 3) |
-| Kushki | PSE, abrir el enlace, «Volver al comercio» | La página real «Kushki Bank» con «Transacción pendiente», la vuelta con `token=` en la URL y `PENDING` (`initializedTransaction`). «Ya pagué: consultar el estado» sigue disponible. **El estado no cambia**, ni con los documentos de prueba (ver la sección 5) |
+| Kushki | PSE; en la página del banco, «Volver al comercio» | La página real «Kushki Bank» con «Transacción pendiente», la vuelta con `token=` en la URL y «Tu pago está en proceso» (`PENDING`, `initializedTransaction` en la consola), con «Consultar de nuevo». **El estado no cambia**, ni con los documentos de prueba (ver la sección 5) |
 | Kushki | Tarjeta | `UNSUPPORTED_OPERATION`, como Rapyd |
 | Mercado Pago | Tarjeta `4013 5406 8274 6260`, 11/2030, CVC 123, titular `APRO Ruiz` | `APPROVED` (`processed`), con un id `ORDTST…` |
 | Mercado Pago | La misma tarjeta con el titular `OTHE Ruiz` | `DECLINED` con el motivo `rejected_by_issuer` |
-| Mercado Pago | PSE, por el túnel | El enlace a `www.mercadopago.com.co/sandbox/payments/<id>/bank_transfer`, que abre «Banco Prueba PSE». Ahí: usuario y contraseña cualesquiera, «APROBAR PAGO», «Enviar», «Estado de la Transacción: OK» y «Volver al comercio», que vuelve con `payment_id=`. La consulta da `APPROVED` (`processed`). Medido el 16 de octubre a las 15:44 con el SDK y el par nuevo. Si en vez del enlace sale un pago pendiente que termina `DECLINED` con `processing_error`, es el límite del sandbox de la sección 5: así salió por el cliente C a las 19:07 |
+| Mercado Pago | PSE, por el túnel | La tienda lleva directo a `www.mercadopago.com.co/sandbox/payments/<id>/bank_transfer`, que abre «Banco Prueba PSE». Ahí: usuario y contraseña cualesquiera, «APROBAR PAGO», «Enviar», «Estado de la Transacción: OK» y «Volver al comercio», que pasa por el comprobante de Mercado Pago y vuelve a la tienda con `payment_id=`: «¡Gracias! Tu pago fue aprobado» (`APPROVED`, `processed` en la consola). Medido por la tienda el 17 de octubre a las 15:23, con la tercera aplicación. Sin «Volver al comercio», la orden se quedó en `action_required` (sección 5). Si en vez del enlace sale un pago pendiente que termina `DECLINED` con `processing_error`, es el límite del sandbox de la sección 5: así salió por el cliente C a las 19:07 |
 
 ## 5. Lo que depende de cada sandbox, no de este código
 
@@ -72,13 +73,13 @@ Medido el 15 de octubre de 2026 entre las 21:47 y las 22:12 (UTC−5) con la API
 
 ## 6. Qué tiene que salir contra el simulador
 
-Con `npm start` (simulador de Render, con el código del #109) o `npm run start:local`:
+Con `npm run start:local` o con el simulador de Render (`npm start -- --environment=simulator`, con el código del #109):
 
 - **El PSE de las cuatro pasarelas** lleva a la página de banco del simulador, que dice que es del simulador. «Volver al comercio» devuelve al cliente, con `payment_id=` en Mercado Pago y `token=` en Kushki, y la consulta da `APPROVED`.
 - **Wompi con el banco `2`** da `DECLINED` sin redirección.
-- **Kushki con el documento `999999990`** queda pendiente después de volver, y «Ya pagué» sigue disponible.
+- **Kushki con el documento `999999990`** queda pendiente después de volver, y la confirmación ofrece «Consultar de nuevo».
 - **La tarjeta**, solo con `start:local`: Wompi y Mercado Pago `APPROVED`; Mercado Pago con `OTHE Ruiz`, `DECLINED` con su motivo; Kushki y Rapyd, `UNSUPPORTED_OPERATION`.
 
 ## 7. Cómo reportar
 
-Una captura por cada paso del pagador, incluida cada URL que la página entrega aunque sea de un dominio externo, con la hora, el modo (`npm start`, `start:sandbox` o `start:local`) y la API que mostraba la página. Si algo no coincide con estas tablas, la traza de la página (abajo, «Traza de llamadas a la API») dice qué respondió la API en cada paso.
+Una captura por cada paso del pagador, incluida cada página a la que lleva la tienda aunque sea de un dominio externo, con la hora y el modo (`npm start`, `start:local` o `npm start -- --environment=simulator`). La tienda no muestra datos técnicos: la API, el ambiente, cada llamada a `/v1/api` con su código, el estado nativo de cada pago y la URL a la que redirige van a la consola del navegador (F12, con el prefijo `[tienda C]`). Si algo no coincide con estas tablas, adjunte esa consola.
