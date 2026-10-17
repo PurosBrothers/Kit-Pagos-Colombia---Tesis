@@ -557,11 +557,22 @@ cliente C con `test@testuser.com` y el banco 1051 terminó igual. Los dos PSE de
 aplicación que llegaron al banco, a las 15:38 y a las 15:41, quedaron cerrados: la búsqueda de pagos
 los da `rejected / bank_error` y `approved / accredited`. Una transacción abierta, entonces, no lo explica.
 
+**Una tercera aplicación entregó la URL tres veces seguidas** (17 de octubre de 2026, 12:41–12:46).
+Con el mismo vendedor de prueba (`/users/me` da el mismo usuario) y el mismo cuerpo, los tres primeros
+PSE nacieron `action_required` con la URL y se cerraron en «Banco Prueba PSE»: el primero y el tercero
+con «APROBAR PAGO» («Estado de la Transacción: OK»; la consulta da `APPROVED`, nativo `processed`) y el
+segundo con «USUARIO ABANDONÓ TRANSACCION EN BANCO» («NOT_AUTHORIZED»; la consulta da `DECLINED`, nativo
+`failed`, con `processing_error`). El primero volvió a `https://example.com/retorno-pse?payment_id=183679736521`.
+No es, entonces, un límite de dos PSE por aplicación. El abandono en el banco termina con el mismo
+`processing_error` que las órdenes sin URL; lo que las distingue es que esta orden sí tuvo URL.
+
 **La causa no se conoce, y no es la petición.** La misma petición pasa de funcionar a fallar sin que
-cambie nada de nuestro lado. Lo que se repite en las dos aplicaciones: sus primeras órdenes de PSE
-entregaron URL (dos a las 13:12 del 15 de octubre con la primera, dos a las 15:38 y 15:41 del 16 con
-la segunda), y horas después ninguna orden la entrega. Son dos casos, así que no alcanza para afirmar
-un límite. Cancelar las órdenes abiertas no cambió nada. Por precaución, **en este sandbox cada PSE se
+cambie nada de nuestro lado. Lo que se repite: las primeras órdenes de PSE de cada aplicación, creadas
+poco después de crearla, entregaron URL (dos el 15 de octubre a las 13:12 con la primera, dos el 16 a las
+15:38 y 15:41 con la segunda, tres el 17 entre las 12:41 y las 12:44 con la tercera), y en las dos
+primeras, horas después, ninguna orden la entregaba. En esas dos, entre los PSE que funcionaron y los que
+fallaron hubo cobros con tarjeta de la misma aplicación. Falta medir si el corte depende del tiempo o de
+esos cobros. Cancelar las órdenes abiertas no cambió nada. Por precaución, **en este sandbox cada PSE se
 termina en el banco simulado**, aprobándolo o eligiendo «USUARIO ABANDONÓ TRANSACCION EN BANCO», en vez
 de dejarlo abierto.
 
