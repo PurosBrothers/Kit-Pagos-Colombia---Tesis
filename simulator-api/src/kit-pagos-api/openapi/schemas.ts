@@ -9,6 +9,8 @@
  * pasa directamente a la propiedad `schema` de la ruta de Fastify.
  */
 
+import { CARD_CAPTURE_VALUES } from "../card-capture";
+
 // ---------------------------------------------------------------------------
 // Componentes reutilizables
 // ---------------------------------------------------------------------------
@@ -94,18 +96,26 @@ export const GatewayCredentialHeaders = {
 export const GetGatewaysSchema = {
   tags: ["Kit Pagos"],
   summary: "Pasarelas disponibles",
-  description: "Devuelve la lista de pasarelas que el SDK soporta. No requiere credenciales.",
+  description:
+    "Devuelve la lista de pasarelas que el SDK soporta y cómo recibe cada una la tarjeta desde un navegador. No requiere credenciales.",
   security: [{ bearerAuth: [] }],
   response: {
     200: {
-      description: "Lista de identificadores de pasarela en minúsculas.",
+      description: "Lista de identificadores de pasarela en minúsculas, con el modo de tarjeta de cada una.",
       type: "object",
-      required: ["gateways"],
+      required: ["gateways", "cardCapture"],
       properties: {
         gateways: {
           type: "array",
           items: { type: "string" },
           example: ["wompi", "mercadopago", "kushki", "rapyd"],
+        },
+        cardCapture: {
+          type: "object",
+          description:
+            "Por pasarela: BROWSER_TOKEN si la página tokeniza la tarjeta con KitPagosBrowser y manda el token en paymentMethod.token; HOSTED_PAGE si el pago con tarjeta se crea sin token y responde REDIRECT_REQUIRED hacia la página de la pasarela.",
+          additionalProperties: { type: "string", enum: CARD_CAPTURE_VALUES },
+          example: { wompi: "BROWSER_TOKEN", mercadopago: "BROWSER_TOKEN", kushki: "BROWSER_TOKEN", rapyd: "HOSTED_PAGE" },
         },
       },
     },
