@@ -531,8 +531,8 @@ el informe de esa noche contaba 12), con varios pagadores y bancos, nacieron
 - **Una pista sin confirmar.** Las URL de banco de las dos órdenes de las 13:12, que nadie pagó, llevan al simulador de bancos (`bc_pse_sim/login`), y este responde «¡Lo sentimos! No se puede continuar con el pago, ya tienes una transacción en curso.» Se cancelaron las dos (`200 canceled`) y el PSE siguió fallando.
 - **Sin incidentes publicados.** [status.mercadopago.com](https://status.mercadopago.com/) decía «All Systems Operational» a las 14:54, sin incidentes de PSE ni de Orders entre el 13 y el 16 de octubre; esa página no cubre el sandbox. `/users/me` del vendedor no muestra restricciones (`site_status: active`), y la documentación de [cuentas de prueba](https://www.mercadopago.com.co/developers/es/docs/checkout-api-orders/resources/test-accounts) no menciona límites de órdenes.
 
-**Era la cuenta de prueba** (16 de octubre de 2026, 15:37–15:44). Con el vendedor de prueba de una
-**segunda** aplicación de Checkout API vía Orders, la misma petición del SDK nació
+**Con una segunda aplicación funcionó dos veces** (16 de octubre de 2026, 15:37–15:44). Con las
+credenciales de prueba de una **segunda** aplicación de Checkout API vía Orders, la misma petición del SDK nació
 `action_required / waiting_transfer` con la `redirect_url`, que llevó a «Banco Prueba PSE»
 (`api.mercadopago.com/beta/bc_pse_sim/login`). El recorrido completo:
 
@@ -543,13 +543,27 @@ el informe de esa noche contaba 12), con varios pagadores y bancos, nacieron
 5. `getPaymentStatus()` del SDK sobre el id de la orden: `APPROVED`, nativo `processed`, final.
 
 Con el mismo par, la tarjeta con titular `APRO Ruiz` salió `APPROVED` (`processed`) y con `OTHE Ruiz`,
-`DECLINED` con `rejected_by_issuer`.
+`DECLINED` con `rejected_by_issuer**Las dos aplicaciones comparten el vendedor de prueba** (medido el 16 de octubre a las 16:12). Con el
+token de la segunda, `/users/me` devuelve un usuario registrado el 15 de octubre a las 13:00, cuando
+se creó la primera aplicación, y `GET /v1/payments/search` del 15 de octubre devuelve 64 pagos hechos
+con la primera: los dos PSE de las 13:12 (`cancelled / by_collector`) y las pruebas de tarjeta.
 
-**Hipótesis sobre la primera cuenta, sin confirmar.** Su simulador de bancos respondía «ya tienes una
-transacción en curso» para las dos órdenes de las 13:12, que nadie terminó en el banco simulado.
-Puede que eso haya bloqueado el PSE de ese vendedor; cancelar las órdenes no lo desbloqueó. La
-primera aplicación queda sin usar. **En este sandbox, cada PSE se termina en el banco simulado**,
-aprobándolo o eligiendo «USUARIO ABANDONÓ TRANSACCION EN BANCO», en vez de dejarlo abierto.
+**A las 19:07 la segunda aplicación falló igual.** Un PSE del cliente C por `/v1/api` nació
+`processing` sin URL y terminó `failed / processing_error`. A las 19:09, el mismo cuerpo que había
+funcionado a las 15:41, enviado con el SDK, nació `processing` sin URL, y a las 19:24 otro PSE del
+cliente C con `test@testuser.com` y el banco 1051 terminó igual. Los dos PSE de la segunda
+aplicación que llegaron al banco, a las 15:38 y a las 15:41, quedaron cerrados: la búsqueda de pagos
+los da `rejected / bank_error` y `approved / accredited`. Una transacción abierta, entonces, no lo explica.
+
+**La causa no se conoce, y no es la petición.** La misma petición pasa de funcionar a fallar sin que
+cambie nada de nuestro lado. Lo que se repite en las dos aplicaciones: sus primeras órdenes de PSE
+entregaron URL (dos a las 13:12 del 15 de octubre con la primera, dos a las 15:38 y 15:41 del 16 con
+la segunda), y horas después ninguna orden la entrega. Son dos casos, así que no alcanza para afirmar
+un límite. Cancelar las órdenes abiertas no cambió nada. Por precaución, **en este sandbox cada PSE se
+termina en el banco simulado**, aprobándolo o eligiendo «USUARIO ABANDONÓ TRANSACCION EN BANCO», en vez
+de dejarlo abierto.
+
+o.
 
 Para el comercio, una orden sin URL no tiene adónde mandar al pagador, pero existe y tiene
 identificador. Desde la versión 0.6.0-rc.2, `createPayment()` la devuelve como una transacción

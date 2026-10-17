@@ -668,7 +668,7 @@
             <div class="data-sheet" style="margin-top: 24px;">
               <div class="data-sheet-header">
                 <h4 class="data-sheet-title">Mapeo canónico de errores (KitPagosErrorCode)</h4>
-                <p class="data-sheet-sub">Los doce códigos de error del dominio están formalmente asociados a su código de estado HTTP correspondiente según RF-08.</p>
+                <p class="data-sheet-sub">Los trece códigos de error del dominio están formalmente asociados a su código de estado HTTP correspondiente según RF-08.</p>
               </div>
               <div class="table-container">
                 <table class="data-table">
@@ -685,6 +685,7 @@
                     <tr><td><code>INVALID_CREDENTIALS</code></td><td><code class="text-amber">401</code></td><td>Llaves públicas/privadas ausentes, inválidas o rechazadas por el proveedor.</td></tr>
                     <tr><td><code>WEBHOOK_SIGNATURE_INVALID</code></td><td><code class="text-amber">401</code></td><td>Firma HMAC/SHA-256 no coincide o marca de tiempo fuera de la ventana de tolerancia.</td></tr>
                     <tr><td><code>RESOURCE_NOT_FOUND</code></td><td><code class="text-amber">404</code></td><td>Transacción o recurso inexistente en la pasarela.</td></tr>
+                    <tr><td><code>RESOURCE_LOCKED</code></td><td><code class="text-amber">423</code></td><td>La pasarela procesa otra petición con la misma llave de idempotencia (Orders API de Mercado Pago); es transitorio.</td></tr>
                     <tr><td><code>RATE_LIMIT_EXCEEDED</code></td><td><code class="text-amber">429</code></td><td>Límite de peticiones por segundo alcanzado en el proveedor.</td></tr>
                     <tr><td><code>CONNECTION_FAILED</code></td><td><code class="text-amber">502</code></td><td>Fallo de socket de red o DNS al contactar el API de la pasarela.</td></tr>
                     <tr><td><code>GATEWAY_SERVER_ERROR</code></td><td><code class="text-amber">502</code></td><td>Error 5xx interno emitido por los servidores del proveedor.</td></tr>
