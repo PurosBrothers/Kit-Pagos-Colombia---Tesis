@@ -574,14 +574,18 @@ primeras, horas después, ninguna orden la entregaba. En esas dos, entre los PSE
 fallaron hubo cobros con tarjeta de la misma aplicación. Falta medir si el corte depende del tiempo o de
 esos cobros.
 
-**Tres horas después, sin cobros con tarjeta, seguía funcionando** (17 de octubre de 2026). Con la
+**Cuatro horas después, sin cobros con tarjeta, seguía funcionando** (17 de octubre de 2026). Con la
 tercera aplicación, ya en las líneas principales del `.env`, el PSE 4 entregó la URL a las 15:12 con el
 mismo cuerpo, y el PSE 5, a las 15:23, desde la tienda del prototipo C y con su propio pagador
 (`pagador.c@example.com`, 84 000 COP, banco 1051): «Banco Prueba PSE», «APROBAR PAGO», el comprobante de
 Mercado Pago y la vuelta a la tienda con `payment_id=184734495674`, `APPROVED`. El PSE 6, a las 15:46, también
-desde la tienda (65 000 COP, Bancolombia), terminó igual: `payment_id=184739554282`, `APPROVED`. A la segunda aplicación,
-creada hacia las 15:30 del 16, se le cortó antes de las 19:07, unas tres horas y media después y con
-cobros con tarjeta en medio. Con la tercera no se ha cobrado ninguna tarjeta.
+desde la tienda (65 000 COP, Bancolombia), terminó igual: `payment_id=184739554282`, `APPROVED`. El PSE 7,
+a las 16:35, desde la tienda con los ajustes del punto 105 (77 000 COP, Davivienda), también:
+`payment_id=184748322702`, `APPROVED`. El PSE 8, a las 16:55, fue el primero por Render con el par de la
+tercera aplicación, que Joshua puso esa tarde: con `npm start`, 77 000 COP y Davivienda, volvió con
+`payment_id=184751088076` y `APPROVED`. A la segunda aplicación, creada hacia las 15:30 del 16, se le
+cortó antes de las 19:07, unas tres horas y media después y con cobros con tarjeta en medio. Con la
+tercera no se ha cobrado ninguna tarjeta.
 
 **Sin «Volver al comercio», el pago no se confirma.** El PSE 4 se aprobó en el banco simulado a las
 15:12 y la consulta siguió dando `action_required` a las 15:13 y a las 15:14. Segundos después de pulsar
