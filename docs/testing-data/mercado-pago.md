@@ -543,7 +543,9 @@ credenciales de prueba de una **segunda** aplicación de Checkout API vía Order
 5. `getPaymentStatus()` del SDK sobre el id de la orden: `APPROVED`, nativo `processed`, final.
 
 Con el mismo par, la tarjeta con titular `APRO Ruiz` salió `APPROVED` (`processed`) y con `OTHE Ruiz`,
-`DECLINED` con `rejected_by_issuer**Las dos aplicaciones comparten el vendedor de prueba** (medido el 16 de octubre a las 16:12). Con el
+`DECLINED` con `rejected_by_issuer`.
+
+**Las dos aplicaciones comparten el vendedor de prueba** (medido el 16 de octubre a las 16:12). Con el
 token de la segunda, `/users/me` devuelve un usuario registrado el 15 de octubre a las 13:00, cuando
 se creó la primera aplicación, y `GET /v1/payments/search` del 15 de octubre devuelve 64 pagos hechos
 con la primera: los dos PSE de las 13:12 (`cancelled / by_collector`) y las pruebas de tarjeta.
@@ -562,8 +564,6 @@ la segunda), y horas después ninguna orden la entrega. Son dos casos, así que 
 un límite. Cancelar las órdenes abiertas no cambió nada. Por precaución, **en este sandbox cada PSE se
 termina en el banco simulado**, aprobándolo o eligiendo «USUARIO ABANDONÓ TRANSACCION EN BANCO», en vez
 de dejarlo abierto.
-
-o.
 
 Para el comercio, una orden sin URL no tiene adónde mandar al pagador, pero existe y tiene
 identificador. Desde la versión 0.6.0-rc.2, `createPayment()` la devuelve como una transacción

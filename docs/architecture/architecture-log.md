@@ -3359,6 +3359,26 @@ En la misma noche, las 18 órdenes de PSE creadas entre las 21:33 y las 21:44 na
 
 **Estado:** Resuelto en `simulator-api/` y en `prototypes/checkout-frontend-rest/`.
 
+### 102. El sandbox de Rapyd solo cobra 9 de sus 50 bancos de PSE, y Davibank cambió de nombre (SDK 0.6.0-rc.3, issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.** Al probar el PR contra Render en `sandbox`, el 16 de octubre, Joshua encontró que el PSE de Rapyd llevaba a la página de Rapyd con Davivienda y respondía `INVALID_REQUEST: Rapyd gateway returned an HTTP error status 400` con Nequi. El 17 de octubre, entre las 10:52 y las 11:00 (UTC−5), se cobró una vez con cada banco de `getPseBanks()`, con los datos del cliente C: 9 de los 50 redirigen a `sandboxcheckout.rapyd.net` y los otros 41 responden `400 ERROR_GET_GATEWAY`, «Contact Rapyd Client Support.», que dice que la cuenta no tiene procesador para ese método (`docs/testing-data/rapyd.md`, 5.8). No es nuestra petición: es la misma para los 50. La documentación de Rapyd ya advertía que en sandbox la lista de métodos trae todos los de la plataforma y en producción solo los habilitados, y nada en el catálogo ni en `GET /v1/payment_methods/{tipo}/required_fields` distingue a los 9 de los 41: los campos son idénticos.
+
+De paso apareció que el catálogo cambió desde el 26 de septiembre: `co_pse_scotiabank_colpatria_bank` ya no está, en su lugar está `co_pse_davibank_bank`, y hay tres métodos nuevos (`co_pse_banco_contactar_bank`, `co_pse_accion_fiduciaria_bank` y `co_pse_paycash_bank`) que la lista de PSE de Mercado Pago, de donde sale `PseBankCode`, no trae. La prueba de contrato de Rapyd, que exigía la lista igual a la tabla de traducción, habría fallado; no se había corrido desde entonces.
+
+**Decisión 1: contra el sandbox, `getPseBanks()` de Rapyd devuelve solo los 9 que cobran.** Decisión de Joan: un banco que no se puede cobrar no se muestra. La lista está escrita en `RAPYD_SANDBOX_PSE_TYPES` y `chargeablePseBanks()` la aplica solo cuando el host de la URL base es el del sandbox en el catálogo de URL del SDK (`sandboxapi.rapyd.net`). En producción y en el simulador la lista pasa entera. *Descartado:* filtrar en `/v1/api/pse-banks`, que no hace publicar el SDK pero deja la lista sin filtrar a quien use el SDK directo; y averiguar los cobrables en cada consulta, que exigiría crear un pago por banco. El costo: si Rapyd habilita un banco, la lista lo esconde hasta actualizarla.
+
+**Decisión 2: la prueba de contrato cobra con cada banco del catálogo.** Exige que los que cobran sean exactamente los de `RAPYD_SANDBOX_PSE_TYPES`, que `getPseBanks()` devuelva esos mismos, y que ningún código de `RAPYD_PSE_TYPES` apunte a un método que ya no está. Es la que avisa cuando la lista escrita deja de ser cierta.
+
+**Decisión 3: `PseBankCode.DAVIBANK` se traduce a `co_pse_davibank_bank`.** Con el nombre anterior, su cobro iba a un método que no existe. Los tres métodos nuevos salen de `getPseBanks()` sin `achCode`, como prevé el punto 68, y no se agregan a `PseBankCode` porque no tienen código de compensación medido.
+
+**Lo que queda igual.** El mensaje del error no trae el código de Rapyd (`ERROR_GET_GATEWAY`); ponerlo cambia el manejo de errores de las cuatro pasarelas y se deja para después de este PR.
+
+**Lo medido** (17 de octubre de 2026). Prueba de contrato de Rapyd contra el sandbox, 6 de 6, con las dos pruebas nuevas, hacia las 11:40. SDK: 55 suites y 944 pruebas, sentencias 97,82 % y ramas 91,06 %; lint, tipos, `metrics`, `check:readme` y build en verde. Mutaciones: sin el filtro falla 1 de 44 pruebas del adaptador; con el nombre anterior de Davibank, 3 de 12 de la tabla.
+
+**Estado:** Resuelto en `sdk/` (se publica como `0.6.0-rc.3`).
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd

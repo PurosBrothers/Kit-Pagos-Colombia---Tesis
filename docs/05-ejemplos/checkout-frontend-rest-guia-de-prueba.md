@@ -2,7 +2,7 @@
 
 Para quien revisa el issue #109 o quiere ver el prototipo C funcionando. Dice cómo correrlo en cada modo y qué tiene que salir en cada pasarela, con lo que se midió el 15 y el 16 de octubre de 2026. Lo que no sale igual no es necesariamente un defecto: la última sección separa lo que depende de cada sandbox.
 
-El recorrido completo del cliente está en [checkout-frontend-rest.md](checkout-frontend-rest.md), y las decisiones en los puntos 91 a 101 del [architecture-log](../architecture/architecture-log.md).
+El recorrido completo del cliente está en [checkout-frontend-rest.md](checkout-frontend-rest.md), y las decisiones en los puntos 91 a 102 del [architecture-log](../architecture/architecture-log.md).
 
 ## 1. Antes de empezar
 
@@ -54,7 +54,7 @@ Medido el 15 de octubre de 2026 entre las 21:47 y las 22:12 (UTC−5) con la API
 | Wompi | PSE con el banco `3` | `ERROR` |
 | Wompi | Tarjeta `4242 4242 4242 4242` | `APPROVED` |
 | Wompi | Tarjeta `4111 1111 1111 1111` | `DECLINED` |
-| Rapyd | PSE, abrir el enlace, «Success» y «Pay» | La página real «Rapyd Bank Payment Simulation», la vuelta al cliente y `APPROVED` (`CLO`) |
+| Rapyd | PSE con cualquier banco de la lista, abrir el enlace, «Success» y «Pay» | La lista trae 9 bancos, los que el sandbox cobra. La página real «Rapyd Bank Payment Simulation», la vuelta al cliente y `APPROVED` (`CLO`) |
 | Rapyd | PSE, abrir el enlace, «Error» y «Pay» | La misma página, la vuelta y `ERROR` (`ERR`) |
 | Rapyd | Tarjeta | `UNSUPPORTED_OPERATION`, sin ninguna petición: la tarjeta de Rapyd está fuera del prototipo C (insumo de la Prioridad 3) |
 | Kushki | PSE, abrir el enlace, «Volver al comercio» | La página real «Kushki Bank» con «Transacción pendiente», la vuelta con `token=` en la URL y `PENDING` (`initializedTransaction`). «Ya pagué: consultar el estado» sigue disponible. **El estado no cambia**, ni con los documentos de prueba (ver la sección 5) |
@@ -67,6 +67,7 @@ Medido el 15 de octubre de 2026 entre las 21:47 y las 22:12 (UTC−5) con la API
 
 - **Kushki no cierra el PSE en este comercio de UAT.** Cinco transferencias, una por cada documento de prueba, seguían `initializedTransaction` entre 11 y 35 horas después de creadas. La documentación de Kushki dice que la simulación de estados la activa Kushki para cada comercio; queda documentado como límite de esta cuenta (`docs/testing-data/kushki.md`, 5.2.2). El simulador, en cambio, responde `approvedTransaction` en la primera consulta.
 - **El PSE de Mercado Pago deja de entregar URL de banco.** La primera aplicación del proyecto la entregó el 15 de octubre a las 13:12 y dejó de hacerlo a las 21:33: la orden nacía `processing` y terminaba `processing_error`. Una segunda aplicación, con el mismo vendedor de prueba, la entregó dos veces el 16 de octubre a las 15:38 y a las 15:41, y a las 19:07 falló igual, también con el mismo cuerpo que había funcionado. La causa no se conoce y no es la petición (punto 100). Si la página muestra un pago pendiente que termina `DECLINED` con `processing_error`, es esto, y el cliente se comporta como debe. **Termine cada PSE en «Banco Prueba PSE»**, aprobándolo o eligiendo «USUARIO ABANDONÓ TRANSACCION EN BANCO»; no lo deje abierto.
+- **El sandbox de Rapyd solo cobra 9 de sus 50 bancos.** Con los otros 41 el pago responde `400 ERROR_GET_GATEWAY`: la cuenta no tiene procesador para ellos. Desde la 0.6.0-rc.3, el SDK los quita de la lista cuando habla con el sandbox, así que el cliente muestra solo Davivienda, Bancolombia, Caja Social, AV Villas, Unión, Contactar, Acción Fiduciaria, Ding y PayCash (`docs/testing-data/rapyd.md`, 5.8; punto 102). Si aparece otro banco de Rapyd en `sandbox`, la API no está corriendo la rc.3.
 - **Mercado Pago no rechaza un cobro duplicado.** Dos cobros con la misma referencia crean dos órdenes; la única protección es la llave de idempotencia, que el SDK genera aleatoria en cada cobro. El comercio tiene que consultar antes de reintentar (punto 100).
 
 ## 6. Qué tiene que salir contra el simulador

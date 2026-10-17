@@ -137,7 +137,7 @@ PaymentMethod.pse({ bankCode: PseBankCode.BANCOLOMBIA });
 
 **`PseBankCode` sirve igual en las cuatro pasarelas.** Es el código de compensación de cuatro dígitos que publica el Banco de la República y que usa ACH Colombia (`1007` es Bancolombia). Mercado Pago, Wompi y Kushki lo reciben tal cual, y el SDK lo traduce para Rapyd, que nombra cada banco con un método propio (`co_pse_bancolombia_bank`). Cada banco de `getPseBanks()` trae además su `achCode` cuando lo tiene.
 
-**El `code` de la lista, en cambio, solo vale en la pasarela que lo dio.** Los bancos de prueba de los sandboxes solo existen así: `1`, `2` y `3` en Wompi, y `0001` en Kushki. Tenga en cuenta que Wompi no valida el código al crear el pago, así que en su sandbox un código de `PseBankCode` no falla al crear, sino después. El razonamiento está en el punto 68 del `architecture-log.md`.
+**El `code` de la lista, en cambio, solo vale en la pasarela que lo dio.** Los bancos de prueba de los sandboxes solo existen así: `1`, `2` y `3` en Wompi, y `0001` en Kushki. Tenga en cuenta que Wompi no valida el código al crear el pago, así que en su sandbox un código de `PseBankCode` no falla al crear, sino después. El razonamiento está en el punto 68 del `architecture-log.md`. Contra el sandbox de Rapyd la lista trae solo los 9 bancos que esa cuenta cobra; con los otros 41, el pago falla con `400 ERROR_GET_GATEWAY` (punto 102).
 
 El ejemplo completo está en el [README, sección 3](../../sdk/README.md#3-crear-una-transacción-con-pse-redirección-bancaria). Lo que hay que tener presente:
 
