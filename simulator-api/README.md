@@ -57,13 +57,17 @@ Las peticiones no conformes o fallidas responden con un payload estructurado:
 }
 ```
 
-Mapeo formal a códigos de estado HTTP según el estándar del proyecto (RF-08):
-- `INVALID_REQUEST` / `MISSING_PARAMETER` → `400 Bad Request`
-- `UNAUTHORIZED` / `INVALID_CREDENTIALS` / `INVALID_SIGNATURE` → `401 Unauthorized`
-- `TRANSACTION_NOT_FOUND` → `404 Not Found`
-- `UNSUPPORTED_OPERATION` → `422 Unprocessable Entity`
-- `GATEWAY_ERROR` / `INTERNAL_ERROR` → `502 Bad Gateway`
+Mapeo formal a códigos de estado HTTP según el estándar del proyecto (RF-08), definido en `src/kit-pagos-api/errors/kitPagosErrorResponse.ts`:
+- `INVALID_REQUEST` / `UNSUPPORTED_OPERATION` → `400 Bad Request` (también cuando el cuerpo no cumple el esquema)
+- `INVALID_CREDENTIALS` / `WEBHOOK_SIGNATURE_INVALID` → `401 Unauthorized`
+- `RESOURCE_NOT_FOUND` → `404 Not Found`
+- `RESOURCE_LOCKED` → `423 Locked`
+- `RATE_LIMIT_EXCEEDED` → `429 Too Many Requests`
+- `CONNECTION_FAILED` / `GATEWAY_SERVER_ERROR` / `MALFORMED_RESPONSE` / `MAX_RETRIES_EXCEEDED` → `502 Bad Gateway`
 - `GATEWAY_TIMEOUT` → `504 Gateway Timeout`
+- `UNKNOWN_ERROR` → `500 Internal Server Error`
+
+Un token de la API ausente o inválido, o una pasarela sin credenciales, responde `401` con `{ "error": "Unauthorized", "message": "…" }`, sin `code`.
 
 ---
 
