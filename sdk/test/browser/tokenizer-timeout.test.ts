@@ -1,6 +1,7 @@
 import { getEventListeners } from "events";
 import { WompiTokenizer } from "../../src-browser/tokenizers/WompiTokenizer";
 import { MercadoPagoTokenizer } from "../../src-browser/tokenizers/MercadoPagoTokenizer";
+import { KushkiTokenizer } from "../../src-browser/tokenizers/KushkiTokenizer";
 import { KitPagosBrowser } from "../../src-browser/KitPagosBrowser";
 import { Gateway } from "../../src/domain/value-objects/Gateway";
 import { KitPagosErrorCode } from "../../src/domain/value-objects/KitPagosErrorCode";
@@ -50,6 +51,16 @@ const tokenizers = [
         fetchFn as typeof fetch,
       ),
     success: { id: "mp_tok_1" },
+  },
+  {
+    name: "Kushki",
+    gateway: Gateway.KUSHKI,
+    tokenize: (params: Partial<TokenizeCardParams>, fetchFn: unknown) =>
+      KushkiTokenizer.tokenize(
+        { gateway: Gateway.KUSHKI, publicKey: "kushki_public", card, amount: "48000.00", environment: "sandbox", ...params },
+        fetchFn as typeof fetch,
+      ),
+    success: { token: "kushki_tok_1" },
   },
 ];
 

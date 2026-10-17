@@ -116,11 +116,10 @@ export async function tokenizeMercadoPagoCard(
  * así que no sirve para cobrar otra cosa.
  *
  * **La tarjeta no es la que la documentación de Kushki lista como aprobada.** Esa,
- * `5451 9515 7492 5480`, no tokeniza en esta cuenta UAT: responde
- * `400 K006 "DFR029 - Bin de tarjeta inválido"`, o sea que el BIN no está habilitado para el
- * comercio. Las tarjetas de rechazo de la misma tabla sí tokenizan, así que la tabla no está
- * mal entera, solo esa fila para esta cuenta. Se usa una Visa de prueba genérica, que
- * tokeniza y aprueba.
+ * `5451 9515 7492 5480`, no tokenizaba en esta cuenta UAT: respondía
+ * `400 K006 "DFR029 - Bin de tarjeta inválido"`, o sea que el BIN no estaba habilitado para el
+ * comercio. El 17 de octubre de 2026 tokenizó (`201`), así que la cuenta cambió sin aviso. Se
+ * sigue usando una Visa de prueba genérica, que tokeniza y aprueba en las dos mediciones.
  */
 export async function tokenizeKushkiCard(
   credentials: Credentials,

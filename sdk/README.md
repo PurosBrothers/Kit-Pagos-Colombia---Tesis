@@ -18,7 +18,7 @@ Diseñado bajo los principios de **Arquitectura Hexagonal (Ports & Adapters)** y
 - **Verificación criptográfica de Webhooks:** Validación de firmas nativas (HMAC-SHA256, SHA-256) con comparación en tiempo constante (`crypto.timingSafeEqual`) y **protección contra ataques de repetición (*anti-replay attacks*)** con ventana de tolerancia temporal configurable.
 - **Gestión de fallos y resiliencia:** Política de reintentos automáticos con retroceso exponencial (*exponential backoff*) y fluctuación (*jitter*) ante fallos de red transitorios, aislando errores permanentes de negocio.
 - **Seguridad y privacidad por diseño (RF-08):** Sanitización automática de llaves privadas, tokens `Bearer` y secretos en mensajes de error y registros para evitar filtraciones en logs de producción.
-- **Tokenización segura en navegador (`kit-pagos-colombia/browser`):** Módulo frontend liviano (unos 14 KB sin minificar, 3,6 KB con gzip) sin dependencias de Node.js para tokenizar tarjetas directamente contra la pasarela respetando PCI DSS.
+- **Tokenización segura en navegador (`kit-pagos-colombia/browser`):** Módulo frontend liviano (unos 22 KB sin minificar, 5,3 KB con gzip) sin dependencias de Node.js para tokenizar tarjetas directamente contra Wompi, Mercado Pago y Kushki respetando PCI DSS.
 
 ---
 
@@ -190,7 +190,7 @@ async function cobrarConTarjeta() {
 
 Para cumplir con **PCI DSS**, los datos sensibles de la tarjeta (número PAN, CVC, fecha de expiración) **nunca deben entrar al backend del comercio ni al SDK de servidor**.
 
-El paquete exporta un punto de entrada independiente y liviano para el frontend (`kit-pagos-colombia/browser`, unos 14 KB sin minificar y 3,6 KB con gzip, sin módulos de Node.js):
+El paquete exporta un punto de entrada independiente y liviano para el frontend (`kit-pagos-colombia/browser`, unos 22 KB sin minificar y 5,3 KB con gzip, sin módulos de Node.js). Tokeniza con Wompi, Mercado Pago y, desde la 0.6.0-rc.4, Kushki:
 
 ```typescript
 import { KitPagosBrowser, Gateway } from "kit-pagos-colombia/browser";
@@ -203,9 +203,11 @@ async function tokenizarTarjetaEnNavegador() {
     expMonth: "12",
     expYear: "2030",
     cardHolder: "Juan Pérez",
-    docType: "CC",            // El SDK lo exige en Mercado Pago; opcional en Wompi
-    docNumber: "19119119100",  // El SDK lo exige en Mercado Pago; opcional en Wompi
+    docType: "CC",            // El SDK lo exige en Mercado Pago; Wompi y Kushki no lo usan
+    docNumber: "19119119100",  // El SDK lo exige en Mercado Pago; Wompi y Kushki no lo usan
   };
+  // El monto del cobro, con el mismo formato del pago. Kushki ata el token a él; las otras lo ignoran.
+  const monto = "48000.00";
 
   // 1. Tokenización contra Wompi:
   const wompiResult = await KitPagosBrowser.tokenizeCard({
@@ -224,9 +226,19 @@ async function tokenizarTarjetaEnNavegador() {
     card: datosFormulario,
   });
 
+  // 3. Tokenización contra Kushki, con su merchant id público y el monto del cobro:
+  const kushkiResult = await KitPagosBrowser.tokenizeCard({
+    gateway: Gateway.KUSHKI,
+    publicKey: "kushki-public-merchant-id",
+    environment: "sandbox",
+    card: datosFormulario,
+    amount: monto,
+  });
+
   // El token resultante se envía a SU backend para llamar a PaymentMethod.card()
   console.log(`Token Wompi: ${wompiResult.token}`);
   console.log(`Token Mercado Pago: ${mpResult.token}`);
+  console.log(`Token Kushki: ${kushkiResult.token}`);
 }
 ```
 
@@ -237,7 +249,13 @@ async function tokenizarTarjetaEnNavegador() {
 > `INVALID_REQUEST` antes de enviar la tarjeta. Usa `AbortSignal.timeout`, que el navegador del
 > pagador tiene que soportar.
 
-> **PCI DSS:** Al usar `KitPagosBrowser`, el número de tarjeta viaja exclusivamente entre el navegador del pagador y los servidores de la pasarela. Su backend solo recibe y almacena el token opaco `tok_...`. El SDK rechaza activamente pasarelas que no soportan tokenización inline en frontend (como Kushki y Rapyd) con `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones.
+> **Kushki, desde la 0.6.0-rc.4.** Kushki pide el monto al tokenizar (`amount`, obligatorio solo
+> con ella) y ata el token a ese valor: cobrar el token por otro monto responde `400 K220` y el SDK
+> de servidor lo devuelve como `INVALID_REQUEST`. Cobre exactamente el monto con el que tokenizó.
+> La tokenización usa `POST /card/v1/tokens` con el merchant id público en la cabecera
+> `Public-Merchant-Id`; su CORS se midió el 17 de octubre de 2026 contra UAT.
+
+> **PCI DSS:** Al usar `KitPagosBrowser`, el número de tarjeta viaja exclusivamente entre el navegador del pagador y los servidores de la pasarela. Su backend solo recibe y almacena el token opaco. Rapyd no tokeniza en el navegador: cobra la tarjeta en su página alojada, así que `KitPagosBrowser` la rechaza con `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones; con Rapyd, cree el pago con tarjeta y sin token, y siga la redirección.
 
 > **Compatibilidad de `kit-pagos-colombia/browser` fuera del navegador.** TypeScript resuelve
 > sus tipos con `moduleResolution` `bundler`, `node16` y `node10`. El archivo es un módulo ES
@@ -557,7 +575,7 @@ const sdkMultiPasarela = new KitPagos({
 Por regulaciones bancarias internacionales (PCI-DSS) y de la Superintendencia Financiera de Colombia (SFC), **un servidor backend nunca debe recibir datos sensibles de tarjetas (número de 16 dígitos, fecha de expiración o CVV) en texto plano**, a menos que cuente con certificación PCI-DSS Nivel 1.
 
 Por esta razón, el SDK opera como un backend seguro que consume **tokens**:
-1. **En el Navegador (Frontend):** El usuario ingresa su tarjeta en un formulario web que utiliza la librería de tokenización oficial de la pasarela activa (ej. Wompi Widget/JS, Mercado Pago CardForm/SDK, Kushki.js o Rapyd Collect).
+1. **En el Navegador (Frontend):** El usuario ingresa su tarjeta en un formulario web que la tokeniza con `KitPagosBrowser` (Wompi, Mercado Pago y Kushki) o con la librería oficial de la pasarela activa. Con Rapyd no hay token: el pago se crea sin él y el pagador escribe la tarjeta en la página alojada de Rapyd.
 2. **Generación del Token:** La pasarela valida la tarjeta directamente desde el navegador y devuelve un token temporal (ej. `tok_test_card_12345`).
 3. **Procesamiento en Backend:** Su frontend envía ese token a su servidor Node.js, donde `KitPagos` ejecuta el cobro de forma segura mediante `PaymentMethod.card(token, { installments })`.
 
