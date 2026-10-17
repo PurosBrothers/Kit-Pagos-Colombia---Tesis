@@ -20,10 +20,10 @@ import {
 import { GATEWAYS } from "./helpers/fakeApi";
 
 describe("clientConfigFrom", () => {
-  it("defaults to the deployed simulator and carries no public key", () => {
+  it("defaults to the official sandboxes through the deployed API and carries no public key", () => {
     expect(clientConfigFrom({})).toEqual({
       apiBaseUrl: "https://kit-pagos-colombia.onrender.com/v1/api",
-      environment: "simulator",
+      environment: "sandbox",
       publicKeys: {},
     });
   });
@@ -69,7 +69,7 @@ describe("clientConfigFrom", () => {
   it("treats an empty variable as unset, which is what `set VARIABLE=` leaves behind", () => {
     expect(clientConfigFrom({ KIT_PAGOS_API_URL: "", KIT_PAGOS_ENVIRONMENT: "" })).toMatchObject({
       apiBaseUrl: DEFAULT_API_URL,
-      environment: "simulator",
+      environment: "sandbox",
     });
   });
 
@@ -299,12 +299,12 @@ describe("prepareServer", () => {
   it("builds the server with the config from the arguments and the port from the argument, the variable or 4100", () => {
     writeFileSync(join(root, "index.html"), "<!doctype html>");
 
-    const fromArgument = prepareServer(["--environment=sandbox", "--port=4300"], { PORT: "4200" }, root, noEnvFile);
+    const fromArgument = prepareServer(["--environment=simulator", "--port=4300"], { PORT: "4200" }, root, noEnvFile);
     const fromVariable = prepareServer([], { PORT: "4200" }, root, noEnvFile);
     const byDefault = prepareServer([], {}, root, noEnvFile);
 
-    expect(fromArgument).toMatchObject({ port: 4300, config: { environment: "sandbox" } });
-    expect(fromVariable).toMatchObject({ port: 4200, config: { environment: "simulator", apiBaseUrl: DEFAULT_API_URL } });
+    expect(fromArgument).toMatchObject({ port: 4300, config: { environment: "simulator" } });
+    expect(fromVariable).toMatchObject({ port: 4200, config: { environment: "sandbox", apiBaseUrl: DEFAULT_API_URL } });
     expect(byDefault).toMatchObject({ port: 4100, envFile: { path: noEnvFile, found: false }, sources: {} });
   });
 
@@ -337,6 +337,16 @@ describe("prepareServer", () => {
 
     expect(startupSummary(prepared)).toContain("Llaves públicas para tarjeta: ninguna");
     expect(startupSummary(prepared)).toContain(`Archivo .env: ${noEnvFile} (no existe; no se leyó)`);
+  });
+
+  it("points to the tunnel only when it charges in the sandbox", () => {
+    writeFileSync(join(root, "index.html"), "<!doctype html>");
+    const sandbox = prepareServer([], {}, root, noEnvFile);
+    const simulator = prepareServer(["--environment=simulator"], {}, root, noEnvFile);
+    if ("help" in sandbox || "help" in simulator) throw new Error("no se esperaba la ayuda");
+
+    expect(startupSummary(sandbox)).toContain("sirva la página por un túnel");
+    expect(startupSummary(simulator)).not.toContain("túnel");
   });
 
   it("serves in /config.json only the public keys of a .env that also holds private secrets", async () => {

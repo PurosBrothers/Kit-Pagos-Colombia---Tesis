@@ -3,9 +3,9 @@ import { DEFAULT_API_URL, DEFAULT_CONFIG, cardTokenizationProblem, loadConfig } 
 import { KIT_PAGOS_BROWSER_URL, loadCardTokenizer, type CardTokenizer } from "../src/tokenizer";
 
 describe("loadConfig", () => {
-  it("falls back to the deployed simulator when the deployment serves no config", async () => {
+  it("falls back to the sandboxes through the deployed API when the deployment serves no config", async () => {
     await expect(loadConfig(async () => new Response("", { status: 404 }))).resolves.toEqual(DEFAULT_CONFIG);
-    expect(DEFAULT_CONFIG).toEqual({ apiBaseUrl: DEFAULT_API_URL, environment: "simulator", publicKeys: {} });
+    expect(DEFAULT_CONFIG).toEqual({ apiBaseUrl: DEFAULT_API_URL, environment: "sandbox", publicKeys: {} });
   });
 
   it("keeps what the deployment provides and fills the rest", async () => {
@@ -13,17 +13,17 @@ describe("loadConfig", () => {
 
     await expect(loadConfig(async () => new Response(JSON.stringify(served)))).resolves.toEqual({
       apiBaseUrl: "https://api.example.com/v1/api",
-      environment: "simulator",
+      environment: "sandbox",
       publicKeys: { someGateway: "pub" },
     });
   });
 
-  it("takes sandbox when the deployment asks for it, and anything else is simulator", async () => {
+  it("takes simulator when the deployment asks for it, and anything else is sandbox", async () => {
     const load = (environment: unknown) => loadConfig(async () => new Response(JSON.stringify({ environment })));
 
-    await expect(load("sandbox")).resolves.toMatchObject({ environment: "sandbox" });
-    await expect(load("production")).resolves.toMatchObject({ environment: "simulator" });
-    await expect(load(undefined)).resolves.toMatchObject({ environment: "simulator" });
+    await expect(load("simulator")).resolves.toMatchObject({ environment: "simulator" });
+    await expect(load("production")).resolves.toMatchObject({ environment: "sandbox" });
+    await expect(load(undefined)).resolves.toMatchObject({ environment: "sandbox" });
   });
 });
 
@@ -39,7 +39,7 @@ describe("cardTokenizationProblem", () => {
 
     expect(remote).toContain("https://kit-pagos-colombia.onrender.com");
     expect(remote).toContain("localhost:3000");
-    expect(remote).toContain("npm run start:sandbox");
+    expect(remote).toContain("«npm start»");
     expect(otherPort).toContain("http://localhost:3001");
   });
 

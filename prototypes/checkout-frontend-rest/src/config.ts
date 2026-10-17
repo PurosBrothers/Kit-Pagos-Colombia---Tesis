@@ -23,14 +23,14 @@ export const DEFAULT_API_URL = "https://kit-pagos-colombia.onrender.com/v1/api";
 
 export const DEFAULT_CONFIG: ClientConfig = {
   apiBaseUrl: DEFAULT_API_URL,
-  environment: "simulator",
+  environment: "sandbox",
   publicKeys: {},
 };
 
 type FetchLike = (input: string) => Promise<Response>;
 
 function asEnvironment(value: unknown): KitPagosEnvironment {
-  return value === "sandbox" ? "sandbox" : "simulator";
+  return value === "simulator" ? "simulator" : DEFAULT_CONFIG.environment;
 }
 
 export async function loadConfig(fetchFn: FetchLike = fetch, url = "./config.json"): Promise<ClientConfig> {
@@ -71,6 +71,6 @@ export function cardTokenizationProblem(config: Pick<ClientConfig, "apiBaseUrl" 
     `Con el ambiente simulator, el SDK tokeniza la tarjeta contra localhost:${SIMULATOR_TOKENIZATION_PORT}, ` +
     `y esta API está en ${api.origin}: el token no serviría y la tarjeta no se envía. ` +
     "Pague con PSE, arranque con «npm run start:local» y la API de Simulación en localhost:3000, " +
-    "o con «npm run start:sandbox» y la llave pública de la pasarela."
+    "o con «npm start», que cobra en el sandbox con la llave pública de la pasarela."
   );
 }

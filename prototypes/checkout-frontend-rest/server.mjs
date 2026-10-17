@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
  * pide verificar.
  *
  * A qué API y a qué ambiente apunta el cliente se decide aquí, al arrancar (punto 94). Se puede
- * pasar con argumentos (`npm start -- --environment=sandbox`) o con variables de entorno. Los
+ * pasar con argumentos (`npm start -- --environment=simulator`) o con variables de entorno. Los
  * argumentos son los que sirven igual en bash, PowerShell y cmd: `set VARIABLE=valor` no define
  * una variable de entorno en PowerShell, y el servidor arrancaría apuntando a la API por omisión
  * sin avisar.
@@ -47,11 +47,15 @@ export const DEFAULT_API_URL = "https://kit-pagos-colombia.onrender.com/v1/api";
  */
 export const ENVIRONMENTS = ["simulator", "sandbox"];
 
+/** Por omisión el cliente cobra en el sandbox oficial de cada pasarela, a través de la API desplegada. */
+export const DEFAULT_ENVIRONMENT = "sandbox";
+
 export const USAGE = `Uso: npm start -- [opciones]
 
   --api-url=<url>               La API de Kit Pagos (/v1/api). Por omisión, ${DEFAULT_API_URL}
-  --environment=<ambiente>      simulator (por omisión) o sandbox. Con sandbox la API cobra
-                                contra el sandbox oficial de cada pasarela
+  --environment=<ambiente>      sandbox (por omisión) o simulator. Con sandbox la API cobra
+                                contra el sandbox oficial de cada pasarela; con simulator,
+                                contra su propio simulador
   --public-key=<pasarela>:<llave>
                                 La llave pública que hace falta para tokenizar una tarjeta.
                                 Se puede repetir, una vez por pasarela
@@ -70,7 +74,7 @@ el servidor arranca sin él; si no existe el que se pidió con --dotenv, no arra
 
 /** @param {string | undefined} value */
 function resolveEnvironment(value) {
-  const environment = value || "simulator";
+  const environment = value || DEFAULT_ENVIRONMENT;
   if (!ENVIRONMENTS.includes(environment)) {
     throw new Error(`Ambiente «${environment}» no válido: use ${ENVIRONMENTS.join(" o ")}.`);
   }
@@ -358,6 +362,9 @@ export function startupSummary({ config, port, sources, envFile }) {
     `  Ambiente: ${config.environment}`,
     `  Llaves públicas para tarjeta: ${withKey.length ? withKey.join(", ") : "ninguna"}`,
     `  Archivo .env: ${envFile.path}${envFile.found ? "" : " (no existe; no se leyó)"}`,
+    ...(config.environment === "sandbox"
+      ? ["  En sandbox, alguna pasarela no deja volver a localhost: sirva la página por un túnel (guía de prueba)."]
+      : []),
   ].join("\n");
 }
 
