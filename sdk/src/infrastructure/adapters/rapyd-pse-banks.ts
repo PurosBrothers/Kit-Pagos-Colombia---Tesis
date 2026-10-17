@@ -10,11 +10,12 @@ import { isPseBankCode, PseBankCode } from "../../domain/value-objects/PseBankCo
  *
  * Se armó cruzando dos listas medidas el 26 de septiembre de 2026: las 47 entidades
  * de PSE de Mercado Pago, con su código de compensación, y los 47 métodos `co_pse_*`
- * de Rapyd, con su nombre. Coincidieron una a una. Los nombres de Rapyd no se derivan
- * del banco: `DAVIBANK` es `co_pse_scotiabank_colpatria_bank` y `CREZCAMOS` es
- * `co_pse_crezcamos_mosi_bank`. Además, `co_bancolombia_bank`, sin `pse`, existe y
+ * de Rapyd, con su nombre. Coincidieron una a una. Los nombres de Rapyd no siempre se
+ * derivan del banco: `CREZCAMOS` es `co_pse_crezcamos_mosi_bank`, y `DAVIBANK` fue
+ * `co_pse_scotiabank_colpatria_bank` hasta que Rapyd lo renombró a `co_pse_davibank_bank`
+ * (medido el 17 de octubre de 2026). Además, `co_bancolombia_bank`, sin `pse`, existe y
  * **no** es PSE: es una redirección de Safetypay. Por eso la tabla está escrita y no
- * calculada (punto 68).
+ * calculada (puntos 68 y 102).
  */
 export const RAPYD_PSE_TYPES: Readonly<Record<PseBankCode, string>> = {
   [PseBankCode.BANCO_DE_BOGOTA]: "co_pse_banco_de_bogota_bank",
@@ -24,7 +25,7 @@ export const RAPYD_PSE_TYPES: Readonly<Record<PseBankCode, string>> = {
   [PseBankCode.CITIBANK]: "co_pse_citibank_bank",
   [PseBankCode.BANCO_GNB_SUDAMERIS]: "co_pse_banco_gnb_sudameris_bank",
   [PseBankCode.BBVA_COLOMBIA]: "co_pse_banco_bbva_colombia_bank",
-  [PseBankCode.DAVIBANK]: "co_pse_scotiabank_colpatria_bank",
+  [PseBankCode.DAVIBANK]: "co_pse_davibank_bank",
   [PseBankCode.BANCO_DE_OCCIDENTE]: "co_pse_banco_de_occidente_bank",
   [PseBankCode.BANCO_CAJA_SOCIAL]: "co_pse_banco_caja_social_bank",
   [PseBankCode.BANCO_AGRARIO]: "co_pse_banco_agrario_bank",
@@ -73,12 +74,35 @@ const PSE_CODE_BY_RAPYD_TYPE: ReadonlyMap<string, PseBankCode> = new Map(
 );
 
 /**
- * Prefijo de los 47 `payment_method_type` de PSE en Rapyd.
+ * Prefijo de los `payment_method_type` de PSE en Rapyd.
  *
- * En Rapyd PSE no es un método con un campo de banco: es una familia de 47 tipos,
- * uno por entidad, con el patrón `co_pse_{banco}_bank` (issue #68, punto 19).
+ * En Rapyd PSE no es un método con un campo de banco: es una familia de tipos, uno
+ * por entidad, con el patrón `co_pse_{banco}_bank` (issue #68, punto 19). Eran 47 el
+ * 26 de septiembre de 2026 y 50 el 17 de octubre.
  */
 export const RAPYD_PSE_TYPE_PREFIX = "co_pse_";
+
+/**
+ * Los métodos de PSE que el sandbox de Rapyd cobra.
+ *
+ * El sandbox lista todos los métodos de la plataforma, también los que la cuenta no
+ * tiene habilitados. Medido el 17 de octubre de 2026: de los 50 `co_pse_*`, estos 9
+ * redirigen a `sandboxcheckout.rapyd.net` y los otros 41 responden
+ * `400 ERROR_GET_GATEWAY` al crear el pago. Nada en el catálogo ni en
+ * `required_fields` los distingue, así que la lista está escrita y la prueba de
+ * contrato la compara con lo que Rapyd cobra (`docs/testing-data/rapyd.md`, 5.8).
+ */
+export const RAPYD_SANDBOX_PSE_TYPES: ReadonlySet<string> = new Set([
+  "co_pse_banco_davivienda_bank",
+  "co_pse_bancolombia_bank",
+  "co_pse_banco_caja_social_bank",
+  "co_pse_banco_av_villas_bank",
+  "co_pse_banco_union_bank",
+  "co_pse_banco_contactar_bank",
+  "co_pse_accion_fiduciaria_bank",
+  "co_pse_ding_bank",
+  "co_pse_paycash_bank",
+]);
 
 /**
  * El método de Rapyd para un código de PSE, o `undefined` si no está en el catálogo.

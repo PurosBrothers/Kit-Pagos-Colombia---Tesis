@@ -300,6 +300,13 @@ async function pagarConPSE() {
 > cambiar de pasarela obliga a volver a pedir la lista. Es la consecuencia de que cada una
 > identifique los bancos a su manera; lo que el SDK garantiza es que usted no tenga que saber cómo.
 
+> Contra el sandbox de Rapyd, desde la 0.6.0-rc.3, `getPseBanks()` devuelve solo los bancos que
+> esa cuenta puede cobrar. El sandbox lista todos los métodos de la plataforma, y con los demás el
+> pago falla con `400 ERROR_GET_GATEWAY`: el 17 de octubre de 2026 cobraban 9 de 50 (Davivienda,
+> Bancolombia, Caja Social, AV Villas, Unión, Contactar, Acción Fiduciaria, Ding y PayCash). En
+> producción, donde Rapyd lista solo los métodos habilitados, y en el simulador, la lista llega
+> completa.
+
 > Un PSE también puede volver como `TRANSACTION`, y por eso conviene tratar las dos ramas. Pasa
 > cuando el pago ya tiene desenlace al crearlo: en el sandbox de Wompi la URL del banco llega en
 > la misma consulta que `APPROVED`, `DECLINED` o `ERROR`, y Mercado Pago responde `402` cuando la

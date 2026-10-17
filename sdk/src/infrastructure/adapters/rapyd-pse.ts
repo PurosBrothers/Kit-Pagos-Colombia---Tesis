@@ -4,11 +4,18 @@ import { Gateway } from "../../domain/value-objects/Gateway";
 import type { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
 import { applyReturnUrls } from "./rapyd-payload";
 import { describePseBank, type PseBank } from "../../domain/value-objects/PseBank";
+import { Environment } from "../../domain/value-objects/Environment";
+import { resolveGatewayCatalogUrl } from "../config/gateway-urls";
 import {
   pseCodeForRapydType,
   RAPYD_PSE_TYPE_PREFIX,
+  RAPYD_SANDBOX_PSE_TYPES,
   rapydPseTypeFor,
 } from "./rapyd-pse-banks";
+
+const RAPYD_SANDBOX_HOST = new URL(
+  resolveGatewayCatalogUrl(Gateway.RAPYD, Environment.SANDBOX),
+).host;
 
 /**
  * PSE en Rapyd Collect. Todo lo específico de PSE vive aquí y no en el adaptador,
@@ -246,4 +253,19 @@ export function parseRapydPseBanks(rawResponse: unknown): PseBank[] {
       ),
     ];
   });
+}
+
+/**
+ * Deja solo los bancos que el sandbox de Rapyd cobra, si `baseUrl` es el sandbox.
+ *
+ * Los demás fallan al cobrar con `400 ERROR_GET_GATEWAY`, y mostrarlos es ofrecerle al
+ * pagador un banco que no va a funcionar. En producción Rapyd lista solo los métodos
+ * que la organización tiene habilitados, según su documentación, y en el simulador
+ * todos cobran: ahí la lista pasa entera.
+ */
+export function chargeablePseBanks(banks: PseBank[], baseUrl: string): PseBank[] {
+  if (new URL(baseUrl).host !== RAPYD_SANDBOX_HOST) {
+    return banks;
+  }
+  return banks.filter((bank) => RAPYD_SANDBOX_PSE_TYPES.has(bank.code));
 }

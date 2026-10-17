@@ -26,6 +26,7 @@ import {
   assertPseRequirements,
   buildCustomerPayload,
   buildPsePaymentPayload,
+  chargeablePseBanks,
   extractCustomerId,
   parseRapydPseBanks,
 } from "./rapyd-pse";
@@ -250,17 +251,18 @@ export class RapydAdapter implements PaymentGatewayPort {
   /**
    * Lista los bancos de PSE filtrando el catálogo de métodos de pago de Colombia.
    *
-   * Rapyd es la única de las cuatro sin lista de bancos: PSE son 47
-   * `payment_method_type` dentro de un catálogo de 97 para Colombia, así que la
-   * lista se arma filtrando por el prefijo `co_pse_`. El país está fijo en `CO`
-   * porque el SDK es de pasarelas colombianas y PSE no existe fuera de Colombia.
+   * Rapyd es la única de las cuatro sin lista de bancos: PSE es una familia de
+   * `payment_method_type` dentro del catálogo de Colombia, así que la lista se arma
+   * filtrando por el prefijo `co_pse_`. El país está fijo en `CO` porque el SDK es de
+   * pasarelas colombianas y PSE no existe fuera de Colombia. Contra el sandbox quedan
+   * solo los bancos que la cuenta cobra (`chargeablePseBanks`, punto 102).
    */
   async getPseBanks(): Promise<PseBank[]> {
     const rawResponse = await this.send(
       "get",
       "/payment_methods/country?country=CO",
     );
-    return parseRapydPseBanks(rawResponse);
+    return chargeablePseBanks(parseRapydPseBanks(rawResponse), this.baseUrl);
   }
 
   /**

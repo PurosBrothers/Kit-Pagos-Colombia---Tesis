@@ -894,5 +894,41 @@ describe("RapydAdapter with PSE", () => {
 
       expect(() => PaymentMethod.pse({ bankCode: firstBank.code })).not.toThrow();
     });
+
+    const catalogWithUnchargeableBank = () =>
+      jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: { status: "SUCCESS" },
+          data: [
+            { type: "co_pse_banco_davivienda_bank", name: "Banco Davivienda" },
+            { type: "co_pse_nequi_bank", name: "Nequi" },
+          ],
+        }),
+      });
+
+    /** En el sandbox, Nequi responde `400 ERROR_GET_GATEWAY` al cobrar (punto 102). */
+    it("leaves out the banks Rapyd's sandbox cannot charge", async () => {
+      global.fetch = catalogWithUnchargeableBank();
+
+      const banks = await new RapydAdapter("https://sandboxapi.rapyd.net/v1").getPseBanks();
+
+      expect(banks.map((bank) => bank.code)).toEqual(["co_pse_banco_davivienda_bank"]);
+    });
+
+    it.each([
+      ["production", "https://api.rapyd.net/v1"],
+      ["the simulator", "http://localhost:3000/v1/sim/rapyd"],
+    ])("keeps every PSE bank against %s", async (_label, baseUrl) => {
+      global.fetch = catalogWithUnchargeableBank();
+
+      const banks = await new RapydAdapter(baseUrl).getPseBanks();
+
+      expect(banks.map((bank) => bank.code)).toEqual([
+        "co_pse_banco_davivienda_bank",
+        "co_pse_nequi_bank",
+      ]);
+    });
   });
 });
