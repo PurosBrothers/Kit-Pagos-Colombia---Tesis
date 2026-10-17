@@ -86,6 +86,7 @@ Kit-Pagos-Colombia---Tesis/
 │       │   ├── wompi-pse.ts                    <-- Flujo PSE y firma de integridad de Wompi (punto 44)
 │       │   ├── MercadoPagoAdapter.ts           <-- Mercado Pago Adapter
 │       │   ├── mercadopago-pse.ts              <-- Flujo PSE por la Orders API (punto 45)
+│       │   ├── mercadopago-card.ts             <-- Tarjeta por la Orders API, desde la 0.6.0 (punto 96)
 │       │   ├── KushkiAdapter.ts                <-- Kushki Adapter
 │       │   ├── kushki-charge.ts                <-- Cobro síncrono con tarjeta
 │       │   ├── kushki-pse.ts                   <-- Flujo de transferencia y rutas de estado (puntos 50 y 53)
@@ -94,8 +95,11 @@ Kit-Pagos-Colombia---Tesis/
 │       │   ├── rapyd-signature.ts              <-- Firma HMAC de cada request saliente (punto 33)
 │       │   ├── rapyd-checkout.ts               <-- Checkout alojado para tarjeta (punto 50)
 │       │   ├── rapyd-pse.ts                    <-- Flujo PSE: customer + payment
+│       │   ├── rapyd-pse-banks.ts              <-- Banco de PSE → método de Rapyd, y los 9 que cobra el sandbox (punto 102)
 │       │   ├── rapyd-payload.ts                <-- Construcción de cuerpos y URLs de retorno
-│       │   └── payment-method-support.ts       <-- Guarda compartida de métodos soportados
+│       │   ├── payment-method-support.ts       <-- Guarda compartida de métodos soportados
+│       │   ├── http-failure.ts                 <-- Respuesta HTTP fallida → KitPagosError, sin credenciales
+│       │   └── redacting-gateway.ts            <-- Envoltorio que quita las credenciales de todo error
 │       └── facade/
 │           └── KitPagos.ts                     <-- KitPagos (Patrón GoF Facade — Punto de entrada público)
 │
@@ -212,7 +216,8 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   - Creación de pago y consulta de estado (endpoint, forma del payload, catálogo de `data.status`): investigado y documentado en `ubiquitous-language.md` (issue #23).
   - **Tarjeta: `POST /v1/checkout`, no `POST /v1/payments`.** Es la única de las cuatro que no cobra la tarjeta servidor-a-servidor: con token responde `CREATE_CARD_TYPE_REQUIRES_ONLY_ONE_OF_FIELDS_OR_TOKEN`, y la variante que cobra exige el número de la tarjeta en la petición, lo que metería al comercio en el alcance de PCI DSS. Así que el cobro devuelve `REDIRECT_REQUIRED`, la misma rama que PSE, y la tarjeta la escribe el pagador en la página de Rapyd. El payload y la traducción de la respuesta viven en `rapyd-checkout.ts`.
   - Consulta de estado por prefijo del identificador: `checkout_` va a `/checkout/{id}` y `payment_` a `/payments/{id}`. Un `checkout_` consultado como pago responde `400 ERROR_GET_PAYMENT`. Medido en el punto 50 del `architecture-log.md`.
-  - **PSE Colombia (esquema confirmado, `architecture-log.md` punto 19, cerrado):** el esquema de campos de identidad del pagador ya está resuelto. Rapyd no expone PSE como un único método; lo modela como una familia de **47 métodos** `co_pse_{banco}_bank` (uno por banco afiliado, ej. `co_pse_bancolombia_bank`), con dos campos obligatorios por método: `customer_identification_type` y `customer_identification_number`. El detalle campo por campo está en `ubiquitous-language.md` y en `testing-data/rapyd.md` (sección 5).
+  - **PSE Colombia (esquema confirmado, `architecture-log.md` punto 19, cerrado):** el esquema de campos de identidad del pagador ya está resuelto. Rapyd no expone PSE como un único método; lo modela como una familia de métodos `co_pse_{banco}_bank` (uno por banco afiliado, ej. `co_pse_bancolombia_bank`; 47 en el punto 19 y 50 el 17 de octubre de 2026), con dos campos obligatorios por método: `customer_identification_type` y `customer_identification_number`. El detalle campo por campo está en `ubiquitous-language.md` y en `testing-data/rapyd.md` (sección 5).
+  - **Bancos de PSE contra el sandbox:** el sandbox solo tiene procesador para 9 de esos 50 métodos; con los demás el pago responde `400 ERROR_GET_GATEWAY`, y el catálogo no dice cuáles son. Contra el host del sandbox, `getPseBanks()` devuelve solo esos 9 (`RAPYD_SANDBOX_PSE_TYPES` en `rapyd-pse-banks.ts`, filtrados por `chargeablePseBanks()` en `rapyd-pse.ts`); contra producción y contra el simulador, la lista completa. La prueba de contrato recorre el catálogo y avisa si cambia (punto 102).
 - **Prioridad:** Media. La investigación del contrato cerró y la implementación está completa: `RapydAdapter.ts` existe e integra `rapyd-signature.ts` (firma por petición), `rapyd-checkout.ts` (tarjeta por checkout alojado) y `rapyd-pse.ts` (PSE). Contrato medido contra el sandbox real (puntos 48 y 50 del `architecture-log.md`; `sdk/test/sandbox/rapyd.sandbox.test.ts`).
 - **Modo simulación:** Redirige solicitudes al simulador en modo pruebas.
 
@@ -225,11 +230,12 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 - **Patrón Arquitectónico:** GoF Adapter.
 - **Responsabilidad:** Implementa el `PaymentGatewayPort` y traduce su contrato hacia las convenciones de Mercado Pago.
 - **Detalles de implementación:**
-  - Autenticación: header `Authorization: Bearer {access_token}`.
-  - Cobro con tarjeta: `token` e `installments` en la raíz del cuerpo. **Las cuotas son obligatorias incluso cuando son una**: sin el campo responde `400 "Invalid installments"`, y es la única de las cuatro que las exige siempre. No hace falta mandar `payment_method_id`: lo deduce del token, y sin token responde `400 "payment_method_id attribute can't be null"`.
-  - Mapeo de estado: campo `status` y `status_detail`. Valores clave: `accredited` (aprobado), `cc_rejected_insufficient_amount` (fondos insuficientes), `cc_rejected_bad_filled_card_number` (número de tarjeta incorrecto).
+  - Autenticación: header `Authorization: Bearer {access_token}`, y una `X-Idempotency-Key` aleatoria en cada `POST`, que Mercado Pago exige (punto 48).
+  - **Tarjeta y PSE por la Orders API** (`POST /v1/orders`), desde la 0.6.0: con el par `APP_USR-` del vendedor de prueba, la Payments API responde `401 "Unauthorized use of live credentials"`, y así un solo par cobra los dos métodos (punto 96). La orden de tarjeta pide la marca y el tipo (`payment_method.id` y `type`), que el adaptador deduce del token con `GET /v1/card_tokens/{token}` y `GET /v1/payment_methods/search` (`mercadopago-card.ts`); `installments` es opcional, y débito solo admite 1. La orden de PSE (`mercadopago-pse.ts`) trae la URL del banco en `transactions.payments[0].payment_method.redirect_url`; si llega en `processing` sin URL, el pago queda `PENDING` (punto 100).
+  - Hasta la 0.5.0 la tarjeta iba por la Payments API (`POST /v1/payments`), que exigía las cuotas incluso cuando eran una (`400 "Invalid installments"`). Los pagos creados así se siguen consultando en `/v1/payments/{id}`; las órdenes, en `/v1/orders/{id}`, y el adaptador los distingue por el prefijo `ORD` del id.
+  - Mapeo de estado: el `status` de la orden y el `status_detail` de su pago. Aprobado: `201` con `processed / accredited`. Rechazado: `402` con la orden en `failed` dentro de `data` y el motivo en el pago (`rejected_by_issuer`, `processing_error`…), que el SDK devuelve como pago `DECLINED`, no como error.
   - Verificación de firma: HMAC-SHA256 sobre headers y body.
-- **Prioridad:** Media. Cobro con tarjeta medido contra el sandbox real (punto 50 del `architecture-log.md`; `sdk/test/sandbox/mercadopago.sandbox.test.ts`). PSE no es testeable en sandbox: la Orders API responde `401` con credenciales de prueba y exige token de producción (punto 45).
+- **Prioridad:** Media. Tarjeta y PSE medidos contra el sandbox real con el par `APP_USR-` de «Pruebas > Credenciales de prueba» de una aplicación de Checkout API vía Orders, cuya cuenta es un vendedor de prueba (puntos 95, 96 y 100; `sdk/test/sandbox/mercadopago.sandbox.test.ts`). Hasta el 14 de octubre de 2026 el PSE no se pudo probar: con un par `TEST-` la Orders API responde `401` (punto 45). El PSE del sandbox deja de entregar la URL del banco sin causa conocida (punto 100).
 - **Modo simulación:** Redirige solicitudes al simulador en modo pruebas.
 
 ---
