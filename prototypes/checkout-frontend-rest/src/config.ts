@@ -4,6 +4,8 @@
  * ejecución, y solo hace falta para tokenizar una tarjeta.
  */
 
+import type { CardCapture } from "./api";
+
 /**
  * El ambiente al que apunta todo el cobro, y el único que entiende el cliente: el mismo valor
  * va en la cabecera `x-kit-pagos-environment` de cada llamada a `/v1/api` y es el `environment`
@@ -47,25 +49,31 @@ export async function loadConfig(fetchFn: FetchLike = fetch, url = "./config.jso
 }
 
 /**
- * Por qué la tienda no ofrece tarjeta con esta pasarela, o `undefined` si la ofrece. La tarjeta se
- * tokeniza en el navegador con la llave pública de la pasarela, y sin llave no hay tokenización
- * posible. Falta por una de dos causas que el cliente no distingue sin nombrar pasarelas: el `.env`
- * solo trae llaves de las pasarelas que `KitPagosBrowser` tokeniza, o el servidor arrancó sin él.
+ * Por qué la tienda no ofrece tarjeta con esta pasarela, o `undefined` si la ofrece. Cómo la
+ * recibe cada pasarela lo dice la API (`cardCapture` de `GET /v1/api/gateways`): en su página,
+ * sin nada más, o tokenizada en el navegador con su llave pública, que llega en `/config.json`.
+ * Sin ese dato, la API corre un código anterior y la tienda no adivina.
  */
-export function cardUnavailableFor(config: Pick<ClientConfig, "publicKeys">, gateway: string): string | undefined {
-  if (config.publicKeys[gateway]) {
+export function cardUnavailableFor(
+  config: Pick<ClientConfig, "publicKeys">,
+  capture: CardCapture | undefined,
+  gateway: string,
+): string | undefined {
+  if (capture === "HOSTED_PAGE") {
     return undefined;
   }
-  return (
-    "Con esta pasarela no ofrecemos tarjeta: la tarjeta se tokeniza en tu navegador con la llave pública " +
-    "de la pasarela, y esta tienda no la tiene, porque el SDK de Kit Pagos todavía no tokeniza con ella " +
-    "o porque la tienda arrancó sin esa llave. Paga con PSE o elige otra pasarela."
-  );
+  if (capture === "BROWSER_TOKEN") {
+    return config.publicKeys[gateway]
+      ? undefined
+      : "La tarjeta no está disponible con esta pasarela: se tokeniza en tu navegador con su llave pública, " +
+          "y esta tienda arrancó sin ella. Paga con PSE o elige otra pasarela.";
+  }
+  return "Con esta pasarela no ofrecemos tarjeta: la API no dice cómo la recibe. Paga con PSE o elige otra pasarela.";
 }
 
 /**
- * Si la página no recibió ninguna llave pública, la segunda causa de `cardUnavailableFor()` es la
- * probable: el aviso va a la consola, para quien prueba, y no al comprador.
+ * Si la página no recibió ninguna llave pública, las pasarelas que tokenizan en el navegador
+ * quedan sin tarjeta: el aviso va a la consola, para quien prueba, y no al comprador.
  */
 export function missingPublicKeysProblem(config: Pick<ClientConfig, "publicKeys">): string | undefined {
   if (Object.keys(config.publicKeys).length > 0) {
@@ -73,7 +81,7 @@ export function missingPublicKeysProblem(config: Pick<ClientConfig, "publicKeys"
   }
   return (
     "la página no recibió ninguna llave pública en /config.json: la tarjeta queda deshabilitada con " +
-    "todas las pasarelas. Arranque el servidor con --dotenv=<ruta del .env> (guía de prueba)."
+    "las pasarelas que tokenizan en el navegador. Arranque el servidor con --dotenv=<ruta del .env> (guía de prueba)."
   );
 }
 

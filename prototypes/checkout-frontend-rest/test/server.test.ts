@@ -154,7 +154,7 @@ describe("publicKeysFromEnvFile", () => {
     expect(publicKeysFromEnvFile(content)).toEqual({ alfa: "pub_primera" });
   });
 
-  it("reads from the repository's .env template exactly its two public keys, under gateway ids the API uses", () => {
+  it("reads from the repository's .env template exactly its three public keys, under gateway ids the API uses", () => {
     const template = readFileSync(join(__dirname, "..", "..", "..", ".env.example"), "utf8");
     const names = template
       .split("\n")
@@ -166,8 +166,9 @@ describe("publicKeysFromEnvFile", () => {
     const read = publicKeysFromEnvFile(fakeFile);
 
     expect(names.length).toBeGreaterThan(20);
-    expect(Object.keys(read).sort()).toEqual(["mercadopago", "wompi"]);
+    expect(Object.keys(read).sort()).toEqual(["kushki", "mercadopago", "wompi"]);
     expect(read).toEqual({
+      kushki: "valor_falso_de_KUSHKI_PUBLIC_KEY",
       mercadopago: "valor_falso_de_MERCADOPAGO_PUBLIC_KEY",
       wompi: "valor_falso_de_WOMPI_PUBLIC_KEY",
     });

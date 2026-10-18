@@ -76,6 +76,21 @@ export const FIXTURES: Record<string, GatewayFixture> = {
 
 export const GATEWAYS = Object.keys(FIXTURES);
 
+/** `cardCapture` de `GET /v1/api/gateways`, como lo responde el simulador desde el punto 106. */
+export const CARD_CAPTURE = {
+  wompi: "BROWSER_TOKEN",
+  mercadopago: "BROWSER_TOKEN",
+  kushki: "BROWSER_TOKEN",
+  rapyd: "HOSTED_PAGE",
+} as const;
+
+/** El pago con tarjeta sin token de la pasarela que cobra en su página. */
+export const HOSTED_CARD_CREATED = redirect(
+  "http://localhost:3000/v1/sim/rapyd/checkout/checkout_0f3c2a9d7e1b4c58a6d2e9f1b3c7a5d4/pay",
+  "checkout_0f3c2a9d7e1b4c58a6d2e9f1b3c7a5d4",
+  "NEW",
+);
+
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
@@ -87,6 +102,8 @@ function json(status: number, body: unknown): Response {
 export function createFakeApi(options: {
   cardCreated?: Record<string, unknown>;
   statusSequence?: Record<string, unknown>[];
+  /** Una API anterior a `cardCapture`, como Render antes de desplegar el punto 106. */
+  withoutCardCapture?: boolean;
 } = {}) {
   const calls: RecordedCall[] = [];
   const queue = [...(options.statusSequence ?? [])];
@@ -99,13 +116,18 @@ export function createFakeApi(options: {
     const gateway = url.searchParams.get("gateway") ?? (body ? JSON.parse(body).gateway : undefined);
 
     if (url.pathname === "/v1/api/gateways") {
-      return json(200, { gateways: GATEWAYS });
+      return json(200, options.withoutCardCapture ? { gateways: GATEWAYS } : { gateways: GATEWAYS, cardCapture: CARD_CAPTURE });
     }
     if (url.pathname === "/v1/api/pse-banks") {
       return json(200, { pseBanks: [{ gateway, banks: [FIXTURES[gateway].bank] }] });
     }
     if (url.pathname === "/v1/api/payments" && method === "POST") {
       const parsed = JSON.parse(body ?? "{}");
+      if (parsed.paymentMethod?.type === "CARD" && !parsed.paymentMethod.token) {
+        return CARD_CAPTURE[gateway as keyof typeof CARD_CAPTURE] === "HOSTED_PAGE"
+          ? json(201, HOSTED_CARD_CREATED)
+          : json(400, { code: "INVALID_REQUEST", message: "La tarjeta necesita un token." });
+      }
       if (parsed.paymentMethod?.type === "CARD") {
         return json(201, options.cardCreated ?? { outcome: "TRANSACTION", transaction: transaction("card-1", "APPROVED", "approved") });
       }

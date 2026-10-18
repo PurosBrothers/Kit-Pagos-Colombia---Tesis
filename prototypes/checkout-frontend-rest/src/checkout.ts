@@ -157,8 +157,10 @@ export class CardModuleError extends Error {
  * Tokeniza en el navegador y cobra con el token. La tarjeta solo entra en `tokenizeCard()`,
  * que la manda a la ruta de tokenización de la pasarela; a `/v1/api` llega el token.
  *
- * Qué pasarelas tokenizan en el navegador lo decide `KitPagosBrowser`: con las demás lanza
- * `UNSUPPORTED_OPERATION` antes de enviar nada, y el error sube tal cual.
+ * Es el camino de las pasarelas que la API marca `BROWSER_TOKEN`. El monto va siempre a la
+ * tokenización, porque hay pasarelas que atan el token a él y cobrar otro se rechaza. Si
+ * `KitPagosBrowser` no tokeniza con la pasarela, lanza `UNSUPPORTED_OPERATION` antes de enviar
+ * nada, y el error sube tal cual.
  */
 export async function payWithCard(
   deps: CardDependencies,
@@ -177,8 +179,18 @@ export async function payWithCard(
     publicKey: deps.publicKeys[order.gateway] ?? "",
     environment: deps.environment,
     card,
+    amount: order.amount,
+    currency: order.currency,
   });
   return startPayment(deps.api, order, { type: "CARD", token, installments: 1 }, poll);
+}
+
+/**
+ * La tarjeta en la página de la pasarela, para las que la API marca `HOSTED_PAGE`: el pago se
+ * crea sin token y responde `REDIRECT_REQUIRED`, como un PSE. La tarjeta no pasa por esta página.
+ */
+export function payOnHostedPage(api: KitPagosApi, order: Order, poll: PollOptions = DEFAULT_POLL): Promise<CheckoutStep> {
+  return startPayment(api, order, { type: "CARD", installments: 1 }, poll);
 }
 
 export const PENDING_STORAGE_KEY = "kit-pagos-checkout-c:pending";

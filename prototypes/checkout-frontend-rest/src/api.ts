@@ -34,9 +34,22 @@ export interface Payer {
   };
 }
 
+/**
+ * Cómo recibe la tarjeta una pasarela, según `GET /v1/api/gateways`: tokenizada en el navegador
+ * (`BROWSER_TOKEN`) o en la página de la pasarela, con un pago creado sin token
+ * (`HOSTED_PAGE`). Con este dato la tienda no tiene que saber cuál es cuál.
+ */
+export type CardCapture = "BROWSER_TOKEN" | "HOSTED_PAGE";
+
+export interface GatewayCatalog {
+  gateways: string[];
+  /** Vacío si la API no lo dice, como la que corre un código anterior a este campo. */
+  cardCapture: Record<string, CardCapture>;
+}
+
 export type PaymentMethodBody =
   | { type: "PSE"; bankCode: string; payerKind: "NATURAL" | "LEGAL" }
-  | { type: "CARD"; token: string; installments: number };
+  | { type: "CARD"; token?: string; installments: number };
 
 export interface CreatePaymentBody {
   gateway: string;
@@ -84,7 +97,7 @@ export class KitPagosApiError extends Error {
 }
 
 export interface KitPagosApi {
-  listGateways(): Promise<string[]>;
+  listGateways(): Promise<GatewayCatalog>;
   listPseBanks(gateway: string): Promise<PseBank[]>;
   createPayment(body: CreatePaymentBody): Promise<CreatePaymentResponse>;
   getPaymentStatus(gateway: string, gatewayTransactionId: string): Promise<TransactionView>;
@@ -162,8 +175,8 @@ export function createKitPagosApi(
 
   return {
     async listGateways() {
-      const body = await call<{ gateways: string[] }>("/gateways");
-      return body.gateways;
+      const body = await call<{ gateways: string[]; cardCapture?: Record<string, CardCapture> }>("/gateways");
+      return { gateways: body.gateways, cardCapture: { ...body.cardCapture } };
     },
     async listPseBanks(gateway) {
       const body = await call<{ pseBanks: Array<{ banks: PseBank[] }> }>(

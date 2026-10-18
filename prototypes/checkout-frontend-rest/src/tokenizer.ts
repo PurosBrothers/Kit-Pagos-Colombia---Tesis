@@ -4,7 +4,7 @@
  * manos de la próxima versión que se publique, sin que nadie la revise.
  */
 export const KIT_PAGOS_BROWSER_URL =
-  "https://cdn.jsdelivr.net/npm/kit-pagos-colombia@0.5.0/dist/browser/index.js";
+  "https://cdn.jsdelivr.net/npm/kit-pagos-colombia@0.6.0-rc.4/dist/browser/index.js";
 
 export interface CardInput {
   number: string;
@@ -21,6 +21,9 @@ export interface TokenizeCardParams {
   publicKey: string;
   card: CardInput;
   environment: string;
+  /** El monto del cobro: hay pasarelas que atan el token a él, y las demás lo ignoran. */
+  amount: string;
+  currency: string;
 }
 
 /** La parte de `KitPagosBrowser` que usa este cliente. */

@@ -5,6 +5,7 @@ import {
   describeOutcome,
   forgetPending,
   offersStatusQuery,
+  payOnHostedPage,
   payWithCard,
   payWithPse,
   peekPending,
@@ -18,7 +19,7 @@ import {
   type PollOptions,
 } from "../src/checkout";
 import { KIT_PAGOS_BROWSER_URL, loadCardTokenizer, type CardTokenizer } from "../src/tokenizer";
-import { createFakeApi, FIXTURES, GATEWAYS, transaction } from "./helpers/fakeApi";
+import { CARD_CAPTURE, createFakeApi, FIXTURES, GATEWAYS, HOSTED_CARD_CREATED, transaction } from "./helpers/fakeApi";
 
 const API = "http://localhost:3000/v1/api";
 const NO_WAIT: PollOptions = { maxAttempts: 5, intervalMs: 1000, sleep: async () => undefined };
@@ -151,6 +152,8 @@ describe("card payments", () => {
       publicKey: "pub_test_placeholder",
       environment: "simulator",
       card: CARD,
+      amount: "50000.00",
+      currency: "COP",
     });
     expect(step.kind).toBe("final");
     const post = calls.find((call) => call.method === "POST")!;
@@ -163,7 +166,7 @@ describe("card payments", () => {
 
   it("lets KitPagosBrowser reject a gateway that does not tokenize, before calling /v1/api", async () => {
     const { fetchFn, calls } = createFakeApi();
-    const unsupported = Object.assign(new Error("La pasarela 'kushki' no admite tokenización en frontend."), {
+    const unsupported = Object.assign(new Error("RAPYD no tokeniza en el navegador: cobra la tarjeta en su página alojada."), {
       code: "UNSUPPORTED_OPERATION",
     });
     const { tokenizer } = tokenizerSpy(Promise.reject(unsupported));
@@ -171,7 +174,7 @@ describe("card payments", () => {
     await expect(
       payWithCard(
         { api: createKitPagosApi(API, fetchFn), loadTokenizer: async () => tokenizer, publicKeys: {}, environment: "simulator" },
-        orderFor("kushki"),
+        orderFor("rapyd"),
         CARD,
         NO_WAIT,
       ),
@@ -238,6 +241,49 @@ describe("card payments", () => {
 
     expect(step.kind === "final" && step.transaction.status).toBe("APPROVED");
     expect(calls.filter((call) => call.method === "GET")).toHaveLength(1);
+  });
+
+  it("tokenizes with the order's amount and currency, which some gateways tie the token to", async () => {
+    const { fetchFn, calls } = createFakeApi();
+    const { tokenizer, tokenizeCard } = tokenizerSpy(Promise.resolve({ token: "tok_atado" }));
+    const order = { ...orderFor("kushki"), amount: "48000.00" };
+
+    await payWithCard(
+      { api: createKitPagosApi(API, fetchFn), loadTokenizer: async () => tokenizer, publicKeys: { kushki: "k" }, environment: "sandbox" },
+      order,
+      CARD,
+      NO_WAIT,
+    );
+
+    expect(tokenizeCard.mock.calls[0][0]).toMatchObject({ amount: "48000.00", currency: "COP" });
+    expect(JSON.parse(calls.find((call) => call.method === "POST")!.body!).amount).toBe("48000.00");
+  });
+
+  it("creates the card payment of a hosted-page gateway without a token and follows its redirect, like PSE", async () => {
+    const { fetchFn, calls } = createFakeApi();
+
+    const step = await payOnHostedPage(createKitPagosApi(API, fetchFn), orderFor("rapyd"), NO_WAIT);
+
+    expect(JSON.parse(calls[0].body!).paymentMethod).toEqual({ type: "CARD", installments: 1 });
+    expect(step).toEqual({
+      kind: "redirect",
+      redirectUrl: HOSTED_CARD_CREATED.redirect.redirectUrl,
+      pending: {
+        gateway: "rapyd",
+        gatewayTransactionId: HOSTED_CARD_CREATED.redirect.gatewayTransactionId,
+        orderReference: "C109-rapyd",
+        method: "CARD",
+      },
+    });
+  });
+
+  it("surfaces the API's rejection of a tokenless card for a gateway that needs a token", async () => {
+    const { fetchFn } = createFakeApi();
+
+    await expect(payOnHostedPage(createKitPagosApi(API, fetchFn), orderFor("wompi"), NO_WAIT)).rejects.toMatchObject({
+      status: 400,
+      code: "INVALID_REQUEST",
+    });
   });
 
   it("keeps a card payment that stays PENDING as the payment to query again, with its method", async () => {
@@ -376,9 +422,14 @@ describe("the API client", () => {
     await expect(empty.listGateways()).rejects.toMatchObject({ code: "HTTP_503", message: "La API respondió 503." });
   });
 
-  it("lists the gateways the API offers", async () => {
+  it("lists the gateways the API offers, with how each takes the card", async () => {
     const { fetchFn } = createFakeApi();
-    await expect(createKitPagosApi(API, fetchFn).listGateways()).resolves.toEqual(GATEWAYS);
+    await expect(createKitPagosApi(API, fetchFn).listGateways()).resolves.toEqual({ gateways: GATEWAYS, cardCapture: CARD_CAPTURE });
+  });
+
+  it("returns an empty cardCapture from an API that does not send it yet", async () => {
+    const { fetchFn } = createFakeApi({ withoutCardCapture: true });
+    await expect(createKitPagosApi(API, fetchFn).listGateways()).resolves.toEqual({ gateways: GATEWAYS, cardCapture: {} });
   });
 });
 

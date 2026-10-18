@@ -58,23 +58,28 @@ describe("cardTokenizationProblem", () => {
 describe("cardUnavailableFor", () => {
   const config = { publicKeys: { alfa: "pub_alfa" } };
 
-  it("offers the card for a gateway whose public key the deployment provides", () => {
-    expect(cardUnavailableFor(config, "alfa")).toBeUndefined();
+  it("offers the card for a gateway that tokenizes in the browser when the deployment provides its key", () => {
+    expect(cardUnavailableFor(config, "BROWSER_TOKEN", "alfa")).toBeUndefined();
   });
 
-  it("explains, without naming the gateway, why a gateway without a public key gets no card", () => {
-    const reason = cardUnavailableFor(config, "beta");
+  it("offers the card on the gateway's own page without any key", () => {
+    expect(cardUnavailableFor(config, "HOSTED_PAGE", "beta")).toBeUndefined();
+  });
 
-    expect(reason).toContain("no ofrecemos tarjeta");
+  it("says the store started without the key of a gateway that tokenizes in the browser, without naming it", () => {
+    const reason = cardUnavailableFor(config, "BROWSER_TOKEN", "beta");
+
+    expect(reason).toContain("arrancó sin ella");
     expect(reason).toContain("Paga con PSE");
     expect(reason).not.toContain("beta");
   });
 
-  it("names both causes, because a missing key can also mean the store started without its .env", () => {
-    const reason = cardUnavailableFor(config, "beta");
+  it("says the API does not tell how the gateway takes the card, as an API older than cardCapture does", () => {
+    const reason = cardUnavailableFor(config, undefined, "alfa");
 
-    expect(reason).toContain("todavía no tokeniza con ella");
-    expect(reason).toContain("arrancó sin esa llave");
+    expect(reason).toContain("no ofrecemos tarjeta");
+    expect(reason).toContain("la API no dice cómo la recibe");
+    expect(reason).not.toContain("alfa");
   });
 });
 
@@ -98,6 +103,12 @@ describe("loadCardTokenizer", () => {
 
     await expect(loadCardTokenizer(importer)).resolves.toBe(KitPagosBrowser);
     expect(importer).toHaveBeenCalledWith(KIT_PAGOS_BROWSER_URL);
-    expect(KIT_PAGOS_BROWSER_URL).toMatch(/^https:\/\/cdn\.jsdelivr\.net\/npm\/kit-pagos-colombia@\d+\.\d+\.\d+\//);
+    expect(KIT_PAGOS_BROWSER_URL).toMatch(/^https:\/\/cdn\.jsdelivr\.net\/npm\/kit-pagos-colombia@\d+\.\d+\.\d+(-rc\.\d+)?\//);
+  });
+
+  it.each(["@next", "@latest", "@^0.6.0", "@0.6", "@0.6.x"])("would not accept %s, which is not one fixed version", (spec) => {
+    const pinned = /^https:\/\/cdn\.jsdelivr\.net\/npm\/kit-pagos-colombia@\d+\.\d+\.\d+(-rc\.\d+)?\//;
+
+    expect(`https://cdn.jsdelivr.net/npm/kit-pagos-colombia${spec}/dist/browser/index.js`).not.toMatch(pinned);
   });
 });

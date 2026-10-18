@@ -18,6 +18,7 @@ import {
   DEFAULT_POLL,
   describeOutcome,
   offersStatusQuery,
+  payOnHostedPage,
   payWithCard,
   payWithPse,
   peekPending,
@@ -49,6 +50,7 @@ const gatewaySelect = byId<HTMLSelectElement>("gateway");
 const bankSelect = byId<HTMLSelectElement>("bank");
 const pseFields = byId<HTMLDivElement>("pse-fields");
 const cardFields = byId<HTMLDivElement>("card-fields");
+const cardHosted = byId<HTMLParagraphElement>("card-hosted");
 const cardMethod = byId<HTMLLabelElement>("card-method");
 const cardUnavailable = byId<HTMLParagraphElement>("card-unavailable");
 const payButton = byId<HTMLButtonElement>("pay-button");
@@ -258,8 +260,9 @@ function handle(step: CheckoutStep, reference: string): void {
   if (step.kind === "redirect") {
     log(describeOutcome(step), step.redirectUrl);
     saveCart(sessionStorage, cart);
+    const title = step.pending.method === "CARD" ? "Te llevamos a la página de pago" : "Te llevamos a tu banco";
     showResult(
-      { tone: "redirect", title: "Te llevamos a tu banco", detail: "Abriendo la página de pago de la pasarela…" },
+      { tone: "redirect", title, detail: "Abriendo la página de pago de la pasarela…" },
       reference,
       cartLines(cart),
     );
@@ -330,21 +333,28 @@ async function main(): Promise<void> {
   }
   const cardInput = cardMethod.querySelector("input") as HTMLInputElement;
   const methodInput = form.elements.namedItem("method") as RadioNodeList;
+  const catalog = await api.listGateways();
+  const captureOf = (gateway: string) => catalog.cardCapture[gateway];
 
   function showMethodFields(): void {
-    const method = new FormData(form).get("method");
-    pseFields.hidden = method !== "PSE";
-    cardFields.hidden = method !== "CARD";
+    const card = new FormData(form).get("method") === "CARD";
+    const hosted = captureOf(gatewaySelect.value) === "HOSTED_PAGE";
+    pseFields.hidden = card;
+    cardFields.hidden = !card || hosted;
+    cardHosted.hidden = !card || !hosted;
   }
 
-  /** La tarjeta se ofrece solo si la pasarela elegida la puede tokenizar en este modo. */
+  /**
+   * La tarjeta se ofrece según lo que la API dice de la pasarela elegida. El problema del modo
+   * solo toca a las que tokenizan en el navegador: la página de la pasarela no depende de él.
+   */
   function updateCardAvailability(): void {
-    const reason = cardProblem
-      ? "El pago con tarjeta no está disponible en este modo de la tienda. Paga con PSE."
-      : cardUnavailableFor(config, gatewaySelect.value);
-    if (reason && !cardProblem) {
-      log(`sin tarjeta con ${gatewaySelect.value}: /config.json no trae su llave pública`);
-    }
+    const capture = captureOf(gatewaySelect.value);
+    const reason =
+      cardProblem && capture === "BROWSER_TOKEN"
+        ? "El pago con tarjeta no está disponible en este modo de la tienda. Paga con PSE."
+        : cardUnavailableFor(config, capture, gatewaySelect.value);
+    log(`tarjeta con ${gatewaySelect.value}: ${capture ?? "la API no dice cómo la recibe"}${reason ? " (deshabilitada)" : ""}`);
     cardInput.disabled = reason !== undefined;
     cardUnavailable.hidden = reason === undefined;
     cardUnavailable.textContent = reason ?? "";
@@ -366,7 +376,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const gateways = await api.listGateways();
+  const { gateways } = catalog;
   gatewaySelect.replaceChildren(...gateways.map((gateway) => new Option(gatewayLabel(gateway), gateway)));
   const choice = pending ?? (JSON.parse(sessionStorage.getItem(CHOICE_STORAGE_KEY) ?? "null") as { gateway?: string; method?: string } | null);
   if (choice?.gateway && gateways.includes(choice.gateway)) {
@@ -404,25 +414,27 @@ async function main(): Promise<void> {
     const step =
       data.get("method") === "PSE"
         ? payWithPse(api, order, field(data, "bank"), poll)
-        : payWithCard(
-            {
-              api,
-              loadTokenizer: loadCardTokenizer,
-              publicKeys: config.publicKeys,
-              environment: config.environment,
-            },
-            order,
-            {
-              number: field(data, "cardNumber"),
-              cvc: field(data, "cvc"),
-              expMonth: field(data, "expMonth"),
-              expYear: field(data, "expYear"),
-              cardHolder: field(data, "cardHolder"),
-              docType: order.payer.documentType,
-              docNumber: order.payer.documentNumber,
-            },
-            poll,
-          );
+        : captureOf(order.gateway) === "HOSTED_PAGE"
+          ? payOnHostedPage(api, order, poll)
+          : payWithCard(
+              {
+                api,
+                loadTokenizer: loadCardTokenizer,
+                publicKeys: config.publicKeys,
+                environment: config.environment,
+              },
+              order,
+              {
+                number: field(data, "cardNumber"),
+                cvc: field(data, "cvc"),
+                expMonth: field(data, "expMonth"),
+                expYear: field(data, "expYear"),
+                cardHolder: field(data, "cardHolder"),
+                docType: order.payer.documentType,
+                docNumber: order.payer.documentNumber,
+              },
+              poll,
+            );
     step.then((outcome) => handle(outcome, order.orderReference)).catch(showFormError);
   });
 }
