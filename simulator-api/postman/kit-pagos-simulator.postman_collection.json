@@ -67,7 +67,22 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"GET /v1/api/gateways: dice cómo recibe la tarjeta cada pasarela (punto 106)\", () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.cardCapture).to.eql({ wompi: \"BROWSER_TOKEN\", rapyd: \"HOSTED_PAGE\", mercadopago: \"BROWSER_TOKEN\", kushki: \"BROWSER_TOKEN\" });",
+                  "  pm.expect(Object.keys(body.cardCapture).sort()).to.eql([...body.gateways].sort());",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /v1/api/payments",
@@ -1459,6 +1474,58 @@
           "response": []
         },
         {
+          "name": "POST /v1/sim/kushki/card/v1/tokens",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Public-Merchant-Id",
+                "value": "{{kushkiPublicMerchantId}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/kushki/card/v1/tokens",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "kushki",
+                "card",
+                "v1",
+                "tokens"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"card\": {\n    \"name\": \"APRO Ruiz\",\n    \"number\": \"4242424242424242\",\n    \"cvv\": \"123\",\n    \"expiryMonth\": \"11\",\n    \"expiryYear\": \"30\"\n  },\n  \"totalAmount\": 50000,\n  \"currency\": \"COP\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"POST /v1/sim/kushki/card/v1/tokens: emite un token de 32 hexadecimales, como UAT\", () => {",
+                  "  pm.expect(pm.response.code).to.equal(201);",
+                  "  pm.expect(pm.response.json().token).to.match(/^[0-9a-f]{32}$/);",
+                  "});",
+                  "pm.environment.set(\"kushkiCardToken\", pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "POST /v1/sim/kushki/card/v1/charges",
           "request": {
             "method": "POST",
@@ -1490,7 +1557,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"token\": \"tok_kushki_card_token_test\",\n  \"amount\": {\n    \"subtotalIva\": 0,\n    \"subtotalIva0\": 50000,\n    \"iva\": 0,\n    \"currency\": \"COP\"\n  },\n  \"orderDetails\": {\n    \"trackingCode\": \"ORD-KUSHKI-{{$timestamp}}\"\n  }\n}"
+              "raw": "{\n  \"token\": \"{{kushkiCardToken}}\",\n  \"amount\": {\n    \"subtotalIva\": 0,\n    \"subtotalIva0\": 50000,\n    \"iva\": 0,\n    \"currency\": \"COP\"\n  },\n  \"orderDetails\": {\n    \"trackingCode\": \"ORD-KUSHKI-{{$timestamp}}\"\n  }\n}"
             }
           },
           "response": [],

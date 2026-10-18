@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { sendBankPage } from "../gateways/bankPage";
+import { renderReturnLink, sendBankPage } from "../gateways/bankPage";
 import { GatewayMockFactory } from "../gateways/rapyd/GatewayMockFactory";
 import {
   RapydCreateCheckoutRequestBody,
@@ -63,15 +63,23 @@ const HOSTED_PAGE_NOT_FOUND = {
   },
 } as const;
 
-/** La página de `GET /v1/sim/rapyd/checkout/:checkoutId/pay`. La lee una persona, así que va en español. */
-const CHECKOUT_PAY_PAGE =
-  '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
-  "<title>Página de pago simulada (Rapyd)</title></head><body>" +
-  "<h1>Página de pago simulada</h1>" +
-  "<p>Esta página es de la API de Simulación de Kit Pagos Colombia. No es de Rapyd, y no " +
-  "imita su página de pago alojada.</p>" +
-  "<p>La visita completó la página de pago. Consulte el checkout para conocer el " +
-  "resultado.</p></body></html>";
+/**
+ * La página de `GET /v1/sim/rapyd/checkout/:checkoutId/pay`. La lee una persona, así que va en
+ * español. Ofrece volver a la `complete_payment_url` (o, sin ella, a la `error_payment_url`)
+ * que mandó el comercio, como las páginas de banco del PSE: la página real de Rapyd devuelve al
+ * pagador sola, después de su simulador de 3DS (medido el 17 de octubre de 2026, punto 106).
+ */
+function renderCheckoutPayPage(returnUrl: string | undefined): string {
+  return (
+    '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
+    "<title>Página de pago simulada (Rapyd)</title></head><body>" +
+    "<h1>Página de pago simulada</h1>" +
+    "<p>Esta página es de la API de Simulación de Kit Pagos Colombia. No es de Rapyd, y no " +
+    "imita su página de pago alojada.</p>" +
+    "<p>La visita completó la página de pago. Consulte el checkout para conocer el " +
+    `resultado.</p>${renderReturnLink(returnUrl)}</body></html>`
+  );
+}
 
 /**
  * Router HTTP de Rapyd (issue #52).
@@ -433,6 +441,11 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
         requestOrigin(request),
       );
       rapydCheckouts.save(created.data.id, created.data);
+      rememberBankReturnUrl(
+        "rapyd",
+        created.data.id,
+        requestBody.complete_payment_url ?? requestBody.error_payment_url,
+      );
 
       /*
        * El rechazo se registra aquí y lo aplica la visita a la página, que es donde nace el
@@ -564,7 +577,10 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
        * Rapyd ni dice si el pago se aprobó: eso se lee consultando el checkout, igual que contra
        * la API real.
        */
-      return reply.code(200).header("content-type", "text/html; charset=utf-8").send(CHECKOUT_PAY_PAGE);
+      return reply
+        .code(200)
+        .header("content-type", "text/html; charset=utf-8")
+        .send(renderCheckoutPayPage(bankReturnUrlFor("rapyd", checkoutId)));
     },
   );
 

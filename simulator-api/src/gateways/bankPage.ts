@@ -49,13 +49,17 @@ function safeReturnUrl(value: string | undefined): string | undefined {
   }
 }
 
+/** El enlace «Volver al comercio» de una página del simulador, o el aviso de que no hay a dónde volver. */
+export function renderReturnLink(returnUrl: string | undefined): string {
+  const target = safeReturnUrl(returnUrl);
+  return target === undefined
+    ? "<p>El comercio no indicó a dónde devolver al pagador.</p>"
+    : `<p><a href="${escapeHtml(target)}">Volver al comercio</a></p>`;
+}
+
 /** El HTML de la página. La lee una persona, así que va en español. */
 export function renderBankPage(gateway: BankPageGateway, returnUrl: string | undefined): string {
-  const target = safeReturnUrl(returnUrl);
-  const back =
-    target === undefined
-      ? "<p>El comercio no indicó a dónde devolver al pagador.</p>"
-      : `<p><a href="${escapeHtml(target)}">Volver al comercio</a></p>`;
+  const back = renderReturnLink(returnUrl);
 
   return (
     '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
