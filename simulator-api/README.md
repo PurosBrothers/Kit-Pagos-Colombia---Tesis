@@ -7,7 +7,7 @@
 La **API de Simulación** es el segundo componente del artefacto de Kit Pagos Colombia. Desarrollada sobre [Fastify](https://fastify.dev/) en TypeScript, cumple dos funciones arquitectónicas desacopladas:
 
 1. **Capa REST de Kit Pagos (`/v1/api`)**: Expone las capacidades del SDK a través de una interfaz HTTP unificada, permitiendo procesar cobros, consultar estados, listar bancos PSE y verificar firmas de webhooks sin necesidad de instalar el paquete npm.
-2. **Servidor Mock de Pasarelas (`/v1/sim`)**: Provee 32 rutas simuladas con fidelidad a los contratos de **Wompi**, **Mercado Pago**, **Kushki** y **Rapyd**, permitiendo ejercitar flujos completos (incluyendo escenarios de rechazo, timeout, errores de red y desenlaces de PSE) sin depender de conexión a internet ni incurrir en bloqueos de sandboxes reales.
+2. **Servidor Mock de Pasarelas (`/v1/sim`)**: Provee 33 rutas simuladas con fidelidad a los contratos de **Wompi**, **Mercado Pago**, **Kushki** y **Rapyd**, permitiendo ejercitar flujos completos (incluyendo escenarios de rechazo, timeout, errores de red y desenlaces de PSE) sin depender de conexión a internet ni incurrir en bloqueos de sandboxes reales.
 
 Servicio desplegado en vivo en Render: [https://kit-pagos-colombia.onrender.com](https://kit-pagos-colombia.onrender.com)
 
@@ -40,7 +40,7 @@ Todos los endpoints de la capa REST operan bajo el tag `Kit Pagos` y retornan re
 
 | Método | Ruta | Propósito | Respuesta Exitosa |
 |---|---|---|---|
-| `GET` | `/v1/api/gateways` | Catálogo de pasarelas activas en el SDK. Prueba de vida sin llamadas externas. | `200 OK`: `{"gateways": ["wompi", "mercadopago", "kushki", "rapyd"]}` |
+| `GET` | `/v1/api/gateways` | Catálogo de pasarelas activas en el SDK y cómo recibe cada una la tarjeta (`BROWSER_TOKEN` o `HOSTED_PAGE`, punto 106). Prueba de vida sin llamadas externas. | `200 OK`: `{"gateways": ["wompi", "rapyd", "mercadopago", "kushki"], "cardCapture": {"wompi": "BROWSER_TOKEN", "mercadopago": "BROWSER_TOKEN", "kushki": "BROWSER_TOKEN", "rapyd": "HOSTED_PAGE"}}` |
 | `POST` | `/v1/api/payments` | Creación unificada de cobros con unión discriminada explícita. | `201 Created`: `TRANSACTION` (cobro directo) o `REDIRECT_REQUIRED` (PSE / 3DS con `redirectUrl`) |
 | `GET` | `/v1/api/payments/:id` | Consulta de estado canónico de una transacción por ID y pasarela (`?gateway=...`). | `200 OK`: `{"gateway": "...", "transaction": { "status": "APPROVED", ... }}` |
 | `GET` | `/v1/api/pse-banks` | Catálogo consolidado de bancos PSE con código nativo y código ACH unificado. | `200 OK`: `{"pseBanks": [{ "gateway": "...", "banks": [...] }]}` |
@@ -73,7 +73,7 @@ Un token de la API ausente o inválido, o una pasarela sin credenciales, respond
 
 ## 2. Servidor Mock de Simulación (`/v1/sim`)
 
-El servidor provee 32 rutas organizadas por pasarela que emulan el comportamiento y formato de carga de cada sandbox oficial, más el disparador de webhooks y `GET /health`. Las rutas se enumeran con su nivel de evidencia en [`docs/02-arquitectura/3-api-de-simulacion.md`](../docs/02-arquitectura/3-api-de-simulacion.md).
+El servidor provee 33 rutas organizadas por pasarela que emulan el comportamiento y formato de carga de cada sandbox oficial, más el disparador de webhooks y `GET /health`. Las rutas se enumeran con su nivel de evidencia en [`docs/02-arquitectura/3-api-de-simulacion.md`](../docs/02-arquitectura/3-api-de-simulacion.md).
 
 ### Rutas por Pasarela
 
@@ -95,8 +95,9 @@ El servidor provee 32 rutas organizadas por pasarela que emulan el comportamient
   - `GET /v1/sim/mercadopago/payment_methods` — Catálogo de medios de pago, con los bancos PSE.
   - `GET /v1/sim/mercadopago/payment_methods/search` — Marca y tipo de tarjeta por BIN (`?public_key=…&bins=…`).
   - `GET /v1/sim/mercadopago/payments/:paymentId/bank_transfer` — Página de banco del PSE (ver abajo).
-- **Kushki (`/v1/sim/kushki`)** — 7:
-  - `POST /v1/sim/kushki/card/v1/charges` — Cobro directo con tarjeta.
+- **Kushki (`/v1/sim/kushki`)** — 8:
+  - `POST /v1/sim/kushki/card/v1/tokens` — Tokenización de tarjeta desde el navegador, con CORS; el token queda atado al monto (punto 106).
+  - `POST /v1/sim/kushki/card/v1/charges` — Cobro directo con tarjeta; con un token de otro monto, `400 K220`.
   - `GET /v1/sim/kushki/charges/:ticketNumber` — Consulta de cargo con tarjeta.
   - `GET /v1/sim/kushki/transfer/v1/bankList` — Lista de bancos PSE.
   - `POST /v1/sim/kushki/transfer/v1/tokens` — Token de la transferencia, con el banco y la URL de retorno.

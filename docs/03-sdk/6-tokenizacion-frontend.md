@@ -76,6 +76,8 @@ Kushki es el modelo más restrictivo del conjunto. Los Hosted Fields son iframes
 
 **Nivel de evidencia:** Nivel 3 — tomado de la documentación oficial. No se ejecutó.
 
+> **Medido el 17 de octubre de 2026 (punto 106 del `architecture-log.md`): Kushki también tokeniza por REST desde el navegador.** Los Hosted Fields existen, pero no son el único camino: `POST https://api-uat.kushkipagos.com/card/v1/tokens`, con el merchant id público en la cabecera `Public-Merchant-Id`, acepta llamadas de otro origen (preflight `200`, `access-control-allow-origin: *`, la cabecera permitida) y responde `201 { token }`. Pide el monto y la moneda del cobro (`totalAmount`, `currency`) y ata el token a ese monto: cobrarlo por otro responde `400 K220`. Es el mismo modelo que Wompi —la tarjeta viaja del JavaScript de la página a la pasarela, sin pasar por el comercio—, y con él la 0.6.0-rc.4 agregó `KushkiTokenizer`. Nivel 1.
+
 ---
 
 ### 2.4 Rapyd
@@ -101,7 +103,7 @@ Intentar envolver Rapyd en la misma abstracción que las otras tres implicaría 
 
 El ejercicio que se hizo con `PaymentGatewayPort` en el servidor aplica acá: buscar la operación común.
 
-La operación «convertir datos de tarjeta en un token» **no es universal en las cuatro pasarelas**. Rapyd la excluye por diseño. El mínimo común denominador real en el navegador es:
+La operación «convertir datos de tarjeta en un token» **no es universal en las cuatro pasarelas**. Rapyd la excluye por diseño; Wompi, Mercado Pago y Kushki la ofrecen por REST (Kushki, medido el 17 de octubre de 2026). El mínimo común denominador real en el navegador es:
 
 > **«Iniciar el flujo de pago con tarjeta»** — que en tres pasarelas produce un token y en una produce una URL de redirección.
 
@@ -153,6 +155,8 @@ sdk/
 ```
 
 > **Decisión de alcance (30 de septiembre de 2026):** No se crea `KushkiTokenizer.ts` como stub. Kushki exige Hosted Fields dentro de iframes y pretender que cabe en la misma interfaz sin implementarlo escondería la asimetría en vez de documentarla. Si un consumidor en JavaScript intenta invocar `KitPagosBrowser.tokenizeCard()` con Kushki o Rapyd, la fachada lanza de inmediato `UNSUPPORTED_OPERATION` sin realizar llamadas de red.
+>
+> **Actualización (17 de octubre de 2026, 0.6.0-rc.4):** `src-browser/tokenizers/KushkiTokenizer.ts` existe y es una implementación, no un stub: usa la ruta REST medida en la sección 2.3, no los Hosted Fields. Rapyd sigue rechazado con `UNSUPPORTED_OPERATION`, con un mensaje que dice crear el pago sin token y seguir la redirección (punto 106).
 
 ---
 
@@ -165,7 +169,7 @@ El issue #115 evalúa si este trabajo debería ser un objetivo específico. La r
 - Wompi y Mercado Pago son los casos más directos de implementar y los de mayor penetración en el mercado colombiano.
 
 **En contra de implementarlo (o a favor de dejarlo como trabajo futuro):**
-- Kushki requiere gestionar iframes — complejidad desproporcionada para el alcance de la tesis.
+- Kushki requiere gestionar iframes — complejidad desproporcionada para el alcance de la tesis. *(El 17 de octubre de 2026 se midió que no: su ruta REST acepta el navegador; ver la sección 2.3.)*
 - Rapyd no tiene tokenización inline — la abstracción nunca puede ser completa para las cuatro pasarelas con la misma interfaz.
 - Agregar un bundle de browser al SDK actual requiere cambios de infraestructura de build que no son triviales y pueden introducir regresiones en el paquete de servidor.
 - Las pruebas de un SDK de navegador requieren un entorno distinto (jsdom, Playwright, o un browser real) que la suite Jest actual no cubre.
@@ -186,7 +190,7 @@ El alcance concreto de implementación:
 
 3. **`KitPagosBrowser.ts`** — Fachada unificada que expone `tokenizeCard()` con la misma semántica, devolviendo un `CardTokenResult` con `{ token, gateway, lastFour, brand }`, cuyo `.token` es consumible en el backend con `PaymentMethod.card(result.token)`.
 
-4. **Kushki y Rapyd no se proveen** — A diferencia de lo propuesto originalmente, no se deja stub de `KushkiTokenizer`: `KitPagosBrowser` rechaza activamente `Gateway.KUSHKI` y `Gateway.RAPYD` lanzando `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones.
+4. **Kushki y Rapyd no se proveen** — A diferencia de lo propuesto originalmente, no se deja stub de `KushkiTokenizer`: `KitPagosBrowser` rechaza activamente `Gateway.KUSHKI` y `Gateway.RAPYD` lanzando `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones. **Desde la 0.6.0-rc.4 (17 de octubre de 2026), Kushki sí se provee**: `KushkiTokenizer.ts`, REST directo contra `POST /card/v1/tokens` con el merchant id público en `Public-Merchant-Id` y el monto del cobro en `amount`, que Kushki ata al token. Rapyd sigue rechazado (punto 106).
 
 5. **Documentar Rapyd** — Queda evidenciado que Rapyd no provee tokenización inline para comercios sin certificación PCI Level 1; su modelo de integración es Hosted Checkout (`REDIRECT_REQUIRED`).
 

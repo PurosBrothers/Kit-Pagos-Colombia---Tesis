@@ -213,7 +213,43 @@
           </div>
           <div class="disparity-row">
             <div class="disparity-term">4. Bloqueos en pruebas</div>
-            <div class="disparity-desc">La Orders API de Mercado Pago para PSE responde HTTP 401 en sandbox pidiendo credenciales de producción. Kushki responde <code>CAS004</code> al consultar el estado de una tarjeta. Para no quedarnos varados en desarrollo, construimos el simulador local.</div>
+            <div class="disparity-desc">La Orders API de Mercado Pago, la del PSE, responde HTTP 401 a las credenciales <code>TEST-</code>; solo sirve el par de prueba de un vendedor de prueba. Kushki responde <code>CAS004</code> al consultar el estado de una tarjeta. Para no quedarnos varados en desarrollo, construimos el simulador local.</div>
+          </div>
+        </div>
+
+        <div class="disparity-analysis" id="sandboxes" style="margin-bottom: 24px;">
+          <h3 class="disparity-title">Lo que encontramos en los sandboxes: límites de las pasarelas, no del SDK</h3>
+          <div class="disparity-row">
+            <div class="disparity-term">Mercado Pago · credenciales</div>
+            <div class="disparity-desc">Las de prueba son el par <code>APP_USR-</code> de «Credenciales de prueba» de una aplicación de Checkout API vía Orders. Un par <code>TEST-</code> recibe 401 en la Orders API, y el <code>APP_USR-</code> de producción cobra dinero real.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">Mercado Pago · túnel</div>
+            <div class="disparity-desc">El PSE no vuelve a <code>localhost</code>: rechaza una URL de retorno local. Para probarlo en la máquina hay que servir la página por un túnel público, y la API detrás de un proxy tiene que leer la IP del pagador de <code>X-Forwarded-For</code>.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">Kushki · PSE en UAT</div>
+            <div class="disparity-desc">La página del banco y la vuelta funcionan, pero la transferencia se queda en <code>initializedTransaction</code>: Kushki activa la simulación de estados por comercio, y hay que pedírsela.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">Kushki · tarjeta</div>
+            <div class="disparity-desc">El token queda atado al monto del cobro: cobrarlo por otro responde <code>400 K220</code>. La tarjeta que su documentación lista como aprobada no siempre tokeniza en la cuenta de prueba.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">Rapyd · bancos PSE</div>
+            <div class="disparity-desc">El sandbox solo cobra 9 de sus 50 bancos, y el catálogo no dice cuáles; además renombra métodos sin aviso. El SDK devuelve solo los que cobran.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">Rapyd · tarjeta</div>
+            <div class="disparity-desc">No hay token en el navegador: la tarjeta se escribe en su página alojada, que pasa por un simulador de 3DS y devuelve al comercio. El SDK lo entrega como una redirección, igual que un PSE.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">Wompi · PSE</div>
+            <div class="disparity-desc">El sandbox no tiene página de banco: el desenlace se elige con tres bancos de prueba, el que aprueba, el que declina y el que simula un error.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">Llaves del navegador</div>
+            <div class="disparity-desc">La llave pública con la que la página tokeniza tiene que ser del mismo par que las credenciales con que el servidor cobra: si son de cuentas distintas, el token no sirve.</div>
           </div>
         </div>
 
@@ -426,7 +462,7 @@
             <div>
               <h3 class="comparison-title" style="margin-bottom: 8px;">Tokenización en el cliente: cumplimiento PCI DSS</h3>
               <p class="section-lead" style="margin-bottom: 24px; font-size: 0.9375rem;">
-                El número de la tarjeta no pasa por tu servidor: el navegador lo manda directo a la pasarela, y tu backend solo recibe el token. El módulo <code>kit-pagos-colombia/browser</code> (16 KB, cero dependencias) tokeniza directo desde el navegador contra Wompi o Mercado Pago y te entrega un token opaco (<code>tok_...</code>) listo para cobrar desde el backend.
+                El número de la tarjeta no pasa por tu servidor: el navegador lo manda directo a la pasarela, y tu backend solo recibe el token. El módulo <code>kit-pagos-colombia/browser</code> (22 KB, cero dependencias) tokeniza directo desde el navegador contra Wompi, Mercado Pago o, desde la 0.6.0, Kushki, y te entrega un token opaco listo para cobrar desde el backend. Rapyd no tokeniza en el navegador: el pago se crea sin token y el pagador escribe la tarjeta en su página alojada.
               </p>
 
               <div class="terminal">
@@ -706,7 +742,7 @@
                 <span>API de Simulación de Pasarelas</span>
                 <span class="endpoints-facet-tag">Tag: Simulación · Prefijo: /v1/sim</span>
               </h3>
-              <span class="text-muted" style="font-size: 0.8125rem;">32 Rutas Mock · Wompi, Mercado Pago, Kushki y Rapyd</span>
+              <span class="text-muted" style="font-size: 0.8125rem;">33 Rutas Mock · Wompi, Mercado Pago, Kushki y Rapyd</span>
             </div>
 
             <p class="endpoint-desc" style="margin-bottom: 20px;">
@@ -836,10 +872,10 @@
               <h3 class="arch-title">API de Simulación</h3>
             </div>
             <p class="arch-desc">
-              Servidor local con 32 rutas mock para flujos de tarjeta y PSE de Wompi, Mercado Pago, Kushki y Rapyd. Desbloquea flujos que los sandboxes oficiales rompen (como el 401 de Mercado Pago en sandbox PSE) y expone <code>/v1/api</code> para probar cobros por HTTP sin escribir código.
+              Servidor local con 33 rutas mock para flujos de tarjeta y PSE de Wompi, Mercado Pago, Kushki y Rapyd. Desbloquea flujos que los sandboxes oficiales rompen (como el 401 de Mercado Pago en sandbox PSE) y expone <code>/v1/api</code> para probar cobros por HTTP sin escribir código.
             </p>
             <div class="arch-meta">
-              32 Rutas Mock · Capa REST /v1/api · Respuestas predecibles
+              33 Rutas Mock · Capa REST /v1/api · Respuestas predecibles
             </div>
           </article>
 

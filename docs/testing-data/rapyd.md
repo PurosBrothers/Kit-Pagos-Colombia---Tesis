@@ -255,6 +255,24 @@ Para simular rechazos o errores en el procesamiento de tarjetas en Sandbox:
 
 4. **Autenticar:** Serás llevado automáticamente a la pantalla de 3DS. Ingresa el código **`123456`** y haz clic en **Continue** para completar el pago y disparar el webhook `PAYMENT_COMPLETED`.
 
+### 4.1. Medido desde la tienda del prototipo C (17 de octubre de 2026)
+
+> **Nivel 1**, punto 106 del `architecture-log.md`. Tienda en `http://localhost:4120`, API de la rama en
+> local con el `.env` de sandbox. Capturas en la evidencia del #109 (`tarjeta-cuatro-pasarelas/`).
+
+- **El pago se crea sin token.** `POST /v1/api/payments` con `paymentMethod: { type: "CARD" }` crea el
+  checkout (`POST /v1/checkout`) y responde `REDIRECT_REQUIRED` hacia
+  `https://sandboxcheckout.rapyd.net/?token=checkout_<32 hex>`. Con `returnUrl` en
+  `http://localhost:4100/?retorno=1` también: Rapyd acepta una URL de retorno local, a diferencia de
+  Mercado Pago.
+- **La página.** «Card Details» (número, MM/YY, CVV, nombre) y el total en COP. Con
+  `4111 1111 1111 1111`, 12/30, CVV `123` y «Place Your Order», lleva a
+  `sandboxcheckout.rapyd.net/3ds-payment?token=payment_<32 hex>`: el «Rapyd 3DS Simulator», que pide
+  `123456` para simular la aprobación del titular («Cancel» simula el error).
+- **La vuelta.** Después de «Continue», Rapyd lleva solo al navegador a la URL de retorno, sin parámetros
+  propios (`http://localhost:4120/?retorno=1`). La consulta del checkout da el pago aprobado, y la tienda
+  mostró «¡Gracias! Tu pago fue aprobado» (29 000 COP).
+
 ---
 
 ## 5. PSE (Pagos Seguros en Línea)

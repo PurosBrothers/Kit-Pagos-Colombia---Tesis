@@ -20,7 +20,7 @@ Corresponde a la implementación y cierre del **Issue #131** (PR #147), que comp
 | **Directorio raíz (`rootDir`)** | `simulator-api` |
 | **Comando de construcción** | `npm ci && npm run build` |
 | **Comando de arranque** | `npm start` |
-| **Colección de Postman** | [`simulator-api/postman/kit-pagos-simulator.postman_collection.json`](../../simulator-api/postman/kit-pagos-simulator.postman_collection.json) (41 peticiones, 100% aprobadas con Newman contra el simulador local el 15 de octubre de 2026) |
+| **Colección de Postman** | [`simulator-api/postman/kit-pagos-simulator.postman_collection.json`](../../simulator-api/postman/kit-pagos-simulator.postman_collection.json) (42 peticiones y 47 aserciones, 100% aprobadas con Newman contra el simulador local el 17 de octubre de 2026, con el SDK 0.6.0-rc.4) |
 
 ---
 
@@ -205,11 +205,11 @@ La colección vive en [`simulator-api/postman/`](../../simulator-api/postman/) y
 
 ### 5.1. Estructura de las 7 carpetas
 
-La colección cuenta con **41 peticiones** diseñadas para ejecutarse en orden:
+La colección cuenta con **42 peticiones** diseñadas para ejecutarse en orden:
 
 ```text
 simulator-api/postman/
-├── kit-pagos-simulator.postman_collection.json  # 41 peticiones
+├── kit-pagos-simulator.postman_collection.json  # 42 peticiones
 ├── local.postman_environment.json               # Apunta a http://localhost:3000
 ├── render.postman_environment.json              # Apunta a https://kit-pagos-colombia.onrender.com
 └── README.md                                    # Instrucciones detalladas de uso
@@ -222,7 +222,7 @@ simulator-api/postman/
 | **02. Wompi (/v1/sim/wompi)** | `GET /merchants/:publicKey`<br>`GET /terms`<br>`GET /pse/financial_institutions`<br>`GET /pse/redirect`<br>`POST /tokens/cards`<br>`POST /transactions`<br>`GET /transactions/:id` | Simula la API nativa de Wompi. `POST /transactions` incluye un script pre-request que calcula la firma de integridad SHA-256 en tiempo real. `GET /pse/redirect` es la página de banco del PSE. |
 | **03. Mercado Pago (/v1/sim/mercadopago)** | `GET /payment_methods`<br>`POST /card_tokens`<br>`POST /payments`<br>`GET /payments/:id`<br>`GET /card_tokens/:id`<br>`GET /payment_methods/search`<br>`POST /orders` (tarjeta, `APRO`)<br>`POST /card_tokens` (titular `OTHE`)<br>`POST /orders` (tarjeta, `OTHE`)<br>`POST /orders` (PSE)<br>`GET /orders/:id`<br>`GET /payments/:paymentId/bank_transfer` | Simula los dos caminos de tarjeta, las órdenes de PSE y el catálogo de medios de pago. La tarjeta del SDK 0.5.0 va por `POST /payments`; la del 0.6.0 lee el BIN del token, busca la marca y el tipo, y crea la orden: aprobada con `APRO` (`201 processed`) y rechazada con `OTHE`, que comprueba el `402` medido con la orden `failed` en `data`. El `POST /orders` de PSE guarda en `mpBankPaymentId` el id numérico de la URL del banco, y la última petición abre esa página. |
 | **04. Rapyd (/v1/sim/rapyd)** | `GET /payment_methods/country`<br>`POST /customers`<br>`POST /payments`<br>`GET /payments/:paymentId`<br>`GET /complete-bank-payment`<br>`POST /checkout`<br>`GET /checkout/:checkoutId`<br>`GET /checkout/:checkoutId/pay` | Simula el checkout hospedado, los pagos y la página de banco del PSE. Las rutas de API calculan en su pre-request las cabeceras `salt`, `timestamp` y la firma HMAC-SHA256 Base64; las dos páginas (`/pay` y `/complete-bank-payment`) no llevan firma. |
-| **05. Kushki (/v1/sim/kushki)** | `GET /transfer/v1/bankList`<br>`POST /transfer/v1/tokens`<br>`POST /transfer/v1/init`<br>`GET /transfer/v1/status/:token`<br>`GET /transfer/v1/agent`<br>`POST /card/v1/charges`<br>`GET /charges/:ticketNumber` | Simula la transferencia PSE (banco, token, inicio, estado y la página de banco `/agent`) y los cargos con tarjeta. |
+| **05. Kushki (/v1/sim/kushki)** | `GET /transfer/v1/bankList`<br>`POST /transfer/v1/tokens`<br>`POST /transfer/v1/init`<br>`GET /transfer/v1/status/:token`<br>`GET /transfer/v1/agent`<br>`POST /card/v1/tokens`<br>`POST /card/v1/charges`<br>`GET /charges/:ticketNumber` | Simula la transferencia PSE (banco, token, inicio, estado y la página de banco `/agent`) y la tarjeta: la tokenización del navegador y el cargo con ese token, por el mismo monto. |
 | **06. Webhooks** | `POST /v1/sim/webhooks/trigger`<br>`POST /v1/api/webhooks/wompi` | El trigger genera un webhook sintético firmado criptográficamente de la transacción de Wompi creada en la carpeta 02, y el segundo endpoint lo verifica usando el verificador real del SDK. |
 
 ### 5.2. Encadenamiento dinámico de identificadores

@@ -11,7 +11,7 @@ Kit Pagos Colombia son **tres componentes**, no uno:
 | Componente | Qué es | Dónde vive |
 |---|---|---|
 | **SDK** | Paquete de TypeScript con arquitectura hexagonal que unifica cuatro pasarelas colombianas en el backend y expone `kit-pagos-colombia/browser` para tokenización PCI DSS en el frontend | [`sdk/`](sdk/) · [README del SDK](sdk/README.md) |
-| **API de Simulación y Capa REST** | Servidor Fastify con dos caras: en `/v1/sim`, 32 rutas mock para probar flujos que los sandboxes bloquean; en `/v1/api`, el SDK expuesto como API REST. Documentado formalmente con OpenAPI 3.0 en [`/docs`](https://kit-pagos-colombia.onrender.com/docs) (Swagger UI) y desplegado en Render: [https://kit-pagos-colombia.onrender.com](https://kit-pagos-colombia.onrender.com) | [`simulator-api/`](simulator-api/) · [README de la API](simulator-api/README.md) |
+| **API de Simulación y Capa REST** | Servidor Fastify con dos caras: en `/v1/sim`, 33 rutas mock para probar flujos que los sandboxes bloquean; en `/v1/api`, el SDK expuesto como API REST. Documentado formalmente con OpenAPI 3.0 en [`/docs`](https://kit-pagos-colombia.onrender.com/docs) (Swagger UI) y desplegado en Render: [https://kit-pagos-colombia.onrender.com](https://kit-pagos-colombia.onrender.com) | [`simulator-api/`](simulator-api/) · [README de la API](simulator-api/README.md) |
 | **Documentación de datos** | Tarjetas, bancos PSE y credenciales de prueba de las cuatro pasarelas, con nivel de evidencia 1 | [`docs/testing-data/`](docs/testing-data/README.md) |
 
 Los tres juntos son el artefacto de un trabajo de grado en Ingeniería de Sistemas (Pontificia Universidad Javeriana). Métodos soportados: **tarjeta de crédito/débito y PSE**.
@@ -74,7 +74,7 @@ El ejemplo rápido de código, con la firma exacta de cada llamada, está en la 
 | Directorio | Propósito | Documentación |
 |---|---|---|
 | [`sdk/`](sdk/) | Código fuente del SDK en TypeScript, pruebas unitarias y métricas CK | [`sdk/README.md`](sdk/README.md) |
-| [`simulator-api/`](simulator-api/) | Servidor Fastify con las 32 rutas mock de pasarelas y los 5 endpoints de Kit Pagos documentados con OpenAPI 3.0 | [`simulator-api/README.md`](simulator-api/README.md) |
+| [`simulator-api/`](simulator-api/) | Servidor Fastify con las 33 rutas mock de pasarelas y los 5 endpoints de Kit Pagos documentados con OpenAPI 3.0 | [`simulator-api/README.md`](simulator-api/README.md) |
 | [`landing/`](landing/) | Página web interactiva y especificación técnica (Vite / Vanilla CSS) | [`docs/06-landing/`](docs/06-landing/) |
 | [`examples/`](examples/) | Once programas ejecutables que demuestran la integración | [`examples/README.md`](examples/README.md) |
 | [`docs/`](docs/) | Documentación completa: DSR, arquitectura C4, métricas y datos de prueba | [`docs/README.md`](docs/README.md) |
@@ -100,11 +100,26 @@ El ejemplo rápido de código, con la firma exacta de cada llamada, está en la 
 
 ### Referencia y contexto académico
 
-- [`docs/architecture/architecture-log.md`](docs/architecture/architecture-log.md) — El registro de decisiones del proyecto: más de 87 puntos técnicos documentados con los defectos medidos, las decisiones tomadas y las que siguen abiertas. Es la fuente de verdad de por qué el código es como es.
+- [`docs/architecture/architecture-log.md`](docs/architecture/architecture-log.md) — El registro de decisiones del proyecto: más de 100 puntos técnicos documentados con los defectos medidos, las decisiones tomadas y las que siguen abiertas. Es la fuente de verdad de por qué el código es como es.
 - [`docs/architecture/money-representation-analysis.md`](docs/architecture/money-representation-analysis.md) — Por qué el dinero es una cadena y no un número, auditado contra las cuatro pasarelas.
 - [`docs/project-management/`](docs/project-management/) — La metodología (Design Science Research), los objetivos específicos y los prototipos, el cronograma y el plan de evaluación de los prototipos.
 - [SAD (Software Architecture Document)](https://docs.google.com/document/d/1woixOGOkZ3N4OQ1YdFYthfP15brxFDec/edit) — El documento formal de arquitectura, fuera del repositorio.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — Estándares de commits, política de ramas y pull requests.
+
+---
+
+## Lo que encontramos en los sandboxes
+
+Límites de las pasarelas, no del proyecto, que aparecieron probando la tienda del prototipo C contra los sandboxes oficiales. Quien integre cualquiera de las cuatro se los va a encontrar, con o sin Kit Pagos.
+
+- **Mercado Pago: las credenciales de prueba no son las que parecen.** Las que sirven son el par `APP_USR-` de «Pruebas > Credenciales de prueba» de una aplicación de Checkout API vía Orders, cuya cuenta es un vendedor de prueba. Un par `TEST-` cobra tarjeta, pero la Orders API, la del PSE, le responde `401`; el `APP_USR-` de la aplicación de producción cobra de verdad ([`mercado-pago.md`](docs/testing-data/mercado-pago.md), punto 95).
+- **Mercado Pago: el PSE no vuelve a `localhost`, y pide la IP del pagador.** Rechaza una `callback_url` local (`402 processing_error`), así que para probarlo en la máquina hay que servir la página por un túnel público (`cloudflared tunnel --url http://localhost:4100`), y la API detrás de un proxy tiene que tomar la IP de `X-Forwarded-For` ([guía de prueba](docs/05-ejemplos/checkout-frontend-rest-guia-de-prueba.md), sección 3).
+- **Kushki: el UAT no cierra las transferencias PSE.** La página del banco y la vuelta funcionan, pero el estado se queda en `initializedTransaction`: Kushki activa la simulación de estados por comercio, y hay que pedírsela ([`kushki.md`](docs/testing-data/kushki.md), 5.2.2).
+- **Kushki: el token de tarjeta queda atado al monto.** Su tokenización pide el monto del cobro, y cobrar el token por otro responde `400 K220`. La tarjeta que su documentación lista como aprobada no tokenizaba en esta cuenta, y el 17 de octubre de 2026 sí ([`kushki.md`](docs/testing-data/kushki.md), 1.3).
+- **Rapyd: el sandbox solo cobra 9 de sus 50 bancos PSE.** Con los otros responde `400 ERROR_GET_GATEWAY`, el catálogo no dice cuáles son, y renombra métodos sin aviso (Davibank). Contra el sandbox, el SDK devuelve solo los 9 ([`rapyd.md`](docs/testing-data/rapyd.md), 5.8).
+- **Rapyd: la tarjeta solo se cobra en su página.** No hay token en el navegador, y el cobro directo exige el número de la tarjeta en el servidor del comercio (PCI). El pagador la escribe en `sandboxcheckout.rapyd.net`, pasa por un simulador de 3DS (código `123456`) y vuelve solo ([`rapyd.md`](docs/testing-data/rapyd.md), 4.1).
+- **Wompi: el PSE del sandbox no tiene página de banco.** Se elige el desenlace con tres bancos de prueba: «Banco que aprueba» (`1`), el que declina (`2`) y el que simula un error (`3`) ([`wompi.md`](docs/testing-data/wompi.md)).
+- **Las llaves públicas del navegador tienen que ser del mismo par que las de la API.** La tarjeta se tokeniza con la llave pública que tiene la página y la cobra la API con sus credenciales; si son de cuentas o aplicaciones distintas, el token no sirve (`.env.example`).
 
 ---
 

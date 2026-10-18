@@ -584,8 +584,14 @@ a las 16:35, desde la tienda con los ajustes del punto 105 (77 000 COP, Davivien
 `payment_id=184748322702`, `APPROVED`. El PSE 8, a las 16:55, fue el primero por Render con el par de la
 tercera aplicación, que Joshua puso esa tarde: con `npm start`, 77 000 COP y Davivienda, volvió con
 `payment_id=184751088076` y `APPROVED`. A la segunda aplicación, creada hacia las 15:30 del 16, se le
-cortó antes de las 19:07, unas tres horas y media después y con cobros con tarjeta en medio. Con la
-tercera no se ha cobrado ninguna tarjeta.
+cortó antes de las 19:07, unas tres horas y media después y con cobros con tarjeta en medio.
+
+**La primera tarjeta con la tercera aplicación** (17 de octubre de 2026, por la tarde). Joan cobró una
+tarjeta con ese par y justo después un PSE, y los dos salieron bien. A las 20:27 la tienda del prototipo C
+cobró otra, `4013 5406 8274 6260` con titular `APRO Ruiz`, 48 000 COP: `APPROVED`, `processed`, orden
+`ORDTST01M569XZ5C4XH5QTNN1VFT3Y32` (punto 106). Si el PSE de la tercera aplicación deja de entregar la URL
+en las horas siguientes, la hipótesis de que los cobros con tarjeta lo cortan gana peso; si sigue, la del
+tiempo.
 
 **Sin «Volver al comercio», el pago no se confirma.** El PSE 4 se aprobó en el banco simulado a las
 15:12 y la consulta siguió dando `action_required` a las 15:13 y a las 15:14. Segundos después de pulsar

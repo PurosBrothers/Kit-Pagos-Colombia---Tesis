@@ -4,7 +4,7 @@ Colección y ambientes versionados de la API de Simulación de Kit Pagos Colombi
 
 ## Archivos
 
-- `kit-pagos-simulator.postman_collection.json`: 41 peticiones en 7 carpetas.
+- `kit-pagos-simulator.postman_collection.json`: 42 peticiones en 7 carpetas.
   1. `00. Diagnóstico`: `GET /health`.
   2. `01. Capa REST Kit Pagos (/v1/api)`: `gateways`, `payments`, `payments/:id` y `pse-banks`.
   3. `02` a `05`: las rutas `/v1/sim` de Wompi, Mercado Pago, Rapyd y Kushki. La carpeta `03`
