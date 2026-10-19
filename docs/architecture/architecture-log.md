@@ -3806,6 +3806,140 @@ En el ejemplo se omitieron dos de las cuatro consultas, que también dieron `PEN
 
 **Estado:** La documentación queda corregida en el PR #161. La causa sigue sin conocerse. El mensaje para el soporte de Mercado Pago quedó redactado, y Joan decidió el 19 de octubre no enviarlo por ahora.
 
+### 114. La página de la tarjeta y el monto son del comercio, no del SDK: la guía de implementación dice qué hacer (PR #161)
+
+**Responsable:** Orduz.
+
+**Contexto.** Al explicarle a Joan cómo se protegen los datos de la tarjeta aparecieron dos huecos en los prototipos:
+
+- ninguno manda Content-Security-Policy en la página donde se escribe la tarjeta;
+- en C, el monto lo calcula el navegador.
+
+Joan preguntó si eran del prototipo o del SDK, y pidió documentar lo que un comercio tiene que implementar.
+
+**De quién es cada hueco.**
+
+- **La CSP es de la página del comercio.** Es una cabecera que manda su servidor, y el SDK no puede ponerla.
+  - Lo que sí le tocaba al SDK, y faltaba, era decir qué orígenes necesita `KitPagosBrowser`.
+  - El resto el SDK ya lo cumple: no recibe el número (punto 77), y el host de la tokenización sale de un catálogo cerrado.
+- **El monto es del servidor del comercio.** El SDK y `/v1/api` cobran lo que les llega. La firma de integridad de Wompi protege el monto después de firmado, no de dónde salió.
+  - A y B lo calculan en el servidor con su catálogo, y una prueba de A lo vigila.
+  - C no tiene servidor del comercio.
+  - En `production`, `/v1/api` exige las credenciales del cliente, así que un comercio real la llama desde su servidor. El modelo de C funciona solo con las cuentas de sandbox del equipo.
+
+**Lo medido** (19 de octubre de 2026). La evidencia está en `.cursor/evidencia/csp-19-oct/` y en `.cursor/evidencia/monto-19-oct/`.
+
+- **La CSP.** Una página de prueba cargó `KitPagosBrowser` 0.6.0 desde jsDelivr, con integridad en un import map, y tokenizó la 4242 con las llaves públicas de sandbox. Fue en Chrome 148, entre las 15:59 y las 16:00:
+  - **Sin CSP:** tokenizan Wompi, Mercado Pago y Kushki, y un `fetch` a otro dominio sale.
+  - **Con `connect-src` limitado** a `'self'` y a los tres hosts de tokenización de sandbox: tokenizan las tres, y el `fetch` y una imagen hacia otro dominio quedan bloqueados (`connect-src` e `img-src`). El navegador lo reportó al servidor por `report-uri`.
+  - **Con la CSP y el hash de integridad alterado:** el módulo no carga.
+  - **Con una CSP sin el hash del import map:** el navegador bloquea el mapa (`script-src-elem`, en línea). Con el hash de integridad alterado, el módulo **cargó y tokenizó** en tres de cuatro corridas; la que no cargó fue la que vino justo después de una falla de integridad.
+- **El monto.** A las 16:07:12 se hizo un `POST /v1/api/payments` en el simulador de Render: Wompi, PSE por el banco 1, con `amount: "1000.00"`. Respondió `201 REDIRECT_REQUIRED`, y la consulta de las 16:07:40 dio `APPROVED` por 1.000 COP.
+
+**Decisiones de Joan (19 de octubre de 2026).**
+
+1. Documentar lo que le toca al comercio.
+2. Dejar los prototipos sin CSP, y C con el monto en la página, con el límite declarado de forma explícita donde se presentan el proyecto y los prototipos.
+
+Ponerla no cambia lo que mide el experimento, que es el código del módulo de pagos, y en B y en C obliga a tocar código de otros.
+
+**Lo que costaría ponerla en cada prototipo**, para quien la agregue después:
+
+- **A.** La cabecera va en el esqueleto (`server.ts` o `app.ts`), igual en A y en B por la paridad.
+  - La vitrina trae su CSS en un `<style>` en línea (`src/views/pages.ts`), que habría que pasar a un archivo o permitir con su hash.
+  - El host de Wompi sale del origen de `publicConfig().baseUrl` del módulo de David, sin nombrarlo y sin tocar ese módulo.
+  - El catálogo va en un `<script type="application/json">`, que el navegador no ejecuta y no necesita permiso.
+- **B.** La misma cabecera, y su propio `<style>` en línea.
+  - El SDK de navegador se sirve desde el mismo origen (`/vendor/…`), así que `'self'` alcanza.
+  - El host de tokenización no está en `publicConfig()`, porque lo decide el SDK. Habría que exponerlo desde el módulo de Andrés, y quizás en `PaymentsPort`, y eso cuenta en las variables del experimento.
+- **C.** La cabecera va en `server.mjs`, al servir el HTML.
+  - El hash del import map se calcula al arrancar, desde `dist/index.html`, con una prueba que lo compare.
+  - Los hosts de tokenización no se pueden escribir en `server.mjs`, porque `no-gateway-names.test.ts` lo prohíbe. Los tendría que dar la API, por ejemplo en `GET /v1/api/gateways` a partir del catálogo del SDK (lo que obliga a desplegar en Render), o un argumento al arrancar.
+  - El origen de la API ya se conoce por `--api-url`. La redirección al banco o a la página de Rapyd es una navegación, que la CSP no bloquea.
+- **En los tres**, una prueba de que la cabecera sale y una corrida en el navegador contra el sandbox: la tarjeta con cada pasarela, el PSE y la página de Rapyd, sin violaciones. Primero con `Content-Security-Policy-Report-Only`, que reporta sin bloquear.
+
+**Lo que cambia.**
+
+- **`docs/03-sdk/4-guia-de-implementacion.md` gana el §9,** «Lo que el SDK no puede hacer por el comercio». Trae:
+  - que el monto lo decide el servidor, y que se compara con la transacción antes de despachar;
+  - la CSP medida, los hosts por pasarela y ambiente, la trampa del import map y lo que la CSP no cierra;
+  - qué pasa con los secretos y con los datos del pagador.
+
+  «Pasar a producción» y la lista de verificación ganan los pasos correspondientes, y las secciones siguientes se corren un número.
+- **`6-tokenizacion-frontend.md` §4** aclara que las dos condiciones de PCI cuidan al SDK, no a la página.
+- **El límite queda declarado donde se presentan el proyecto y los prototipos:**
+  - en «Lo que el proyecto no hace» del `README.md` de la raíz;
+  - en `docs/01-producto/4-por-que-kit-pagos.md` §4, de donde sale esa lista;
+  - en la landing, como el límite 05 de «Lo que el proyecto no hace», y en la lista de `docs/06-landing/1-alcance-y-contenido.md` §3.4;
+  - en un aviso al principio de `prototypes/README.md`, con la tabla de lo que costaría ponerla;
+  - en un aviso al principio del §9 de la guía;
+  - en el recorrido de C.
+- **La landing deja de prometer cumplimiento de PCI DSS.** Antes decía tres cosas:
+  - «Tokenización segura (PCI DSS)», en la ficha «04 / Seguridad»;
+  - «cumplimiento PCI DSS», en el título del bloque de tokenización;
+  - «(PCI DSS)», en el comentario del fragmento de código.
+
+  Ahora dice lo que el SDK garantiza, que la tarjeta no pasa por el servidor, y remite al límite 05 para la página. El SDK deja la tarjeta fuera del servidor, pero la página del comercio sigue en el alcance (SAQ A-EP). El `README.md` de la raíz decía «tokenización PCI DSS», y se corrigió igual.
+- **De paso:**
+  - `4-por-que-kit-pagos.md` decía que el SDK no toca la tokenización, y desde el punto 77 `KitPagosBrowser` la hace.
+  - El recorrido de C decía que el módulo se carga en la versión 0.5.0, y es la 0.6.0.
+
+**Estado:** Documentado en el PR #161. Los prototipos quedan sin CSP por decisión, no por olvido.
+
+### 115. El README del paquete, aterrizado a lo que hace la 0.6.0 (PR #161)
+
+**Responsable:** Orduz.
+
+**Contexto.** Después del punto 114, la landing ya no prometía cumplimiento de PCI DSS, pero `sdk/README.md` sí. Ese README es lo que ve en npm quien instala el paquete. Joan pidió aterrizarlo a lo que hay. Se revisó cada afirmación contra el código y se corrieron sus ejemplos.
+
+**Lo que no era cierto o no funcionaba.**
+
+- **El ejemplo del simulador en Render no cobraba.** Wompi, con `publicKey` y `privateKey` y sin `integritySecret`, falla con `INVALID_CREDENTIALS` antes de salir a la red (`assertIntegritySecret`). Con el secreto por omisión del simulador, Render responde `422` «La firma es inválida», porque verifica con los secretos del equipo (punto 86).
+- **El ejemplo de producción**, de Wompi, tampoco traía `integritySecret`.
+- **Promesas sin respaldo:**
+  - «respetando PCI DSS» y «Cumplimiento PCI-DSS»;
+  - una obligación atribuida a la Superintendencia Financiera, sin fuente;
+  - «a menos que cuente con certificación PCI-DSS Nivel 1», que confunde el nivel de validación con un permiso para recibir tarjetas;
+  - «modificando únicamente el archivo de configuración»;
+  - «basta con configurar `environment`» para producción.
+- **Contradicciones y errores:**
+  - Decía que cualquiera de las cuatro pasarelas puede pedir 3DS con tarjeta, y más abajo, que Mercado Pago no redirige.
+  - Decía que los códigos de banco no son portables, sin mencionar `PseBankCode`.
+  - El ejemplo de tokenización usaba una llave `pub_prod_` con `environment: "sandbox"`.
+  - Faltaba `webhookUrl` en Rapyd, que la verificación de sus webhooks exige.
+  - Los nombres de las variables no eran los de `.env.example`.
+  - El enlace del índice al paso 5 estaba roto.
+  - La guía de implementación enlazaba a una sección del README que ya no existe, y decía «Configurar `baseUrl`» para producción.
+
+**Lo medido** (19 de octubre de 2026, con `sdk/dist` de la 0.6.0; la evidencia está en `.cursor/evidencia/readme-19-oct/`).
+
+- **Contra el simulador de Render, con llaves de demostración:**
+  - Kushki y Mercado Pago listaron bancos y crearon un PSE (`REDIRECT_REQUIRED`).
+  - Wompi falló como se describe arriba.
+- **Contra una copia del simulador sin perfil** (sin `.env`, en el puerto 3999), con `integritySecret: "test_integrity_kit_pagos_simulator"`: el PSE de Wompi se creó y la consulta dio `APPROVED`. Con otro secreto, `422`.
+- **El módulo de navegador** mide 21 955 bytes sin minificar y 5 304 con gzip.
+- **Los 11 fragmentos del README compilan** (`npm run check:readme`).
+
+**Lo que cambia en `sdk/README.md`.**
+
+- **La introducción y las características** dicen lo que el SDK hace. Los reintentos son solo de las consultas, y la limpieza de credenciales es de los errores que lanza.
+- **Una sección nueva, «Lo que el SDK no hace»:** los tokens, los datos de cada pasarela, la redirección, que solo cubre tarjeta y PSE, y que no protege la página de pago ni decide el monto.
+- **Los ejemplos corregidos:**
+  - el del simulador, en local y con su secreto por omisión;
+  - Render, con lo que se puede cobrar ahí;
+  - producción, con los secretos;
+  - Rapyd, con `webhookUrl`;
+  - las variables, con los nombres de `.env.example`.
+- **La sección de PCI pasa a «La tarjeta, la página de pago y el monto»:**
+  - lo que cubre la tokenización;
+  - la página en SAQ A-EP y la CSP, con los hosts de cada pasarela y la trampa del import map;
+  - que el monto lo decide el servidor.
+
+  Enlaza a la guía de implementación, §9 y §10.
+- **Las notas de tarjeta, PSE y Mercado Pago** se corrigen: 3DS, `PseBankCode` y las ventanas del PSE en el sandbox (punto 113).
+
+**Estado:** Corregido en el PR #161. En GitHub se ve al integrar. En npm, el README cambia con la próxima versión que se publique, y la página de la 0.6.0 sigue mostrando el anterior.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd

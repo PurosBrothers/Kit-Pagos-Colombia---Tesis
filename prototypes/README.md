@@ -10,6 +10,13 @@ Dos implementaciones del mismo checkout mínimo de comercio electrónico: mostra
 
 C no comparte el esqueleto de A y B, y `check-skeleton-parity.sh` no lo compara: es una página estática con Vite, servida por `server.mjs`, que demuestra el patrón de integración 2 (punto 91 del `architecture-log.md`).
 
+> **Límite declarado: los prototipos no son plantillas para producción.**
+>
+> - **Ninguno de los tres manda Content-Security-Policy** en la página donde se escribe la tarjeta. Un script malicioso en esa página podría leer el número y mandarlo a otro dominio.
+> - **En C, el monto lo decide el navegador.**
+>
+> Se dejaron así a propósito: Joan lo decidió el 19 de octubre de 2026 (punto 114). El experimento mide el código de pagos, y una cabecera no cambia esa medición. Antes de copiar una de estas páginas a un comercio, lea [«Lo que un comercio real agrega»](#lo-que-un-comercio-real-agrega).
+
 ## La regla: solo cambia el módulo de pagos
 
 Todo lo que no es integración de pagos es idéntico en los dos prototipos, y queda fuera del conteo de líneas. El módulo de pagos es lo único que cada prototipo escribe:
@@ -100,6 +107,23 @@ Un PSE de A contra el sandbox de Wompi se ve así (abreviado):
 [checkout]   orden ORD-4D67DA45 ← creación: APPROVED (nativo APPROVED), transacción 12066420-1792439469-43793
 [checkout] navegador ← tienda  POST /api/orders → 201 · 2502 ms
 ```
+
+## Lo que un comercio real agrega
+
+Los tres prototipos cobran de verdad en los sandboxes, pero no son comercios completos. Hay dos cosas que un comercio necesita y que el SDK no puede hacer por él (punto 114). Están, con lo medido, en la [guía de implementación](../docs/03-sdk/4-guia-de-implementacion.md) §9.
+
+- **El monto lo decide el servidor.**
+  - En A y en B, el servidor cobra con los precios de su catálogo. Una prueba de A manda un precio desde el navegador y comprueba que se ignora.
+  - C no tiene servidor del comercio, así que el monto lo decide la página.
+- **La página de la tarjeta lleva Content-Security-Policy.** Ninguno de los tres servidores la manda, por decisión de Joan del 19 de octubre de 2026.
+
+Lo que costaría ponérsela a cada uno. El detalle está en el punto 114.
+
+| Prototipo | Dónde iría | Qué hay que resolver |
+|---|---|---|
+| A | En el esqueleto (`server.ts` o `app.ts`), igual en A y B por la paridad | Pasar a un archivo el `<style>` en línea de `src/views/pages.ts`, o permitirlo con su hash. El host de Wompi sale de `publicConfig().baseUrl` del módulo de David, sin nombrarlo |
+| B | La misma cabecera del esqueleto | Su propio `<style>` en línea. El host de tokenización lo decide el SDK y no está en `publicConfig()`: habría que exponerlo desde el módulo de Andrés, y eso cuenta en las variables del experimento |
+| C | En `server.mjs`, al servir el HTML | El hash del import map, calculado al arrancar desde `dist/index.html`. Los hosts de tokenización no se pueden escribir en `server.mjs`, porque `no-gateway-names.test.ts` lo prohíbe: tendría que darlos la API o un argumento |
 
 ## Pruebas
 
