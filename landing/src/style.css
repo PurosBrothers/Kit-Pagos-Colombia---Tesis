@@ -1923,6 +1923,14 @@ code, pre {
   padding: 26px;
 }
 
+.limit-entry-wide {
+  grid-column: 1 / -1;
+}
+
+.limit-entry-wide .limit-text + .limit-text {
+  margin-top: 12px;
+}
+
 .limit-num {
   font-family: var(--font-mono);
   font-size: 0.875rem;
@@ -2135,7 +2143,9 @@ code, pre {
   color: var(--text-muted);
 }
 
-.path-footer-link a {
+.path-footer-link a,
+.section-lead a,
+.limit-text a {
   color: var(--brand-green);
   font-weight: 500;
   text-decoration: underline;
