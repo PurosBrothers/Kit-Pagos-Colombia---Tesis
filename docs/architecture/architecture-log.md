@@ -3642,7 +3642,7 @@ Capturas en `.cursor/evidencia/153/`.
 
 Capturas en `.cursor/evidencia/155-final/`.
 
-**Estado:** La prueba final y el conflicto, resueltos en el #155. La 0.6.0 la publica el workflow cuando el #155 llega a `main`, y el PR corto que sigue (rama `109-sdk-060`) pasa a ella el simulador, A, B y la tienda; con ese PR se cierran este punto y el #109. Render despliega `devops` al integrar el #155, con el simulador todavía en la rc.5.
+**Estado:** Resuelto. El workflow publicó la 0.6.0 como `latest` cuando el #155 llegó a `main`. El PR de la rama `109-sdk-060` pasó a ella el simulador, A, B y la tienda, con sus pruebas y el `check:sri` de la tienda en verde, y con él se cierra el #109. Render despliega `devops` con cada integración.
 
 ---
 
