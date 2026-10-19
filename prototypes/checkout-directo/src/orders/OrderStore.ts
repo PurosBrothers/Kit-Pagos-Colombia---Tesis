@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { OrderLine } from "../catalog";
 import { MerchantPaymentStatus, Payer, PaymentMethodRequest } from "../checkout/PaymentsPort";
 
 /** `ERROR`: un fallo técnico que siguió después de reintentar; el pago no se decidió. */
@@ -17,7 +18,7 @@ export interface StatusRecord {
 
 export interface Order {
   id: string;
-  productId: string;
+  lines: OrderLine[];
   amountInPesos: number;
   payer: Payer;
   method: PaymentMethodRequest["type"];
@@ -27,7 +28,7 @@ export interface Order {
 }
 
 export interface NewOrder {
-  productId: string;
+  lines: OrderLine[];
   amountInPesos: number;
   payer: Payer;
   method: PaymentMethodRequest["type"];

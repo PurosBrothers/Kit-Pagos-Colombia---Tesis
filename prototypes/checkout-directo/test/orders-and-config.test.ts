@@ -16,8 +16,8 @@ describe("OrderStore", () => {
   it("should create a pending order with a unique id and an empty history", () => {
     const store = new OrderStore(fixedNow);
 
-    const first = store.create({ productId: "p", amountInPesos: 1000, payer, method: "CARD" });
-    const second = store.create({ productId: "p", amountInPesos: 1000, payer, method: "PSE" });
+    const first = store.create({ lines: [], amountInPesos: 1000, payer, method: "CARD" });
+    const second = store.create({ lines: [], amountInPesos: 1000, payer, method: "PSE" });
 
     expect(first.id).toMatch(/^ORD-[0-9A-F]{8}$/);
     expect(first.id).not.toBe(second.id);
@@ -27,7 +27,7 @@ describe("OrderStore", () => {
 
   it("should find an order by the transaction id recorded on it", () => {
     const store = new OrderStore(fixedNow);
-    const order = store.create({ productId: "p", amountInPesos: 1000, payer, method: "CARD" });
+    const order = store.create({ lines: [], amountInPesos: 1000, payer, method: "CARD" });
 
     store.record(order, { source: "creation", status: "PENDING", nativeStatus: "PENDING" }, "tx-9");
 
@@ -38,7 +38,7 @@ describe("OrderStore", () => {
 
   it("should record a webhook that repeats the last status, but not a query that does", () => {
     const store = new OrderStore(fixedNow);
-    const order = store.create({ productId: "p", amountInPesos: 1000, payer, method: "CARD" });
+    const order = store.create({ lines: [], amountInPesos: 1000, payer, method: "CARD" });
 
     store.record(order, { source: "creation", status: "APPROVED", nativeStatus: "APPROVED" });
     store.record(order, { source: "query", status: "APPROVED", nativeStatus: "APPROVED" });
@@ -49,7 +49,7 @@ describe("OrderStore", () => {
 
   it("should record a query whose native status changed even if the merchant status did not", () => {
     const store = new OrderStore(fixedNow);
-    const order = store.create({ productId: "p", amountInPesos: 1000, payer, method: "PSE" });
+    const order = store.create({ lines: [], amountInPesos: 1000, payer, method: "PSE" });
 
     store.record(order, { source: "creation", status: "PENDING", nativeStatus: "PENDING" });
     store.record(order, { source: "query", status: "PENDING", nativeStatus: "IN_PROCESS" });

@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyReply } from "fastify";
-import { PRODUCT } from "../catalog";
+import { MAX_QUANTITY, PRODUCTS, RequestedItem, linesTotal, orderDescription, orderLines } from "../catalog";
 import { Payer, PaymentMethodRequest, PaymentTechnicalError } from "../checkout/PaymentsPort";
 import { Order } from "../orders/OrderStore";
 import { RouteContext } from "./context";
@@ -7,6 +7,7 @@ import { RouteContext } from "./context";
 interface CreateOrderBody {
   payer: Payer;
   method: PaymentMethodRequest;
+  items: RequestedItem[];
 }
 
 const nonEmpty = { type: "string", minLength: 1 } as const;
@@ -14,8 +15,21 @@ const nonEmpty = { type: "string", minLength: 1 } as const;
 const createOrderSchema = {
   body: {
     type: "object",
-    required: ["payer", "method"],
+    required: ["payer", "method", "items"],
     properties: {
+      items: {
+        type: "array",
+        minItems: 1,
+        maxItems: PRODUCTS.length,
+        items: {
+          type: "object",
+          required: ["productId", "quantity"],
+          properties: {
+            productId: { enum: PRODUCTS.map((product) => product.id) },
+            quantity: { type: "integer", minimum: 1, maximum: MAX_QUANTITY },
+          },
+        },
+      },
       payer: {
         type: "object",
         required: ["fullName", "email", "documentType", "documentNumber", "phone"],
@@ -75,10 +89,11 @@ export async function apiRoutes(app: FastifyInstance, context: RouteContext): Pr
   });
 
   app.post<{ Body: CreateOrderBody }>("/api/orders", { schema: createOrderSchema }, async (request, reply) => {
-    const { payer, method } = request.body;
+    const { payer, method, items } = request.body;
+    const lines = orderLines(items);
     const order = orders.create({
-      productId: PRODUCT.id,
-      amountInPesos: PRODUCT.priceInPesos,
+      lines,
+      amountInPesos: linesTotal(lines),
       payer,
       method: method.type,
     });
@@ -86,7 +101,7 @@ export async function apiRoutes(app: FastifyInstance, context: RouteContext): Pr
       const payment = await payments.createPayment({
         orderReference: order.id,
         amountInPesos: order.amountInPesos,
-        description: PRODUCT.name,
+        description: orderDescription(lines),
         payer,
         method,
         returnUrl: `${publicBaseUrl}/orders/${order.id}`,

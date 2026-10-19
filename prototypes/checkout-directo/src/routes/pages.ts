@@ -1,12 +1,12 @@
 import { FastifyInstance } from "fastify";
-import { PRODUCT } from "../catalog";
-import { notFoundPage, orderPage, productPage } from "../views/pages";
+import { PRODUCTS } from "../catalog";
+import { notFoundPage, orderPage, storePage } from "../views/pages";
 import { RouteContext } from "./context";
 
-/** Las dos páginas del checkout: el producto y la orden, adonde vuelve el pagador. */
+/** Las dos páginas de la tienda: la vitrina con el carrito y la orden, adonde vuelve el pagador. */
 export async function pageRoutes(app: FastifyInstance, context: RouteContext): Promise<void> {
   app.get("/", async (_request, reply) => {
-    return reply.type("text/html; charset=utf-8").send(productPage(PRODUCT));
+    return reply.type("text/html; charset=utf-8").send(storePage(PRODUCTS));
   });
 
   app.get<{ Params: { id: string } }>("/orders/:id", async (request, reply) => {

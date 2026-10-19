@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
-import { PRODUCT } from "../src/catalog";
+import { PRODUCTS } from "../src/catalog";
 import { PaymentTechnicalError, PaymentsPort } from "../src/checkout/PaymentsPort";
 import { OrderStore } from "../src/orders/OrderStore";
 import { fakePayments } from "./helpers/fakePayments";
@@ -18,6 +18,9 @@ const payer = {
 const card = { type: "CARD", cardToken: "tok_fake", installments: 1 };
 const pse = { type: "PSE", bankCode: "1007", personType: "NATURAL" };
 
+const [batman, superman, spiderman] = PRODUCTS;
+const oneComic = [{ productId: batman.id, quantity: 1 }];
+
 describe("checkout skeleton", () => {
   let payments: jest.Mocked<PaymentsPort>;
   let orders: OrderStore;
@@ -33,30 +36,80 @@ describe("checkout skeleton", () => {
     await app.close();
   });
 
-  const createOrder = (method: object) =>
-    app.inject({ method: "POST", url: "/api/orders", payload: { payer, method } });
+  const createOrder = (method: object, items: object[] = oneComic) =>
+    app.inject({ method: "POST", url: "/api/orders", payload: { payer, method, items } });
 
   describe("pages", () => {
-    it("should show the product with the card and PSE forms", async () => {
+    it("should show the three comics, the cart and the card and PSE forms", async () => {
       const res = await app.inject({ method: "GET", url: "/" });
 
       expect(res.statusCode).toBe(200);
       expect(res.headers["content-type"]).toContain("text/html");
-      expect(res.body).toContain(PRODUCT.name);
+      for (const product of PRODUCTS) {
+        expect(res.body).toContain(product.title);
+        expect(res.body).toContain(`data-product-id="${product.id}"`);
+        expect(res.body).toContain(`href="#${product.art}"`);
+      }
+      expect(res.body).toContain('id="cart-lines"');
       expect(res.body).toContain('id="card-fields"');
       expect(res.body).toContain('id="pse-fields"');
       expect(res.body).toContain('src="/assets/checkout.js"');
     });
 
-    it("should show an order with its native status history", async () => {
+    it("should explain under the title that this is prototype A, which integrates without the SDK", async () => {
+      const res = await app.inject({ method: "GET", url: "/" });
+
+      const afterTitle = res.body.slice(res.body.indexOf('id="catalog-title"'));
+      expect(afterTitle.indexOf("Este prototipo es")).toBeLessThan(afterTitle.indexOf('class="products"'));
+      expect(res.body).toContain("prototipo A de Kit Pagos Colombia");
+      expect(res.body).toContain("sin el SDK");
+    });
+
+    it("should hand the script the catalog prices without letting a < close the tag", async () => {
+      const res = await app.inject({ method: "GET", url: "/" });
+
+      const json = res.body.match(/<script type="application\/json" id="catalog-data">(.*?)<\/script>/s)?.[1];
+      expect(JSON.parse(json ?? "[]")).toEqual(
+        PRODUCTS.map(({ id, title, priceInPesos }) => ({ id, title, priceInPesos })),
+      );
+      expect(json).not.toContain("<");
+    });
+
+    it("should show an approved order with its comics and, folded, its native status history", async () => {
       const created = (await createOrder(card)).json().order;
 
       const res = await app.inject({ method: "GET", url: `/orders/${created.id}` });
 
       expect(res.statusCode).toBe(200);
       expect(res.body).toContain(created.id);
+      expect(res.body).toContain("¡Gracias! Tu pago fue aprobado");
+      expect(res.body).toContain(batman.title);
+      expect(res.body).toContain('data-status="APPROVED"');
       expect(res.body).toContain("Aprobado");
       expect(res.body).toContain("tx-card-1");
+    });
+
+    it.each([
+      ["DECLINED", "Tu pago fue rechazado"],
+      ["PENDING", "Tu pago está en proceso"],
+    ])("should tell the buyer a %s order in store words", async (status, title) => {
+      payments.createPayment.mockResolvedValueOnce({ transactionId: "tx-3", status: status as "DECLINED", nativeStatus: status });
+      const created = (await createOrder(card)).json().order;
+
+      const res = await app.inject({ method: "GET", url: `/orders/${created.id}` });
+
+      expect(res.body).toContain(title);
+      expect(res.body).toContain(`data-status="${status}"`);
+    });
+
+    it("should tell the buyer that a technical failure left the payment undecided", async () => {
+      payments.createPayment.mockRejectedValueOnce(new PaymentTechnicalError("La pasarela no respondió"));
+      const created = (await createOrder(card)).json().order;
+
+      const res = await app.inject({ method: "GET", url: `/orders/${created.id}` });
+
+      expect(res.body).toContain("No pudimos procesar el pago");
+      expect(res.body).toContain("sin crear");
     });
 
     it("should escape the payer data it shows", async () => {
@@ -83,19 +136,39 @@ describe("checkout skeleton", () => {
   });
 
   describe("POST /api/orders", () => {
-    it("should charge the catalog price in whole pesos, with the order as reference and its page as return URL", async () => {
-      const res = await createOrder(card);
+    it("should charge the cart at catalog prices in whole pesos, with the order as reference and its page as return URL", async () => {
+      const res = await createOrder(card, [
+        { productId: batman.id, quantity: 2 },
+        { productId: superman.id, quantity: 1 },
+      ]);
 
       expect(res.statusCode).toBe(201);
       const { order } = res.json();
       expect(payments.createPayment).toHaveBeenCalledWith({
         orderReference: order.id,
-        amountInPesos: PRODUCT.priceInPesos,
-        description: PRODUCT.name,
+        amountInPesos: 2 * batman.priceInPesos + superman.priceInPesos,
+        description: "La Candelaria Cómics · 3 cómics",
         payer,
         method: card,
         returnUrl: `${BASE_URL}/orders/${order.id}`,
       });
+      expect(order.lines).toEqual([
+        { productId: batman.id, title: batman.title, quantity: 2, unitPriceInPesos: batman.priceInPesos },
+        { productId: superman.id, title: superman.title, quantity: 1, unitPriceInPesos: superman.priceInPesos },
+      ]);
+    });
+
+    it("should ignore any price the browser sends and join repeated lines", async () => {
+      const res = await createOrder(card, [
+        { productId: spiderman.id, quantity: 1, priceInPesos: 1 },
+        { productId: spiderman.id, quantity: 2 },
+      ]);
+
+      expect(res.statusCode).toBe(201);
+      expect(res.json().order.amountInPesos).toBe(3 * spiderman.priceInPesos);
+      expect(payments.createPayment).toHaveBeenCalledWith(
+        expect.objectContaining({ amountInPesos: 3 * spiderman.priceInPesos }),
+      );
     });
 
     it("should store the merchant status, the transaction and the native status of a card payment", async () => {
@@ -147,10 +220,15 @@ describe("checkout skeleton", () => {
     });
 
     it.each([
-      ["a payer without email", { payer: { ...payer, email: "" }, method: card }],
-      ["an unknown method", { payer, method: { type: "CASH" } }],
-      ["a card without token", { payer, method: { type: "CARD", installments: 1 } }],
-      ["a PSE payment without bank", { payer, method: { type: "PSE", personType: "NATURAL" } }],
+      ["a payer without email", { payer: { ...payer, email: "" }, method: card, items: oneComic }],
+      ["an unknown method", { payer, method: { type: "CASH" }, items: oneComic }],
+      ["a card without token", { payer, method: { type: "CARD", installments: 1 }, items: oneComic }],
+      ["a PSE payment without bank", { payer, method: { type: "PSE", personType: "NATURAL" }, items: oneComic }],
+      ["an order without comics", { payer, method: card }],
+      ["an empty cart", { payer, method: card, items: [] }],
+      ["a comic that is not in the catalog", { payer, method: card, items: [{ productId: "watchmen", quantity: 1 }] }],
+      ["more copies than allowed", { payer, method: card, items: [{ productId: batman.id, quantity: 10 }] }],
+      ["zero copies", { payer, method: card, items: [{ productId: batman.id, quantity: 0 }] }],
     ])("should reject %s with 400 without calling the gateway", async (_case, payload) => {
       const res = await app.inject({ method: "POST", url: "/api/orders", payload });
 
