@@ -45,38 +45,41 @@ Los dos `package.json` traen `kit-pagos-colombia`, para que el esqueleto sea id�
 
 El monto llega en pesos enteros: convertirlo a la unidad de la pasarela es trabajo del módulo. `verifyWebhook()` recibe el cuerpo tal como llegó por la red, las cabeceras y la query, porque Mercado Pago firma con el `data.id` de la URL. El contrato tiene que servir sin cambios para la migración a Mercado Pago (issue #133).
 
-## Correrlo contra el simulador
+## Cómo correrlos
 
-Con la API de Simulación corriendo en `localhost:3000` (`simulator-api`, `npm run dev`):
+Por omisión, `npm start` cobra en el sandbox oficial de la pasarela, como el prototipo C (punto 104), sin encender nada en la máquina:
 
 ```bash
 cd prototypes/checkout-directo   # o checkout-con-sdk
 npm ci
-npm run dev                      # http://localhost:4000
+npm start                        # http://localhost:4000
 ```
 
-Para que el simulador mande los webhooks al checkout, arranque `simulator-api` con `SIMULATOR_WEBHOOK_TARGET_URL=http://localhost:4000/webhooks` y `SIMULATOR_WEBHOOK_AUTO=true` (sección 4.2 de [`3-api-de-simulacion.md`](../docs/02-arquitectura/3-api-de-simulacion.md)). Si corren los dos prototipos a la vez, el segundo necesita otro `PORT`, y el destino de los webhooks es uno solo.
+| Comando | Dónde cobra | Para qué sirve |
+|---|---|---|
+| `npm start` | El sandbox oficial de la pasarela | Probar contra lo real. Las llaves salen del `.env` de la raíz; sin ellas, A se detiene al arrancar y dice cuáles faltan |
+| `npm start -- --environment=simulator` | La API de Simulación de Render | Los escenarios del simulador sin encender nada. La primera consulta puede tardar mientras Render despierta |
+| `npm run start:local` | Una API de Simulación en `localhost:3000` (`simulator-api`, `npm run dev`) | Trabajar con el simulador de la máquina |
+| `npm run dev` | Lo mismo que `start:local`, recompilando al guardar | Desarrollo |
+
+El esqueleto lee el `.env` de la raíz, el mismo de la API de Simulación (una variable del entorno gana sobre el archivo), y el ambiente: `--environment=sandbox|simulator`, `--simulator-url=…` y `--port=…`, o sus variables. No nombra ninguna pasarela: cada módulo de pagos traduce el ambiente a sus URLs (punto 111 del `architecture-log.md`). En A, el sandbox es `https://sandbox.wompi.co/v1` y el simulador, sus rutas `/v1/sim/wompi`; `WOMPI_BASE_URL` gana sobre los dos. El módulo de B que construye el #151 tiene que leer el mismo ambiente (`src/checkout/environment.ts`).
 
 | Variable | Por omisión | Qué es |
 |---|---|---|
 | `PORT` | `4000` | El puerto del checkout |
 | `PUBLIC_BASE_URL` | `http://localhost:<PORT>` | El origen público, para la URL de retorno del banco |
+| `CHECKOUT_ENVIRONMENT` | `sandbox` | `sandbox` o `simulator` |
+| `CHECKOUT_SIMULATOR_URL` | `https://kit-pagos-colombia.onrender.com` | El origen de la API de Simulación, con `simulator` |
 
-La configuración de la pasarela, como las llaves y la URL base, la lee el módulo de pagos de cada prototipo.
+**Los webhooks (función 4).** En el sandbox, Wompi manda los eventos a la URL configurada en su panel, que no puede ser `localhost`, y lo mismo pasa con el simulador de Render: la orden se resuelve con la consulta. Con el simulador local el webhook sí llega. Basta con arrancar `simulator-api` con `SIMULATOR_WEBHOOK_TARGET_URL=http://localhost:4000/webhooks` y `SIMULATOR_WEBHOOK_AUTO=true` (sección 4.2 de [`3-api-de-simulacion.md`](../docs/02-arquitectura/3-api-de-simulacion.md)), porque el simulador y A leen del mismo `.env` el secreto de eventos (`WOMPI_EVENTS_SECRET`). Si corren los dos prototipos a la vez, el segundo necesita otro `PORT`, y el destino de los webhooks es uno solo.
 
-En A, contra el simulador, el módulo usa por omisión `http://localhost:3000/v1/sim/wompi` y las llaves de prueba del simulador. Para que el webhook llegue y se verifique (función 4), el simulador necesita el perfil completo de Wompi y el mismo secreto de eventos que A. Si no, salta el envío con `WEBHOOK_SECRET_NOT_CONFIGURED`:
+**Los datos de prueba de A**, medidos el 19 de octubre de 2026 en el sandbox de Wompi y en el simulador local (en el de Render, la tarjeta aprobada):
 
-```bash
-# simulator-api
-WOMPI_PUBLIC_KEY=pub_test_simulator WOMPI_PRIVATE_KEY=prv_test_simulator \
-WOMPI_INTEGRITY_SECRET=test_integrity_kit_pagos_simulator WOMPI_EVENTS_SECRET=<secreto> \
-SIMULATOR_WEBHOOK_TARGET_URL=http://localhost:4000/webhooks SIMULATOR_WEBHOOK_AUTO=true npm run dev
+- la tarjeta 4242 4242 4242 4242 se aprueba y la 4111 1111 1111 1111 se rechaza;
+- en PSE, el banco 1 aprueba, el 2 rechaza y el 3 da `ERROR`, que A traduce a rechazo;
+- en el sandbox, el PSE se resuelve en la primera consulta, sin página de banco.
 
-# prototypes/checkout-directo
-WOMPI_EVENTS_SECRET=<el mismo secreto> npm run dev
-```
-
-En la tienda, la tarjeta 4242 4242 4242 4242 aprueba y la 4111 1111 1111 1111 rechaza; en PSE, el banco 1 aprueba, el 2 rechaza y el 3 simula un error. Los precios del catálogo esquivan los montos que el simulador reserva para escenarios de fallo.
+Los precios del catálogo esquivan los montos que el simulador reserva para escenarios de fallo.
 
 ## Pruebas
 

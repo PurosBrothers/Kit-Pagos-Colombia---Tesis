@@ -3659,7 +3659,7 @@ Capturas en `.cursor/evidencia/155-final/`.
 
 **Lo que cambia en A.**
 
-- **La vitrina.** Tres cómics con su portada, el carrito con cantidades y el checkout con los datos de prueba precargados. Debajo del título, el recuadro «Este prototipo es» explica que A es el grupo de control y que cobra con Wompi sin el SDK.
+- **La vitrina.** Tres cómics con su portada, el carrito con cantidades y el checkout con los datos de prueba precargados. Debajo del título, el recuadro «Este prototipo es» explica que A es el grupo de control y que integra la pasarela a mano, sin el SDK. Desde el punto 111 la tienda no nombra la pasarela.
 - **La página de la orden.** Muestra el resultado en palabras de tienda, según el estado. Mientras el pago sigue en proceso, por ejemplo al volver del banco, se consulta sola hasta ocho veces. El historial con el estado nativo (función 6) queda plegado en «Detalle técnico de la orden».
 - **El pedido llega por líneas.** El servidor calcula el total con los precios del catálogo, sin confiar en un precio del navegador, y rechaza con `400` un producto inexistente o una cantidad fuera de 1 a 9.
 - **Ningún pedido cae en un monto reservado.** El cómic más barato cuesta 68 000 COP, por encima de los montos que el simulador reserva para fallos (10 001 a 10 604), y una prueba lo comprueba.
@@ -3698,6 +3698,44 @@ El servidor, el contrato, los webhooks, la configuración y las dependencias se 
 - **En el navegador, contra el simulador:** 2 Batman y 1 Spider-Man con la tarjeta 4242, aprobados; Superman por PSE con el banco 1, aprobado al volver del banco; Batman con la 4111, rechazado. Las capturas están en `.cursor/evidencia/161/`.
 
 **Estado:** Resuelto en el PR #161 para A. La vitrina de B queda pendiente de que Andrés decida si la adopta; mientras tanto, la excepción sigue en el script de paridad.
+
+### 111. Los prototipos A y B cobran por omisión en el sandbox oficial, como el C (issues #150 y #151, PR #161)
+
+**Responsable:** Orduz. Las líneas nuevas del módulo de pagos de A también son de Orduz, en un commit aparte, para que David las revise.
+
+**Contexto.** El punto 104 dejó el `npm start` del prototipo C cobrando en los sandboxes oficiales, y `npm run start:local` contra un simulador en la máquina. A y B no: su `npm start` corría `node dist/server.js` sin compilar, y el módulo de A apuntaba a `http://localhost:3000/v1/sim/wompi`. Sin un simulador encendido, la tienda no cargaba bancos ni tokenizaba.
+
+**Decisiones de Joan (19 de octubre de 2026).**
+
+1. **Todos los prototipos cobran por omisión contra el sandbox oficial.** El mecanismo va en el esqueleto, igual en A y B, y cada módulo de pagos traduce el ambiente a sus URLs.
+2. **Las líneas del módulo de A las escribe Orduz**, marcadas, para que David las revise.
+3. **Lo probado tiene que funcionar contra el sandbox real**, como Tostadero Ceiba.
+
+**Lo que cambia.**
+
+- **`src/checkout/environment.ts`, en el esqueleto.** El ambiente es `sandbox` (por omisión) o `simulator`, con la URL del simulador, que por omisión es la de Render. No nombra pasarelas.
+- **`src/config.ts`.** Toma `--environment`, `--simulator-url` y `--port` de la línea de comandos. Lee el `.env` de la raíz con el criterio de la API de Simulación: el entorno gana sobre el archivo, y una línea vacía no se copia.
+- **`package.json`.** `npm start` compila y cobra en el sandbox; `npm start -- --environment=simulator`, en el simulador de Render; `npm run start:local` y `npm run dev`, en el de `localhost:3000`.
+- **El módulo de pagos de A.**
+  - La URL de Wompi sale del ambiente: `https://sandbox.wompi.co/v1` o las rutas `/v1/sim/wompi` del simulador. `WOMPI_BASE_URL` gana sobre las dos.
+  - En el sandbox, si faltan `WOMPI_PUBLIC_KEY`, `WOMPI_PRIVATE_KEY` o `WOMPI_INTEGRITY_SECRET`, se detiene al arrancar y las nombra.
+  - Son 23 líneas agregadas y 2 quitadas en `src/payments/index.ts`, más 55 de pruebas. **Cuentan en la variable 1 de A**: al medir hay que restarlas o declararlas.
+- **La tienda de A deja de nombrar a Wompi.** Si las páginas nombraran la pasarela, el commit de migración del #133 tendría que cambiarlas también, y la migración tiene que tocar solo `src/payments/`. Una prueba revisa que las páginas, el catálogo, las órdenes y las rutas no nombren ninguna pasarela. La franja de arriba dice si se cobra en el sandbox oficial o en la API de Simulación.
+- **B recibe el mismo esqueleto.** Su módulo, que construye Andrés en el #151, tiene que leer `paymentsEnvironment()`. El de relleno que hay en `devops` no lo usa.
+
+*Alternativa descartada.* Poner las URLs de Wompi en los scripts de `package.json`: al migrar a Mercado Pago habría que cambiar el esqueleto.
+
+**Lo medido** (19 de octubre de 2026).
+
+- **Con `npm start`, contra el sandbox real de Wompi:**
+  - la tarjeta 4242 nace `PENDING` y la consulta la aprueba (transacción `12066420-1792435980-10974`);
+  - la 4111 nace `PENDING` y queda `DECLINED` a los 10 segundos, dentro de la ventana en que la página de la orden se consulta sola;
+  - en PSE, el banco 1 queda `APPROVED` en la primera consulta, sin página de banco, el 2 `DECLINED` y el 3 da `ERROR`, que A traduce a rechazo.
+- **Con `--environment=simulator`, contra Render:** la tarjeta 4242 se aprueba, con el secreto de integridad del `.env`.
+- **Los otros dos casos:** `npm run start:local` arranca contra `localhost:3000`, y `npm start` sin las llaves se detiene con el mensaje.
+- **Pruebas:** 115 en A y 52 en B, con la paridad en verde.
+
+**Estado:** Resuelto para A en el PR #161. B tiene el mecanismo; su módulo lo adopta en el #151.
 
 ---
 
