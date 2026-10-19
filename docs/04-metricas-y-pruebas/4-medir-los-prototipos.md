@@ -21,7 +21,7 @@ La forma práctica de garantizarlo: construir un **esqueleto común**, copiarlo 
 El esqueleto está en `prototypes/` desde el issue #130 (punto 90 del `architecture-log.md`, y [`prototypes/README.md`](../../prototypes/README.md)):
 
 - **El módulo de pagos de cada prototipo** es `src/payments/` y `test/payments/`. Incluye `src/payments/browser/client.js`, que tokeniza la tarjeta en el navegador.
-- **Lo demás es el esqueleto**, incluido el contrato `src/checkout/PaymentsPort.ts`. `prototypes/check-skeleton-parity.sh` comprueba en la CI que sea idéntico en los dos.
+- **Lo demás es el esqueleto**, incluido el contrato `src/checkout/PaymentsPort.ts`. `prototypes/check-skeleton-parity.sh` comprueba en la CI que sea idéntico en los dos, salvo la vitrina de A, «La Candelaria Cómics» (páginas, catálogo, órdenes y sus pruebas), que es una excepción declarada desde el 19 de octubre de 2026 (punto 110 del `architecture-log.md`). La vitrina no está en `src/payments/`, así que no entra en el conteo.
 - **Los dos `package.json` traen `kit-pagos-colombia`**, para que también las dependencias sean idénticas. El mismo script falla si el módulo de pagos de A menciona el SDK.
 - **La línea base del conteo** es el commit que agrega el esqueleto.
 

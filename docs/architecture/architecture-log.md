@@ -3644,6 +3644,61 @@ Capturas en `.cursor/evidencia/155-final/`.
 
 **Estado:** Resuelto. El workflow publicó la 0.6.0 como `latest` cuando el #155 llegó a `main`. El PR de la rama `109-sdk-060` pasó a ella el simulador, A, B y la tienda, con sus pruebas y el `check:sri` de la tienda en verde, y con él se cierra el #109. Render despliega `devops` con cada integración.
 
+### 110. El prototipo A se presenta como «La Candelaria Cómics», y su vitrina queda fuera de la regla de paridad (issue #150, PR #161)
+
+**Responsable:** Orduz (la vitrina y la revisión del PR #161). El módulo de pagos de A es de David y no se toca.
+
+**Contexto.** El PR #161 trae el módulo de pagos de A, integrado a mano con Wompi. La página del esqueleto era un formulario para un solo producto, la «Camiseta Kit Pagos». Joan pidió que A se viera como la tienda del prototipo C (punto 103), con la explicación del prototipo debajo del título. El plan de evaluación (§2) exige «misma interfaz» en A y B, y `check-skeleton-parity.sh` lo comprueba en la CI.
+
+**Decisiones de Joan (19 de octubre de 2026).**
+
+1. **El negocio:** una tienda de cómics estadounidenses, «La Candelaria Cómics», con *Batman: Año Uno*, *Superman: Hijo Rojo* y *Spider-Man: La última cacería de Kraven*. Las portadas son siluetas dibujadas en SVG, sin logos.
+2. **Con carrito**, como Tostadero Ceiba.
+3. **Solo en A.** Andrés trabaja el B por su cuenta. Es una excepción a la regla del plan, y se registra aquí.
+4. **La salida de la descripción del #161 se reemplaza por la medida.** La que tenía no correspondía al simulador: los nombres de los bancos, los identificadores y la URL del banco no coincidían. La revisión del módulo de pagos va como comentario a David, sin cambiarle el código.
+
+**Lo que cambia en A.**
+
+- **La vitrina.** Tres cómics con su portada, el carrito con cantidades y el checkout con los datos de prueba precargados. Debajo del título, el recuadro «Este prototipo es» explica que A es el grupo de control y que cobra con Wompi sin el SDK.
+- **La página de la orden.** Muestra el resultado en palabras de tienda, según el estado. Mientras el pago sigue en proceso, por ejemplo al volver del banco, se consulta sola hasta ocho veces. El historial con el estado nativo (función 6) queda plegado en «Detalle técnico de la orden».
+- **El pedido llega por líneas.** El servidor calcula el total con los precios del catálogo, sin confiar en un precio del navegador, y rechaza con `400` un producto inexistente o una cantidad fuera de 1 a 9.
+- **Ningún pedido cae en un monto reservado.** El cómic más barato cuesta 68 000 COP, por encima de los montos que el simulador reserva para fallos (10 001 a 10 604), y una prueba lo comprueba.
+- **El carrito sobrevive a un rechazo** y se vacía cuando la orden queda aprobada.
+- **`PaymentsPort` y `src/payments/` no cambian.** El módulo recibe lo mismo que antes: monto en pesos enteros, referencia, descripción, pagador, medio y URL de retorno.
+
+**La excepción a la paridad.** `check-skeleton-parity.sh` excluye ahora, por nombre, la vitrina de A:
+
+- `src/views/`, `src/public/` y `src/orders/`;
+- `catalog.ts`, `routes/api.ts` y `routes/pages.ts`;
+- las pruebas `checkout.test.ts`, `orders-and-config.test.ts` y `catalog.test.ts`.
+
+El servidor, el contrato, los webhooks, la configuración y las dependencias se siguen comparando. Se probó que el script falla con un cambio en el `app.ts` de A y con una mención del SDK en el módulo de pagos de A.
+
+**Lo que la excepción no toca, y lo que sí.**
+
+- **Las variables 1 y 2** se cuentan sobre `src/payments/`, y la migración del #133 parte del commit de cierre de Wompi y solo toca el módulo. La vitrina no entra en el conteo.
+- **La variable 6 (cobertura)** tiene que medirse solo sobre `src/payments/`. La cobertura que reporta Jest incluye todo `src/`, y las pruebas de la vitrina de A la mueven.
+- **«Misma interfaz» deja de cumplirse en lo que ve el comprador.** Se declara como amenaza a la validez: quien compare A y B ve dos tiendas distintas, aunque las seis funciones y el contrato sean los mismos. Si B recibe la misma vitrina, la exclusión se quita.
+
+**La revisión del módulo de pagos de David** (sin cambios en su código).
+
+- **Funcionan las seis funciones contra el simulador.** Así quedó medido el 19 de octubre de 2026:
+  - la tarjeta 4242 nace `PENDING` y la consulta la aprueba, y la 4111 se rechaza;
+  - el banco 1 de PSE lleva a la página del banco y vuelve aprobado, y el 2 se rechaza;
+  - el webhook llega firmado, se verifica y queda en el historial;
+  - los montos 10 002 y 10 602 se reintentan y salen, el 10 500 termina en `PaymentTechnicalError` después de 3 intentos y el 10 100 vuelve `DECLINED` sin reintentar.
+- **La verificación del webhook no exige que la firma cubra `transaction.id` y `transaction.status`.** Es el ataque del punto 67, del que el SDK sí se protege. En el prototipo de control no se corrige: es lo que da una integración directa que sigue la documentación oficial, y es evidencia a favor de B.
+- **Un estado desconocido de Wompi se traduce a `DECLINED` sin aviso.**
+- **Un `4xx` de Wompi al crear sale como `Error` y no como `PaymentTechnicalError`**, así que el esqueleto responde `500`.
+
+**Lo verificado** (19 de octubre de 2026, sobre la rama del #161 al día con `devops`).
+
+- **Pruebas de A:** 91 pruebas en verde. Cobertura: sentencias 96,17 %, ramas 88,46 %, funciones 86,66 % y líneas 98,93 %, con un umbral de 80 %.
+- **Tipos y paridad:** `npm run typecheck` y `check-skeleton-parity.sh` en verde.
+- **En el navegador, contra el simulador:** 2 Batman y 1 Spider-Man con la tarjeta 4242, aprobados; Superman por PSE con el banco 1, aprobado al volver del banco; Batman con la 4111, rechazado. Las capturas están en `.cursor/evidencia/161/`.
+
+**Estado:** Resuelto en el PR #161 para A. La vitrina de B queda pendiente de que Andrés decida si la adopta; mientras tanto, la excepción sigue en el script de paridad.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
