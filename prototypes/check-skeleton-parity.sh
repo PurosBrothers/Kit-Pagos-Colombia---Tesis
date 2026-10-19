@@ -3,13 +3,22 @@
 # no es el módulo de pagos es idéntico en los dos prototipos. El módulo de pagos es
 # src/payments/ y test/payments/; lo demás es el esqueleto común (punto 90 del
 # architecture-log.md).
+#
+# Excepción (punto 110): la vitrina de A, «La Candelaria Cómics», con su catálogo, su carrito,
+# sus órdenes por líneas y sus pruebas, solo existe en A. Se excluye por nombre: src/views/,
+# src/public/, src/orders/, catalog.ts, routes/api.ts y routes/pages.ts, y las pruebas
+# checkout.test.ts, orders-and-config.test.ts y catalog.test.ts. El servidor, el contrato
+# PaymentsPort, los webhooks, la configuración y las dependencias se siguen comparando.
 set -eu
 cd "$(dirname "$0")"
 
 if ! diff -r \
   --exclude=payments --exclude=node_modules --exclude=coverage --exclude=dist \
+  --exclude=views --exclude=public --exclude=orders \
+  --exclude=catalog.ts --exclude=api.ts --exclude=pages.ts \
+  --exclude=checkout.test.ts --exclude=orders-and-config.test.ts --exclude=catalog.test.ts \
   checkout-directo checkout-con-sdk; then
-  echo "El esqueleto de los dos prototipos no es idéntico: solo pueden diferir src/payments/ y test/payments/." >&2
+  echo "El esqueleto de los dos prototipos no es idéntico: solo pueden diferir src/payments/, test/payments/ y la vitrina de A (punto 110)." >&2
   exit 1
 fi
 
@@ -20,4 +29,4 @@ if grep -rnE "kit-pagos-colombia|/vendor/kit-pagos" checkout-directo/src/payment
   exit 1
 fi
 
-echo "Esqueleto idéntico en los dos prototipos, y el módulo de pagos de A no usa el SDK."
+echo "Esqueleto idéntico en los dos prototipos, salvo la vitrina de A, y el módulo de pagos de A no usa el SDK."

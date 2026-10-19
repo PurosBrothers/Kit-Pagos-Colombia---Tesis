@@ -4,7 +4,7 @@ Dos implementaciones del mismo checkout mínimo de comercio electrónico: mostra
 
 | Carpeta | Prototipo | Cómo cobra |
 |---|---|---|
-| `checkout-directo/` | A, control | `fetch` contra la API nativa de la pasarela, siguiendo su documentación oficial |
+| `checkout-directo/` | A, control | `fetch` contra la API nativa de la pasarela, siguiendo su documentación oficial. Se presenta como «La Candelaria Cómics», una tienda de cómics con catálogo y carrito |
 | `checkout-con-sdk/` | B, tratamiento | `kit-pagos-colombia` en el servidor y `kit-pagos-colombia/browser` en la página |
 | `checkout-frontend-rest/` | C, fuera del experimento A/B | Desde el navegador contra `/v1/api`, sin servidor de pagos propio. Se documenta en [`docs/05-ejemplos/checkout-frontend-rest.md`](../docs/05-ejemplos/checkout-frontend-rest.md) |
 
@@ -19,6 +19,14 @@ Todo lo que no es integración de pagos es idéntico en los dos prototipos, y qu
 - `test/payments/`: sus pruebas, con el mismo esfuerzo en los dos (variable 6).
 
 Lo demás es el esqueleto común: el servidor Fastify, las páginas, las órdenes en memoria, las rutas y el contrato `src/checkout/PaymentsPort.ts`. No se modifica desde ningún prototipo. `check-skeleton-parity.sh` lo comprueba en la CI: compara las dos carpetas sin `payments/` y falla si el módulo de pagos de A usa el SDK.
+
+**Excepción: la vitrina de A** (punto 110 del `architecture-log.md`). Desde el 19 de octubre de 2026, A se presenta como «La Candelaria Cómics», con tres cómics, un carrito y una página de resultado para el comprador, y B conserva la página de un producto. Difieren y quedan fuera de la comparación:
+
+- `src/views/`, `src/public/` y `src/orders/`;
+- `src/catalog.ts`, `src/routes/api.ts` y `src/routes/pages.ts`;
+- las pruebas `checkout.test.ts`, `orders-and-config.test.ts` y `catalog.test.ts`.
+
+El servidor, el contrato, los webhooks, la configuración y las dependencias se siguen comparando. La vitrina no está en `src/payments/`, así que no entra en el conteo de líneas.
 
 Los dos `package.json` traen `kit-pagos-colombia`, para que el esqueleto sea idéntico incluso en las dependencias. Solo el módulo de pagos de B puede usarlo.
 
@@ -55,6 +63,20 @@ Para que el simulador mande los webhooks al checkout, arranque `simulator-api` c
 | `PUBLIC_BASE_URL` | `http://localhost:<PORT>` | El origen público, para la URL de retorno del banco |
 
 La configuración de la pasarela, como las llaves y la URL base, la lee el módulo de pagos de cada prototipo.
+
+En A, contra el simulador, el módulo usa por omisión `http://localhost:3000/v1/sim/wompi` y las llaves de prueba del simulador. Para que el webhook llegue y se verifique (función 4), el simulador necesita el perfil completo de Wompi y el mismo secreto de eventos que A. Si no, salta el envío con `WEBHOOK_SECRET_NOT_CONFIGURED`:
+
+```bash
+# simulator-api
+WOMPI_PUBLIC_KEY=pub_test_simulator WOMPI_PRIVATE_KEY=prv_test_simulator \
+WOMPI_INTEGRITY_SECRET=test_integrity_kit_pagos_simulator WOMPI_EVENTS_SECRET=<secreto> \
+SIMULATOR_WEBHOOK_TARGET_URL=http://localhost:4000/webhooks SIMULATOR_WEBHOOK_AUTO=true npm run dev
+
+# prototypes/checkout-directo
+WOMPI_EVENTS_SECRET=<el mismo secreto> npm run dev
+```
+
+En la tienda, la tarjeta 4242 4242 4242 4242 aprueba y la 4111 1111 1111 1111 rechaza; en PSE, el banco 1 aprueba, el 2 rechaza y el 3 simula un error. Los precios del catálogo esquivan los montos que el simulador reserva para escenarios de fallo.
 
 ## Pruebas
 
