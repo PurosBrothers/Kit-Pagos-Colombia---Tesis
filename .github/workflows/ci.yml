@@ -34,6 +34,9 @@ jobs:
       - name: Run test with coverage
         run: npm test -- --coverage
 
+      - name: Verify CK metrics (DoD condition 4)
+        run: npm run metrics
+
       - name: Build SDK
         run: npm run build
 
@@ -87,7 +90,9 @@ jobs:
         with:
           node-version: '20' 
           cache: 'npm' 
-          cache-dependency-path: simulator-api/package-lock.json
+          cache-dependency-path: |
+            simulator-api/package-lock.json
+            sdk/package-lock.json
       - name: Install dependencies
         run: npm ci
 
@@ -96,6 +101,19 @@ jobs:
 
       - name: Run test with coverage
         run: npm test -- --coverage
+
+      - name: Install SDK dependencies (the CK metrics script lives in sdk/scripts)
+        working-directory: ./sdk
+        run: npm ci
+
+      - name: Verify CK metrics with the simulator's exceptions (DoD condition 4, issue #153)
+        working-directory: ./sdk
+        run: >-
+          npm run metrics --
+          --root ../simulator-api/src
+          --tsconfig ../simulator-api/tsconfig.json
+          --exceptions ../simulator-api/ck-exceptions.json
+          --mode guard
 
   landing:
     name: Landing (Snippet Guard & Build)
