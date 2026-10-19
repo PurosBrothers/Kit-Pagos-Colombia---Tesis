@@ -3679,11 +3679,11 @@ Capturas en `.cursor/evidencia/155-final/`.
 
 **Lo medido** (19 de octubre de 2026, sobre la rama al día con `devops`).
 
-- **Pruebas:** 53 suites y 1238 pruebas. Tres son nuevas, para `compileSchemasAsIs`, y dejarlo sin efecto pone dos en rojo.
+- **Pruebas:** 53 suites y 1239 pruebas. Cinco son nuevas: tres de `compileSchemasAsIs` (dejarlo sin efecto pone dos en rojo), la de la orden de tarjeta en `/docs` y la validación de OpenAPI.
 - **Cobertura:** sentencias 97,14 % y ramas 88,98 %.
 - **Lint, tipos y métricas:** lint y tipos en verde, y las 28 clases dentro de los umbrales CK.
 - **Postman:** con Newman, 42 de 42 peticiones y 47 de 47 aserciones.
-- **OpenAPI:** la especificación de `/docs/json` es válida como OpenAPI 3.0.3 según `@apidevtools/swagger-parser` 10.
+- **OpenAPI:** la especificación de `/docs/json` es válida como OpenAPI 3.0.3. Una prueba de `openapi.test.ts` la valida con `@apidevtools/swagger-parser` 12 en cada corrida, y falla si un schema trae un `type` inválido.
 - **Cuántas rutas:** tienen schema 16 operaciones: las 10 del #106, las dos tokenizaciones con sus preflights y las dos lecturas nuevas. No lo tienen las tres páginas HTML que lee una persona: `/wompi/pse/redirect`, `/wompi/terms` y la página de banco de Mercado Pago.
 
 **Estado:** Resuelto en el PR #137 para Wompi y Mercado Pago. El RF-13 sigue pendiente del #107 (Rapyd y Kushki), cuyos routers tienen que llamar también a `compileSchemasAsIs`.

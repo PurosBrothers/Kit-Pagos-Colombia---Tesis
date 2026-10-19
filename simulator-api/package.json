@@ -32,6 +32,7 @@
     "kit-pagos-colombia": "^0.6.0"
   },
   "devDependencies": {
+    "@apidevtools/swagger-parser": "^12.1.0",
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^26.1.2",

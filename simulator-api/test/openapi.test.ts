@@ -1,3 +1,4 @@
+import SwaggerParser from "@apidevtools/swagger-parser";
 import { KitPagosErrorCode } from "kit-pagos-colombia";
 import { buildApp } from "../src/app";
 
@@ -21,6 +22,13 @@ describe("GET /docs/json — especificación OpenAPI", () => {
     expect(spec.openapi).toBe("3.0.3");
     expect(spec.info).toBeDefined();
     expect((spec.info as Record<string, unknown>).title).toContain("Kit Pagos");
+  });
+
+  it("pasa la validación de OpenAPI 3.0, con los schemas de todas las rutas", async () => {
+    const app = buildApp({ logger: false });
+    const response = await app.inject({ method: "GET", url: "/docs/json" });
+
+    await expect(SwaggerParser.validate(response.json())).resolves.toBeDefined();
   });
 
   it("documenta las rutas de simulación de gateways y los preflights de tokenización", async () => {
