@@ -118,7 +118,22 @@ describe("Rapyd request signature on /v1/sim/rapyd", () => {
     expect(response.statusCode).toBe(200);
   });
 
+  /*
+   * Con el reloj fijo: `signedRequest()` y la ruta leen `Date.now()` cada uno por su lado, y si
+   * entre las dos lecturas cambia el segundo, el límite exacto de −300 s llega como −301 s.
+   */
   describe("timestamp window", () => {
+    const NOW_MS = Date.UTC(2026, 9, 15, 17, 0, 0, 500);
+    let clock: jest.SpyInstance<number, []>;
+
+    beforeEach(() => {
+      clock = jest.spyOn(Date, "now").mockReturnValue(NOW_MS);
+    });
+
+    afterEach(() => {
+      clock.mockRestore();
+    });
+
     it.each([
       ["300 s in the past", -300],
       ["3600 s in the future", 3600],
@@ -130,6 +145,8 @@ describe("Rapyd request signature on /v1/sim/rapyd", () => {
 
     it.each([
       ["360 s in the past (measured)", -360],
+      ["301 s in the past (the simulator's limit, between the measured -300 and -360)", -301],
+      ["3601 s in the future (simulator decision)", 3601],
       ["3700 s in the future (simulator decision)", 3700],
     ])("rejects a timestamp %s", async (_, offsetSeconds) => {
       const response = await app.inject(signedRequest({ offsetSeconds }));

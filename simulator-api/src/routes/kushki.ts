@@ -1,6 +1,12 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { GatewayMockFactory } from "../gateways/kushki/GatewayMockFactory";
+import { sendBankPage } from "../gateways/bankPage";
 import {
+  KushkiChargeMockFactory,
+  KushkiErrorMockFactory,
+  KushkiTransferMockFactory,
+} from "../gateways/kushki/GatewayMockFactory";
+import {
+  KushkiCardTokenRequestBody,
   KushkiChargeResponse,
   KushkiCreateChargeRequestBody,
   KushkiTransferInitRequestBody,
@@ -8,10 +14,17 @@ import {
   KushkiTransferTokenRequestBody,
 } from "../gateways/kushki/types";
 import {
+  centsFromKushkiAmount,
   headerScenario,
   resolveScenario,
   wholePesosFromKushkiAmount,
 } from "../scenarios/scenarioFromRequest";
+import { getSimulatorScenario } from "../scenarios/ScenarioEngine";
+import {
+  allowAnyOriginExceptUnauthorized,
+  KUSHKI_TOKENIZATION_PREFLIGHT_HEADERS,
+  registerTokenizationPreflight,
+} from "../gateways/tokenizationCors";
 import { bankListFailure, queryFailure, technicalFailure } from "../scenarios/technicalFailure";
 import { invalidCredentialRequested } from "../scenarios/invalidCredential";
 import {
@@ -19,7 +32,9 @@ import {
   kushkiTransferMachine,
 } from "../state/kushkiStateMachine";
 import { rememberScenarioTarget } from "../state/scenarioTarget";
-import { kushkiCharges, kushkiTransfers } from "../store/GatewayStores";
+import { requestOrigin } from "../store/BankRedirectOrigins";
+import { bankReturnUrlFor, rememberBankReturnUrl, withQueryParam } from "../store/BankReturnUrls";
+import { kushkiCardTokens, kushkiCharges, kushkiTransfers } from "../store/GatewayStores";
 import { rememberTraceabilityCode } from "../store/TransferTraceability";
 import {
   hasDuplicateMark,
@@ -60,6 +75,14 @@ const CARD_INVALID_CREDENTIAL = {
   code: "K004",
 } as const;
 
+const CARD_AMOUNT_MISMATCH = {
+  code: "K220",
+  message: "Monto de la transacción es diferente al monto de la venta inicial",
+} as const;
+
+/** Un número de tarjeta de 13 a 19 dígitos; Kushki respondió `K001` a uno de 4 (medido). */
+const CARD_NUMBER_PATTERN = /^\d{13,19}$/;
+
 const DOCUMENT_OUTCOMES: ReadonlyMap<string, string> = new Map([
   ["123456789", "APPROVED"],
   ["999999990", "PENDING"],
@@ -78,6 +101,8 @@ const DOCUMENT_OUTCOMES: ReadonlyMap<string, string> = new Map([
  *    candidatas de consulta de cobros con tarjeta y ninguna existe. Se conserva para que
  *    el ejemplo pueda mostrar el ciclo de vida completo, y está declarado en el punto 50.
  * 3-6. El ciclo de Transfer In: `bankList`, emisión del token, `init` y consulta de estado.
+ * 7. POST /v1/sim/kushki/card/v1/tokens: la tokenización de tarjeta desde el navegador, con
+ *    CORS (punto 106).
  *
  * Punto crítico del cobro con tarjeta, explícito en el issue: un **rechazo** viaja con el
  * mismo código HTTP que una aprobación, y la decisión de éxito o fallo vive únicamente en
@@ -116,7 +141,9 @@ function hasTransferIdLength(id: string): boolean {
 }
 
 export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
-  const mockFactory = new GatewayMockFactory();
+  const chargeMocks = new KushkiChargeMockFactory();
+  const transferMocks = new KushkiTransferMockFactory();
+  const errorBodies = new KushkiErrorMockFactory();
 
   /**
    * Traduce un escenario de negocio al vocabulario de **transferencia** de Kushki.
@@ -150,6 +177,60 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
     return undefined;
   }
 
+  /**
+   * `POST /v1/sim/kushki/card/v1/tokens`: la tokenización de tarjeta que hace el navegador del
+   * pagador con `KitPagosBrowser` (punto 106). Es la única ruta de Kushki que llama un
+   * navegador, y por eso la única con CORS.
+   *
+   * Nivel 1 — medido contra UAT el 17 de octubre de 2026: sin `Public-Merchant-Id`, `401
+   * Unauthorized` sin CORS; con uno inexistente, `400 K004`; sin monto o con un número corto,
+   * `400 K001`; sin moneda, `400 K055`; si no, `201 { token }`. El desenlace del cobro no se
+   * decide aquí sino en `card/v1/charges`, por el monto, así que solo aplica el escenario de
+   * la cabecera, como la tokenización de Wompi.
+   */
+  registerTokenizationPreflight(app, "/v1/sim/kushki/card/v1/tokens", KUSHKI_TOKENIZATION_PREFLIGHT_HEADERS);
+  app.post(
+    "/v1/sim/kushki/card/v1/tokens",
+    { onSend: allowAnyOriginExceptUnauthorized },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      if (!request.headers["public-merchant-id"]) {
+        return reply.code(401).send({ message: "Unauthorized" });
+      }
+      if (invalidCredentialRequested(request, ["public-merchant-id"])) {
+        return reply.code(400).send(CARD_INVALID_CREDENTIAL);
+      }
+
+      const failure = await technicalFailure(getSimulatorScenario(request), request, reply, errorBodies);
+      if (failure !== undefined) {
+        return failure;
+      }
+
+      const body = request.body as KushkiCardTokenRequestBody | undefined;
+      const card = body?.card;
+      const complete =
+        typeof card?.name === "string" &&
+        card.name.trim() !== "" &&
+        typeof card.number === "string" &&
+        CARD_NUMBER_PATTERN.test(card.number) &&
+        typeof card.cvv === "string" &&
+        card.cvv !== "" &&
+        typeof card.expiryMonth === "string" &&
+        card.expiryMonth !== "" &&
+        typeof card.expiryYear === "string" &&
+        card.expiryYear !== "";
+      if (!complete || typeof body?.totalAmount !== "number" || !(body.totalAmount > 0)) {
+        return reply.code(400).send({ code: "K001", message: "Cuerpo de la petición inválido." });
+      }
+      if (!body.currency) {
+        return reply.code(400).send({ code: "K055", message: "Tipo de moneda no permitido" });
+      }
+
+      const { token } = chargeMocks.buildCardToken();
+      kushkiCardTokens.save(token, { totalAmountCents: Math.round(body.totalAmount * 100) });
+      return reply.code(201).send({ token });
+    },
+  );
+
   app.post(
     "/v1/sim/kushki/card/v1/charges",
     async (request: FastifyRequest, reply: FastifyReply) => {
@@ -178,7 +259,17 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
           .send({ code: "K001", message: "Cuerpo de la petición inválido." });
       }
 
-      const failure = await technicalFailure(scenario, request, reply, mockFactory);
+      /*
+       * Nivel 1 — medido contra UAT el 17 de octubre de 2026: un token emitido por 48 000 y
+       * cobrado por 50 000 responde `400 K220`. Solo se revisa con los tokens que emitió este
+       * simulador, porque de los demás no se sabe el monto.
+       */
+      const issued = kushkiCardTokens.findById(requestBody.token);
+      if (issued && issued.totalAmountCents !== centsFromKushkiAmount(requestBody.amount)) {
+        return reply.code(400).send(CARD_AMOUNT_MISMATCH);
+      }
+
+      const failure = await technicalFailure(scenario, request, reply, errorBodies);
 
       if (failure !== undefined) {
         return failure;
@@ -187,7 +278,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       if (scenario === "FLAPPING") {
         const key = requestBody.token;
         if (nextFlappingAttempt(key)) {
-          return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+          return reply.code(503).send(errorBodies.buildServerErrorResponse(503));
         }
         scenario = "APPROVED";
       }
@@ -220,13 +311,13 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       if (scenario === "DECLINED" || scenario === "REJECTED") {
         // HTTP 201 y no 4xx: Kushki nunca usa el status HTTP para señalar
         // un rechazo de negocio.
-        charge = mockFactory.buildDeclinedResponse(requestBody);
+        charge = chargeMocks.buildDeclinedResponse(requestBody);
       } else if (scenario === "EXPIRED") {
-        charge = mockFactory.buildExpiredResponse(requestBody);
+        charge = chargeMocks.buildExpiredResponse(requestBody);
       } else if (scenario === "INITIALIZED" || scenario === "PENDING") {
-        charge = mockFactory.buildInitializedResponse(requestBody);
+        charge = chargeMocks.buildInitializedResponse(requestBody);
       } else if (scenario === "APPROVED" || scenario === "APPROVAL") {
-        charge = mockFactory.buildApprovedResponse(requestBody);
+        charge = chargeMocks.buildApprovedResponse(requestBody);
       } else {
         return reply
           .code(501)
@@ -307,7 +398,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       const failure = await queryFailure(
         { gateway: "kushki", resource: "charge", id: ticketNumber },
         reply,
-        mockFactory,
+        errorBodies,
       );
       if (failure !== undefined) {
         return failure;
@@ -335,12 +426,12 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(403).send(TRANSFER_UNAUTHORIZED);
       }
 
-      const failure = bankListFailure(request, reply, mockFactory, "kushki");
+      const failure = bankListFailure(request, reply, errorBodies, "kushki");
       if (failure !== undefined) {
         return failure;
       }
 
-      return reply.code(200).send(mockFactory.buildBankList());
+      return reply.code(200).send(transferMocks.buildBankList());
     },
   );
 
@@ -370,7 +461,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       });
       let scenario = resolved.scenario;
 
-      const failure = await technicalFailure(scenario, request, reply, mockFactory);
+      const failure = await technicalFailure(scenario, request, reply, errorBodies);
 
       if (failure !== undefined) {
         return failure;
@@ -403,7 +494,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       if (scenario === "FLAPPING") {
         const key = `kushki_transfer_${body.paymentDescription ?? body.bankId}`;
         if (nextFlappingAttempt(key)) {
-          return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+          return reply.code(503).send(errorBodies.buildServerErrorResponse(503));
         }
         scenario = "APPROVED";
       }
@@ -421,11 +512,11 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
           .send({ error: `Escenario aún no soportado: ${scenario}` });
       }
 
-      const { token } = mockFactory.buildTransferToken();
+      const { token } = transferMocks.buildTransferToken();
 
       kushkiTransfers.save(
         token,
-        mockFactory.buildTransferSeed(token, body),
+        transferMocks.buildTransferSeed(token, body),
       );
 
       /*
@@ -468,7 +559,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       const body = request.body as KushkiTransferInitRequestBody;
 
       if (scenario !== undefined) {
-        const failure = await technicalFailure(scenario, request, reply, mockFactory);
+        const failure = await technicalFailure(scenario, request, reply, errorBodies);
 
         if (failure !== undefined) {
           return failure;
@@ -543,12 +634,37 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
 
       kushkiTransfers.save(body.token, moved);
 
-      const initResponse = mockFactory.buildTransferInit(body.token);
+      const initResponse = transferMocks.buildTransferInit(body.token, requestOrigin(request));
       rememberTraceabilityCode(body.token, initResponse.trazabilityCode);
+      /*
+       * Nivel 1 — medido el 14 de octubre de 2026 contra el sandbox UAT: al volver de la página
+       * real, el pagador llegó al `callbackUrl` con `token=<token de la transferencia>` agregado
+       * (`docs/05-ejemplos/checkout-frontend-rest.md`, «En Render y en el sandbox, medido en el
+       * navegador»). Se agrega al registrar la URL, no al servir la página, como en Mercado Pago.
+       */
+      rememberBankReturnUrl("kushki", body.token, withQueryParam(transfer.callbackUrl, "token", body.token));
 
       return reply.code(201).send(initResponse);
     },
   );
+
+  /**
+   * El destino de `redirectUrl`: el agente de PSE de una transferencia (issue #109).
+   *
+   * La ruta es la real. Nivel 1 — medido contra el sandbox UAT el 14 de octubre de 2026 (punto
+   * 94): la `redirectUrl` es `https://api-uat.kushkipagos.com/transfer/v1/agent?token=…&mid=…`,
+   * que redirige a `uat-sandbox.kushkipagos.com/checkout/transfer?status=pending&…`, y al volver
+   * agrega `token=` a la URL del comercio. La del simulador no lleva `mid`, y no puede apuntar al
+   * dominio real porque allí no existe un token que el simulador inventó.
+   *
+   * Nivel 3 — convención del simulador: el contenido de la página no se imita. Devuelve al
+   * pagador al `callbackUrl` que el comercio mandó al pedir el token, con `token=` agregado, y no
+   * mueve la transferencia: el desenlace lo decide el escenario y se ve al consultar el estado.
+   */
+  app.get("/v1/sim/kushki/transfer/v1/agent", async (request: FastifyRequest, reply: FastifyReply) => {
+    const { token } = request.query as { token?: string };
+    return sendBankPage(reply, "kushki", token ? bankReturnUrlFor("kushki", token) : undefined);
+  });
 
   /**
    * Consulta de estado de una transferencia.
@@ -602,7 +718,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       const failure = await queryFailure(
         { gateway: "kushki", resource: "transfer", id: token },
         reply,
-        mockFactory,
+        errorBodies,
       );
       if (failure !== undefined) {
         return failure;

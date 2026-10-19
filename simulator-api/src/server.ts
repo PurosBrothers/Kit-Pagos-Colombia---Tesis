@@ -1,12 +1,12 @@
 import { buildApp } from "./app";
 import { fastifyLoggerConfig } from "./logger/redactSerializer";
+import { listenAddress } from "./serverAddress";
 
-const PORT = Number(process.env.PORT ?? 3000);
-const HOST = process.env.HOST ?? "0.0.0.0";
+const address = listenAddress();
 
 const app = buildApp({ logger: fastifyLoggerConfig });
 
-app.listen({ port: PORT, host: HOST }).catch((error) => {
+app.listen(address).catch((error) => {
   app.log.error(error);
   process.exit(1);
 });

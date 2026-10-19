@@ -1,19 +1,20 @@
 import {
   pseCodeForRapydType,
   RAPYD_PSE_TYPES,
+  RAPYD_SANDBOX_PSE_TYPES,
   rapydPseTypeFor,
 } from "./rapyd-pse-banks";
 import { PseBankCode } from "../../domain/value-objects/PseBankCode";
 
 /**
- * Los 47 `co_pse_*` que devolvió `GET /v1/payment_methods/country?country=CO` en el
- * sandbox de Rapyd el 26 de septiembre de 2026. `npm run test:sandbox` compara la
+ * Los 50 `co_pse_*` que devolvió `GET /v1/payment_methods/country?country=CO` en el
+ * sandbox de Rapyd el 17 de octubre de 2026. `npm run test:sandbox` compara la
  * tabla contra la lista en vivo; esta copia fija es la que corre en cada cambio.
  */
 const MEASURED_RAPYD_TYPES = [
   "co_pse_banco_davivienda_bank", "co_pse_bancolombia_bank", "co_pse_ding_bank",
   "co_pse_banco_caja_social_bank", "co_pse_banco_av_villas_bank", "co_pse_banco_union_bank",
-  "co_pse_powwi_bank", "co_pse_rappipay_bank", "co_pse_scotiabank_colpatria_bank",
+  "co_pse_powwi_bank", "co_pse_rappipay_bank", "co_pse_davibank_bank",
   "co_pse_uala_bank", "co_pse_jfk_cooperativa_financiera_bank", "co_pse_lulo_bank_bank",
   "co_pse_movii_bank", "co_pse_nequi_bank", "co_pse_nu_bank", "co_pse_daviplata_bank",
   "co_pse_financiera_juriscoop_compania_de_financiamiento_bank", "co_pse_global66_bank",
@@ -28,13 +29,26 @@ const MEASURED_RAPYD_TYPES = [
   "co_pse_banco_de_bogota_bank", "co_pse_banco_de_occidente_bank", "co_pse_banco_falabella_bank",
   "co_pse_banco_finandina_bic_bank", "co_pse_alianza_fiduciaria_bank", "co_pse_ban100_bank",
   "co_pse_bancamia_bank", "co_pse_banco_agrario_bank", "co_pse_banco_bbva_colombia_bank",
+  "co_pse_banco_contactar_bank", "co_pse_accion_fiduciaria_bank", "co_pse_paycash_bank",
 ];
 
 describe("RAPYD_PSE_TYPES", () => {
-  it("should cover exactly the PSE methods measured in the Rapyd sandbox", () => {
-    expect([...Object.values(RAPYD_PSE_TYPES)].sort()).toEqual(
-      [...MEASURED_RAPYD_TYPES].sort(),
-    );
+  it("should translate every bank into a PSE method measured in the Rapyd sandbox", () => {
+    const measured = new Set(MEASURED_RAPYD_TYPES);
+    expect(Object.values(RAPYD_PSE_TYPES).filter((type) => !measured.has(type))).toEqual([]);
+  });
+
+  /**
+   * Estos tres no tienen código de PSE porque la lista de Mercado Pago, de donde salió
+   * `PseBankCode`, no los trae. `getPseBanks()` los devuelve sin `achCode`.
+   */
+  it("should leave out only the Rapyd methods that Mercado Pago does not list", () => {
+    const translated = new Set(Object.values(RAPYD_PSE_TYPES));
+    expect(MEASURED_RAPYD_TYPES.filter((type) => !translated.has(type)).sort()).toEqual([
+      "co_pse_accion_fiduciaria_bank",
+      "co_pse_banco_contactar_bank",
+      "co_pse_paycash_bank",
+    ]);
   });
 
   it("should not assign the same Rapyd method to two banks", () => {
@@ -43,12 +57,23 @@ describe("RAPYD_PSE_TYPES", () => {
   });
 
   /**
-   * Las dos entradas cuyo nombre en Rapyd no se deduce del banco. Son la razón de que la
-   * tabla esté escrita a mano en vez de calculada a partir del nombre.
+   * La entrada cuyo nombre en Rapyd no se deduce del banco. Es la razón de que la tabla
+   * esté escrita a mano en vez de calculada a partir del nombre.
    */
-  it("should keep the Rapyd names that do not follow the bank's current brand", () => {
-    expect(RAPYD_PSE_TYPES[PseBankCode.DAVIBANK]).toBe("co_pse_scotiabank_colpatria_bank");
+  it("should keep the Rapyd name that does not follow the bank's brand", () => {
     expect(RAPYD_PSE_TYPES[PseBankCode.CREZCAMOS]).toBe("co_pse_crezcamos_mosi_bank");
+  });
+
+  /** Era `co_pse_scotiabank_colpatria_bank`, que ya no está en el catálogo de Rapyd. */
+  it("should translate Davibank into the method Rapyd renamed", () => {
+    expect(RAPYD_PSE_TYPES[PseBankCode.DAVIBANK]).toBe("co_pse_davibank_bank");
+  });
+});
+
+describe("RAPYD_SANDBOX_PSE_TYPES", () => {
+  it("should hold the 9 measured methods, all of them in the Rapyd catalog", () => {
+    expect(RAPYD_SANDBOX_PSE_TYPES.size).toBe(9);
+    expect([...RAPYD_SANDBOX_PSE_TYPES].filter((type) => !MEASURED_RAPYD_TYPES.includes(type))).toEqual([]);
   });
 });
 

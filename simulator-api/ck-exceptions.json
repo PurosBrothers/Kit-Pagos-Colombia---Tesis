@@ -1,0 +1,13 @@
+{
+  "description": "Excepciones CK de la API de Simulación (issue #153), separadas de las del SDK. Cada entrada admite que una métrica de una clase de un archivo pase el umbral de methodology.md §6, hasta `allowed`, y la justifica el punto `logPoint` del docs/architecture/architecture-log.md (criterio de la §6.2). `file` es relativo a simulator-api/src. Se aplica desde sdk/ con: npm run metrics -- --root ../simulator-api/src --tsconfig ../simulator-api/tsconfig.json --exceptions ../simulator-api/ck-exceptions.json --mode guard. Una entrada que ya no cubre ninguna violación hace fallar el modo guarda.",
+  "exceptions": [
+    {
+      "file": "services/KitPagosProvider.ts",
+      "className": "KitPagosProvider",
+      "metric": "CBO",
+      "allowed": 7,
+      "logPoint": 107,
+      "reason": "Es la costura entre la capa REST y el SDK: recibe la pasarela y las cabeceras de la petición y devuelve una instancia de KitPagos. De los siete tipos de sus firmas, cinco son datos sin comportamiento (Gateway, RequestHeaders, TargetEnvironment, ResolvedCredentials y Credentials), como PseBank en el punto 47, y dos son colaboradores (CredentialResolver, que se inyecta, y KitPagos, que construye). Sacar instanceFor() y createInstance() a funciones de módulo bajaría el conteo sin cambiar de qué depende la clase."
+    }
+  ]
+}

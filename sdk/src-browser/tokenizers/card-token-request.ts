@@ -10,6 +10,7 @@ import {
 const GATEWAY_LABELS: Readonly<Record<string, string>> = {
   [Gateway.WOMPI]: "Wompi",
   [Gateway.MERCADOPAGO]: "Mercado Pago",
+  [Gateway.KUSHKI]: "Kushki",
 };
 
 /** La respuesta de la pasarela con su cuerpo ya leído como texto. */

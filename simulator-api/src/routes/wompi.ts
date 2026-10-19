@@ -12,7 +12,7 @@ import {
   invalidCredentialIn,
   invalidCredentialRequested,
 } from "../scenarios/invalidCredential";
-import { GatewayMockFactory } from "../gateways/wompi/GatewayMockFactory";
+import { WompiErrorMockFactory, WompiTokenMockFactory } from "../gateways/wompi/GatewayMockFactory";
 import {
   integrityRejection,
   missingFieldRejection,
@@ -37,7 +37,9 @@ import {
 } from "./schemas/wompi.schemas";
 import { rememberScenarioTarget } from "../state/scenarioTarget";
 import { wompiStateMachine } from "../state/wompiStateMachine";
+import { sendBankPage } from "../gateways/bankPage";
 import { rememberBankRedirectOrigin, requestOrigin } from "../store/BankRedirectOrigins";
+import { bankReturnUrlFor, rememberBankReturnUrl } from "../store/BankReturnUrls";
 import { wompiTransactions } from "../store/GatewayStores";
 import { cardTokenOutcomeFor, rememberCardTokenOutcome } from "../store/CardTokenOutcomes";
 import {
@@ -74,15 +76,6 @@ const INVALID_KEY_ON_QUERY = {
 const NOT_FOUND = {
   error: { type: "NOT_FOUND_ERROR", reason: "La entidad solicitada no existe" },
 } as const;
-
-const PSE_REDIRECT_PAGE =
-  '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
-  "<title>Redirección simulada al banco (PSE)</title></head><body>" +
-  "<h1>Redirección simulada al banco</h1>" +
-  "<p>Esta página es de la API de Simulación de Kit Pagos Colombia. No es de Wompi ni de " +
-  "un banco, y no imita la página real del banco.</p>" +
-  "<p>El resultado del pago quedó decidido al crear la transacción. " +
-  "Consulte la transacción para conocerlo.</p></body></html>";
 
 const TERMS_PAGE =
   '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
@@ -123,7 +116,8 @@ function sendsPrivateKey(request: FastifyRequest): boolean {
  */
 export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   const scenarioEngine = new ScenarioEngine();
-  const mockFactory = new GatewayMockFactory();
+  const tokenMocks = new WompiTokenMockFactory();
+  const errorBodies = new WompiErrorMockFactory();
   const spentTokens = new SpentAcceptanceTokens();
 
   // ── POST /v1/sim/wompi/transactions ──────────────────────────────────────
@@ -173,7 +167,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
       });
       let scenario = resolved.scenario;
 
-      const failure = await technicalFailure(scenario, request, reply, mockFactory, { data: {} });
+      const failure = await technicalFailure(scenario, request, reply, errorBodies, { data: {} });
 
       if (failure !== undefined) {
         return failure;
@@ -183,7 +177,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         const key = requestBody.reference ?? "default_wompi_flapping";
         const isFailing = nextFlappingAttempt(key);
         if (isFailing) {
-          return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+          return reply.code(503).send(errorBodies.buildServerErrorResponse(503));
         }
         scenario = DEFAULT_SCENARIO;
       }
@@ -224,6 +218,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         // La URL del banco se publica en una consulta, que no sabe con qué host se creó el PSE.
         if (response.data.payment_method?.type === "PSE") {
           rememberBankRedirectOrigin("wompi", response.data.id, requestOrigin(request));
+          rememberBankReturnUrl("wompi", response.data.id.replace(/-/g, ""), requestBody.redirect_url);
         }
 
         // `PENDING` nace igual que el aprobado; lo que lo distingue es que la consulta no lo
@@ -300,7 +295,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         const failure = await queryFailure(
           { gateway: "wompi", resource: "transaction", id },
           reply,
-          mockFactory,
+          errorBodies,
         );
         if (failure !== undefined) {
           return failure;
@@ -354,7 +349,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send(NOT_FOUND);
       }
 
-      return reply.code(200).send(mockFactory.buildMerchantResponse(requestOrigin(request)));
+      return reply.code(200).send(tokenMocks.buildMerchantResponse(requestOrigin(request)));
     },
   );
 
@@ -373,7 +368,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
     "/v1/sim/wompi/pse/financial_institutions",
     { schema: getWompiPseInstitutionsSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const failure = bankListFailure(request, reply, mockFactory, "wompi");
+      const failure = bankListFailure(request, reply, errorBodies, "wompi");
       if (failure !== undefined) {
         return failure;
       }
@@ -394,14 +389,16 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
    * Nivel 3 — convención del simulador. La ruta existe en Wompi (medida como URL el 6 de
    * octubre de 2026, `docs/testing-data/wompi.md`, sección 3), pero el contenido de la página
    * del banco no se imita. Antes la URL apuntaba aquí y la ruta no estaba registrada: abrirla
-   * daba 404.
+   * daba 404. Desde el issue #109 la página devuelve al pagador a la `redirect_url` que mandó
+   * el comercio, y es la misma de las otras tres pasarelas (`gateways/bankPage.ts`).
    *
    * No mueve la transacción: en Wompi el desenlace lo decide el banco de prueba elegido al
    * crearla y se ve al consultarla (`wompiStateMachine.ts`). Tampoco repite `ticket_id` en
    * la página, para no devolver en HTML algo que vino en la URL.
    */
-  app.get("/v1/sim/wompi/pse/redirect", async (_request: FastifyRequest, reply: FastifyReply) => {
-    return reply.code(200).header("content-type", "text/html; charset=utf-8").send(PSE_REDIRECT_PAGE);
+  app.get("/v1/sim/wompi/pse/redirect", async (request: FastifyRequest, reply: FastifyReply) => {
+    const { ticket_id: ticketId } = request.query as { ticket_id?: string };
+    return sendBankPage(reply, "wompi", ticketId ? bankReturnUrlFor("wompi", ticketId) : undefined);
   });
 
   /**
@@ -477,7 +474,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         getSimulatorScenario(request),
         request,
         reply,
-        mockFactory,
+        errorBodies,
         { status: "CREATED", data: {} },
       );
       if (failure !== undefined) {
@@ -550,7 +547,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const response = mockFactory.buildTokenCardResponse(body);
+      const response = tokenMocks.buildTokenCardResponse(body);
 
       if (cleanNumber === DECLINING_TEST_CARD) {
         rememberCardTokenOutcome("wompi", response.data.id, { scenario: "PENDING_THEN_DECLINED" });

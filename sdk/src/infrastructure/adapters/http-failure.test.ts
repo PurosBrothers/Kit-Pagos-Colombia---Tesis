@@ -46,6 +46,15 @@ describe("httpFailure()", () => {
     });
   });
 
+  it("should carry the reason in the message with the echoed key redacted (issue #153)", async () => {
+    const error = await httpFailure(asResponse(401, wompiEchoedKeyBody), Gateway.WOMPI, credentials);
+
+    expect(error.message).toBe(
+      "Wompi gateway returned an HTTP error status 401 (INVALID_ACCESS_TOKEN: " +
+        "La llave proporcionada no corresponde a este ambiente, se recibió: [REDACTED])",
+    );
+  });
+
   it("should leave the body untouched without credentials", async () => {
     const error = await httpFailure(asResponse(401, wompiEchoedKeyBody), Gateway.WOMPI);
 

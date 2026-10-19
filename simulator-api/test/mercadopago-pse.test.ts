@@ -50,14 +50,16 @@ describe("PSE in the Mercado Pago simulator", () => {
     },
   };
 
+  let idempotency = 0;
+
   function createOrder(app: ReturnType<typeof buildApp>, scenario?: string) {
     return app.inject({
       method: "POST",
       url: "/v1/sim/mercadopago/orders",
       // La llave de idempotencia va siempre: la API de órdenes no crea nada sin ella, así
-      // que el mock tampoco.
+      // que el mock tampoco. Es una por petición: repetida, la orden no se vuelve a crear.
       headers: {
-        "x-idempotency-key": "prueba-idempotencia",
+        "x-idempotency-key": `prueba-idempotencia-${++idempotency}`,
         ...(scenario ? { "x-simulate-scenario": scenario } : {}),
       },
       payload: orderPayload,
@@ -98,7 +100,7 @@ describe("PSE in the Mercado Pago simulator", () => {
     expect(order.status).toBe("action_required");
     expect(order.status_detail).toBe("waiting_transfer");
     expect(order.transactions.payments[0].payment_method.redirect_url).toMatch(
-      /^https:\/\/www\.mercadopago\.com\.co\/payments\//,
+      /^http:\/\/[^/]+\/v1\/sim\/mercadopago\/payments\/[1-9][0-9]{11}\/bank_transfer$/,
     );
   });
 

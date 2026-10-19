@@ -51,6 +51,14 @@
  *    validación y muere después en `processing_error`, igual que en Wompi. Y por
  *    debajo del mínimo de la cuenta (1600 COP) responde 422.
  *
+ * 7. **Una orden puede nacer sin URL.** Medido el 15 de octubre de 2026 con el vendedor de
+ *    prueba (`docs/testing-data/mercado-pago.md`): entre las 21:33 y las 21:44, 12 de 12
+ *    órdenes nacieron `processing / in_process` con `201` y sin `redirect_url`, y pasaron
+ *    a `failed / processing_error` en unos 4 s; a las 13:12 el mismo cuerpo había nacido
+ *    `action_required` con la URL. Por eso una orden que se puede leer y no trae URL se
+ *    devuelve como transacción (`processing` es `PENDING`) y no como error: el comercio
+ *    tiene el identificador y la consulta le dice cómo terminó.
+ *
  * ## Qué es obligatorio, medido por omisión
  *
  * Cada uno de estos campos, quitado por separado, devuelve `400` con
@@ -109,8 +117,9 @@ const ORDER_ID_PREFIX = "ORD";
  * Lanza en vez de redondear cuando hay centavos, por la misma razón que
  * `Amount.toMinorUnits()` lanza en vez de truncar: cobrar un monto distinto del
  * que el comercio pidió es peor que fallar. Mercado Pago rechaza los decimales
- * en `total_amount` (medido: `"2000.00"` da 400), así que no hay forma de
- * mandarlos y hay que decidir explícitamente.
+ * en `total_amount` (medido: `"2000.00"` da 400 en PSE, y `"20000.00"` da
+ * `400 does not match pattern` en tarjeta el 15 de octubre de 2026), así que no hay
+ * forma de mandarlos y hay que decidir explícitamente.
  */
 export function toWholePesos(amount: Amount): string {
   const [pesos, cents] = amount.getValue().split(".");
@@ -120,12 +129,36 @@ export function toWholePesos(amount: Amount): string {
       KitPagosErrorCode.INVALID_REQUEST,
       Gateway.MERCADOPAGO,
       null,
-      `Mercado Pago no acepta centavos en PSE: el monto ${amount.getValue()} ` +
+      `Mercado Pago no acepta centavos en la Orders API: el monto ${amount.getValue()} ` +
         `tiene decimales distintos de cero y total_amount solo admite pesos enteros.`,
     );
   }
 
   return pesos;
+}
+
+const IPV4_MAPPED = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i;
+
+/**
+ * La IP del pagador escrita como la acepta Mercado Pago, o `undefined` si viene en blanco.
+ *
+ * Medido el 15 de octubre de 2026 con un PSE por la Orders API
+ * (`docs/02-arquitectura/3-api-de-simulacion.md`, «La IP del pagador»): acepta `127.0.0.1` y
+ * rechaza con `400` `::1` («length must be >= 7»), `::ffff:127.0.0.1` («does not match
+ * pattern») y un valor con un espacio delante. Las dos primeras son las formas en que Node
+ * entrega la IP de un socket que escucha en `::`, así que un comercio que pase `req.ip` tal
+ * cual las manda. Solo se reescriben esas dos, que son la misma dirección; lo demás pasa sin
+ * validar, y nunca se pone una IP que no llegó. Es la misma regla que aplica `/v1/api`.
+ */
+export function normalizePayerIp(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed === "::1") {
+    return "127.0.0.1";
+  }
+  return IPV4_MAPPED.exec(trimmed)?.[1] ?? trimmed;
 }
 
 /**
@@ -153,7 +186,7 @@ export function assertPseRequirements(request: CreatePaymentRequest): void {
     missing.push("payer.phone y payer.phoneAreaCode");
   }
   if (!payer.address) missing.push("payer.address");
-  if (!request.ipAddress) missing.push("ipAddress");
+  if (!normalizePayerIp(request.ipAddress)) missing.push("ipAddress");
   // Mercado Pago rechaza la orden sin `config.online.callback_url`, de modo que
   // aquí ReturnUrlConfig no es opcional como sí lo es en Wompi.
   if (!request.returnUrlConfig?.resolveFor("PENDING")) {
@@ -222,7 +255,7 @@ export function buildPseOrderPayload(
       ],
     },
     // La clave lleva un punto en el nombre; no es un objeto anidado.
-    additional_info: { "payer.ip_address": request.ipAddress },
+    additional_info: { "payer.ip_address": normalizePayerIp(request.ipAddress) },
     config: {
       online: {
         // Mercado Pago admite una sola URL de retorno mientras ReturnUrlConfig
@@ -261,27 +294,50 @@ function firstPayment(rawResponse: unknown): Record<string, unknown> | undefined
   return payment as Record<string, unknown>;
 }
 
+/** La orden de la respuesta, venga suelta o dentro de `data`. */
+function orderOf(rawResponse: unknown): Record<string, unknown> | undefined {
+  return (readObject(rawResponse, "data") ?? rawResponse) as Record<string, unknown> | undefined;
+}
+
+/** La URL del banco del primer pago, o `undefined` si no viene. */
+function redirectUrlOf(rawResponse: unknown): string | undefined {
+  const url = readObject(firstPayment(rawResponse), "payment_method")?.redirect_url;
+  return typeof url === "string" && url.length > 0 ? url : undefined;
+}
+
+/**
+ * Si la respuesta trae una orden con estado, pero sin la URL del banco.
+ *
+ * Es la orden que nace `processing` (punto 7 del encabezado). Sin estado no hay nada que
+ * normalizar, y sin identificador el normalizador lanza `MALFORMED_RESPONSE`: las dos son
+ * respuestas malformadas.
+ */
+function isOrderWithoutRedirect(rawResponse: unknown): boolean {
+  const status = orderOf(rawResponse)?.status;
+  return (
+    typeof status === "string" && status.length > 0 && redirectUrlOf(rawResponse) === undefined
+  );
+}
+
 /**
  * Convierte la respuesta de creación en una redirección pendiente.
  *
  * Lanza si no hay URL, en vez de devolver una redirección vacía, por la misma
  * razón que el sondeo de Wompi lanza (punto 43): el comercio recibiría algo que
  * parece válido, no redirigiría a nadie, y el pago quedaría colgado hasta
- * expirar. El error lleva el identificador porque la orden **ya existe** en la
- * pasarela y perderlo volvería irrastreable un cobro real.
+ * expirar. El error lleva el identificador, si lo hay, porque la orden puede
+ * existir en la pasarela. `resolveOrderOutcome()` no llega aquí con una orden que
+ * se puede leer: esa vuelve como transacción.
  */
 export function extractOrderRedirect(rawResponse: unknown): PendingRedirect {
-  const order = (readObject(rawResponse, "data") ?? rawResponse) as
-    | Record<string, unknown>
-    | undefined;
+  const order = orderOf(rawResponse);
   const payment = firstPayment(rawResponse);
-  const method = readObject(payment, "payment_method");
 
   const orderId = String(order?.id ?? "");
-  const redirectUrl = method?.redirect_url;
+  const redirectUrl = redirectUrlOf(rawResponse);
   const rawStatus = String(order?.status ?? payment?.status ?? "");
 
-  if (typeof redirectUrl !== "string" || redirectUrl.length === 0) {
+  if (redirectUrl === undefined) {
     throw new KitPagosError(
       KitPagosErrorCode.MALFORMED_RESPONSE,
       Gateway.MERCADOPAGO,
@@ -317,7 +373,8 @@ function isFailedOrderBody(body: unknown): boolean {
  * Ese `402` no es un fallo de la petición: la orden se creó y su pago se rechazó, y un
  * error haría que el comercio perdiera el identificador de una orden que sí existe. En el
  * issue #122 se decidió tratarlo como un pago `DECLINED`, sin agregar códigos a
- * `KitPagosErrorCode`.
+ * `KitPagosErrorCode`. Desde la versión 0.6.0 vale igual para las órdenes de tarjeta, cuyo
+ * rechazo llega con la misma forma (`mercadopago-card.ts`).
  * Se exigen el status **y** la forma: un `402` sin la orden en `data` sigue siendo error,
  * porque no hay nada que normalizar. El cuerpo se toma del `originalPayload` del error,
  * que ya pasó por la limpieza de credenciales de `httpFailure()`.
@@ -336,66 +393,32 @@ export function acceptFailedOrder(httpStatus: number, failure: KitPagosError): u
 }
 
 /**
- * El resultado de crear una orden de PSE: la orden fallida normalizada, o la redirección.
+ * El resultado de crear una orden de PSE: la orden fallida o sin URL normalizada, o la
+ * redirección.
  *
- * El normalizador lee la orden de `data`, así que recibe el cuerpo del `402` tal cual.
+ * El normalizador lee la orden de `data`, así que recibe el cuerpo del `402` tal cual. Una
+ * orden sin URL sale con el estado que traiga: la medida, `processing`, es `PENDING`.
  */
 export function resolveOrderOutcome(
   rawResponse: unknown,
   normalize: (rawResponse: unknown) => Transaction,
 ): PaymentResult {
-  if (isFailedOrderBody(rawResponse)) {
+  if (isFailedOrderBody(rawResponse) || isOrderWithoutRedirect(rawResponse)) {
     return transactionResult(normalize(rawResponse));
   }
   return redirectRequired(extractOrderRedirect(rawResponse));
 }
 
 /**
- * Extrae la redirección de 3D Secure o autenticación externa de un cobro con tarjeta en Mercado Pago.
- * Mercado Pago entrega la URL del desafío en `point_of_interaction.transaction_data.ticket_url`
- * o en `three_ds_info.external_resource_url` o en `transaction_details.external_resource_url`.
- */
-export function extractPaymentRedirect(rawResponse: unknown): PendingRedirect | undefined {
-  if (typeof rawResponse !== "object" || rawResponse === null) return undefined;
-  const payload = rawResponse as Record<string, unknown>;
-
-  const id = payload.id !== undefined ? String(payload.id) : "";
-  const rawStatus = typeof payload.status === "string" ? payload.status : "";
-
-  const poi = readObject(payload, "point_of_interaction");
-  const transactionData = readObject(poi, "transaction_data");
-  const ticketUrl = transactionData?.ticket_url;
-
-  const threeDs = readObject(payload, "three_ds_info");
-  const threeDsUrl = threeDs?.external_resource_url;
-
-  const transactionDetails = readObject(payload, "transaction_details");
-  const detailsUrl = transactionDetails?.external_resource_url;
-
-  const redirectUrl =
-    (typeof ticketUrl === "string" && ticketUrl.length > 0 && ticketUrl) ||
-    (typeof threeDsUrl === "string" && threeDsUrl.length > 0 && threeDsUrl) ||
-    (typeof detailsUrl === "string" && detailsUrl.length > 0 && detailsUrl);
-
-  if (redirectUrl) {
-    return {
-      redirectUrl,
-      gatewayTransactionId: new GatewayTransactionId(id, Gateway.MERCADOPAGO),
-      rawStatus,
-    };
-  }
-
-  return undefined;
-}
-
-/**
  * Si un identificador corresponde a una orden y no a un pago.
  *
  * Existe porque Mercado Pago tiene dos familias de recursos con endpoints
- * distintos, y `getStatus()` recibe un string plano: los pagos de tarjeta se
- * consultan en `/v1/payments/{id}` con un id numérico, y las órdenes de PSE en
- * `/v1/orders/{id}` con un ULID prefijado `ORD` (medido:
- * `ORD01M2V7ZQH9BAZ57V99VG1NY0K1`). Distinguir por el prefijo es frágil en
+ * distintos, y `getStatus()` recibe un string plano: los pagos de tarjeta creados por la
+ * Payments API antes de la versión 0.6.0 se consultan en `/v1/payments/{id}` con un id
+ * numérico, y las órdenes (PSE y, desde 0.6.0, tarjeta) en `/v1/orders/{id}` con un ULID
+ * prefijado `ORD` (medido: `ORD01M2V7ZQH9BAZ57V99VG1NY0K1`; con las credenciales de un
+ * vendedor de prueba, `ORDTST01M50EJ7EF1B8E8KAS3T7FK5SW` el 15 de octubre de 2026, que el
+ * mismo prefijo cubre). Distinguir por el prefijo es frágil en
  * apariencia, pero la alternativa era cambiar la firma del puerto para las
  * cuatro pasarelas y así meterle a las otras tres una distinción que no tienen.
  */

@@ -1,5 +1,6 @@
 import { buildApp } from "../src/app";
 import {
+  KUSHKI_TOKENIZATION_PREFLIGHT_HEADERS,
   MERCADOPAGO_TOKENIZATION_PREFLIGHT_HEADERS,
   WOMPI_TOKENIZATION_PREFLIGHT_HEADERS,
 } from "../src/gateways/tokenizationCors";
@@ -105,6 +106,65 @@ describe("CORS of the card tokenization routes (point 89)", () => {
 
       expect(res.statusCode).toBe(401);
       expect(res.headers["access-control-allow-origin"]).toBe("*");
+    });
+  });
+
+  describe("Kushki POST /v1/sim/kushki/card/v1/tokens (point 106)", () => {
+    const KUSHKI_TOKENS = "/v1/sim/kushki/card/v1/tokens";
+    const kushkiCard = {
+      card: { name: "APRO Ruiz", number: "4242424242424242", cvv: "123", expiryMonth: "11", expiryYear: "30" },
+      totalAmount: 48000,
+      currency: "COP",
+    };
+
+    it("should answer the browser preflight with 200 and exactly the measured headers", async () => {
+      const res = await app.inject(preflight(KUSHKI_TOKENS, "content-type,public-merchant-id"));
+
+      expect(res.statusCode).toBe(200);
+      expect(accessControlHeaders(res.headers)).toEqual(KUSHKI_TOKENIZATION_PREFLIGHT_HEADERS);
+    });
+
+    it("should open the origin on the token response", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: KUSHKI_TOKENS,
+        headers: { origin: MERCHANT_ORIGIN, "public-merchant-id": "kushki_public_sim" },
+        payload: kushkiCard,
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.headers["access-control-allow-origin"]).toBe("*");
+    });
+
+    it("should open the origin on a 400 too, as the measured K004 does", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: KUSHKI_TOKENS,
+        headers: { origin: MERCHANT_ORIGIN, "public-merchant-id": "kushki_invalid" },
+        payload: kushkiCard,
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.headers["access-control-allow-origin"]).toBe("*");
+    });
+
+    it("should not open the origin on the 401 without merchant id, which the real API sends without CORS", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: KUSHKI_TOKENS,
+        headers: { origin: MERCHANT_ORIGIN },
+        payload: kushkiCard,
+      });
+
+      expect(res.statusCode).toBe(401);
+      expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+    });
+
+    it("should keep the charge route, which only a backend calls, without CORS", async () => {
+      const res = await app.inject(preflight("/v1/sim/kushki/card/v1/charges", "content-type,private-merchant-id"));
+
+      expect(res.statusCode).toBe(404);
+      expect(accessControlHeaders(res.headers)).toEqual({});
     });
   });
 

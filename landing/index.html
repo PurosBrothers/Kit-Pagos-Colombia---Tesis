@@ -213,7 +213,43 @@
           </div>
           <div class="disparity-row">
             <div class="disparity-term">4. Bloqueos en pruebas</div>
-            <div class="disparity-desc">La Orders API de Mercado Pago para PSE responde HTTP 401 en sandbox pidiendo credenciales de producción. Kushki responde <code>CAS004</code> al consultar el estado de una tarjeta. Para no quedarnos varados en desarrollo, construimos el simulador local.</div>
+            <div class="disparity-desc">La Orders API de Mercado Pago, la del PSE, responde HTTP 401 a las credenciales <code>TEST-</code>; solo sirve el par de prueba de un vendedor de prueba. Kushki responde <code>CAS004</code> al consultar el estado de una tarjeta. Para no quedarnos varados en desarrollo, construimos el simulador local.</div>
+          </div>
+        </div>
+
+        <div class="disparity-analysis" id="sandboxes" style="margin-bottom: 24px;">
+          <h3 class="disparity-title">Lo que encontramos en los sandboxes: límites de las pasarelas, no del SDK</h3>
+          <div class="disparity-row">
+            <div class="disparity-term">Mercado Pago · credenciales</div>
+            <div class="disparity-desc">Las de prueba son el par <code>APP_USR-</code> de «Credenciales de prueba» de una aplicación de Checkout API vía Orders. Un par <code>TEST-</code> recibe 401 en la Orders API, y el <code>APP_USR-</code> de producción cobra dinero real.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">Mercado Pago · túnel</div>
+            <div class="disparity-desc">El PSE no vuelve a <code>localhost</code>: rechaza una URL de retorno local. Para probarlo en la máquina hay que servir la página por un túnel público, y la API detrás de un proxy tiene que leer la IP del pagador de <code>X-Forwarded-For</code>.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">Kushki · PSE en UAT</div>
+            <div class="disparity-desc">La página del banco y la vuelta funcionan, pero la transferencia se queda en <code>initializedTransaction</code>: Kushki activa la simulación de estados por comercio, y hay que pedírsela.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">Kushki · tarjeta</div>
+            <div class="disparity-desc">El token queda atado al monto del cobro: cobrarlo por otro responde <code>400 K220</code>. La tarjeta que su documentación lista como aprobada no siempre tokeniza en la cuenta de prueba.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">Rapyd · bancos PSE</div>
+            <div class="disparity-desc">El sandbox solo cobra 9 de sus 50 bancos, y el catálogo no dice cuáles; además renombra métodos sin aviso. El SDK devuelve solo los que cobran.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">Rapyd · tarjeta</div>
+            <div class="disparity-desc">No hay token en el navegador: la tarjeta se escribe en su página alojada, que pasa por un simulador de 3DS y devuelve al comercio. El SDK lo entrega como una redirección, igual que un PSE.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">Wompi · PSE</div>
+            <div class="disparity-desc">El sandbox no tiene página de banco: el desenlace se elige con tres bancos de prueba, el que aprueba, el que declina y el que simula un error.</div>
+          </div>
+          <div class="disparity-row">
+            <div class="disparity-term">Llaves del navegador</div>
+            <div class="disparity-desc">La llave pública con la que la página tokeniza tiene que ser del mismo par que las credenciales con que el servidor cobra: si son de cuentas distintas, el token no sirve.</div>
           </div>
         </div>
 
@@ -426,7 +462,7 @@
             <div>
               <h3 class="comparison-title" style="margin-bottom: 8px;">Tokenización en el cliente: cumplimiento PCI DSS</h3>
               <p class="section-lead" style="margin-bottom: 24px; font-size: 0.9375rem;">
-                El número de la tarjeta no pasa por tu servidor: el navegador lo manda directo a la pasarela, y tu backend solo recibe el token. El módulo <code>kit-pagos-colombia/browser</code> (16 KB, cero dependencias) tokeniza directo desde el navegador contra Wompi o Mercado Pago y te entrega un token opaco (<code>tok_...</code>) listo para cobrar desde el backend.
+                El número de la tarjeta no pasa por tu servidor: el navegador lo manda directo a la pasarela, y tu backend solo recibe el token. El módulo <code>kit-pagos-colombia/browser</code> (22 KB, cero dependencias) tokeniza directo desde el navegador contra Wompi, Mercado Pago o, desde la 0.6.0, Kushki, y te entrega un token opaco listo para cobrar desde el backend. Rapyd no tokeniza en el navegador: el pago se crea sin token y el pagador escribe la tarjeta en su página alojada.
               </p>
 
               <div class="terminal">
@@ -668,7 +704,7 @@
             <div class="data-sheet" style="margin-top: 24px;">
               <div class="data-sheet-header">
                 <h4 class="data-sheet-title">Mapeo canónico de errores (KitPagosErrorCode)</h4>
-                <p class="data-sheet-sub">Los doce códigos de error del dominio están formalmente asociados a su código de estado HTTP correspondiente según RF-08.</p>
+                <p class="data-sheet-sub">Los trece códigos de error del dominio están formalmente asociados a su código de estado HTTP correspondiente según RF-08.</p>
               </div>
               <div class="table-container">
                 <table class="data-table">
@@ -685,6 +721,7 @@
                     <tr><td><code>INVALID_CREDENTIALS</code></td><td><code class="text-amber">401</code></td><td>Llaves públicas/privadas ausentes, inválidas o rechazadas por el proveedor.</td></tr>
                     <tr><td><code>WEBHOOK_SIGNATURE_INVALID</code></td><td><code class="text-amber">401</code></td><td>Firma HMAC/SHA-256 no coincide o marca de tiempo fuera de la ventana de tolerancia.</td></tr>
                     <tr><td><code>RESOURCE_NOT_FOUND</code></td><td><code class="text-amber">404</code></td><td>Transacción o recurso inexistente en la pasarela.</td></tr>
+                    <tr><td><code>RESOURCE_LOCKED</code></td><td><code class="text-amber">423</code></td><td>La pasarela procesa otra petición con la misma llave de idempotencia (Orders API de Mercado Pago); es transitorio.</td></tr>
                     <tr><td><code>RATE_LIMIT_EXCEEDED</code></td><td><code class="text-amber">429</code></td><td>Límite de peticiones por segundo alcanzado en el proveedor.</td></tr>
                     <tr><td><code>CONNECTION_FAILED</code></td><td><code class="text-amber">502</code></td><td>Fallo de socket de red o DNS al contactar el API de la pasarela.</td></tr>
                     <tr><td><code>GATEWAY_SERVER_ERROR</code></td><td><code class="text-amber">502</code></td><td>Error 5xx interno emitido por los servidores del proveedor.</td></tr>
@@ -705,7 +742,7 @@
                 <span>API de Simulación de Pasarelas</span>
                 <span class="endpoints-facet-tag">Tag: Simulación · Prefijo: /v1/sim</span>
               </h3>
-              <span class="text-muted" style="font-size: 0.8125rem;">25 Rutas Mock · Wompi, Mercado Pago, Kushki y Rapyd</span>
+              <span class="text-muted" style="font-size: 0.8125rem;">33 Rutas Mock · Wompi, Mercado Pago, Kushki y Rapyd</span>
             </div>
 
             <p class="endpoint-desc" style="margin-bottom: 20px;">
@@ -716,53 +753,68 @@
               <div class="sim-gw-box">
                 <div class="sim-gw-name">
                   <span>Wompi Simulado</span>
-                  <span class="endpoints-facet-tag">5 rutas</span>
+                  <span class="endpoints-facet-tag">7 rutas</span>
                 </div>
                 <ul class="sim-gw-routes">
-                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/wompi/merchants/:key</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/wompi/merchants/:publicKey</code></li>
                   <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/wompi/tokens/cards</code></li>
                   <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/wompi/transactions</code></li>
                   <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/wompi/transactions/:id</code></li>
                   <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/wompi/pse/financial_institutions</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/wompi/pse/redirect</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/wompi/terms</code></li>
                 </ul>
               </div>
 
               <div class="sim-gw-box">
                 <div class="sim-gw-name">
                   <span>Mercado Pago Simulado</span>
-                  <span class="endpoints-facet-tag">4 rutas</span>
+                  <span class="endpoints-facet-tag">9 rutas</span>
                 </div>
                 <ul class="sim-gw-routes">
-                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/mercadopago/v1/payments</code></li>
-                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/mercadopago/v1/payments/:id</code></li>
-                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/mercadopago/v1/orders</code></li>
-                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/mercadopago/v1/payment_methods/pse/banks</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/mercadopago/card_tokens</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/mercadopago/card_tokens/:id</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/mercadopago/payment_methods/search</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/mercadopago/orders</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/mercadopago/orders/:id</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/mercadopago/payments</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/mercadopago/payments/:id</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/mercadopago/payment_methods</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/mercadopago/payments/:paymentId/bank_transfer</code></li>
                 </ul>
               </div>
 
               <div class="sim-gw-box">
                 <div class="sim-gw-name">
                   <span>Kushki Simulado</span>
-                  <span class="endpoints-facet-tag">4 rutas</span>
+                  <span class="endpoints-facet-tag">7 rutas</span>
                 </div>
                 <ul class="sim-gw-routes">
                   <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/kushki/card/v1/charges</code></li>
-                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/kushki/tokens/v1/card</code></li>
-                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/kushki/transfer-in/v1/init</code></li>
-                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/kushki/transfer-in/v1/status/:token</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/kushki/charges/:ticketNumber</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/kushki/transfer/v1/bankList</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/kushki/transfer/v1/tokens</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/kushki/transfer/v1/init</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/kushki/transfer/v1/status/:token</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/kushki/transfer/v1/agent</code></li>
                 </ul>
               </div>
 
               <div class="sim-gw-box">
                 <div class="sim-gw-name">
                   <span>Rapyd Simulado</span>
-                  <span class="endpoints-facet-tag">4 rutas</span>
+                  <span class="endpoints-facet-tag">9 rutas</span>
                 </div>
                 <ul class="sim-gw-routes">
-                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/rapyd/v1/checkout</code></li>
-                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/rapyd/v1/payments</code></li>
-                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/rapyd/v1/payments/:id</code></li>
-                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/rapyd/v1/payment_methods/banks</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/rapyd/checkout</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/rapyd/checkout/:checkoutId</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/rapyd/checkout/:checkoutId/pay</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/rapyd/checkout/:checkoutId/pagar</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/rapyd/payments</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/rapyd/payments/:paymentId</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-post sim-route-method">POST</span><code>/v1/sim/rapyd/customers</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/rapyd/payment_methods/country</code></li>
+                  <li class="sim-route-row"><span class="method-badge method-get sim-route-method">GET</span><code>/v1/sim/rapyd/complete-bank-payment</code></li>
                 </ul>
               </div>
             </div>
@@ -775,7 +827,7 @@
               <div style="padding-top: 6px;">
                 <div class="sim-route-row" style="margin-bottom: 8px;">
                   <span class="method-badge method-post sim-route-method">POST</span>
-                  <code>/v1/sim/webhooks/trigger/:gateway</code>
+                  <code>/v1/sim/webhooks/trigger</code>
                 </div>
                 <p style="margin: 0; font-size: 0.8125rem; color: var(--text-muted); line-height: 1.5;">
                   Emite una notificación HTTP firmada criptográficamente hacia una URL destino, reproduciendo el evento asíncrono que entregaría la pasarela en producción.
@@ -820,10 +872,10 @@
               <h3 class="arch-title">API de Simulación</h3>
             </div>
             <p class="arch-desc">
-              Servidor local con 25 rutas mock para flujos de tarjeta y PSE de Wompi, Mercado Pago, Kushki y Rapyd. Desbloquea flujos que los sandboxes oficiales rompen (como el 401 de Mercado Pago en sandbox PSE) y expone <code>/v1/api</code> para probar cobros por HTTP sin escribir código.
+              Servidor local con 33 rutas mock para flujos de tarjeta y PSE de Wompi, Mercado Pago, Kushki y Rapyd. Desbloquea flujos que los sandboxes oficiales rompen (como el 401 de Mercado Pago en sandbox PSE) y expone <code>/v1/api</code> para probar cobros por HTTP sin escribir código.
             </p>
             <div class="arch-meta">
-              25 Rutas Mock · Capa REST /v1/api · Respuestas predecibles
+              33 Rutas Mock · Capa REST /v1/api · Respuestas predecibles
             </div>
           </article>
 

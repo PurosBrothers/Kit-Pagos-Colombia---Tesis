@@ -255,6 +255,24 @@ Para simular rechazos o errores en el procesamiento de tarjetas en Sandbox:
 
 4. **Autenticar:** Serás llevado automáticamente a la pantalla de 3DS. Ingresa el código **`123456`** y haz clic en **Continue** para completar el pago y disparar el webhook `PAYMENT_COMPLETED`.
 
+### 4.1. Medido desde la tienda del prototipo C (17 de octubre de 2026)
+
+> **Nivel 1**, punto 106 del `architecture-log.md`. Tienda en `http://localhost:4120`, API de la rama en
+> local con el `.env` de sandbox. Capturas en la evidencia del #109 (`tarjeta-cuatro-pasarelas/`).
+
+- **El pago se crea sin token.** `POST /v1/api/payments` con `paymentMethod: { type: "CARD" }` crea el
+  checkout (`POST /v1/checkout`) y responde `REDIRECT_REQUIRED` hacia
+  `https://sandboxcheckout.rapyd.net/?token=checkout_<32 hex>`. Con `returnUrl` en
+  `http://localhost:4100/?retorno=1` también: Rapyd acepta una URL de retorno local, a diferencia de
+  Mercado Pago.
+- **La página.** «Card Details» (número, MM/YY, CVV, nombre) y el total en COP. Con
+  `4111 1111 1111 1111`, 12/30, CVV `123` y «Place Your Order», lleva a
+  `sandboxcheckout.rapyd.net/3ds-payment?token=payment_<32 hex>`: el «Rapyd 3DS Simulator», que pide
+  `123456` para simular la aprobación del titular («Cancel» simula el error).
+- **La vuelta.** Después de «Continue», Rapyd lleva solo al navegador a la URL de retorno, sin parámetros
+  propios (`http://localhost:4120/?retorno=1`). La consulta del checkout da el pago aprobado, y la tienda
+  mostró «¡Gracias! Tu pago fue aprobado» (29 000 COP).
+
 ---
 
 ## 5. PSE (Pagos Seguros en Línea)
@@ -432,7 +450,7 @@ Cuatro casos reales del sandbox que van a morder a quien derive nombres a mano:
 | **Tres formas de pagar con BBVA** | `co_bbva_bank`, `co_bbva_colombia_bank` y `co_pse_banco_bbva_colombia_bank` coexisten |
 | **Un typo en producción** | `co_bancoavvilas_bank` ("Banco AV Villa") y `co_bancoavvillas_bank` ("Banco AV Villas") coexisten, con una `l` de diferencia |
 | **Sufijo duplicado** | `co_pse_lulo_bank_bank` termina en `_bank_bank` |
-| **Nombre desincronizado del tipo** | `co_pse_scotiabank_colpatria_bank` se llama hoy **"Davibank"** tras el rebranding |
+| **Nombre desincronizado del tipo** | `co_pse_scotiabank_colpatria_bank` se llamaba **"Davibank"** tras el rebranding. El 17 de octubre de 2026 ya no estaba: Rapyd lo renombró a `co_pse_davibank_bank` (sección 5.8) |
 
 De la última sale una regla dura: **el nombre visible del banco se lee del campo `name` que
 devuelve la API, nunca se deriva del string del tipo.** El tipo conserva la marca vieja.
@@ -456,3 +474,43 @@ PSE en Rapyd está medido hasta la redirección, no más allá.
 > producción devuelve solo los que la organización tiene habilitados. Los 47 `co_pse_*` prueban que
 > el catálogo existe y cuál es su contrato, **no** que una cuenta de producción los tenga los 47
 > activos.
+
+### 5.8. El sandbox solo procesa 9 de los 50 bancos (17 de octubre de 2026)
+
+> **Medido contra `sandboxapi.rapyd.net` el 17 de octubre de 2026, entre las 10:52 y las 11:00
+> (UTC−5)**, con las credenciales del `.env` y el SDK de la rama del issue #109: un `createPayment()`
+> de PSE por cada banco de `getPseBanks()`, con los datos del cliente C (50 000 COP, CC 1020304050,
+> teléfono y nombre completo). Lo encontró Joshua al probar el PR contra Render: Davivienda llevaba a
+> la página de Rapyd y Nequi respondía `400`.
+
+El catálogo trae hoy **50** métodos `co_pse_*`, no los 47 de la sección 5.1. Cambiaron cuatro cosas:
+`co_pse_scotiabank_colpatria_bank` ya no está y en su lugar aparece `co_pse_davibank_bank`, y son
+nuevos `co_pse_banco_contactar_bank`, `co_pse_accion_fiduciaria_bank` y `co_pse_paycash_bank`. Esos
+tres no están en la lista de PSE de Mercado Pago, de donde salió `PseBankCode` (47 bancos, la misma
+lista medida ese día), así que salen sin `achCode`.
+
+| Resultado | Cantidad | Bancos |
+| --- | --- | --- |
+| `REDIRECT_REQUIRED`, `ACT`, a `sandboxcheckout.rapyd.net` | **9** | `co_pse_banco_davivienda_bank`, `co_pse_bancolombia_bank`, `co_pse_banco_caja_social_bank`, `co_pse_banco_av_villas_bank`, `co_pse_banco_union_bank`, `co_pse_banco_contactar_bank`, `co_pse_accion_fiduciaria_bank`, `co_pse_ding_bank`, `co_pse_paycash_bank` |
+| `400`, `ERROR_GET_GATEWAY`, «Contact Rapyd Client Support.» | **41** | Los demás, entre ellos `co_pse_nequi_bank`, `co_pse_daviplata_bank`, `co_pse_banco_de_bogota_bank`, `co_pse_banco_bbva_colombia_bank`, `co_pse_banco_popular_bank` y `co_pse_banco_de_occidente_bank` |
+
+`ERROR_GET_GATEWAY` dice que la cuenta no tiene un procesador para ese método: el método existe en
+el catálogo, pero esta organización de sandbox no lo puede cobrar. Es lo que anticipa la nota de la
+sección 5.7, ahora medido. Un `400` llega al SDK como `INVALID_REQUEST`, y el mensaje que ve el
+comercio es «Rapyd gateway returned an HTTP error status 400», sin el código de Rapyd. *(Desde
+el SDK 0.6.0-rc.5 el mensaje trae el código y el motivo: «… status 400 (ERROR_GET_GATEWAY:
+Contact Rapyd Client Support.)», punto 107 del `architecture-log.md`.)*
+
+Lo que se hizo con esto (SDK 0.6.0-rc.3, punto 102 del `architecture-log.md`):
+
+- **`getPseBanks()` de Rapyd, contra el sandbox, devuelve solo esos 9.** La lista está escrita en
+  `RAPYD_SANDBOX_PSE_TYPES` (`sdk/src/infrastructure/adapters/rapyd-pse-banks.ts`) y se aplica solo
+  cuando la URL base es `sandboxapi.rapyd.net`. En producción Rapyd lista solo los métodos habilitados,
+  y en el simulador todos cobran.
+- **`PseBankCode.DAVIBANK` se traduce a `co_pse_davibank_bank`.** Con el nombre anterior, un cobro con
+  ese código iba a un método que ya no existe.
+- **La prueba de contrato cobra una vez con cada banco del catálogo** y exige que los que cobran sean
+  exactamente los de la lista, y que la tabla de traducción no apunte a un método que Rapyd ya no tenga.
+  Si Rapyd habilita o deshabilita un banco, falla. El 17 de octubre, hacia las 11:40, pasó 6 de 6.
+
+El mensaje del error sigue sin el código de Rapyd; se deja para después de este PR.

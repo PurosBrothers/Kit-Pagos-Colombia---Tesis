@@ -4,9 +4,30 @@ import {
   MercadoPagoCreatePaymentRequestBody,
   MercadoPagoOrderResponse,
   MercadoPagoOrderStatus,
+  MercadoPagoPaymentMethodResult,
+  MercadoPagoPaymentMethodSearchResponse,
   MercadoPagoPaymentResponse,
   MercadoPagoTokenizeCardRequestBody,
 } from "./types";
+
+/**
+ * Los medios de pago de las tarjetas de prueba, por BIN.
+ *
+ * Nivel 1 — medido con `GET /v1/payment_methods/search` el 15 de octubre de 2026: `401354`
+ * (Visa crédito), `525413` (Mastercard crédito) y `491511` (Visa débito) son los BIN de las
+ * tres tarjetas de `docs/testing-data/mercado-pago.md`. Los demás BIN que empiezan con 4 o con
+ * 5 caen en Visa o Mastercard crédito, que es una convención del simulador sin medir.
+ */
+const PAYMENT_METHODS_BY_BIN: ReadonlyMap<string, MercadoPagoPaymentMethodResult> = new Map([
+  ["401354", { id: "visa", name: "Visa", payment_type_id: "credit_card", status: "active" }],
+  ["525413", { id: "master", name: "Mastercard", payment_type_id: "credit_card", status: "active" }],
+  ["491511", { id: "debvisa", name: "Visa Débito", payment_type_id: "debit_card", status: "active" }],
+]);
+
+const PAYMENT_METHODS_BY_FIRST_DIGIT: ReadonlyMap<string, MercadoPagoPaymentMethodResult> = new Map([
+  ["4", PAYMENT_METHODS_BY_BIN.get("401354")!],
+  ["5", PAYMENT_METHODS_BY_BIN.get("525413")!],
+]);
 
 /** Algoritmo de Luhn (ISO/IEC 7812-1) sobre una cadena de solo dígitos. */
 function passesLuhn(digits: string): boolean {
@@ -24,18 +45,50 @@ function passesLuhn(digits: string): boolean {
 }
 
 /**
+ * El titular del token: la identificación vuelve solo si llegaron el tipo y el número.
+ *
+ * Nivel 1 (medido contra api.mercadopago.com el 4 de octubre de 2026): si falta
+ * `cardholder.identification`, la API responde `identification: {}`.
+ */
+function tokenCardholder(
+  requestBody: MercadoPagoTokenizeCardRequestBody,
+): MercadoPagoCardTokenResponse["cardholder"] {
+  const hasId = Boolean(
+    requestBody.cardholder?.identification?.type &&
+    requestBody.cardholder?.identification?.number,
+  );
+
+  const idObj = hasId
+    ? {
+        type: requestBody.cardholder!.identification!.type,
+        number: requestBody.cardholder!.identification!.number,
+      }
+    : {};
+
+  return {
+    name: requestBody.cardholder?.name ?? "APRO",
+    identification: idObj,
+  };
+}
+
+/**
  * Gateway Mock Factory — Mercado Pago (API de Simulación).
  *
  * Responsabilidad única: construir el payload de respuesta que replica la
- * estructura nativa de Mercado Pago (/v1/payments) para los escenarios soportados.
+ * estructura nativa de Mercado Pago para los escenarios soportados.
  *
  * Particularidades nativas de Mercado Pago:
  * - Estados en minúsculas (`approved`, `rejected`, etc.).
  * - Monto en pesos decimales (`transaction_amount`), no en centavos.
  * - Objeto plano sin envoltorio `data`.
  * - `status_detail` con el código nativo de acreditación o rechazo.
+ *
+ * Desde el issue #153 son cuatro clases, una por recurso de la API: los pagos de
+ * `/v1/payments`, las órdenes de `/v1/orders` (PSE y tarjeta), la tarjeta antes del cobro
+ * (`/v1/card_tokens` y `/v1/payment_methods/search`) y los cuerpos de error nativos. Ver el
+ * punto 107 del `architecture-log.md`.
  */
-export class GatewayMockFactory {
+export class MercadoPagoPaymentMockFactory {
   /**
    * Genera un identificador numérico aleatorio al estilo de Mercado Pago (ej. 1234567890).
    */
@@ -148,40 +201,10 @@ export class GatewayMockFactory {
       date_approved: null,
     };
   }
+}
 
-  /**
-   * Respuesta nativa de timeout para Mercado Pago (HTTP 504).
-   */
-  buildTimeoutResponse() {
-    return {
-      message: "Gateway Timeout",
-      error: "gateway_timeout",
-      status: 504,
-    };
-  }
-
-  /**
-   * Respuesta nativa de rate limit para Mercado Pago (HTTP 429).
-   */
-  buildRateLimitResponse() {
-    return {
-      message: "Too many requests",
-      error: "rate_limit_exceeded",
-      status: 429,
-    };
-  }
-
-  /**
-   * Respuesta nativa de error de servidor para Mercado Pago (HTTP 5xx).
-   */
-  buildServerErrorResponse(status = 500) {
-    return {
-      message: "Internal Server Error",
-      error: "server_error",
-      status,
-    };
-  }
-
+/** Las órdenes de `/v1/orders`: la de PSE y la de tarjeta, que cobra la versión 0.6.0 del SDK. */
+export class MercadoPagoOrderMockFactory {
   /**
    * Identificador de orden al estilo de la Orders API: un ULID con prefijo.
    *
@@ -195,15 +218,40 @@ export class GatewayMockFactory {
   }
 
   /**
+   * El identificador que la URL del banco lleva en la ruta (`/payments/<id>/bank_transfer`).
+   *
+   * Nivel 1 — medido contra `api.mercadopago.com` el 14 de octubre de 2026: son doce dígitos y
+   * **no** son el `PAY…` del pago (`docs/testing-data/mercado-pago.md`, «La URL de banco del
+   * PSE y la vuelta al comercio»). La vuelta al comercio lo trae como `payment_id`. El valor
+   * es aleatorio; solo la forma está medida.
+   */
+  generateBankPaymentId(): string {
+    const first = 1 + Math.floor(Math.random() * 9);
+    const rest = Math.floor(Math.random() * 1e11)
+      .toString()
+      .padStart(11, "0");
+    return `${first}${rest}`;
+  }
+
+  /**
    * Construye la respuesta de una orden de PSE esperando al pagador.
    *
    * Reproduce el caso que la API real devuelve con HTTP 201: `action_required` /
    * `waiting_transfer` y la URL del banco ya presente en la creación. A
    * diferencia de Wompi, aquí no hay nada que sondear (ver el punto 43 del
    * `architecture-log.md` para la comparación).
+   *
+   * `origin` es el `protocolo://host` de la petición que crea la orden (`requestOrigin()`):
+   * la URL del banco apunta a la página de banco del propio simulador, con la forma de ruta
+   * medida (`/payments/<id numérico>/bank_transfer`) bajo `/v1/sim/mercadopago`. Antes
+   * apuntaba al dominio real con un id inventado y abrirla daba «Esta página no existe»
+   * (issue #109). `bankPaymentId` es ese id numérico (`generateBankPaymentId()`); el llamador
+   * lo necesita para registrar la URL de retorno.
    */
   buildPendingOrderResponse(
     requestBody: MercadoPagoCreateOrderRequestBody,
+    origin: string,
+    bankPaymentId: string,
     customId?: string,
   ): MercadoPagoOrderResponse {
     const paymentId = this.generateOrderId("PAY");
@@ -214,31 +262,8 @@ export class GatewayMockFactory {
       paymentId,
       status: "action_required",
       statusDetail: "waiting_transfer",
-      // El identificador del pago va en la URL porque es lo que hace la pasarela
-      // real, y así el ejemplo muestra una URL distinta por pago.
-      redirectUrl: `https://www.mercadopago.com.co/payments/${paymentId}/bank_transfer`,
+      redirectUrl: `${origin}/v1/sim/mercadopago/payments/${bankPaymentId}/bank_transfer`,
       financialInstitution: requested?.payment_method?.financial_institution,
-    });
-  }
-
-  /**
-   * Construye la respuesta de una orden ya pagada, que es lo que la pasarela
-   * devuelve cuando el pagador completó la transferencia en el banco.
-   *
-   * No lleva `redirect_url`: la orden ya no espera a nadie. Es el estado que el
-   * comercio debería ver al consultar después de que el pagador vuelve.
-   */
-  buildProcessedOrderResponse(
-    requestBody: MercadoPagoCreateOrderRequestBody,
-    customId?: string,
-  ): MercadoPagoOrderResponse {
-    return this.buildOrder(requestBody, {
-      orderId: customId ?? this.generateOrderId("ORD"),
-      paymentId: this.generateOrderId("PAY"),
-      status: "processed",
-      statusDetail: "accredited",
-      financialInstitution:
-        requestBody.transactions?.payments?.[0]?.payment_method?.financial_institution,
     });
   }
 
@@ -262,6 +287,71 @@ export class GatewayMockFactory {
       financialInstitution:
         requestBody.transactions?.payments?.[0]?.payment_method?.financial_institution,
     });
+  }
+
+  /**
+   * Construye una orden de tarjeta, la que cobra la versión 0.6.0 del SDK.
+   *
+   * Nivel 1 — medido contra `api.mercadopago.com` el 15 de octubre de 2026, con 20 000 COP
+   * (`docs/testing-data/mercado-pago.md`). La forma es la misma en los tres desenlaces:
+   * `processed / accredited` aprobada, `processing / in_process` pendiente y `failed /
+   * failed` rechazada, con el motivo solo en el pago. A diferencia de la orden de PSE fallida,
+   * la de tarjeta trae `total_paid_amount` y `paid_amount` iguales al total aunque falle, y
+   * no trae `payer` ni al crear ni al consultar. `transaction_security.validation` llegó
+   * siempre en `never`. El id real de un vendedor de prueba empieza con `ORDTST`; aquí se
+   * usa `ORD`, que el SDK reconoce igual (`isOrderId()`).
+   *
+   * `installment_amount` es el total entre las cuotas, redondeado: con 20 000 en 3 cuotas
+   * la API real respondió `"6667"`.
+   */
+  buildCardOrderResponse(
+    requestBody: MercadoPagoCreateOrderRequestBody,
+    status: MercadoPagoOrderStatus,
+    statusDetail: string,
+    paymentStatusDetail = statusDetail,
+  ): MercadoPagoOrderResponse {
+    const now = new Date().toISOString();
+    const total = requestBody.total_amount;
+    const requested = requestBody.transactions?.payments?.[0]?.payment_method;
+    const installments = requested?.installments ?? 1;
+    const transactionSecurity = { validation: "never" };
+
+    return {
+      id: this.generateOrderId("ORD"),
+      type: requestBody.type ?? "online",
+      processing_mode: requestBody.processing_mode ?? "automatic",
+      external_reference: requestBody.external_reference,
+      total_amount: total,
+      total_paid_amount: total,
+      country_code: "COL",
+      status,
+      status_detail: statusDetail,
+      capture_mode: "automatic_async",
+      currency: "COP",
+      created_date: now,
+      last_updated_date: now,
+      config: { online: { transaction_security: transactionSecurity } },
+      transactions: {
+        payments: [
+          {
+            id: this.generateOrderId("PAY"),
+            amount: total,
+            paid_amount: total,
+            reference_id: Math.random().toString(36).slice(2, 12),
+            status,
+            status_detail: paymentStatusDetail,
+            payment_method: {
+              id: requested?.id ?? "",
+              type: requested?.type ?? "",
+              token: requested?.token,
+              installments,
+              installment_amount: String(Math.round(Number(total) / installments)),
+              transaction_security: transactionSecurity,
+            },
+          },
+        ],
+      },
+    };
   }
 
   /**
@@ -322,12 +412,29 @@ export class GatewayMockFactory {
       },
     };
   }
+}
+
+/** La tarjeta antes del cobro: el token de `/v1/card_tokens` y el medio de pago de su BIN. */
+export class MercadoPagoCardMockFactory {
+  /**
+   * Construye la respuesta de `GET /v1/payment_methods/search` para un BIN.
+   *
+   * Nivel 1 para la forma (`paging` y `results`) y para el BIN sin medio de pago: `999999`
+   * respondió `results: []` con `total: 0` el 15 de octubre de 2026. La API real devuelve dos
+   * entradas iguales para cada BIN medido y decenas de campos por entrada; aquí va una, con
+   * los campos que lee el SDK.
+   */
+  buildPaymentMethodSearchResponse(bin: string): MercadoPagoPaymentMethodSearchResponse {
+    const match = PAYMENT_METHODS_BY_BIN.get(bin) ?? PAYMENT_METHODS_BY_FIRST_DIGIT.get(bin.charAt(0));
+    const results = match ? [match] : [];
+    return { paging: { total: results.length, limit: 30, offset: 0 }, results };
+  }
 
   /**
    * Construye la respuesta nativa de tokenización de tarjeta (POST /v1/card_tokens).
    *
    * Nivel de evidencia 1 (medido contra api.mercadopago.com el 4 de octubre de 2026):
-   * Si falta cardholder.identification, responde con identification: {}.
+   * Si falta cardholder.identification, responde con identification: {} (`tokenCardholder()`).
    * Si el número no pasa Luhn, emite el token igual con luhn_validation: false: medido con
    * "1234" y con 4013540682746261, que tiene 16 dígitos pero falla el dígito verificador.
    *
@@ -359,18 +466,6 @@ export class GatewayMockFactory {
     const lastFourDigits = cleanNumber.slice(-4) || "6260";
     const hiddenDigits = Math.max(cleanNumber.length - 10, 0);
 
-    const hasId = Boolean(
-      requestBody.cardholder?.identification?.type &&
-      requestBody.cardholder?.identification?.number,
-    );
-
-    const idObj = hasId
-      ? {
-          type: requestBody.cardholder!.identification!.type,
-          number: requestBody.cardholder!.identification!.number,
-        }
-      : {};
-
     return {
       id: `tok_sim_mp_${Math.random().toString(36).substring(2, 12)}`,
       public_key: publicKey,
@@ -388,10 +483,43 @@ export class GatewayMockFactory {
       date_created: now.toISOString(),
       date_last_updated: now.toISOString(),
       date_due: dueDate.toISOString(),
-      cardholder: {
-        name: requestBody.cardholder?.name ?? "APRO",
-        identification: idObj,
-      },
+      cardholder: tokenCardholder(requestBody),
+    };
+  }
+}
+
+/** Los cuerpos de error nativos de Mercado Pago, los que usa `technicalFailure()` en todas sus rutas. */
+export class MercadoPagoErrorMockFactory {
+  /**
+   * Respuesta nativa de timeout para Mercado Pago (HTTP 504).
+   */
+  buildTimeoutResponse() {
+    return {
+      message: "Gateway Timeout",
+      error: "gateway_timeout",
+      status: 504,
+    };
+  }
+
+  /**
+   * Respuesta nativa de rate limit para Mercado Pago (HTTP 429).
+   */
+  buildRateLimitResponse() {
+    return {
+      message: "Too many requests",
+      error: "rate_limit_exceeded",
+      status: 429,
+    };
+  }
+
+  /**
+   * Respuesta nativa de error de servidor para Mercado Pago (HTTP 5xx).
+   */
+  buildServerErrorResponse(status = 500) {
+    return {
+      message: "Internal Server Error",
+      error: "server_error",
+      status,
     };
   }
 }

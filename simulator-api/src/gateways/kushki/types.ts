@@ -46,6 +46,25 @@ export interface KushkiCreateChargeRequestBody {
   };
 }
 
+/**
+ * Cuerpo de `POST /card/v1/tokens`, la tokenización de tarjeta que hace el navegador.
+ *
+ * **Forma verificada contra la API UAT** el 17 de octubre de 2026: con este cuerpo responde
+ * `201 { token }` (32 hexadecimales); sin `totalAmount` o con un número corto, `400 K001`; sin
+ * `currency`, `400 K055`.
+ */
+export interface KushkiCardTokenRequestBody {
+  card?: {
+    name?: string;
+    number?: string;
+    cvv?: string;
+    expiryMonth?: string;
+    expiryYear?: string;
+  };
+  totalAmount?: number;
+  currency?: string;
+}
+
 /** Estados nativos de transacción de Kushki para pagos con tarjeta. */
 export type KushkiTransactionStatus = "APPROVAL" | "DECLINED" | "INITIALIZED";
 

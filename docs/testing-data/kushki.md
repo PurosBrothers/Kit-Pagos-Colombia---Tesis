@@ -68,7 +68,8 @@ segunda (punto 50 del `architecture-log.md`):
   `POST /card/v1/tokens`: el BIN no está habilitado para el comercio. Las tarjetas de rechazo
   de la misma tabla sí tokenizan, así que no es la tabla entera, es esa fila para esta cuenta.
   Para probar conviene una Visa de prueba genérica (`4242 4242 4242 4242`), que tokeniza y
-  aprueba.
+  aprueba. *(El 17 de octubre de 2026 `5451 9515 7492 5480` sí tokenizó, con `201`: la cuenta
+  cambió sin aviso. Ver la sección 1.3.)*
 - **La única consulta de tarjeta que Kushki publica es la del flujo asíncrono, y el cobro
   síncrono no está ahí.** Conviene leer cómo se llegó a esto, porque la primera conclusión fue
   más fuerte de lo que la medición aguantaba.
@@ -163,6 +164,33 @@ segunda (punto 50 del `architecture-log.md`):
   correrlo.
 - Que haya dos autorizadores distintos (uno propio para tarjeta y una política de IAM para
   transferencias) es una explicación posible, no medida.
+
+---
+
+### 1.3. La tokenización desde el navegador (17 de octubre de 2026)
+
+> **Medido contra `api-uat.kushkipagos.com` con `Origin: https://tienda-prueba.trycloudflare.com`**,
+> para el punto 106 del `architecture-log.md`. Es lo que hace `KitPagosBrowser` desde la 0.6.0-rc.4.
+
+`POST /card/v1/tokens` acepta llamadas desde el navegador del pagador, sin los campos alojados en
+iframes de su librería:
+
+| Petición | Respuesta |
+|---|---|
+| Preflight `OPTIONS`, con `access-control-request-headers: content-type,public-merchant-id` | `200`, `access-control-allow-origin: *`, `access-control-allow-methods: OPTIONS,POST`, y `Public-Merchant-Id` entre las cabeceras permitidas |
+| `POST` con `Public-Merchant-Id`, `{ card: { name, number, cvv, expiryMonth, expiryYear }, totalAmount: 48000, currency: "COP" }` | `201 { token }`, 32 hexadecimales, con `access-control-allow-origin: *` |
+| El mismo, con `totalAmount: 48000.5` | `201`: admite decimales |
+| Sin `totalAmount`, o con un número de 4 dígitos | `400 { code: "K001", message: "Cuerpo de la petición inválido." }` |
+| Sin `currency` | `400 { code: "K055", message: "Tipo de moneda no permitido" }` |
+| Con un `Public-Merchant-Id` que no existe | `400 { code: "K004", message: "ID de comercio o credencial no válido" }` |
+| Sin `Public-Merchant-Id` | `401 { message: "Unauthorized" }`, **sin** `access-control-allow-origin`: un navegador no puede leerlo |
+| Con una tarjeta vencida (`expiryYear: "20"`) | `201`: la vigencia no se revisa al tokenizar |
+
+**El token queda atado al monto.** Un token emitido por 48 000 y cobrado por 48 000 en
+`POST /card/v1/charges` (a través de `/v1/api` en Render) salió `APPROVED`. Cobrado por 50 000,
+responde `400 { code: "K220", message: "Monto de la transacción es diferente al monto de la venta
+inicial" }`. Quien tokeniza tiene que saber el monto del cobro, y cobrarlo exacto; el SDK de
+servidor devuelve ese `400` como `INVALID_REQUEST`, sin el mensaje de Kushki.
 
 ---
 
@@ -365,7 +393,30 @@ opción porque es la que el simulador implementa.
 `declinedTransaction` exige que una persona autorice en el portal del banco simulado, y los números
 de documento de prueba de la sección 5.4 **no cambian el estado por sí solos** —los cuatro quedan en
 `initializedTransaction` hasta que alguien complete la autorización—. Los estados finales de la tabla
-del SDK vienen de la documentación de Kushki y están marcados como tales.
+del SDK vienen de la documentación de Kushki y están marcados como tales. *(Desde el 14 de octubre
+de 2026 la página de UAT no ofrece autorizar ni elegir el desenlace: ver 5.2.2.)*
+
+### 5.2.2. La página del PSE en UAT, la vuelta al comercio y el estado que no cambia (14 al 16 de octubre de 2026)
+
+> **Medido contra UAT a través de `/v1/api` en `sandbox`, para el issue #109** (puntos 94 y 97 del
+> `architecture-log.md`). Las capturas están en la evidencia del #109 (`ambiente-y-render/` y
+> `sandbox-completo/`).
+
+- **La URL del banco.** El `init` devolvió `https://api-uat.kushkipagos.com/transfer/v1/agent?token=<token>&mid=<id del comercio>`, que redirige a `https://uat-sandbox.kushkipagos.com/checkout/transfer?status=pending&…` con los datos del cobro en la query (tipo y número de documento, referencia, banco, monto, CUS).
+- **La página.** «Kushki Bank»: «Transacción pendiente. El banco está validando su transacción, esto puede tardar unos minutos», los datos de la transacción y el botón «Volver al comercio». No ofrece autorizar ni elegir un desenlace.
+- **La vuelta.** «Volver al comercio» lleva a la `callbackUrl` del comercio con `token=<token de la transferencia>` agregado, sin tocar la query que ya traía (`…/?retorno=1&token=4a8532b1…`, 14 de octubre a las 22:50). El primer «Atrás» del navegador desde esa página cae en `api-uat…/transfer/v1/agent`, que vuelve a redirigir a la página.
+- **El estado no cambia.** El 15 de octubre, entre las 21:56 y las 22:02, se creó una transferencia por cada documento de la sección 5.4 (`1020304050`, `123456789`, `100000002` y `999999990`): la página fue la misma y las cuatro quedaron `initializedTransaction`. Consultadas otra vez el 16 de octubre a las 09:24, junto con la del 14 de octubre, las cinco seguían `initializedTransaction`, entre 11 y 35 horas después de creadas.
+
+**Hipótesis, sin confirmar con Kushki.** La investigación del 15 de octubre encontró en la documentación
+de Kushki que la simulación de estados de las transferencias la activa Kushki para cada comercio; el
+enlace no quedó registrado. Con este comercio de UAT, el desenlace de un PSE de Kushki no se alcanza.
+El simulador responde `approvedTransaction` en la primera consulta: es una diferencia con este sandbox,
+no con la documentación de Kushki.
+
+**Es una limitación de Kushki, no del proyecto.** El SDK traduce bien lo que Kushki responde
+(`initializedTransaction` es `PENDING`), y la tienda del prototipo C lo muestra como un pago en proceso.
+Para ver el desenlace de un PSE de Kushki en UAT hay que pedirle a Kushki que active la simulación de
+estados de las transferencias para el comercio.
 
 ### 5.3. Tipos de documento válidos en Colombia
 

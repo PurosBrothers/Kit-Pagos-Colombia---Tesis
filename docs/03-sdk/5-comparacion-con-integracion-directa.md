@@ -89,7 +89,7 @@ Esto es la variable 4 del experimento de la Fase 5, y es contable: cuántos iden
 | La fórmula exacta de la firma de integridad | Hay que implementarla | No aparece |
 | El token de aceptación y que es de un solo uso | Hay que pedirlo y no reutilizarlo | No aparece |
 | `APPROVED`, `DECLINED`, `VOIDED`, `PENDING` de Wompi | Hay que traducirlos | No aparecen |
-| `transaction_amount` y `X-Idempotency-Key` de Mercado Pago | Hay que conocerlos | No aparecen |
+| `total_amount` en pesos enteros, la marca y el tipo de la tarjeta (`payment_method.id` y `type`) y `X-Idempotency-Key` de Mercado Pago | Hay que conocerlos, y deducir la marca del BIN | No aparecen |
 | Que el PSE de Mercado Pago está en otra API | Hay que descubrirlo | No aparece |
 | El objeto de desglose de IVA de Kushki | Hay que armarlo | No aparece |
 | Los dos vocabularios de estado de Kushki | Hay que manejar los dos | No aparecen |
@@ -119,7 +119,7 @@ El caso de Kushki es el más elocuente. Un comercio que integre a mano tiene que
 
 **Los estados.** Seis valores normalizados en lugar de cuatro vocabularios, con el estado nativo conservado para auditoría. Y con el caso de `CLO` resuelto correctamente: el SDK solo lo traduce a aprobado si además viene `paid: true`.
 
-**Los errores.** Doce códigos en lugar de los formatos de error de cuatro proveedores, cada uno con su propio esquema de mensajes. Y con la distinción que más importa ya hecha: qué se reintenta y qué no.
+**Los errores.** Trece códigos en lugar de los formatos de error de cuatro proveedores, cada uno con su propio esquema de mensajes. Y con la distinción que más importa ya hecha: qué se reintenta y qué no.
 
 **Las firmas de webhook.** Cuatro algoritmos distintos detrás de una sola llamada, con comparación en tiempo constante y ventana anti-replay incluidas. Esta es, probablemente, la parte donde el SDK evita más daño: una verificación de firma implementada con `===` o sin ventana anti-replay **no falla**. Acepta notificaciones falsas, y el comercio no se entera hasta que alguien lo explota.
 

@@ -1,6 +1,6 @@
 # Las métricas CK
 
-Cuatro métricas de la suite de Chidamber & Kemerer, calculadas sobre el código del SDK en cada revisión. Este documento explica qué mide cada una, por qué esas cuatro, cómo se calculan y qué reporta el SDK hoy.
+Cuatro métricas de la suite de Chidamber & Kemerer, calculadas en cada revisión sobre el código del SDK y, desde el issue #153, sobre el de la API de Simulación. Este documento explica qué mide cada una, por qué esas cuatro, cómo se calculan y qué reportan hoy el SDK y el simulador.
 
 > **La fuente normativa es [methodology.md §6.1](../project-management/methodology.md).** Ahí están las fórmulas exactas y los umbrales, y ahí es donde se cambian. Este documento las explica; no las duplica, porque dos definiciones de la misma métrica en dos archivos es exactamente el problema que estas métricas ya tuvieron una vez.
 
@@ -50,7 +50,14 @@ Dos ajustes acompañaron la corrección:
 
 ## 4. Cómo las calcula el script
 
-[sdk/scripts/ck-metrics.ts](../../sdk/scripts/ck-metrics.ts), 663 líneas, con `ts-morph` para analizar el árbol sintáctico. No usa expresiones regulares ni cuenta líneas: recorre nodos.
+[sdk/scripts/ck-metrics.ts](../../sdk/scripts/ck-metrics.ts), 830 líneas, con `ts-morph` para analizar el árbol sintáctico. No usa expresiones regulares ni cuenta líneas: recorre nodos.
+
+**El CBO cuenta referencias de tipo, no texto.** Hasta el issue #153 buscaba cada nombre importado como texto dentro de la firma, y eso fallaba de dos maneras:
+
+- Un nombre contenido en otro contaba dos veces: `RapydPaymentResponse` contaba también `RapydPayment`.
+- Un import con alias no contaba: `import { GatewayMockFactory as WompiMockFactory }` dejaba fuera a la fábrica de Wompi, porque la firma decía el alias.
+
+Ahora se leen las referencias de tipo de la firma, también dentro de argumentos genéricos y de `typeof`, y se comparan por nombre exacto con lo que importa el archivo, alias incluido. En el SDK no cambió ningún valor. En el simulador sí, y está en el punto 107.
 
 La complejidad ciclomática de un método es `1 + puntos de decisión`, y qué cuenta como punto de decisión está fijado en la metodología. Dos decisiones que vale la pena conocer porque no son obvias:
 
@@ -61,28 +68,33 @@ La complejidad ciclomática de un método es `1 + puntos de decisión`, y qué c
 
 ---
 
-## 5. Lo que reporta el SDK hoy
+## 5. Lo que reportan hoy el SDK y el simulador
 
-31 clases analizadas, **todas dentro de los umbrales**. Los valores más altos:
+**El SDK** (`npm run metrics`, 18 de octubre de 2026): 35 clases analizadas, **todas dentro de los umbrales**. Los valores más altos:
 
 | Clase | WMC | CBO | RFC | MAX_CC |
 |---|---|---|---|---|
 | `Amount` | **23** | 1 | 18 | 4 |
-| `RapydAdapter` | 20 | **6** | 14 | 4 |
-| `KushkiAdapter` | 19 | **6** | 12 | 8 |
-| `ErrorHandler` | 17 | 2 | 6 | 7 |
-| `WompiAdapter` | 15 | **6** | 15 | 6 |
-| `MercadoPagoAdapter` | 15 | **6** | 11 | 7 |
-| `KitPagos` | 15 | **6** | 10 | 9 |
-| `SdkConfigurator` | 15 | 2 | 8 | 6 |
-| `Transaction` | 5 | **7** | 5 | 1 |
+| `SdkConfigurator` | 20 | 3 | 10 | 8 |
+| `ErrorHandler` | 18 | 2 | 6 | 8 |
+| `KushkiAdapter` | 18 | **6** | 11 | 7 |
+| `RapydAdapter` | 18 | **6** | 12 | 4 |
+| `WompiTokenizer` | 17 | 4 | 11 | 7 |
+| `KitPagos` | 16 | **6** | 10 | 10 |
 | `RapydResponseNormalizer` | 15 | 2 | 4 | 10 |
+| `WompiAdapter` | 14 | **6** | 14 | 5 |
+| `MercadoPagoAdapter` | 13 | **6** | 9 | 6 |
+| `Transaction` | 5 | **7** | 5 | 1 |
 
 Los valores en negrita superan su umbral y están cubiertos por una **excepción documentada**. El reporte los muestra en rojo igual, a propósito: una excepción no borra el número, solo explica por qué se acepta.
 
+**La API de Simulación** (desde el issue #153, con su registro de excepciones): 28 clases, **todas dentro de los umbrales** salvo `KitPagosProvider`, con CBO **7** cubierto por la excepción del punto 107. Antes del #153 había seis clases fuera de umbral, todas corregidas en el código: `CredentialResolver`, `SignatureGenerator` y las fábricas de respuestas de Mercado Pago, Rapyd y Kushki. La tabla de antes y después está en el punto 107.
+
 ---
 
-## 6. Las tres excepciones, y por qué son legítimas
+## 6. Las excepciones, y por qué son legítimas
+
+Son tres en el SDK y una en el simulador.
 
 La regla de admisión, fijada en [methodology.md §6.2](../project-management/methodology.md): **cada excepción tiene que enlazar al punto del architecture-log que la justifica.** Agregar una clase al registro sin ese respaldo no es una resolución válida, porque deja el umbral verde en el reporte y rojo en la realidad.
 
@@ -115,7 +127,11 @@ Las dos formas de bajar ese CBO 6 se evaluaron y se descartaron con razones:
 - **Devolver un tipo estructural en línea** (`Promise<{ code: string; name: string }[]>`) esquiva el conteo sin cambiar el diseño, y empeora lo que importa: el tipo pierde su nombre y su documentación. Es manipular la métrica.
 - **Sacar la lista de bancos a un puerto aparte** implementado por cuatro clases nuevas mueve el acoplamiento sin reducirlo, y le devuelve al comercio la pregunta de si su pasarela sabe responder, que es justo la que el SDK existe para que no tenga que hacerse.
 
-> Nota de consistencia: `methodology.md` §6.2 enumera las dos primeras excepciones. La tercera, del punto 47, está implementada en el script y documentada en el architecture-log.
+### `KitPagosProvider`, del simulador — CBO 7 (punto 107)
+
+Esta va en otro registro, `simulator-api/ck-exceptions.json`, porque es del simulador y no del SDK. `KitPagosProvider` es la costura entre la capa REST y el SDK: recibe la pasarela y las cabeceras de la petición y devuelve una instancia de `KitPagos`. De los siete tipos de sus firmas, cinco son datos sin comportamiento (`Gateway`, `RequestHeaders`, `TargetEnvironment`, `ResolvedCredentials` y `Credentials`) y dos son colaboradores (`CredentialResolver`, que se inyecta, y `KitPagos`, que construye).
+
+Se descartó lo mismo que en el punto 47. Sacar sus métodos privados a funciones de módulo bajaría el conteo sin cambiar de qué depende la clase.
 
 ---
 
@@ -123,7 +139,7 @@ Las dos formas de bajar ese CBO 6 se evaluaron y se descartaron con razones:
 
 Según la metodología: si un valor supera su umbral durante la revisión de un pull request y no está cubierto por una excepción documentada, **se registra como defecto y el código no se aprueba** hasta resolver la violación. Si la violación persiste dos iteraciones consecutivas sobre la misma clase, se convoca una sesión técnica de refactorización.
 
-**Y hay algo que conviene saber sobre esto: `npm run metrics` no corre en CI.** Es uno de los cuatro comandos que quedan fuera, así que un pull request puede estar verde en GitHub y violar un umbral igual. Hay que correrlo a mano, y está en el bloque de verificación de [00-entorno-de-desarrollo.md](../00-entorno-de-desarrollo.md).
+**Desde el issue #153, las métricas corren en CI** (opción B del issue, decidida por Joan el 17 de octubre de 2026). El job del SDK corre `npm run metrics`. El del simulador instala las dependencias de `sdk/`, porque el script vive ahí, y corre el modo guarda con el registro del simulador. Un pull request que viole un umbral sin excepción queda en rojo. Antes no corría en CI, y un PR podía estar verde en GitHub y violar un umbral igual.
 
 ---
 
@@ -143,9 +159,17 @@ npm run metrics -- --root ../prototypes/checkout-directo/src --tsconfig ../proto
 | `--root <carpeta>` | Raíz de fuentes. Se puede repetir. Excluye `*.test.ts` y `*.spec.ts` dentro de cada raíz. |
 | `--tsconfig <archivo>` | El `tsconfig.json` del proyecto analizado. Solo se admite con `--root`. |
 | `--mode guard\|measure` | `guard` sale con 1 ante una violación; `measure` la reporta y sale con 0. Por omisión, `guard` para el SDK y `measure` con `--root`. |
-| `--json <archivo>` | Escribe la tabla completa en JSON, con el modo, las raíces, el `tsconfig` y los umbrales. |
+| `--json <archivo>` | Escribe la tabla completa en JSON, con el modo, las raíces, el `tsconfig` y los umbrales. Con `--exceptions`, también las excepciones aplicadas y las vencidas. |
+| `--exceptions <archivo>` | El registro de excepciones del proyecto externo, `{ "exceptions": [...] }`. Cada entrada lleva `file` (relativo a la primera raíz), `className`, `metric`, `allowed`, `logPoint` y `reason`. Solo con `--root`. Un registro ilegible o una entrada incompleta salen con código 2; una entrada que ya no cubre ninguna violación hace fallar el modo guarda. |
 
-Con `--root`, `KNOWN_EXCEPTIONS` no se aplica: una clase del prototipo que se llame `Amount` no hereda la excepción del `Amount` del SDK. Un argumento inválido sale con código 2. El procedimiento completo está en [4-medir-los-prototipos.md](4-medir-los-prototipos.md), sección 3.
+Con `--root`, `KNOWN_EXCEPTIONS` no se aplica: una clase del prototipo que se llame `Amount` no hereda la excepción del `Amount` del SDK. El proyecto externo que necesite excepciones trae las suyas con `--exceptions`, como el simulador. Un argumento inválido sale con código 2. El procedimiento completo está en [4-medir-los-prototipos.md](4-medir-los-prototipos.md), sección 3.
+
+Para el simulador, que entra en la condición 4 de la DoD desde el issue #153:
+
+```bash
+cd sdk
+npm run metrics -- --root ../simulator-api/src --tsconfig ../simulator-api/tsconfig.json --exceptions ../simulator-api/ck-exceptions.json --mode guard
+```
 
 ---
 

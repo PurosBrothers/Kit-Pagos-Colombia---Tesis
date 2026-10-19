@@ -67,11 +67,12 @@ describe("Browser Bundle Verification", () => {
     }
   });
 
-  it("exports KitPagosBrowser, WompiTokenizer and MercadoPagoTokenizer in ESM format", () => {
+  it("exports KitPagosBrowser and the Wompi, Mercado Pago and Kushki tokenizers in ESM format", () => {
     const bundleContent = fs.readFileSync(bundlePath, "utf-8");
     expect(bundleContent).toContain("KitPagosBrowser");
     expect(bundleContent).toContain("WompiTokenizer");
     expect(bundleContent).toContain("MercadoPagoTokenizer");
+    expect(bundleContent).toContain("KushkiTokenizer");
     expect(bundleContent).toMatch(/export\s*\{/);
   });
 

@@ -99,6 +99,7 @@ describe("REST module /v1/api", () => {
       [KitPagosErrorCode.INVALID_CREDENTIALS, 401],
       [KitPagosErrorCode.WEBHOOK_SIGNATURE_INVALID, 401],
       [KitPagosErrorCode.RESOURCE_NOT_FOUND, 404],
+      [KitPagosErrorCode.RESOURCE_LOCKED, 423],
       [KitPagosErrorCode.RATE_LIMIT_EXCEEDED, 429],
       [KitPagosErrorCode.CONNECTION_FAILED, 502],
       [KitPagosErrorCode.GATEWAY_SERVER_ERROR, 502],

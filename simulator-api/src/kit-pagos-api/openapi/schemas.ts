@@ -9,6 +9,8 @@
  * pasa directamente a la propiedad `schema` de la ruta de Fastify.
  */
 
+import { CARD_CAPTURE_VALUES } from "../card-capture";
+
 // ---------------------------------------------------------------------------
 // Componentes reutilizables
 // ---------------------------------------------------------------------------
@@ -34,7 +36,7 @@ export const KitPagosErrorSchema = {
       description:
         "Código de error del SDK. Uno de: INVALID_REQUEST, UNSUPPORTED_OPERATION, " +
         "INVALID_CREDENTIALS, WEBHOOK_SIGNATURE_INVALID, RESOURCE_NOT_FOUND, " +
-        "RATE_LIMIT_EXCEEDED, CONNECTION_FAILED, GATEWAY_SERVER_ERROR, " +
+        "RESOURCE_LOCKED, RATE_LIMIT_EXCEEDED, CONNECTION_FAILED, GATEWAY_SERVER_ERROR, " +
         "MALFORMED_RESPONSE, MAX_RETRIES_EXCEEDED, GATEWAY_TIMEOUT, UNKNOWN_ERROR.",
       example: "INVALID_REQUEST",
     },
@@ -94,18 +96,26 @@ export const GatewayCredentialHeaders = {
 export const GetGatewaysSchema = {
   tags: ["Kit Pagos"],
   summary: "Pasarelas disponibles",
-  description: "Devuelve la lista de pasarelas que el SDK soporta. No requiere credenciales.",
+  description:
+    "Devuelve la lista de pasarelas que el SDK soporta y cómo recibe cada una la tarjeta desde un navegador. No requiere credenciales.",
   security: [{ bearerAuth: [] }],
   response: {
     200: {
-      description: "Lista de identificadores de pasarela en minúsculas.",
+      description: "Lista de identificadores de pasarela en minúsculas, con el modo de tarjeta de cada una.",
       type: "object",
-      required: ["gateways"],
+      required: ["gateways", "cardCapture"],
       properties: {
         gateways: {
           type: "array",
           items: { type: "string" },
           example: ["wompi", "mercadopago", "kushki", "rapyd"],
+        },
+        cardCapture: {
+          type: "object",
+          description:
+            "Por pasarela: BROWSER_TOKEN si la página tokeniza la tarjeta con KitPagosBrowser y manda el token en paymentMethod.token; HOSTED_PAGE si el pago con tarjeta se crea sin token y responde REDIRECT_REQUIRED hacia la página de la pasarela.",
+          additionalProperties: { type: "string", enum: CARD_CAPTURE_VALUES },
+          example: { wompi: "BROWSER_TOKEN", mercadopago: "BROWSER_TOKEN", kushki: "BROWSER_TOKEN", rapyd: "HOSTED_PAGE" },
         },
       },
     },
@@ -216,6 +226,34 @@ const TRANSACTION_STATUS_ENUM = [
   "UNKNOWN",
 ] as const;
 
+/**
+ * El `RejectionReason` del SDK con sus mismos campos. La respuesta se serializa con este
+ * esquema y lo que no declara se descarta: con otros nombres, el motivo sale como `{}`
+ * (`test/rejection-reason.test.ts`).
+ */
+const RejectionReasonSchema = {
+  type: "object",
+  description: "Motivo del rechazo. Solo existe cuando el estado es DECLINED y la pasarela envió un código; Wompi no lo envía.",
+  required: ["rejectionCode", "rejectionCategory"],
+  properties: {
+    rejectionCode: {
+      type: "string",
+      description:
+        "Código nativo del rechazo, tal como lo envía la pasarela: el status_detail en Mercado Pago, " +
+        "el failure_code en Rapyd y el responseCode en Kushki.",
+      example: "rejected_by_issuer",
+    },
+    rejectionCategory: {
+      type: "string",
+      description:
+        "Categoría normalizada por el SDK: INSUFFICIENT_FUNDS, INVALID_CARD_DATA, CARD_RESTRICTED, " +
+        "FRAUD_SUSPICION, NETWORK_ERROR, AUTHENTICATION_FAILED, DUPLICATED_PAYMENT o UNKNOWN. " +
+        "Es UNKNOWN cuando no hay una fuente para la correspondencia.",
+      example: "UNKNOWN",
+    },
+  },
+} as const;
+
 /** Respuesta cuando el cobro se completó en línea (tarjeta aprobada). */
 const TransactionOutcomeSchema = {
   type: "object",
@@ -243,14 +281,7 @@ const TransactionOutcomeSchema = {
         isPending: { type: "boolean" },
         isFinal: { type: "boolean" },
         authorizationCode: { type: "string" },
-        rejectionReason: {
-          type: "object",
-          properties: {
-            code: { type: "string" },
-            category: { type: "string" },
-            message: { type: "string" },
-          },
-        },
+        rejectionReason: RejectionReasonSchema,
       },
     },
     warnings: {
@@ -326,7 +357,16 @@ export const PostPaymentsSchema = {
       paymentMethod: PaymentMethodSchema,
       returnUrlConfig: ReturnUrlConfigSchema,
       taxBreakdown: TaxBreakdownSchema,
-      ipAddress: { type: "string", example: "186.84.90.1" },
+      ipAddress: {
+        type: "string",
+        description:
+          "IP del pagador. Opcional: si no llega, la API usa la de la petición, o la primera de " +
+          "X-Forwarded-For si el servidor tiene SIMULATOR_TRUST_FORWARDED_FOR=true. " +
+          "En los dos casos se envía sin espacios, y ::ffff:a.b.c.d y ::1 como IPv4 (a.b.c.d y " +
+          "127.0.0.1), que Mercado Pago sí acepta. " +
+          "Mercado Pago la exige para PSE. Un backend que llama a la API debe enviarla.",
+        example: "186.84.90.1",
+      },
     },
   },
   response: {
@@ -470,14 +510,7 @@ export const GetPaymentStatusSchema = {
             isPending: { type: "boolean" },
             isFinal: { type: "boolean" },
             authorizationCode: { type: "string" },
-            rejectionReason: {
-              type: "object",
-              properties: {
-                code: { type: "string" },
-                category: { type: "string" },
-                message: { type: "string" },
-              },
-            },
+            rejectionReason: RejectionReasonSchema,
           },
         },
         warnings: {

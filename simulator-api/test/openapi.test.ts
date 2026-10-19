@@ -1,3 +1,4 @@
+import { KitPagosErrorCode } from "kit-pagos-colombia";
 import { buildApp } from "../src/app";
 
 /**
@@ -148,7 +149,7 @@ describe("GET /docs/json — especificación OpenAPI", () => {
     expect(tags).toContain("Simulación");
   });
 
-  it("documenta los doce códigos de error KitPagosErrorCode en el schema 400 de /payments", async () => {
+  it("documenta todos los códigos de error KitPagosErrorCode en el schema 400 de /payments", async () => {
     const app = buildApp({ logger: false });
     const response = await app.inject({ method: "GET", url: "/docs/json" });
     const spec = response.json<Record<string, unknown>>();
@@ -162,9 +163,9 @@ describe("GET /docs/json — especificación OpenAPI", () => {
     const schema = content?.schema as Record<string, unknown>;
     const codeProperty = (schema?.properties as Record<string, unknown>)?.code as Record<string, unknown>;
     expect(codeProperty?.description).toBeDefined();
-    // La descripción debe mencionar al menos algunos de los 12 códigos
-    expect(String(codeProperty.description)).toContain("INVALID_REQUEST");
-    expect(String(codeProperty.description)).toContain("GATEWAY_TIMEOUT");
+    for (const code of Object.values(KitPagosErrorCode)) {
+      expect(String(codeProperty.description)).toContain(code);
+    }
   });
 
   it("sirve el spec JSON en /docs/json", async () => {
