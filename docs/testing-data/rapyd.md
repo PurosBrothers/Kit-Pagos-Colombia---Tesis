@@ -497,7 +497,9 @@ lista medida ese día), así que salen sin `achCode`.
 `ERROR_GET_GATEWAY` dice que la cuenta no tiene un procesador para ese método: el método existe en
 el catálogo, pero esta organización de sandbox no lo puede cobrar. Es lo que anticipa la nota de la
 sección 5.7, ahora medido. Un `400` llega al SDK como `INVALID_REQUEST`, y el mensaje que ve el
-comercio es «Rapyd gateway returned an HTTP error status 400», sin el código de Rapyd.
+comercio es «Rapyd gateway returned an HTTP error status 400», sin el código de Rapyd. *(Desde
+el SDK 0.6.0-rc.5 el mensaje trae el código y el motivo: «… status 400 (ERROR_GET_GATEWAY:
+Contact Rapyd Client Support.)», punto 107 del `architecture-log.md`.)*
 
 Lo que se hizo con esto (SDK 0.6.0-rc.3, punto 102 del `architecture-log.md`):
 

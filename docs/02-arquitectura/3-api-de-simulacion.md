@@ -51,17 +51,20 @@ simulator-api/src/
 │   ├── kushki.ts             7 rutas
 │   └── webhooks.ts           POST /v1/sim/webhooks/trigger
 ├── gateways/
-│   ├── wompi/                GatewayMockFactory.ts + types.ts
-│   ├── mercadopago/          GatewayMockFactory.ts + types.ts
-│   ├── rapyd/                GatewayMockFactory.ts + types.ts
-│   └── kushki/               GatewayMockFactory.ts + types.ts
+│   ├── wompi/                GatewayMockFactory.ts (transacciones, tokens, errores) + types.ts
+│   ├── mercadopago/          GatewayMockFactory.ts (pagos, órdenes, tarjeta, errores) + types.ts
+│   ├── rapyd/                GatewayMockFactory.ts (pagos, checkout, preparación de PSE, errores) + types.ts
+│   └── kushki/               GatewayMockFactory.ts (cobros, transferencias, errores) + types.ts
 ├── scenarios/
 │   ├── ScenarioEngine.ts     construye la transacción de Wompi según el escenario
 │   ├── scenarioFromRequest.ts precedencia, montos reservados y su normalización a pesos
 │   ├── invalidCredential.ts  marcas de credencial inválida
 │   └── technicalFailure.ts   fallas técnicas de creación, de consulta y de lista de bancos
 ├── webhooks/
-│   ├── SignatureGenerator.ts cuerpo nativo y firma de cada webhook saliente
+│   ├── SignatureGenerator.ts despacha por pasarela y pone el secreto del perfil del servidor
+│   ├── wompiWebhook.ts, mercadoPagoWebhook.ts, kushkiWebhook.ts, rapydWebhook.ts
+│   │                         cuerpo nativo y firma del webhook de cada pasarela (issue #153)
+│   ├── webhookTypes.ts       tipos compartidos y WebhookUnavailableError
 │   ├── signatures.ts         las cuatro fórmulas de firma
 │   ├── webhookDispatch.ts    envío al destino configurado
 │   └── autoEmission.ts       emisión automática, apagada por omisión
@@ -73,7 +76,7 @@ simulator-api/src/
 **`app.ts` está separado de `server.ts` a propósito.** `buildApp()` construye la instancia de Fastify sin ponerla a escuchar, y `server.ts` es lo único que llama a `listen()`. Así las suites de prueba usan `app.inject()` sobre la misma aplicación que corre en producción, sin abrir un socket. La diferencia práctica es que las pruebas no pueden quedarse colgadas esperando la red ni chocar por el puerto ocupado.
 
 **Capa de autenticación y resolución de credenciales (`src/auth/`):**
-- `CredentialResolver`: Implementa la resolución híbrida. Primero inspecciona las cabeceras `x-gateway-public-key`, `x-gateway-private-key` (e `integrity-secret`). Si no están presentes, recurre al perfil de sandbox del `.env` del servidor. Por seguridad estricta, `webhookSecret` **nunca** se acepta desde el cliente HTTP para evitar invalidar la verificación criptográfica. Si faltan credenciales, lanza `MissingCredentialsError` (HTTP 401).
+- `CredentialResolver`: Implementa la resolución híbrida. Primero inspecciona las cabeceras `x-gateway-public-key`, `x-gateway-private-key` (e `integrity-secret`). Si no están presentes, recurre al perfil de sandbox del `.env` del servidor, que se lee de una tabla por pasarela (`SERVER_PROFILES`, issue #153) con las variables de cada credencial. Por seguridad estricta, `webhookSecret` **nunca** se acepta desde el cliente HTTP para evitar invalidar la verificación criptográfica. Si faltan credenciales, lanza `MissingCredentialsError` (HTTP 401).
 - `targetEnvironment`: Resuelve el ambiente destino a partir de la cabecera `x-kit-pagos-environment` (por defecto `simulator` si no se envía; valores desconocidos responden HTTP 400 `INVALID_REQUEST`). La API resuelve la URL de destino desde un **catálogo cerrado** embebido en el SDK por pasarela y ambiente (Issue #123, Punto 80). El cliente nunca suministra URLs de pasarela, previniendo vectores de SSRF con fuga de credenciales. La regla de credenciales se aplica sobre el ambiente declarado:
 
   | Ambiente Declarado (`x-kit-pagos-environment`) | Sin credenciales propias completas |
@@ -189,9 +192,9 @@ El simulador recuerda, por token, el desenlace que deriva de la tarjeta (`src/st
 
 Son una convención del simulador, sin equivalente en ninguna pasarela. Están en pesos enteros, porque el PSE de Mercado Pago no admite centavos, y cada ruta normaliza su monto antes de buscarlo: los centavos de Wompi (`amount_in_cents`), el decimal de Mercado Pago y de Rapyd, y la suma del desglose de Kushki. Un monto con centavos distintos de cero no es un monto reservado. Se reconocen al crear un cobro con tarjeta o con PSE en las cuatro pasarelas, y la falla elegida se guarda con la transacción.
 
-La columna del SDK es lo que reporta `kit-pagos-colombia` 0.6.0-rc.4, que es la versión que usa `/v1/api` (`simulator-api/package.json` pide `0.6.0-rc.4`), comprobado en `test/scenario-through-sdk.test.ts`.
+La columna del SDK es lo que reporta `kit-pagos-colombia` 0.6.0-rc.5, que es la versión que usa `/v1/api` (`simulator-api/package.json` pide `0.6.0-rc.5`), comprobado en `test/scenario-through-sdk.test.ts`. Los códigos son los mismos que con la rc.4. Lo que cambió en la rc.5 es el mensaje de un error HTTP, que ahora trae el código y el motivo del cuerpo nativo (punto 107).
 
-| Monto (COP) | Escenario | Lo que responde el simulador | Con el SDK 0.6.0-rc.4 |
+| Monto (COP) | Escenario | Lo que responde el simulador | Con el SDK 0.6.0-rc.5 |
 |---|---|---|---|
 | 10 100 | `DECLINED` | El rechazo nativo de la pasarela | `DECLINED` en las tarjetas de Wompi, Mercado Pago y Kushki; en el PSE de Wompi, que cierra con la URL en la primera consulta; en el PSE de Mercado Pago, cuyo `402` trae la orden en `data` y sale con su id; y, al consultar, en los PSE de Rapyd y Kushki. Rapyd tarjeta devuelve la redirección a su página de pago |
 | 10 101 | `PENDING` | El pendiente nativo | `PENDING`, al crear o al consultar |
@@ -211,7 +214,7 @@ Las combinaciones de ruta y monto que responden `501` están al final de esta se
 
 Los montos de la consulta hacen que la creación salga bien y que falle el `GET` de estado, que es la operación que el SDK sí reintenta:
 
-| Monto (COP) | Lo que responde la consulta | Con el SDK 0.6.0-rc.4 |
+| Monto (COP) | Lo que responde la consulta | Con el SDK 0.6.0-rc.5 |
 |---|---|---|
 | 10 602 | `503` en las dos primeras consultas y la transacción en la tercera. El contador vuelve a cero al recuperarse, así que cada `getPaymentStatus()` muestra su propio reintento | `getPaymentStatus()` reintenta y termina con la transacción |
 | 10 600 | `500` en cada consulta | `MAX_RETRIES_EXCEEDED` después de los reintentos, con el último `GATEWAY_SERVER_ERROR` en `cause` |
