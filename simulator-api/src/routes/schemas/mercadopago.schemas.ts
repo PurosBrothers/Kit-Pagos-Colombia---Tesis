@@ -125,7 +125,7 @@ const mpOrdersErrorBody = {
         properties: {
           code: { type: "string" },
           message: { type: "string" },
-          details: { type: "string" },
+          details: { type: "array", items: { type: "string" } },
         },
       },
     },

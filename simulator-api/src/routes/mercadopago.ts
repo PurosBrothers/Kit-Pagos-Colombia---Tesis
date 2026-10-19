@@ -62,6 +62,7 @@ import {
   postMpPaymentsSchema,
   postMpTokenCardSchema,
 } from "./schemas/mercadopago.schemas";
+import { compileSchemasAsIs } from "./schemas/compileSchemasAsIs";
 
 export const DEFAULT_SCENARIO = "APPROVED";
 
@@ -322,6 +323,7 @@ const ORDER_SCENARIOS: ReadonlySet<string> = new Set([
  *   usa `/v1/api`, así que el simulador atiende los dos caminos.
  */
 export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
+  compileSchemasAsIs(app);
   const paymentMocks = new MercadoPagoPaymentMockFactory();
   const orderMocks = new MercadoPagoOrderMockFactory();
   const cardMocks = new MercadoPagoCardMockFactory();

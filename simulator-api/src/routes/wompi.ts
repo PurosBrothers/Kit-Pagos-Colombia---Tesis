@@ -35,6 +35,7 @@ import {
   postWompiTokenCardSchema,
   postWompiTransactionsSchema,
 } from "./schemas/wompi.schemas";
+import { compileSchemasAsIs } from "./schemas/compileSchemasAsIs";
 import { rememberScenarioTarget } from "../state/scenarioTarget";
 import { wompiStateMachine } from "../state/wompiStateMachine";
 import { sendBankPage } from "../gateways/bankPage";
@@ -146,6 +147,7 @@ function sendsPrivateKey(request: FastifyRequest): boolean {
  * already fixed the outcome.
  */
 export async function wompiRoutes(app: FastifyInstance): Promise<void> {
+  compileSchemasAsIs(app);
   const scenarioEngine = new ScenarioEngine();
   const tokenMocks = new WompiTokenMockFactory();
   const errorBodies = new WompiErrorMockFactory();

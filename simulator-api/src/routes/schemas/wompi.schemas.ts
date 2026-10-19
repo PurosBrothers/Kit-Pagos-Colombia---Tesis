@@ -196,7 +196,6 @@ export const postWompiTransactionsSchema = {
         description: "Firma SHA-256 de integridad requerida y validada por el simulador.",
       },
     },
-    additionalProperties: false,
     examples: [
       {
         amount_in_cents: 5000000,
