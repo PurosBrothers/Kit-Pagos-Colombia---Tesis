@@ -1,4 +1,5 @@
 import { FastifyInstance } from "fastify";
+import { getHealthSchema } from "./schemas/health.schemas";
 
 /**
  * Endpoint minimo de salud (GET /health).
@@ -12,8 +13,6 @@ import { FastifyInstance } from "fastify";
  * Registrado como plugin de Fastify para seguir el mismo patron que va a
  * usar el futuro HTTPRouter.
  */
-import { getHealthSchema } from "./schemas/health.schemas";
-
 export async function healthRoute(app: FastifyInstance): Promise<void> {
   app.get("/health", { schema: getHealthSchema }, async () => {
     return { status: "ok" };

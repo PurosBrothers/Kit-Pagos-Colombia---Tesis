@@ -1024,6 +1024,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       if (failure !== undefined) {
         return failure;
       }
+
       return reply.code(200).send([
         {
           id: "master",

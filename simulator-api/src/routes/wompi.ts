@@ -49,9 +49,17 @@ import {
   rememberQueryFailure,
 } from "../store/ScenarioMarks";
 
+/**
+ * La tarjeta de prueba que el sandbox de Wompi declina. Nivel 1, medido el 6 de octubre de
+ * 2026 (`docs/testing-data/wompi.md`, sección 1.3): nace `PENDING` y la consulta la muestra
+ * `DECLINED`; el `status_message` lo pone `wompiStateMachine.ts`.
+ */
 const DECLINING_TEST_CARD = "4111111111111111";
+
+/** El patrón que Wompi exige al número de tarjeta, tal como lo cita en su `422`. */
 const CARD_NUMBER_PATTERN = /^\d{12,19}$/;
 
+/** El algoritmo de Luhn sobre un número que ya pasó `CARD_NUMBER_PATTERN`. */
 function passesLuhn(digits: string): boolean {
   let sum = 0;
   for (let index = 0; index < digits.length; index++) {
@@ -65,6 +73,25 @@ function passesLuhn(digits: string): boolean {
   return sum % 10 === 0;
 }
 
+/*
+ * Credencial inválida. Nivel 1 — medido contra `sandbox.wompi.co` el 6 de octubre de 2026
+ * (`docs/testing-data/wompi.md`, sección 1.3), con una llave privada inexistente y, aparte,
+ * con una pública inexistente («Con una llave pública inexistente»), que es la que el SDK manda
+ * en todas las rutas de Wompi.
+ *
+ * - `POST /transactions` con cuerpo válido: `401` con este cuerpo, con las dos llaves. Con
+ *   cuerpo `{}` respondió `422`: Wompi valida el cuerpo antes que la llave, y la ruta conserva
+ *   ese orden.
+ * - `GET /transactions/{id}`: `403`, con otro `reason`, solo con la llave **privada**
+ *   inexistente. Con la pública inexistente, sin `Authorization` o con una llave válida
+ *   responde `200` con la transacción.
+ * - `GET /merchants/{llave}` con la pública inexistente: `404`, también sin `Authorization`.
+ * - `GET /pse/financial_institutions`: `200` con las dos llaves inexistentes; la ruta no mira
+ *   la marca.
+ *
+ * No se imita la variante cuyo `reason` repite la llave recibida (la llave `garbage`), para no
+ * devolver una credencial en una respuesta.
+ */
 const INVALID_KEY_ON_CREATE = {
   error: { type: "INVALID_ACCESS_TOKEN", reason: "Llave no válida" },
 } as const;
@@ -73,10 +100,12 @@ const INVALID_KEY_ON_QUERY = {
   error: { type: "INVALID_ACCESS_TOKEN", reason: "El token no tiene suficientes permisos" },
 } as const;
 
+/** Nivel 1 — medido el 5 y el 6 de octubre de 2026: transacción o comercio inexistente. */
 const NOT_FOUND = {
   error: { type: "NOT_FOUND_ERROR", reason: "La entidad solicitada no existe" },
 } as const;
 
+/** La página de `GET /v1/sim/wompi/terms`. La lee una persona, así que va en español. */
 const TERMS_PAGE =
   '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
   "<title>Términos de aceptación simulados</title></head><body>" +
@@ -86,9 +115,11 @@ const TERMS_PAGE =
   "<p>En producción, el comercio debe mostrarle al pagador el <code>permalink</code> real " +
   "que entrega Wompi en <code>presigned_acceptance</code>.</p></body></html>";
 
+/** Si la petición llega con una llave privada (`Bearer prv_…`). */
 function sendsPrivateKey(request: FastifyRequest): boolean {
-  return request.headers.authorization?.startsWith("Bearer priv_") ?? false;
+  return request.headers.authorization?.startsWith("Bearer prv_") ?? false;
 }
+
 /**
  * Wompi HTTP router (issue #55).
  * Wompi HTTP router (issue #55 & #65).
@@ -127,6 +158,16 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
       schema: postWompiTransactionsSchema,
       preValidation: async (request, reply) => {
         const body = request.body as WompiCreateTransactionRequestBody | undefined;
+
+        /*
+         * Wompi no cobra sin método de pago, y el mock tampoco.
+         *
+         * Medido contra `sandbox.wompi.co`: un `POST /transactions` sin `payment_method`
+         * responde `422 UNPROCESSABLE "No se especificó método de pago o fuente de pago"`.
+         * El mock lo aceptaba, y por eso el SDK pudo pasar meses sin mandar el token de
+         * tarjeta con todas las pruebas en verde. Un mock que acepta más que la API real no
+         * es permisivo: es el lugar donde se esconden los defectos (puntos 48 y 50).
+         */
         if (!body?.payment_method) {
           return reply.code(422).send({
             error: {
@@ -372,6 +413,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
       if (failure !== undefined) {
         return failure;
       }
+
       return reply.code(200).send({
         data: [
           { financial_institution_code: "1", financial_institution_name: "Banco que aprueba" },
