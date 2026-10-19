@@ -19,12 +19,6 @@ import { bankListFailure, queryFailure, technicalFailure } from "../scenarios/te
 import { mpOrderMachine, mpPaymentMachine } from "../state/mercadopagoStateMachine";
 import { rememberScenarioTarget } from "../state/scenarioTarget";
 import {
-import {
-  getSimulatorScenario,
-  ScenarioEngine,
-} from "../scenarios/ScenarioEngine";
-import { transactionStore } from "../store/TransactionStore";
-import {
   CardTokenOutcome,
   cardTokenOutcomeFor,
   rememberCardTokenOutcome,
@@ -42,6 +36,7 @@ import {
   getMpPaymentSchema,
   postMpOrdersSchema,
   postMpPaymentsSchema,
+  postMpTokenCardSchema,
 } from "./schemas/mercadopago.schemas";
 
 export const DEFAULT_SCENARIO = "APPROVED";
@@ -194,7 +189,33 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   // 1. Creación de pago (POST /v1/sim/mercadopago/payments)
   app.post(
     "/v1/sim/mercadopago/payments",
-    { schema: postMpPaymentsSchema },
+    {
+      schema: postMpPaymentsSchema,
+      preValidation: async (request, reply) => {
+        rejectsWithoutIdempotencyKey(request, reply, "payments");
+        if (reply.sent) {
+          return reply;
+        }
+
+        const body = request.body as MercadoPagoCreatePaymentRequestBody | undefined;
+        if (!body?.token) {
+          return reply.code(400).send({
+            message: "payment_method_id attribute can't be null",
+            error: "bad_request",
+            status: 400,
+            cause: [],
+          });
+        }
+        if (body.installments === undefined) {
+          return reply.code(400).send({
+            message: "Invalid installments",
+            error: "bad_request",
+            status: 400,
+            cause: [],
+          });
+        }
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       if (rejectsWithoutIdempotencyKey(request, reply, "payments")) {
         return reply;
@@ -407,7 +428,15 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   // devuelve 424 pase lo que pase. Ver `mercadopago-pse.ts` en el SDK.
   app.post(
     "/v1/sim/mercadopago/orders",
-    { schema: postMpOrdersSchema },
+    {
+      schema: postMpOrdersSchema,
+      preValidation: async (request, reply) => {
+        rejectsWithoutIdempotencyKey(request, reply, "orders");
+        if (reply.sent) {
+          return reply;
+        }
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       if (rejectsWithoutIdempotencyKey(request, reply, "orders")) {
         return reply;
@@ -636,7 +665,31 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   registerTokenizationPreflight(app, "/v1/sim/mercadopago/card_tokens", MERCADOPAGO_TOKENIZATION_PREFLIGHT_HEADERS);
   app.post(
     "/v1/sim/mercadopago/card_tokens",
-    { onSend: allowAnyOrigin },
+    {
+      schema: postMpTokenCardSchema,
+      onSend: allowAnyOrigin,
+      preValidation: async (request, reply) => {
+        const authHeader = request.headers.authorization;
+        if (authHeader?.startsWith("Bearer ")) {
+          return reply.code(400).send({
+            message: "unexpected_processing",
+            error: "bad_request",
+            status: 400,
+            cause: [{ code: "G001", description: "unexpected_processing" }],
+          });
+        }
+
+        const query = request.query as { public_key?: string } | undefined;
+        if (!query?.public_key || !query.public_key.trim()) {
+          return reply.code(401).send({
+            message: "access is unauthorized",
+            error: "unauthorized",
+            code: "unauthorized_access",
+            cause: [{ code: "E212", description: "access_parameters is required" }],
+          });
+        }
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const query = request.query as { public_key?: string } | undefined;
       const publicKey = query?.public_key;

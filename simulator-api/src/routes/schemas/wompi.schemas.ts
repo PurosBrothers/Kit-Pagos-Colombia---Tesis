@@ -7,16 +7,15 @@
  *
  * Notas de diseño derivadas del architecture-log.md y del código medido:
  *
- * - `x-simulate-scenario`: el ScenarioEngine (issue #65) acepta los valores
- *   de negocio APPROVED, DECLINED, REJECTED, EXPIRED y los técnicos TIMEOUT,
- *   NETWORK_ERROR, RATE_LIMIT, SERVER_ERROR, BAD_GATEWAY, SERVICE_UNAVAILABLE,
- *   FLAPPING, DUPLICATE_PAYMENT. Cualquier otro valor devuelve 501.
+ * - En creación, `x-simulate-scenario` admite los escenarios de negocio del
+ *   ScenarioEngine y los técnicos de technicalFailure.ts. Un valor desconocido
+ *   devuelve 501. En tokenización solo se aplican fallas técnicas.
  *
  * - El POST devuelve 201 con status PENDING, no APPROVED (punto 50 del
  *   architecture-log.md; un cobro con tarjeta de Wompi es asíncrono).
  *
- * - PSE: la primera consulta GET devuelve PENDING con async_payment_url; la
- *   segunda resuelve el estado final (punto 43 del architecture-log.md).
+ * - PSE: la creación devuelve PENDING sin async_payment_url; la primera consulta
+ *   GET publica la URL y la siguiente resuelve el estado (punto 43).
  *
  * - El 501 es parte del contrato: escenario todavía no soportado.
  */
@@ -27,30 +26,14 @@
 const simulateScenarioHeader = {
   type: "string",
   description:
-    "Escenario de simulación a ejecutar. " +
-    "Wompi (vía ScenarioEngine) acepta: APPROVED, DECLINED, REJECTED, EXPIRED, " +
-    "TIMEOUT, GATEWAY_TIMEOUT, NETWORK_ERROR, CONNECTION_ERROR, " +
-    "RATE_LIMIT, TOO_MANY_REQUESTS, SERVER_ERROR, INTERNAL_ERROR, " +
-    "BAD_GATEWAY, SERVICE_UNAVAILABLE, FLAPPING, DUPLICATE_PAYMENT. " +
-    "Cualquier otro valor devuelve 501.",
-  enum: [
-    "APPROVED",
-    "DECLINED",
-    "REJECTED",
-    "EXPIRED",
-    "TIMEOUT",
-    "GATEWAY_TIMEOUT",
-    "NETWORK_ERROR",
-    "CONNECTION_ERROR",
-    "RATE_LIMIT",
-    "TOO_MANY_REQUESTS",
-    "SERVER_ERROR",
-    "INTERNAL_ERROR",
-    "BAD_GATEWAY",
-    "SERVICE_UNAVAILABLE",
-    "FLAPPING",
-    "DUPLICATE_PAYMENT",
-  ],
+    "Escenario de simulación. En creación de transacciones se admiten APPROVED, APPROVAL, " +
+    "PENDING, PENDING_THEN_DECLINED, DECLINED, REJECTED, EXPIRED, TIMEOUT, " +
+    "GATEWAY_TIMEOUT, NETWORK_ERROR, CONNECTION_ERROR, RATE_LIMIT, TOO_MANY_REQUESTS, " +
+    "SERVER_ERROR, INTERNAL_ERROR, BAD_GATEWAY, SERVICE_UNAVAILABLE, FLAPPING, " +
+    "DUPLICATE_PAYMENT, SLOW, MALFORMED_JSON, MALFORMED_BODY, HTML_ERROR, 429, 500, " +
+    "502, 503 e INVALID_CREDENTIALS. " +
+    "Un escenario de creación desconocido devuelve 501. En tokenización solo se " +
+    "aplican escenarios técnicos.",
   example: "APPROVED",
 } as const;
 
@@ -66,6 +49,10 @@ const wompiErrorBody = {
         code: {
           type: "string",
           description: "Código auxiliar (solo en algunos errores, p. ej. MERCHANT_NOT_FOUND)",
+        },
+        messages: {
+          type: "object",
+          additionalProperties: { type: "array", items: { type: "string" } },
         },
       },
       required: ["type"],
@@ -96,6 +83,11 @@ const wompiTransactionObject = {
         "solo en la primera consulta GET (flujo de dos pasos).",
       properties: {
         type: { type: "string", example: "PSE" },
+        token: {
+          type: "string",
+          description: "Token devuelto por POST /v1/sim/wompi/tokens/cards para pagos con tarjeta.",
+          example: "tok_sim_12345678",
+        },
         user_type: { type: "integer", example: 0 },
         user_legal_id: { type: "string", example: "123456789" },
         user_legal_id_type: { type: "string", example: "CC" },
@@ -130,7 +122,9 @@ export const postWompiTransactionsSchema = {
   summary: "Crear transacción Wompi",
   description:
     "Simula `POST /transactions` de Wompi. " +
-    "Siempre devuelve 201 con `status: PENDING`, igual que la pasarela real (architecture-log punto 50). " +
+    "Cuando la creación tiene éxito devuelve 201 con `status: PENDING`, igual que la pasarela " +
+    "real (architecture-log punto 50). Requiere acceptance_token de un solo uso y una firma " +
+    "de integridad válida; faltas y firmas inválidas responden 422. " +
     "Para PSE la respuesta también es PENDING y sin URL de redirección: " +
     "la URL aparece solo en la primera consulta GET subsiguiente (architecture-log punto 43). " +
     "El header `x-simulate-scenario` controla el escenario; sin él se asume APPROVED.",
@@ -147,7 +141,15 @@ export const postWompiTransactionsSchema = {
   },
   body: {
     type: "object",
-    required: ["amount_in_cents", "currency", "reference", "customer_email"],
+    required: [
+      "amount_in_cents",
+      "currency",
+      "reference",
+      "customer_email",
+      "payment_method",
+      "acceptance_token",
+      "signature",
+    ],
     properties: {
       amount_in_cents: {
         type: "integer",
@@ -169,8 +171,8 @@ export const postWompiTransactionsSchema = {
       payment_method: {
         type: "object",
         description:
-          "Obligatorio. Sin este campo el simulador responde 422 " +
-          "(replica el comportamiento medido contra sandbox.wompi.co).",
+          "Requerido por el simulador; si se omite, responde 422. Para PSE, declara type=PSE " +
+          "y los datos del banco; para tarjeta, declara type=CARD y el token.",
         properties: {
           type: { type: "string", example: "PSE" },
           user_type: { type: "integer", example: 0 },
@@ -185,8 +187,14 @@ export const postWompiTransactionsSchema = {
         },
       },
       redirect_url: { type: "string", format: "uri", example: "https://mi-tienda.co/pago/resultado" },
-      acceptance_token: { type: "string", description: "Token de aceptación de términos Wompi" },
-      signature: { type: "string", description: "Firma de integridad (no validada por el simulador)" },
+      acceptance_token: {
+        type: "string",
+        description: "Token de aceptación de términos Wompi requerido por el handler y de un solo uso.",
+      },
+      signature: {
+        type: "string",
+        description: "Firma SHA-256 de integridad requerida y validada por el simulador.",
+      },
     },
     additionalProperties: false,
     examples: [
@@ -225,8 +233,8 @@ export const postWompiTransactionsSchema = {
     },
     422: {
       description:
-        "Cuerpo inválido. Ocurre cuando falta `payment_method` " +
-        "(replica el 422 medido contra sandbox.wompi.co).",
+        "Validación de Wompi: falta payment_method, acceptance_token o signature; " +
+        "el token ya se usó o la firma de integridad es inválida.",
       ...wompiErrorBody,
     },
     501: {
@@ -414,7 +422,10 @@ export const postWompiTokenCardSchema = {
   summary: "Tokenizar tarjeta de crédito Wompi",
   description:
     "Simula `POST /v1/tokens/cards` de Wompi. " +
-    "Requiere cabecera `Authorization: Bearer <pub_key>`.",
+    "Requiere Authorization: Bearer <llave pública>. El handler responde 401 si falta la " +
+    "cabecera, 404 si el comercio no existe y 422 si los datos no pasan las validaciones. " +
+    "Use el `data.id` devuelto como `payment_method.token` al crear una transacción. " +
+    "Las respuestas POST, incluidos los errores, permiten CORS desde cualquier origen.",
   tags: ["Wompi Simulación"],
   headers: {
     type: "object",
@@ -422,22 +433,32 @@ export const postWompiTokenCardSchema = {
     properties: {
       authorization: {
         type: "string",
-        description: "Cabecera Bearer con la llave pública del comercio (pub_test_...)",
+        description: "Authorization: Bearer <llave pública del comercio>.",
         example: "Bearer pub_test_abc123",
       },
       "x-simulate-scenario": simulateScenarioHeader,
+      "x-simulator-scenario": {
+        ...simulateScenarioHeader,
+        description: "Alias de x-simulate-scenario.",
+      },
     },
   },
   body: {
     type: "object",
-    required: ["number", "cvc", "exp_month", "exp_year", "card_holder"],
     properties: {
-      number: { type: "string", description: "Número de tarjeta", example: "4242424242424242" },
-      cvc: { type: "string", description: "Código CVC", example: "123" },
+      number: {
+        type: "string",
+        description: "Número de tarjeta de 12 a 19 dígitos que pasa Luhn.",
+        example: "4242424242424242",
+      },
+      cvc: { type: "string", description: "Código CVC de 3 o 4 dígitos", example: "123" },
       exp_month: { type: "string", description: "Mes de expiración (MM)", example: "12" },
       exp_year: { type: "string", description: "Año de expiración (AA o AAAA)", example: "30" },
-      card_holder: { type: "string", description: "Nombre del tarjetahabiente", example: "Juan Pérez" },
+      card_holder: { type: "string", description: "Nombre del tarjetahabiente", example: "Juan Perez" },
     },
+    description:
+      "El handler requiere number, cvc, exp_month, exp_year y card_holder; faltas o " +
+      "valores inválidos responden 422 en el formato de validación nativo de Wompi.",
   },
   response: {
     201: {
@@ -451,12 +472,12 @@ export const postWompiTokenCardSchema = {
             id: { type: "string", example: "tok_sim_12345678" },
             created_at: { type: "string", format: "date-time" },
             brand: { type: "string", example: "VISA" },
-            name: { type: "string", example: "Juan Pérez" },
+            name: { type: "string", example: "Juan Perez" },
             last_four: { type: "string", example: "4242" },
             bin: { type: "string", example: "424242" },
             exp_year: { type: "string", example: "30" },
             exp_month: { type: "string", example: "12" },
-            card_holder: { type: "string", example: "Juan Pérez" },
+            card_holder: { type: "string", example: "Juan Perez" },
             created_with_cvc: { type: "boolean", example: true },
             expires_at: { type: "string", format: "date-time" },
             validity_ends_at: { type: ["string", "null"] },
@@ -464,14 +485,8 @@ export const postWompiTokenCardSchema = {
         },
       },
     },
-    401: {
-      description: "No autorizado (Authorization header faltante).",
-      ...wompiErrorBody,
-    },
-    404: {
-      description: "Comercio no encontrado.",
-      ...wompiErrorBody,
-    },
+    401: { description: "No autorizado: falta Authorization.", ...wompiErrorBody },
+    404: { description: "Comercio no encontrado.", ...wompiErrorBody },
     422: {
       description: "Error de validación de campos de entrada.",
       type: "object",
@@ -485,6 +500,10 @@ export const postWompiTokenCardSchema = {
         },
       },
     },
+    429: { description: "Límite de solicitudes simulado.", ...wompiErrorBody },
+    500: { description: "Error interno simulado.", ...wompiErrorBody },
+    502: { description: "Error de gateway simulado.", ...wompiErrorBody },
+    503: { description: "Servicio no disponible simulado.", ...wompiErrorBody },
+    504: { description: "Tiempo de espera agotado simulado.", ...wompiErrorBody },
   },
 } as const;
-

@@ -29,14 +29,10 @@ import {
   WompiTokenizeCardRequestBody,
 } from "../gateways/wompi/types";
 import {
-  WompiCreateTransactionRequestBody,
-  WompiTokenizeCardRequestBody,
-} from "../gateways/wompi/types";
-import { transactionStore } from "../store/TransactionStore";
-import {
   getWompiMerchantSchema,
   getWompiPseInstitutionsSchema,
   getWompiTransactionSchema,
+  postWompiTokenCardSchema,
   postWompiTransactionsSchema,
 } from "./schemas/wompi.schemas";
 import { rememberScenarioTarget } from "../state/scenarioTarget";
@@ -51,6 +47,55 @@ import {
   rememberQueryFailure,
 } from "../store/ScenarioMarks";
 
+const DECLINING_TEST_CARD = "4111111111111111";
+const CARD_NUMBER_PATTERN = /^\d{12,19}$/;
+
+function passesLuhn(digits: string): boolean {
+  let sum = 0;
+  for (let index = 0; index < digits.length; index++) {
+    let digit = Number(digits[digits.length - 1 - index]);
+    if (index % 2 === 1) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+  }
+  return sum % 10 === 0;
+}
+
+const INVALID_KEY_ON_CREATE = {
+  error: { type: "INVALID_ACCESS_TOKEN", reason: "Llave no válida" },
+} as const;
+
+const INVALID_KEY_ON_QUERY = {
+  error: { type: "INVALID_ACCESS_TOKEN", reason: "El token no tiene suficientes permisos" },
+} as const;
+
+const NOT_FOUND = {
+  error: { type: "NOT_FOUND_ERROR", reason: "La entidad solicitada no existe" },
+} as const;
+
+const PSE_REDIRECT_PAGE =
+  '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
+  "<title>Redirección simulada al banco (PSE)</title></head><body>" +
+  "<h1>Redirección simulada al banco</h1>" +
+  "<p>Esta página es de la API de Simulación de Kit Pagos Colombia. No es de Wompi ni de " +
+  "un banco, y no imita la página real del banco.</p>" +
+  "<p>El resultado del pago quedó decidido al crear la transacción. " +
+  "Consulte la transacción para conocerlo.</p></body></html>";
+
+const TERMS_PAGE =
+  '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
+  "<title>Términos de aceptación simulados</title></head><body>" +
+  "<h1>Términos de aceptación simulados</h1>" +
+  "<p>Esta página es de la API de Simulación de Kit Pagos Colombia: no son los términos de " +
+  "Wompi.</p>" +
+  "<p>En producción, el comercio debe mostrarle al pagador el <code>permalink</code> real " +
+  "que entrega Wompi en <code>presigned_acceptance</code>.</p></body></html>";
+
+function sendsPrivateKey(request: FastifyRequest): boolean {
+  return request.headers.authorization?.startsWith("Bearer priv_") ?? false;
+}
 /**
  * Wompi HTTP router (issue #55).
  * Wompi HTTP router (issue #55 & #65).
@@ -84,32 +129,27 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   // ── POST /v1/sim/wompi/transactions ──────────────────────────────────────
   app.post(
     "/v1/sim/wompi/transactions",
-    { schema: postWompiTransactionsSchema },
+    {
+      schema: postWompiTransactionsSchema,
+      preValidation: async (request, reply) => {
+        const body = request.body as WompiCreateTransactionRequestBody | undefined;
+        if (!body?.payment_method) {
+          return reply.code(422).send({
+            error: {
+              type: "UNPROCESSABLE",
+              reason: "No se especificó método de pago o fuente de pago",
+            },
+          });
+        }
+
+        const missingField = missingFieldRejection(body);
+        if (missingField !== undefined) {
+          return reply.code(422).send(missingField);
+        }
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const requestBody = request.body as WompiCreateTransactionRequestBody;
-
-      /*
-       * Wompi no cobra sin método de pago, y el mock tampoco.
-       *
-       * Medido contra `sandbox.wompi.co`: un `POST /transactions` sin `payment_method`
-       * responde `422 UNPROCESSABLE "No se especificó método de pago o fuente de pago"`.
-       * El mock lo aceptaba, y por eso el SDK pudo pasar meses sin mandar el token de
-       * tarjeta con todas las pruebas en verde. Un mock que acepta más que la API real no
-       * es permisivo: es el lugar donde se esconden los defectos (puntos 48 y 50).
-       */
-      if (!requestBody?.payment_method) {
-        return reply.code(422).send({
-          error: {
-            type: "UNPROCESSABLE",
-            reason: "No se especificó método de pago o fuente de pago",
-          },
-        });
-      }
-
-      const missingField = missingFieldRejection(requestBody);
-      if (missingField !== undefined) {
-        return reply.code(422).send(missingField);
-      }
 
       if (invalidCredentialRequested(request, ["authorization"])) {
         return reply.code(401).send(INVALID_KEY_ON_CREATE);
@@ -316,7 +356,6 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
 
       return reply.code(200).send(mockFactory.buildMerchantResponse(requestOrigin(request)));
     },
-    },
   );
 
   /**
@@ -381,7 +420,22 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   registerTokenizationPreflight(app, "/v1/sim/wompi/tokens/cards", WOMPI_TOKENIZATION_PREFLIGHT_HEADERS);
   app.post(
     "/v1/sim/wompi/tokens/cards",
-    { onSend: allowAnyOrigin },
+    {
+      schema: postWompiTokenCardSchema,
+      onSend: allowAnyOrigin,
+      preValidation: async (request, reply) => {
+        const authorization = request.headers.authorization;
+        if (!authorization || !authorization.startsWith("Bearer ")) {
+          return reply.code(401).send({
+            error: {
+              type: "UNAUTHORIZED",
+              code: "ACCESS_TOKEN_HEADER_NOT_PRESENT",
+              reason: "Header de autorización 'Authorization' no enviado.",
+            },
+          });
+        }
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const authHeader = request.headers.authorization;
       if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -506,5 +560,3 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 }
-
-

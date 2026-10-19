@@ -22,6 +22,70 @@ describe("GET /docs/json — especificación OpenAPI", () => {
     expect((spec.info as Record<string, unknown>).title).toContain("Kit Pagos");
   });
 
+  it("documenta las rutas de simulación de gateways y los preflights de tokenización", async () => {
+    const app = buildApp({ logger: false });
+    const response = await app.inject({ method: "GET", url: "/docs/json" });
+    const spec = response.json<Record<string, unknown>>();
+    const paths = spec.paths as Record<string, Record<string, unknown>>;
+    const expectedOperations: Record<string, string> = {
+      "/health": "get",
+      "/v1/sim/wompi/transactions": "post",
+      "/v1/sim/wompi/transactions/{id}": "get",
+      "/v1/sim/wompi/merchants/{publicKey}": "get",
+      "/v1/sim/wompi/pse/financial_institutions": "get",
+      "/v1/sim/mercadopago/payments": "post",
+      "/v1/sim/mercadopago/payments/{id}": "get",
+      "/v1/sim/mercadopago/orders": "post",
+      "/v1/sim/mercadopago/orders/{id}": "get",
+      "/v1/sim/mercadopago/payment_methods": "get",
+      "/v1/sim/wompi/tokens/cards": "post",
+      "/v1/sim/mercadopago/card_tokens": "post",
+    };
+
+    for (const [path, method] of Object.entries(expectedOperations)) {
+      expect(paths[path]?.[method]).toBeDefined();
+    }
+
+    for (const path of ["/v1/sim/wompi/tokens/cards", "/v1/sim/mercadopago/card_tokens"]) {
+      const preflight = paths[path]?.["options"] as Record<string, unknown>;
+      expect(preflight).toBeDefined();
+      const response200 = (preflight.responses as Record<string, unknown>)?.["200"] as Record<string, unknown>;
+      expect(response200).toBeDefined();
+      expect(response200.headers).toBeDefined();
+    }
+
+    const wompiTokenPost = paths["/v1/sim/wompi/tokens/cards"]["post"] as Record<string, unknown>;
+    const mercadoPagoTokenPost = paths["/v1/sim/mercadopago/card_tokens"]["post"] as Record<string, unknown>;
+    expect(wompiTokenPost.requestBody).toBeDefined();
+    expect(mercadoPagoTokenPost.requestBody).toBeDefined();
+    expect(wompiTokenPost.responses).toHaveProperty("422");
+    expect(mercadoPagoTokenPost.responses).toHaveProperty("401");
+
+    const wompiPaymentPost = paths["/v1/sim/wompi/transactions"]["post"] as Record<string, unknown>;
+    const wompiRequestBody = wompiPaymentPost.requestBody as Record<string, unknown>;
+    const wompiJsonContent = (wompiRequestBody.content as Record<string, unknown>)["application/json"] as Record<string, unknown>;
+    const wompiBodySchema = wompiJsonContent.schema as Record<string, unknown>;
+    expect(wompiBodySchema.required).toEqual(
+      expect.arrayContaining(["payment_method", "acceptance_token", "signature"]),
+    );
+
+    const paymentPost = paths["/v1/sim/mercadopago/payments"]["post"] as Record<string, unknown>;
+    const paymentRequestBody = paymentPost.requestBody as Record<string, unknown>;
+    const paymentJsonContent = (paymentRequestBody.content as Record<string, unknown>)["application/json"] as Record<string, unknown>;
+    const paymentBodySchema = paymentJsonContent.schema as Record<string, unknown>;
+    expect(paymentBodySchema.required).toEqual(expect.arrayContaining(["token", "installments"]));
+
+    const mercadoPagoTokenParameters = mercadoPagoTokenPost.parameters as Array<Record<string, unknown>>;
+    expect(mercadoPagoTokenParameters).toContainEqual(
+      expect.objectContaining({ name: "public_key", in: "query", required: true }),
+    );
+
+    const paymentParameters = paymentPost.parameters as Array<Record<string, unknown>>;
+    expect(paymentParameters).toContainEqual(
+      expect.objectContaining({ name: "x-idempotency-key", in: "header", required: true }),
+    );
+  });
+
   it("documenta GET /v1/api/gateways con tag Kit Pagos", async () => {
     const app = buildApp({ logger: false });
     const response = await app.inject({ method: "GET", url: "/docs/json" });
@@ -190,4 +254,3 @@ describe("GET /docs/json — especificación OpenAPI", () => {
     expect(response.json().message).toContain("gateway");
   });
 });
-

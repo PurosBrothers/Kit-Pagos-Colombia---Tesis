@@ -17,12 +17,11 @@
  * - PSE va por `/orders`, no por `/payments` (issue #64).
  *   Los estados de orders son distintos: `action_required`, `processed`, `failed`.
  *
- * - `x-simulate-scenario`: el router de Mercado Pago acepta
- *   APPROVED (alias APPROVAL), REJECTED, DECLINED, EXPIRED, PENDING, NOT_FOUND.
- *   Cualquier otro valor devuelve 501.
+ * - En creación, `x-simulate-scenario` admite escenarios de negocio y técnicos.
+ *   Orders rechaza con 501 los escenarios de creación no soportados; las consultas
+ *   leen el estado persistido y no usan esa cabecera.
  *
- * - El GET /payments/:id regenera el payload desde el escenario pedido por
- *   header, porque el router no lee el TransactionStore (a diferencia de Wompi).
+ * - Los GET de pagos y órdenes consultan el estado guardado al crearlos.
  *
  * - El 501 es parte del contrato: escenario todavía no soportado.
  */
@@ -33,34 +32,14 @@
 const mpSimulateScenarioHeader = {
   type: "string",
   description:
-    "Escenario de simulación. " +
-    "Mercado Pago acepta: APPROVED, APPROVAL, REJECTED, DECLINED, EXPIRED, " +
-    "PENDING (solo en GET /orders/:id), NOT_FOUND (solo en GET /payments/:id y GET /orders/:id), " +
-    "TIMEOUT, GATEWAY_TIMEOUT, NETWORK_ERROR, CONNECTION_ERROR, " +
-    "RATE_LIMIT, TOO_MANY_REQUESTS, SERVER_ERROR, INTERNAL_ERROR, " +
-    "BAD_GATEWAY, SERVICE_UNAVAILABLE, FLAPPING, DUPLICATE_PAYMENT. " +
-    "Cualquier otro valor devuelve 501.",
-  enum: [
-    "APPROVED",
-    "APPROVAL",
-    "REJECTED",
-    "DECLINED",
-    "EXPIRED",
-    "PENDING",
-    "NOT_FOUND",
-    "TIMEOUT",
-    "GATEWAY_TIMEOUT",
-    "NETWORK_ERROR",
-    "CONNECTION_ERROR",
-    "RATE_LIMIT",
-    "TOO_MANY_REQUESTS",
-    "SERVER_ERROR",
-    "INTERNAL_ERROR",
-    "BAD_GATEWAY",
-    "SERVICE_UNAVAILABLE",
-    "FLAPPING",
-    "DUPLICATE_PAYMENT",
-  ],
+    "Escenario solicitado en rutas de creación. Valores de negocio admitidos incluyen " +
+    "APPROVED, APPROVAL, REJECTED, DECLINED, EXPIRED y PENDING; también se admiten " +
+    "escenarios técnicos TIMEOUT, GATEWAY_TIMEOUT, NETWORK_ERROR, CONNECTION_ERROR, " +
+    "RATE_LIMIT, TOO_MANY_REQUESTS, SERVER_ERROR, INTERNAL_ERROR, BAD_GATEWAY, " +
+    "SERVICE_UNAVAILABLE, FLAPPING, DUPLICATE_PAYMENT, SLOW, MALFORMED_JSON, " +
+    "MALFORMED_BODY, HTML_ERROR, 429, 500, 502, 503 e INVALID_CREDENTIALS. " +
+    "Orders admite solo el subconjunto implementado " +
+    "y responde 501 para los escenarios de creación no soportados.",
   example: "APPROVED",
 } as const;
 
@@ -119,6 +98,7 @@ const mpPaymentsErrorBody = {
   properties: {
     message: { type: "string" },
     error: { type: "string" },
+    code: { type: "string" },
     status: { type: "integer" },
     cause: {
       type: "array",
@@ -127,6 +107,7 @@ const mpPaymentsErrorBody = {
         properties: {
           code: { oneOf: [{ type: "integer" }, { type: "string" }] },
           description: { type: "string" },
+          data: { type: "string" },
         },
       },
     },
@@ -144,6 +125,7 @@ const mpOrdersErrorBody = {
         properties: {
           code: { type: "string" },
           message: { type: "string" },
+          details: { type: "string" },
         },
       },
     },
@@ -163,6 +145,8 @@ export const postMpPaymentsSchema = {
     "Simula `POST /v1/payments` de Mercado Pago. " +
     "**Requiere la cabecera `x-idempotency-key`** (Mercado Pago responde " +
     "400 si falta: \"Header X-Idempotency-Key can't be null\"). " +
+    "Requiere token e installments; si falta cualquiera el handler responde 400 " +
+    "con el mensaje nativo correspondiente. " +
     "PSE no va por esta ruta sino por POST /v1/sim/mercadopago/orders. " +
     "Los estados de Mercado Pago son en minúsculas (`approved`, `rejected`).",
   tags: ["Mercado Pago Simulación"],
@@ -186,7 +170,7 @@ export const postMpPaymentsSchema = {
   },
   body: {
     type: "object",
-    required: ["transaction_amount", "payer"],
+    required: ["transaction_amount", "token", "installments", "payer"],
     properties: {
       transaction_amount: {
         type: "number",
@@ -265,17 +249,14 @@ export const postMpPaymentsSchema = {
 /**
  * GET /v1/sim/mercadopago/payments/:id
  *
- * Consulta el estado de un pago. Regenera el payload desde el escenario
- * solicitado en header (no lee el TransactionStore).
+ * Consulta el estado persistido del pago.
  */
 export const getMpPaymentSchema = {
   summary: "Consultar pago Mercado Pago",
   description:
     "Simula `GET /v1/payments/:id` de Mercado Pago. " +
-    "**Nota**: el simulador regenera el payload a partir del escenario pedido " +
-    "en `x-simulate-scenario` y no lee estado persistido, a diferencia de Wompi. " +
-    "Esto es una limitación conocida del simulador (docs/05-ejemplos/intercambiabilidad.md). " +
-    "Acepta el escenario especial NOT_FOUND para probar la ruta 404.",
+    "Devuelve el pago guardado al crearlo y su estado actual; no vuelve a elegir el desenlace " +
+    "desde una cabecera de escenario. Si el identificador no existe, responde 404.",
   tags: ["Mercado Pago Simulación"],
   params: {
     type: "object",
@@ -288,16 +269,9 @@ export const getMpPaymentSchema = {
       },
     },
   },
-  headers: {
-    type: "object",
-    properties: {
-      "x-simulate-scenario": mpSimulateScenarioHeader,
-    },
-  },
   response: {
     200: {
-      description:
-        "Pago encontrado. Por defecto (sin header) devuelve estado approved.",
+      description: "Pago encontrado con el estado persistido de su creación.",
       ...mpPaymentResponseObject,
       examples: [
         {
@@ -314,7 +288,7 @@ export const getMpPaymentSchema = {
       ],
     },
     404: {
-      description: "Pago no encontrado (escenario NOT_FOUND).",
+      description: "Pago no encontrado.",
       ...mpPaymentsErrorBody,
     },
   },
@@ -347,6 +321,10 @@ export const postMpOrdersSchema = {
         example: "idempotency-key-pse-001",
       },
       "x-simulate-scenario": mpSimulateScenarioHeader,
+      "x-simulator-scenario": {
+        ...mpSimulateScenarioHeader,
+        description: "Alias de x-simulate-scenario.",
+      },
     },
   },
   body: {
@@ -500,11 +478,9 @@ export const getMpOrderSchema = {
     "Simula `GET /v1/orders/:id` de Mercado Pago. " +
     "Por defecto devuelve la orden con `status: processed` " +
     "(como si el pagador ya completó la transferencia bancaria). " +
-    "Con `x-simulate-scenario: PENDING` devuelve `status: action_required` " +
-    "(el pagador aún no ha ido al banco). " +
-    "Con NOT_FOUND devuelve 404. " +
-    "El simulador no guarda estado entre POST y GET: no conoce la `external_reference` " +
-    "original (limitación documentada en docs/05-ejemplos/intercambiabilidad.md).",
+    "Devuelve la orden persistida y el estado resultante de su flujo PSE. " +
+    "La cabecera de escenario no cambia una orden ya creada; un identificador inexistente " +
+    "responde 404.",
   tags: ["Mercado Pago Simulación"],
   params: {
     type: "object",
@@ -514,17 +490,6 @@ export const getMpOrderSchema = {
         type: "string",
         description: "Identificador de la orden",
         example: "ord-abc-001",
-      },
-    },
-  },
-  headers: {
-    type: "object",
-    properties: {
-      "x-simulate-scenario": {
-        type: "string",
-        enum: ["APPROVED", "PENDING", "NOT_FOUND"],
-        description: "PENDING devuelve action_required; NOT_FOUND devuelve 404; por defecto processed.",
-        example: "APPROVED",
       },
     },
   },
@@ -569,7 +534,7 @@ export const getMpOrderSchema = {
       ],
     },
     404: {
-      description: "Orden no encontrada (escenario NOT_FOUND).",
+      description: "Orden no encontrada.",
       ...mpOrdersErrorBody,
     },
   },
@@ -652,10 +617,15 @@ export const postMpTokenCardSchema = {
   summary: "Tokenizar tarjeta de crédito Mercado Pago",
   description:
     "Simula `POST /v1/card_tokens` de Mercado Pago. " +
-    "Requiere parámetro de consulta `?public_key=APP_USR-...`.",
+    "Requiere el parámetro `public_key` en la query; si falta, el handler responde 401. " +
+    "Esta ruta no exige Authorization; Mercado Pago responde 400 si se envía esa cabecera. " +
+    "Use el `id` devuelto como `token` en POST /v1/sim/mercadopago/payments, junto con " +
+    "installments y x-idempotency-key. Las respuestas POST, incluidos los errores, " +
+    "permiten CORS desde cualquier origen.",
   tags: ["Mercado Pago Simulación"],
   querystring: {
     type: "object",
+    required: ["public_key"],
     properties: {
       public_key: {
         type: "string",
@@ -667,7 +637,17 @@ export const postMpTokenCardSchema = {
   headers: {
     type: "object",
     properties: {
-      "x-simulate-scenario": mpSimulateScenarioHeader,
+      "x-simulate-scenario": {
+        ...mpSimulateScenarioHeader,
+        description:
+          "Escenario técnico para fallas de tokenización; los escenarios de negocio no " +
+          "alteran la emisión del token.",
+      },
+      "x-simulator-scenario": {
+        ...mpSimulateScenarioHeader,
+        description:
+          "Alias de x-simulate-scenario. Solo se aplican escenarios técnicos.",
+      },
     },
   },
   body: {
@@ -702,12 +682,14 @@ export const postMpTokenCardSchema = {
         live_mode: { type: "boolean", example: false },
         require_esc: { type: "boolean", example: false },
         status: { type: "string", example: "active" },
+        first_six_digits: { type: "string", example: "450995" },
         last_four_digits: { type: "string", example: "0000" },
         card_number_length: { type: "integer", example: 16 },
         trunc_card_number: { type: "string", example: "450995XXXXXX0000" },
         expiration_month: { type: "integer", example: 12 },
         expiration_year: { type: "integer", example: 2030 },
         security_code_length: { type: "integer", example: 3 },
+        luhn_validation: { type: "boolean", example: true },
         date_created: { type: "string", format: "date-time" },
         date_last_updated: { type: "string", format: "date-time" },
         date_due: { type: "string", format: "date-time" },
@@ -732,6 +714,9 @@ export const postMpTokenCardSchema = {
       description: "Llave pública inexistente.",
       ...mpPaymentsErrorBody,
     },
+    429: { description: "Límite de solicitudes simulado.", ...mpPaymentsErrorBody },
+    502: { description: "Error de gateway simulado.", ...mpPaymentsErrorBody },
+    503: { description: "Servicio no disponible simulado.", ...mpPaymentsErrorBody },
+    504: { description: "Tiempo de espera agotado simulado.", ...mpPaymentsErrorBody },
   },
 } as const;
-

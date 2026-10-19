@@ -1,6 +1,4 @@
 import Fastify, { FastifyError, FastifyInstance } from "fastify";
-import fastifySwagger from "@fastify/swagger";
-import fastifySwaggerUi from "@fastify/swagger-ui";
 import { KitPagosError, KitPagosErrorCode } from "kit-pagos-colombia";
 import { healthRoute } from "./routes/health";
 import { wompiRoutes } from "./routes/wompi";
@@ -112,25 +110,6 @@ export function buildApp(options?: BuildAppOptions): FastifyInstance {
     }
   });
 
-  app.register(fastifySwagger, {
-    openapi: {
-      info: {
-        title: "Simulator API",
-        version: "1.0.0",
-        description: "API de simulación de pasarelas de pago para Kit Pagos Colombia",
-      },
-      servers: [{ url: "http://localhost:3000" }],
-    },
-  });
-
-  app.register(fastifySwaggerUi, {
-    routePrefix: "/docs",
-    uiConfig: {
-      docExpansion: "list",
-      deepLinking: false,
-    },
-  });
-
   const credentialResolver =
     options?.credentialResolver ?? new CredentialResolver();
   const kitPagosProvider =
@@ -188,4 +167,3 @@ export function buildApp(options?: BuildAppOptions): FastifyInstance {
 
   return app;
 }
-
