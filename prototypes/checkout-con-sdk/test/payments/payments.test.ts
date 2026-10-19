@@ -1,26 +1,360 @@
+import { Gateway, KitPagosError, KitPagosErrorCode } from "kit-pagos-colombia";
+import { PaymentTechnicalError } from "../../src/checkout/PaymentsPort";
 import { createPayments } from "../../src/payments";
 
-// Las pruebas del módulo de pagos de este prototipo. En el esqueleto común solo comprueban
-// que el módulo todavía no existe; el issue de cada prototipo las reemplaza.
-describe("payments module (skeleton placeholder)", () => {
-  const payments = createPayments();
+/**
+ * Pruebas del módulo de pagos del prototipo B. El SDK se reemplaza por un doble: lo que se
+ * prueba aquí es la traducción entre el puerto del esqueleto y `kit-pagos-colombia`, no la
+ * red. El SDK real tiene sus propias pruebas en `sdk/`.
+ */
 
-  it("should fail every operation until the prototype implements it", async () => {
-    expect(() => payments.publicConfig()).toThrow(/todavía no está implementado/);
-    await expect(payments.listPseBanks()).rejects.toThrow(/todavía no está implementado/);
-    await expect(payments.getPaymentStatus("tx")).rejects.toThrow(/todavía no está implementado/);
-    await expect(payments.verifyWebhook({ rawBody: "", headers: {}, query: {} })).rejects.toThrow(
-      /todavía no está implementado/,
+const mockCreatePayment = jest.fn();
+const mockGetPaymentStatus = jest.fn();
+const mockGetPseBanks = jest.fn();
+const mockValidateWebhook = jest.fn();
+const mockKitPagosConstructor = jest.fn();
+
+jest.mock("kit-pagos-colombia", () => {
+  const actual = jest.requireActual("kit-pagos-colombia");
+  return {
+    ...actual,
+    KitPagos: jest.fn().mockImplementation((options: unknown) => {
+      mockKitPagosConstructor(options);
+      return {
+        createPayment: mockCreatePayment,
+        getPaymentStatus: mockGetPaymentStatus,
+        getPseBanks: mockGetPseBanks,
+        validateWebhook: mockValidateWebhook,
+      };
+    }),
+  };
+});
+
+/** Una transacción del SDK reducida a lo que el módulo lee. */
+function fakeTransaction(id: string, status: string, rawStatus: string = status) {
+  return {
+    gatewayTransactionId: { value: id, gateway: Gateway.WOMPI },
+    getStatus: () => status,
+    rawStatus,
+  };
+}
+
+function webhookError(code: KitPagosErrorCode): KitPagosError {
+  return new KitPagosError(code, Gateway.WOMPI, null, "desde el doble");
+}
+
+/** Un error que no viene del SDK: no es un fallo de la pasarela y no debe reetiquetarse. */
+const foreignError = new Error("error ajeno al SDK");
+
+const payer = {
+  fullName: "Pedro Pérez",
+  email: "pedro@example.com",
+  documentType: "CC" as const,
+  documentNumber: "1020304050",
+  phone: "3001234567",
+};
+
+const cardRequest = {
+  orderReference: "ORD-1",
+  amountInPesos: 5_000_000,
+  description: "Teclado",
+  payer,
+  method: { type: "CARD" as const, cardToken: "tok_123", installments: 3 },
+  returnUrl: "http://localhost:4000/orders/ORD-1",
+};
+
+const pseRequest = {
+  ...cardRequest,
+  method: { type: "PSE" as const, bankCode: "1007", personType: "NATURAL" as const },
+};
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
+
+describe("payments module (kit-pagos-colombia)", () => {
+  describe("publicConfig", () => {
+    it("should expose the gateway, the public key and the simulator environment the browser needs", () => {
+      const payments = createPayments({ WOMPI_PUBLIC_KEY: "pub_test_desde_entorno" });
+      expect(payments.publicConfig()).toEqual({
+        gateway: "WOMPI",
+        publicKey: "pub_test_desde_entorno",
+        environment: "simulator",
+      });
+    });
+
+    it("should fall back to the example credentials when the environment is empty", () => {
+      expect(createPayments({}).publicConfig().publicKey).toBe("pub_test_ejemplo_no_real");
+    });
+  });
+
+  describe("createPayment", () => {
+    it("should map the port request to the SDK and translate an approved transaction", async () => {
+      mockCreatePayment.mockResolvedValue({
+        outcome: "TRANSACTION",
+        transaction: fakeTransaction("tx-1", "APPROVED"),
+      });
+
+      const snapshot = await createPayments({}).createPayment(cardRequest);
+
+      expect(snapshot).toEqual({
+        transactionId: "tx-1",
+        status: "APPROVED",
+        nativeStatus: "APPROVED",
+      });
+
+      const request = mockCreatePayment.mock.calls[0][0];
+      expect(request.amount.getValue()).toBe("5000000");
+      expect(request.currency.getCode()).toBe("COP");
+      expect(request.orderReference.getValue()).toBe("ORD-1");
+      expect(request.payer).toMatchObject({ email: payer.email, fullName: payer.fullName });
+      expect(request.paymentMethod).toMatchObject({ type: "CARD", cardToken: "tok_123", installments: 3 });
+      expect(request.returnUrlConfig.resolveFor("APPROVED")).toBe(cardRequest.returnUrl);
+    });
+
+    it("should map a PSE payment to the SDK method", async () => {
+      mockCreatePayment.mockResolvedValue({
+        outcome: "TRANSACTION",
+        transaction: fakeTransaction("tx-pse", "PENDING"),
+      });
+
+      await createPayments({}).createPayment(pseRequest);
+
+      expect(mockCreatePayment.mock.calls[0][0].paymentMethod).toMatchObject({
+        type: "PSE",
+        bankCode: "1007",
+        payerKind: "NATURAL",
+      });
+    });
+
+    it("should surface a business decline as a snapshot, not as an error", async () => {
+      mockCreatePayment.mockResolvedValue({
+        outcome: "TRANSACTION",
+        transaction: fakeTransaction("tx-dec", "DECLINED", "DECLINED"),
+      });
+
+      await expect(createPayments({}).createPayment(cardRequest)).resolves.toEqual({
+        transactionId: "tx-dec",
+        status: "DECLINED",
+        nativeStatus: "DECLINED",
+      });
+    });
+
+    it.each(["EXPIRED", "VOIDED", "ERROR"])(
+      "should map the terminal %s state to DECLINED and keep the native status",
+      async (native) => {
+        mockCreatePayment.mockResolvedValue({
+          outcome: "TRANSACTION",
+          transaction: fakeTransaction("tx-terminal", native),
+        });
+
+        const snapshot = await createPayments({}).createPayment(cardRequest);
+
+        expect(snapshot.status).toBe("DECLINED");
+        expect(snapshot.nativeStatus).toBe(native);
+      },
     );
-    await expect(
-      payments.createPayment({
-        orderReference: "ORD-1",
-        amountInPesos: 1000,
-        description: "x",
-        payer: { fullName: "a", email: "a@b.c", documentType: "CC", documentNumber: "1", phone: "1" },
-        method: { type: "PSE", bankCode: "1007", personType: "NATURAL" },
-        returnUrl: "http://localhost:4000/orders/ORD-1",
-      }),
-    ).rejects.toThrow(/todavía no está implementado/);
+
+    it("should translate a redirect outcome to a PENDING snapshot with the bank URL", async () => {
+      mockCreatePayment.mockResolvedValue({
+        outcome: "REDIRECT_REQUIRED",
+        redirect: {
+          redirectUrl: "https://banco.example/pagar",
+          gatewayTransactionId: { value: "tx-pse-2" },
+          rawStatus: "PENDING",
+        },
+      });
+
+      const snapshot = await createPayments({}).createPayment(pseRequest);
+
+      expect(snapshot).toEqual({
+        transactionId: "tx-pse-2",
+        status: "PENDING",
+        nativeStatus: "PENDING",
+        redirectUrl: "https://banco.example/pagar",
+      });
+    });
+
+    it("should wrap a technical failure as PaymentTechnicalError with the SDK error as cause", async () => {
+      const failure = webhookError(KitPagosErrorCode.GATEWAY_TIMEOUT);
+      mockCreatePayment.mockRejectedValue(failure);
+
+      const error = await createPayments({}).createPayment(cardRequest).catch((e) => e);
+
+      expect(error).toBeInstanceOf(PaymentTechnicalError);
+      expect((error as PaymentTechnicalError).cause).toBe(failure);
+      expect((error as Error).message).toContain("GATEWAY_TIMEOUT");
+    });
+
+    it("should let a non-SDK error bubble untouched", async () => {
+      mockCreatePayment.mockRejectedValue(foreignError);
+
+      await expect(createPayments({}).createPayment(cardRequest)).rejects.toBe(foreignError);
+    });
+  });
+
+  describe("listPseBanks", () => {
+    it("should map the SDK banks to the port options", async () => {
+      mockGetPseBanks.mockResolvedValue([
+        { code: "1", name: "Banco que aprueba" },
+        { code: "2", name: "Banco que declina" },
+      ]);
+
+      await expect(createPayments({}).listPseBanks()).resolves.toEqual([
+        { code: "1", name: "Banco que aprueba" },
+        { code: "2", name: "Banco que declina" },
+      ]);
+    });
+
+    it("should wrap a technical failure", async () => {
+      mockGetPseBanks.mockRejectedValue(webhookError(KitPagosErrorCode.MAX_RETRIES_EXCEEDED));
+
+      await expect(createPayments({}).listPseBanks()).rejects.toBeInstanceOf(PaymentTechnicalError);
+    });
+  });
+
+  describe("getPaymentStatus", () => {
+    it("should query the SDK and translate the result", async () => {
+      mockGetPaymentStatus.mockResolvedValue(fakeTransaction("tx-q", "PENDING"));
+
+      await expect(createPayments({}).getPaymentStatus("tx-q")).resolves.toEqual({
+        transactionId: "tx-q",
+        status: "PENDING",
+        nativeStatus: "PENDING",
+      });
+      expect(mockGetPaymentStatus).toHaveBeenCalledWith("tx-q");
+    });
+
+    it("should wrap a technical failure as a PaymentTechnicalError", async () => {
+      mockGetPaymentStatus.mockRejectedValue(webhookError(KitPagosErrorCode.GATEWAY_SERVER_ERROR));
+
+      await expect(createPayments({}).getPaymentStatus("tx-q")).rejects.toBeInstanceOf(
+        PaymentTechnicalError,
+      );
+    });
+  });
+
+  describe("verifyWebhook", () => {
+    it("should translate a verified event and normalize headers and query", async () => {
+      mockValidateWebhook.mockReturnValue({
+        eventType: "transaction.updated",
+        gatewayTransactionId: "tx-wh",
+        newStatus: "APPROVED",
+        gateway: Gateway.WOMPI,
+      });
+
+      const notification = await createPayments({}).verifyWebhook({
+        rawBody: "{}",
+        headers: {
+          "x-event-checksum": ["abc", "ignored"],
+          "content-type": "application/json",
+          "x-missing": undefined,
+        },
+        query: { id: "tx-wh", empty: undefined },
+      });
+
+      expect(notification).toEqual({
+        transactionId: "tx-wh",
+        status: "APPROVED",
+        nativeStatus: "APPROVED",
+      });
+      const [payload, headers, options] = mockValidateWebhook.mock.calls[0];
+      expect(payload).toBe("{}");
+      expect(headers).toEqual({ "x-event-checksum": "abc", "content-type": "application/json" });
+      expect(options).toEqual({ gateway: "WOMPI", query: { id: "tx-wh" } });
+    });
+
+    it("should translate a declined event retaining the native status", async () => {
+      mockValidateWebhook.mockReturnValue({
+        eventType: "transaction.updated",
+        gatewayTransactionId: "tx-wh",
+        newStatus: "DECLINED",
+        gateway: Gateway.WOMPI,
+      });
+
+      const notification = await createPayments({}).verifyWebhook({
+        rawBody: "{}",
+        headers: {},
+        query: {},
+      });
+
+      expect(notification).toEqual({
+        transactionId: "tx-wh",
+        status: "DECLINED",
+        nativeStatus: "DECLINED",
+      });
+    });
+
+    it("should return null when the signature is invalid", async () => {
+      mockValidateWebhook.mockImplementation(() => {
+        throw webhookError(KitPagosErrorCode.WEBHOOK_SIGNATURE_INVALID);
+      });
+
+      await expect(
+        createPayments({}).verifyWebhook({ rawBody: "{}", headers: {}, query: {} }),
+      ).resolves.toBeNull();
+    });
+
+    it("should wrap any other SDK failure as a technical error", async () => {
+      mockValidateWebhook.mockImplementation(() => {
+        throw webhookError(KitPagosErrorCode.MALFORMED_RESPONSE);
+      });
+
+      await expect(
+        createPayments({}).verifyWebhook({ rawBody: "{}", headers: {}, query: {} }),
+      ).rejects.toBeInstanceOf(PaymentTechnicalError);
+    });
+
+    it("should let a non-SDK error bubble untouched", async () => {
+      mockValidateWebhook.mockImplementation(() => {
+        throw foreignError;
+      });
+
+      await expect(
+        createPayments({}).verifyWebhook({ rawBody: "{}", headers: {}, query: {} }),
+      ).rejects.toBe(foreignError);
+    });
+  });
+
+  describe("SDK configuration", () => {
+    it("should read the Wompi credentials from the environment, including the webhook secret and base URL", () => {
+      createPayments({
+        WOMPI_PUBLIC_KEY: " pub_test_x ",
+        WOMPI_PRIVATE_KEY: "prv_test_x",
+        WOMPI_INTEGRITY_SECRET: "integrity_x",
+        WOMPI_EVENTS_SECRET: "events_x",
+        WOMPI_BASE_URL: "http://simulador:3000/v1/sim/wompi",
+      });
+
+      expect(mockKitPagosConstructor).toHaveBeenCalledWith({
+        gateway: Gateway.WOMPI,
+        credentials: {
+          [Gateway.WOMPI]: {
+            publicKey: "pub_test_x",
+            privateKey: "prv_test_x",
+            integritySecret: "integrity_x",
+            webhookSecret: "events_x",
+          },
+        },
+        environment: "simulator",
+        baseUrl: "http://simulador:3000/v1/sim/wompi",
+      });
+    });
+
+    it("should use the simulator integrity secret and omit the base URL when the environment is empty", () => {
+      createPayments({});
+
+      expect(mockKitPagosConstructor).toHaveBeenCalledWith({
+        gateway: Gateway.WOMPI,
+        credentials: {
+          [Gateway.WOMPI]: {
+            publicKey: "pub_test_ejemplo_no_real",
+            privateKey: "prv_test_ejemplo_no_real",
+            integritySecret: "test_integrity_kit_pagos_simulator",
+          },
+        },
+        environment: "simulator",
+      });
+    });
   });
 });
