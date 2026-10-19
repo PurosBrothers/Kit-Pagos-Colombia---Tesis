@@ -234,6 +234,12 @@ export const postMpPaymentsSchema = {
         "El mensaje y la estructura varían según qué falta.",
       ...mpPaymentsErrorBody,
     },
+    401: {
+      description:
+        "Access token inexistente (las marcas de `invalidCredential.ts`): " +
+        "`{ code: \"unauthorized\", message: \"user not found\" }`, medido.",
+      ...mpPaymentsErrorBody,
+    },
     409: {
       description: "Pago duplicado (escenario DUPLICATE_PAYMENT).",
       ...mpPaymentsErrorBody,

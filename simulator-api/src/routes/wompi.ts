@@ -158,6 +158,8 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
     "/v1/sim/wompi/transactions",
     {
       schema: postWompiTransactionsSchema,
+      // Antes que el schema, que marca obligatorios el método de pago, el token de aceptación
+      // y la firma: así cada falta recibe la respuesta medida de Wompi y no el 400 de Fastify.
       preValidation: async (request, reply) => {
         const body = request.body as WompiCreateTransactionRequestBody | undefined;
 
@@ -464,9 +466,11 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
     {
       schema: postWompiTokenCardSchema,
       onSend: allowAnyOrigin,
+      // Antes que el schema, que marca obligatoria `Authorization`: así su falta recibe la
+      // respuesta medida de Wompi y no el 400 genérico de Fastify.
       preValidation: async (request, reply) => {
-        const authorization = request.headers.authorization;
-        if (!authorization || !authorization.startsWith("Bearer ")) {
+        const authHeader = request.headers.authorization;
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
           return reply.code(401).send({
             error: {
               type: "UNAUTHORIZED",
@@ -478,18 +482,8 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const authHeader = request.headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return reply.code(401).send({
-          error: {
-            type: "UNAUTHORIZED",
-            code: "ACCESS_TOKEN_HEADER_NOT_PRESENT",
-            reason: "Header de autorización 'Authorization' no enviado.",
-          },
-        });
-      }
-
-      const publicKey = authHeader.slice(7).trim();
+      // `preValidation` ya respondió si faltaba `Authorization: Bearer`.
+      const publicKey = (request.headers.authorization as string).slice(7).trim();
       if (!publicKey) {
         return reply.code(401).send({
           error: {
