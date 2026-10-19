@@ -3347,6 +3347,8 @@ En la misma noche, las 18 órdenes de PSE creadas entre las 21:33 y las 21:44 na
 
 **Estado:** Resuelto en `sdk/` (publicado como `0.6.0-rc.2`) y en el simulador. El PSE de Mercado Pago en el sandbox queda como límite del sandbox, sin causa conocida. Con las credenciales de prueba de una segunda aplicación de Checkout API vía Orders, el 16 de octubre funcionó dos veces: a las 15:44 llegó a «Banco Prueba PSE», se aprobó con «APROBAR PAGO», volvió al comercio con `payment_id=` y la consulta dio `APPROVED` (`processed`). A las 19:07 falló igual que la primera, también con el mismo cuerpo que había funcionado. Las dos aplicaciones comparten el vendedor de prueba, y en las dos las primeras órdenes de PSE entregaron URL y horas después ninguna. Una tercera, el 17 de octubre entre las 12:41 y las 12:46, entregó la URL en sus tres primeros PSE (dos aprobados y uno abandonado en el banco), así que no es un límite de dos por aplicación; falta medir si el corte depende del tiempo o de los cobros con tarjeta que hubo en las dos primeras. Con la tercera, sin cobros con tarjeta, el PSE seguía entregando la URL más de cuatro horas después (15:12, 15:23, 15:46, 16:35 y, por Render, 16:55); los cuatro últimos fueron por la tienda del prototipo C y terminaron `APPROVED` (puntos 103 a 105). Sin «Volver al comercio», un PSE aprobado en el banco simulado siguió en `action_required`, y pasó a `APPROVED` segundos después de pulsarlo. Los dos PSE de la segunda quedaron cerrados en el banco simulado, así que una transacción abierta no lo explica. No es la petición: la misma pasa de funcionar a fallar sin cambios de nuestro lado (`docs/testing-data/mercado-pago.md`). El proyecto usa el par de la tercera aplicación en el `.env` y, desde el 17 de octubre, en Render (issue #156, punto 105). La tarjeta funcionó con las dos primeras; con la tercera, la primera se cobró el 17 de octubre por la tarde, y el PSE de justo después funcionó (punto 106).
 
+> **Revisado el 19 de octubre de 2026 (punto 113).** El corte no es definitivo. La tercera aplicación, que falló el 18 en la noche, volvió a entregar la URL el 19 a las 14:25 sin ningún cambio. El PSE del sandbox falla por ventanas y se recupera solo, y un cobro con tarjeta aprobado no lo corta.
+
 ### 101. Lo que la corrida contra los sandboxes reales encontró en nuestro código (issue #109)
 
 **Responsable:** Joan (issue #109).
@@ -3468,6 +3470,8 @@ Con la tienda ajustada, la API local y la tercera aplicación, a las 16:35, un P
 **Lo medido con la tienda** (17 de octubre de 2026). Con la API de la rama en local, el `.env` de la raíz y la tienda en `localhost` en `sandbox`, sin túnel: Kushki, 48 000 COP, `APPROVED` (`APPROVAL`); Rapyd, 29 000 COP por su página y el simulador de 3DS, de vuelta en la tienda, `APPROVED`; Wompi, 36 000, y Mercado Pago, 48 000 (`processed`), `APPROVED`. Con el simulador local (`start:local`): Kushki `APPROVAL`, y Rapyd por la página simulada y «Volver al comercio», `APPROVED`. Capturas en `.cursor/evidencia/109/tarjeta-cuatro-pasarelas/`. Verificación: SDK, 56 suites y 996 pruebas (sentencias 97,89 %, ramas 91,28 %), lint, build, `check:readme` y métricas CK; contrato de Kushki contra UAT, 7 de 7, con la tokenización de `KitPagosBrowser` y el rechazo por monto; simulador, 50 suites y 1229 pruebas (líneas 97,8 %, ramas 89,69 %) y lint; Newman, 42 de 42 peticiones y 47 de 47 aserciones; cliente, 138 pruebas (sentencias 95,76 %, ramas 97,74 %), tipos, build y `check:sri`. Once mutaciones (la validación del monto, `K004`, la cabecera del merchant id, la rama de Kushki en `KitPagosBrowser`, `K220`, el `401` sin CORS, el modo de Rapyd, el modo `HOSTED_PAGE` en el cliente, el pago sin token, el monto en la tokenización y la vuelta de la página de Rapyd), todas detectadas.
 
 **La tarjeta de Mercado Pago con la tercera aplicación.** Joan cobró una tarjeta con ese par la tarde del 17 de octubre y después un PSE, y los dos salieron bien; a las 20:27 la tienda cobró otra (`processed`). Si el PSE se corta en las horas siguientes, la hipótesis de los cobros con tarjeta del punto 100 gana peso.
+
+> **Revisado el 19 de octubre de 2026 (punto 113).** La hipótesis no se sostiene: un PSE con URL siguió, 49 segundos después, a una tarjeta aprobada con la misma aplicación y el mismo pagador. El corte es por ventanas y se recupera solo.
 
 **Estado:** Resuelto en `sdk/` (publicado como `0.6.0-rc.4`), en el simulador y en `prototypes/checkout-frontend-rest/`. En Render, cuando Joshua despliegue el commit.
 
@@ -3640,6 +3644,8 @@ Capturas en `.cursor/evidencia/153/`.
 - **Lo que había pasado antes.** Es el mismo corte que tuvieron la primera aplicación el 15 de octubre y la segunda el 16. La tercera había entregado URL en sus ocho PSE del 17 de octubre. El 18 cobró tarjetas a las 19:03 y a las 22:07, y no se sabe desde cuándo dejó de entregarla.
 - **Lo que queda abierto.** La hipótesis de que los cobros con tarjeta lo provocan (punto 106) sigue sin probarse. Para volver a ver la página «Banco Prueba PSE» hace falta otra aplicación de prueba.
 
+> **Revisado el 19 de octubre de 2026 (punto 113).** No hace falta otra aplicación: la tercera volvió a entregar la URL el 19 a las 14:25. Una tarjeta aprobada no corta el PSE.
+
 Capturas en `.cursor/evidencia/155-final/`.
 
 **Estado:** Resuelto. El workflow publicó la 0.6.0 como `latest` cuando el #155 llegó a `main`. El PR de la rama `109-sdk-060` pasó a ella el simulador, A, B y la tienda, con sus pruebas y el `check:sri` de la tienda en verde, y con él se cierra el #109. Render despliega `devops` con cada integración.
@@ -3736,6 +3742,69 @@ El servidor, el contrato, los webhooks, la configuración y las dependencias se 
 - **Pruebas:** 115 en A y 52 en B, con la paridad en verde.
 
 **Estado:** Resuelto para A en el PR #161. B tiene el mecanismo; su módulo lo adopta en el #151.
+
+### 112. La traza de los prototipos: lo que pasa por debajo de la tienda, sin llaves ni cuerpos (PR #161)
+
+**Responsable:** Orduz.
+
+**Contexto.** Joan pidió poder mostrarle al director lo que pasa por debajo de las tiendas. El prototipo C ya tenía su traza en la consola del navegador (punto 103); A y B no tenían ninguna. Además, el 19 de octubre hizo falta saber si un pago llegaba siquiera a la pasarela (punto 113).
+
+**Decisión de Joan (19 de octubre de 2026):** traza en A y en C.
+
+**Lo que cambia.**
+
+- **A y B, en el esqueleto (`src/trace.ts`).** La terminal muestra, con `[checkout]`, cada petición que llega del navegador o de la pasarela, y cada llamada que sale hacia la pasarela, con el método, la ruta, el código HTTP, el estado nativo y el tiempo.
+  - Ve las llamadas del módulo de pagos envolviendo `fetch`, sin tocar el módulo.
+  - Va igual en B porque `server.ts` es del esqueleto, y la paridad lo exige.
+  - Solo la enciende `server.ts`, así que las pruebas no la imprimen.
+- **A, en su vitrina.** En la terminal, una línea al crear la orden (qué se paga, con qué medio, y que va al módulo de pagos) y una por cada cambio de estado (creación, consulta o webhook). En la consola del navegador, con `[tienda A]`, las llamadas de la página y la tokenización, que sale del navegador directo a la pasarela.
+- **C, en `server.mjs`.** La terminal muestra, con `[tienda C]`, cada archivo que sirve. Los pagos no pasan por ese servidor: van del navegador a `/v1/api`, y su traza sigue en la consola.
+- **Lo que nunca se registra:** las cabeceras, los cuerpos, la query, los datos del pagador o de la tarjeta, y ninguna llave completa (quedan los prefijos, como `pub_test_…` o `APP_USR-…`).
+
+**Un ejemplo real** (19 de octubre de 2026, 14:51, A con `npm start` contra el sandbox de Wompi, un PSE por el banco 1):
+
+```
+[checkout] navegador → tienda  POST /api/orders
+[checkout]   orden ORD-4D67DA45: La Candelaria Cómics · 1 cómic por $68.000 COP, por PSE (banco 1) → módulo de pagos
+[checkout]   tienda → pasarela  GET sandbox.wompi.co/v1/merchants/pub_test_… → 200 · 163 ms
+[checkout]   tienda → pasarela  POST sandbox.wompi.co/v1/transactions → 201 · estado PENDING · 573 ms
+[checkout]   tienda → pasarela  GET sandbox.wompi.co/v1/transactions/12066420-1792439469-43793 → 200 · estado PENDING · 258 ms
+[checkout]   tienda → pasarela  GET sandbox.wompi.co/v1/transactions/12066420-1792439469-43793 → 200 · estado APPROVED · 271 ms
+[checkout]   orden ORD-4D67DA45 ← creación: APPROVED (nativo APPROVED), transacción 12066420-1792439469-43793
+[checkout] navegador ← tienda  POST /api/orders → 201 · 2502 ms
+```
+
+En el ejemplo se omitieron dos de las cuatro consultas, que también dieron `PENDING`.
+
+**Lo verificado** (19 de octubre de 2026). A: 122 pruebas. B: 57. C: 139. La paridad sigue en verde. Las pruebas comprueban que la traza tapa las llaves, que no deja salir la query, el cuerpo ni los datos del pagador, y que está apagada por omisión.
+
+**Estado:** Resuelto en el PR #161.
+
+### 113. El PSE de Mercado Pago en el sandbox falla por ventanas y se recupera solo: la aplicación no se muere (corrige los puntos 100, 106 y 108)
+
+**Responsable:** Orduz.
+
+**Contexto.** Desde el 15 de octubre se leía cada corte como definitivo, y por eso se crearon una segunda y una tercera aplicación. El 19 a las 14:14 la tienda del prototipo C volvió a recibir un PSE rechazado. Joan pidió buscar la causa en vez de crear una cuarta aplicación.
+
+**Lo medido** (19 de octubre de 2026, hora de Colombia; la evidencia está en `.cursor/evidencia/mp-pse-19-oct/`).
+
+- **No había transacción en curso.** Los 15 pagos PSE del vendedor de prueba estaban cerrados: aprobados, rechazados en el banco o cancelados. El vendedor estaba activo (`site_status: active`).
+- **La ventana de falla.** Siete PSE, seis de la tienda y uno por Render, nacieron `processing` sin URL entre las 14:09 y las 14:17, y terminaron `failed` / `processing_error`.
+- **Desde las 14:25 funcionó**, con la misma aplicación. La orden que falló por Render y las que funcionaron dan el mismo `integration_data.application_id`, así que Render usa el mismo par que el `.env`. Ocho PSE recibieron la URL:
+  - directo a Mercado Pago, con la IP y la `callback_url` del 15 de octubre;
+  - con la `callback_url` del túnel;
+  - con la IP de la máquina (98.98.186.204, Bogotá);
+  - con el banco 1001;
+  - dos por Render, con el mismo cuerpo de la tienda que había fallado a las 14:16;
+  - dos más alrededor de una tarjeta, abajo.
+- **Una tarjeta aprobada no corta el PSE.** A las 14:33:03 se aprobó una tarjeta `APRO Ruiz` con el mismo pagador, y a las 14:33:52 un PSE recibió la URL.
+- **La tercera aplicación no estaba muerta.** Había fallado el 18 entre las 22:08 y las 22:19, y el 19 funcionó.
+
+**Lo que cambia en la lectura.** El PSE del sandbox falla por ventanas, de minutos a horas, sin ninguna pista en la respuesta, y después se recupera. Seguramente las dos primeras aplicaciones también se habrían recuperado. Descartado: la petición, el pagador, la IP, la `callback_url`, el banco, las credenciales y un cobro con tarjeta aprobado. Sin medir: si una tarjeta rechazada influye. Hubo una con fondos insuficientes a las 13:55, antes de la ventana de hoy, y es una sola observación.
+
+**Qué hacer.** Si el PSE de Mercado Pago falla en el sandbox, esperar entre 10 y 15 minutos y volver a intentarlo, sin crear aplicaciones nuevas. La traza del punto 112, o la consola del prototipo C, muestra si la orden llegó a Mercado Pago.
+
+**Estado:** La documentación queda corregida en el PR #161. La causa sigue sin conocerse. El mensaje para el soporte de Mercado Pago quedó redactado, y Joan decidió el 19 de octubre no enviarlo por ahora.
 
 ---
 

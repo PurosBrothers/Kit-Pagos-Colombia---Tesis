@@ -81,6 +81,26 @@ El esqueleto lee el `.env` de la raíz, el mismo de la API de Simulación (una v
 
 Los precios del catálogo esquivan los montos que el simulador reserva para escenarios de fallo.
 
+## La traza: lo que pasa por debajo
+
+Para ver, o mostrar, qué hace la tienda por debajo (punto 112 del `architecture-log.md`):
+
+- **En la terminal de `npm start`, A y B**, con `[checkout]`, muestran cada petición que llega del navegador o de la pasarela, y cada llamada que sale hacia la pasarela, con el método, la ruta, el código HTTP, el estado nativo y el tiempo. Lo hace `src/trace.ts`, del esqueleto, envolviendo `fetch`: ve las llamadas del módulo de pagos sin tocarlo.
+- **A agrega**, en la misma terminal, la orden (qué se paga y con qué medio) y cada cambio de estado (creación, consulta o webhook). En la consola del navegador (F12), con `[tienda A]`, muestra las llamadas de la página y la tokenización, que va del navegador directo a la pasarela.
+- **Nunca se registran** cabeceras, cuerpos, la query, los datos del pagador o de la tarjeta, ni una llave completa (quedan los prefijos, como `pub_test_…`).
+
+Un PSE de A contra el sandbox de Wompi se ve así (abreviado):
+
+```
+[checkout] navegador → tienda  POST /api/orders
+[checkout]   orden ORD-4D67DA45: La Candelaria Cómics · 1 cómic por $68.000 COP, por PSE (banco 1) → módulo de pagos
+[checkout]   tienda → pasarela  GET sandbox.wompi.co/v1/merchants/pub_test_… → 200 · 163 ms
+[checkout]   tienda → pasarela  POST sandbox.wompi.co/v1/transactions → 201 · estado PENDING · 573 ms
+[checkout]   tienda → pasarela  GET sandbox.wompi.co/v1/transactions/12066420-1792439469-43793 → 200 · estado APPROVED · 271 ms
+[checkout]   orden ORD-4D67DA45 ← creación: APPROVED (nativo APPROVED), transacción 12066420-1792439469-43793
+[checkout] navegador ← tienda  POST /api/orders → 201 · 2502 ms
+```
+
 ## Pruebas
 
 ```bash
