@@ -12,7 +12,7 @@ import {
   invalidCredentialIn,
   invalidCredentialRequested,
 } from "../scenarios/invalidCredential";
-import { GatewayMockFactory } from "../gateways/wompi/GatewayMockFactory";
+import { WompiErrorMockFactory, WompiTokenMockFactory } from "../gateways/wompi/GatewayMockFactory";
 import {
   integrityRejection,
   missingFieldRejection,
@@ -140,7 +140,8 @@ function sendsPrivateKey(request: FastifyRequest): boolean {
  */
 export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   const scenarioEngine = new ScenarioEngine();
-  const mockFactory = new GatewayMockFactory();
+  const tokenMocks = new WompiTokenMockFactory();
+  const errorBodies = new WompiErrorMockFactory();
   const spentTokens = new SpentAcceptanceTokens();
 
   // ── POST /v1/sim/wompi/transactions ──────────────────────────────────────
@@ -194,7 +195,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
       });
       let scenario = resolved.scenario;
 
-      const failure = await technicalFailure(scenario, request, reply, mockFactory, { data: {} });
+      const failure = await technicalFailure(scenario, request, reply, errorBodies, { data: {} });
 
       if (failure !== undefined) {
         return failure;
@@ -204,7 +205,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         const key = requestBody.reference ?? "default_wompi_flapping";
         const isFailing = nextFlappingAttempt(key);
         if (isFailing) {
-          return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+          return reply.code(503).send(errorBodies.buildServerErrorResponse(503));
         }
         scenario = DEFAULT_SCENARIO;
       }
@@ -321,7 +322,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         const failure = await queryFailure(
           { gateway: "wompi", resource: "transaction", id },
           reply,
-          mockFactory,
+          errorBodies,
         );
         if (failure !== undefined) {
           return failure;
@@ -374,7 +375,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send(NOT_FOUND);
       }
 
-      return reply.code(200).send(mockFactory.buildMerchantResponse(requestOrigin(request)));
+      return reply.code(200).send(tokenMocks.buildMerchantResponse(requestOrigin(request)));
     },
   );
 
@@ -392,7 +393,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     "/v1/sim/wompi/pse/financial_institutions",
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const failure = bankListFailure(request, reply, mockFactory, "wompi");
+      const failure = bankListFailure(request, reply, errorBodies, "wompi");
       if (failure !== undefined) {
         return failure;
       }
@@ -484,7 +485,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         getSimulatorScenario(request),
         request,
         reply,
-        mockFactory,
+        errorBodies,
         { status: "CREATED", data: {} },
       );
       if (failure !== undefined) {
@@ -557,7 +558,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const response = mockFactory.buildTokenCardResponse(body);
+      const response = tokenMocks.buildTokenCardResponse(body);
 
       if (cleanNumber === DECLINING_TEST_CARD) {
         rememberCardTokenOutcome("wompi", response.data.id, { scenario: "PENDING_THEN_DECLINED" });

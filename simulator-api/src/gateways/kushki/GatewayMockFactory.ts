@@ -5,7 +5,6 @@ import {
   KushkiCreateChargeRequestBody,
   KushkiTransactionStatus,
   KushkiTransferInitResponse,
-  KushkiTransferStatus,
   KushkiTransferStatusResponse,
   KushkiTransferTokenRequestBody,
 } from "./types";
@@ -22,8 +21,18 @@ import {
  * del ciclo de vida. Lo que sí hace, y el mock reproduce desde que se midió, es
  * **desarmarlo en campos sueltos dentro de `details`** en vez de devolver el mismo objeto
  * `amount` que llegó: ver `KushkiChargeResponse` en `types.ts`.
+ *
+ * Desde el issue #153 son tres clases, una por recurso de la API de Kushki: los cobros con
+ * tarjeta de `/card/v1/charges`, las transferencias de PSE de `/transfer/v1` y los cuerpos de
+ * error nativos. Ver el punto 107 del `architecture-log.md`.
  */
-export class GatewayMockFactory {
+
+/** Un token de Kushki: 32 hexadecimales, igual en tarjeta y en transferencia. */
+function kushkiToken(): string {
+  return randomUUID().replace(/-/g, "");
+}
+
+export class KushkiChargeMockFactory {
   private buildResponse(
     requestBody: KushkiCreateChargeRequestBody,
     status: KushkiTransactionStatus,
@@ -51,6 +60,16 @@ export class GatewayMockFactory {
           : undefined,
       },
     };
+  }
+
+  /**
+   * Respuesta de `POST /card/v1/tokens`, la tokenización en el navegador.
+   *
+   * Nivel 1 — medido contra `api-uat.kushkipagos.com` el 17 de octubre de 2026
+   * (`docs/testing-data/kushki.md`, §1.3): `201 { token }` con 32 hexadecimales.
+   */
+  buildCardToken(): { token: string } {
+    return { token: kushkiToken() };
   }
 
   buildApprovedResponse(
@@ -87,37 +106,10 @@ export class GatewayMockFactory {
     response.details.responseText = "Transacción expirada";
     return response;
   }
+}
 
-  /**
-   * Respuesta nativa de timeout para Kushki (HTTP 504).
-   */
-  buildTimeoutResponse() {
-    return {
-      code: "K504",
-      message: "Gateway Timeout en Kushki",
-    };
-  }
-
-  /**
-   * Respuesta nativa de rate limit para Kushki (HTTP 429).
-   */
-  buildRateLimitResponse() {
-    return {
-      code: "K429",
-      message: "Demasiadas peticiones a Kushki (Rate limit exceeded)",
-    };
-  }
-
-  /**
-   * Respuesta nativa de error de servidor para Kushki (HTTP 5xx).
-   */
-  buildServerErrorResponse(status = 500) {
-    return {
-      code: `K${status}`,
-      message: `Error interno de servidor en Kushki (${status})`,
-    };
-  }
-
+/** Las transferencias de PSE: la lista de bancos, el token, el `init` y el registro guardado. */
+export class KushkiTransferMockFactory {
   /**
    * Lista de bancos de `GET /transfer/v1/bankList`.
    *
@@ -152,7 +144,7 @@ export class GatewayMockFactory {
    * de la transaccion**: la consulta de estado es por token, no por un id nuevo.
    */
   buildTransferToken(): { token: string } {
-    return { token: randomUUID().replace(/-/g, "") };
+    return { token: kushkiToken() };
   }
 
   /**
@@ -214,6 +206,11 @@ export class GatewayMockFactory {
    * Los valores fijos son solo el relleno de un campo que la petición no trajo; el resto
    * (`country`, `merchantName`, `transactionReference`) lo genera Kushki y no lo controla
    * el comercio.
+   *
+   * Es también la forma de `GET /transfer/v1/status/{token}`: la consulta devuelve este
+   * registro con su estado movido por la máquina, y la respuesta real **no** trae
+   * `ticketNumber` ni `transaction_status` ni `contactDetails`, trae `token`, `status` y
+   * `email` en la raíz (punto 48).
    */
   buildTransferSeed(
     token: string,
@@ -242,48 +239,37 @@ export class GatewayMockFactory {
       callbackUrl: request.callbackUrl ?? "https://comercio.example.com/retorno",
     };
   }
+}
+
+/** Los cuerpos de error nativos de Kushki, los que usa `technicalFailure()` en todas sus rutas. */
+export class KushkiErrorMockFactory {
+  /**
+   * Respuesta nativa de timeout para Kushki (HTTP 504).
+   */
+  buildTimeoutResponse() {
+    return {
+      code: "K504",
+      message: "Gateway Timeout en Kushki",
+    };
+  }
 
   /**
-   * Respuesta de `GET /transfer/v1/status/{token}`, con la forma medida.
-   *
-   * Antes reusaba la forma de un cobro con tarjeta, con el token metido en
-   * `ticketNumber`, "para que el normalizador la entienda sin ramas nuevas". Era al
-   * reves de como tiene que ser: la respuesta real **no** trae `ticketNumber` ni
-   * `transaction_status` ni `contactDetails`, trae `token`, `status` y `email` en la
-   * raiz. El mock que se acomoda al codigo confirma el codigo en vez de verificarlo,
-   * y eso es justo lo que escondio el defecto (punto 48).
-   *
-   * La ruta ya no la usa para construir la respuesta de una consulta: la transferencia
-   * se guardó al emitir el token (`buildTransferSeed`) y la consulta devuelve el registro
-   * con su estado movido por la máquina. Queda porque es la forma del registro y porque
-   * una respuesta de estado tiene que poder construirse sin pasar por el almacén, como en
-   * las pruebas de tabla.
+   * Respuesta nativa de rate limit para Kushki (HTTP 429).
    */
-  buildTransferStatus(
-    token: string,
-    status: KushkiTransferStatus,
-  ): KushkiTransferStatusResponse {
+  buildRateLimitResponse() {
     return {
-      status,
-      token,
-      paymentDescription: "ORDER-SIM-PSE",
-      email: "comprador@example.com",
-      amount: {
-        subtotalIva0: 150000,
-        subtotalIva: 0,
-        iva: 0,
-        ice: 0,
-        currency: "COP",
-      },
-      transactionReference: randomUUID(),
-      bankId: "001",
-      documentType: "CC",
-      documentNumber: "1999888777",
-      currency: "COP",
-      country: "Colombia",
-      created: Date.now(),
-      merchantName: "KIT PAGOS COLOMBIA",
-      callbackUrl: "https://comercio.example.com/retorno",
+      code: "K429",
+      message: "Demasiadas peticiones a Kushki (Rate limit exceeded)",
+    };
+  }
+
+  /**
+   * Respuesta nativa de error de servidor para Kushki (HTTP 5xx).
+   */
+  buildServerErrorResponse(status = 500) {
+    return {
+      code: `K${status}`,
+      message: `Error interno de servidor en Kushki (${status})`,
     };
   }
 }

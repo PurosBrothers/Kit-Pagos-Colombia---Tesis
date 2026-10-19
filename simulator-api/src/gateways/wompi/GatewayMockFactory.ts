@@ -28,8 +28,12 @@ import {
  * query— were a método duplicating the table and a function in the router
  * reading the bank code. Now every builder is a pure function of the request
  * body and the scenario, and the router owns persistence and movement.
+ *
+ * Desde el issue #153 son tres clases, una por recurso de la API de Wompi: las
+ * transacciones, los dos tokens que se piden antes de crear una (el de aceptación y el de
+ * tarjeta) y los cuerpos de error nativos. Ver el punto 107 del `architecture-log.md`.
  */
-export class GatewayMockFactory {
+export class WompiTransactionMockFactory {
   /**
    * Crea un cobro con tarjeta como lo crea Wompi: **`PENDING`, no `APPROVED`**.
    *
@@ -100,42 +104,6 @@ export class GatewayMockFactory {
   }
 
   /**
-   * Respuesta nativa de timeout para Wompi (HTTP 504).
-   */
-  buildTimeoutResponse() {
-    return {
-      error: {
-        type: "GATEWAY_TIMEOUT",
-        reason: "Tiempo de espera agotado en la pasarela Wompi",
-      },
-    };
-  }
-
-  /**
-   * Respuesta nativa de saturación / límite de tasa (HTTP 429).
-   */
-  buildRateLimitResponse() {
-    return {
-      error: {
-        type: "RATE_LIMIT",
-        reason: "Demasiadas peticiones a Wompi (Rate limit exceeded)",
-      },
-    };
-  }
-
-  /**
-   * Respuesta nativa de error interno de pasarela (HTTP 5xx).
-   */
-  buildServerErrorResponse(code = 500) {
-    return {
-      error: {
-        type: "SERVER_ERROR",
-        reason: `Error interno de pasarela Wompi (${code})`,
-      },
-    };
-  }
-
-  /**
    * Crea un PSE tal como lo crea Wompi: PENDING y **sin** URL de redirección.
    *
    * Que la URL no esté es lo correcto, no una simplificación del mock. Se midió
@@ -164,7 +132,10 @@ export class GatewayMockFactory {
 
     return { data: transaction };
   }
+}
 
+/** Los dos tokens que Wompi entrega antes de crear una transacción. */
+export class WompiTokenMockFactory {
   /**
    * Token de aceptación de términos.
    *
@@ -220,6 +191,45 @@ export class GatewayMockFactory {
         created_with_cvc: Boolean(requestBody.cvc),
         expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
         validity_ends_at: null,
+      },
+    };
+  }
+}
+
+/** Los cuerpos de error nativos de Wompi, los que usa `technicalFailure()` en todas sus rutas. */
+export class WompiErrorMockFactory {
+  /**
+   * Respuesta nativa de timeout para Wompi (HTTP 504).
+   */
+  buildTimeoutResponse() {
+    return {
+      error: {
+        type: "GATEWAY_TIMEOUT",
+        reason: "Tiempo de espera agotado en la pasarela Wompi",
+      },
+    };
+  }
+
+  /**
+   * Respuesta nativa de saturación / límite de tasa (HTTP 429).
+   */
+  buildRateLimitResponse() {
+    return {
+      error: {
+        type: "RATE_LIMIT",
+        reason: "Demasiadas peticiones a Wompi (Rate limit exceeded)",
+      },
+    };
+  }
+
+  /**
+   * Respuesta nativa de error interno de pasarela (HTTP 5xx).
+   */
+  buildServerErrorResponse(code = 500) {
+    return {
+      error: {
+        type: "SERVER_ERROR",
+        reason: `Error interno de pasarela Wompi (${code})`,
       },
     };
   }

@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { GatewayMockFactory } from "../gateways/mercadopago/GatewayMockFactory";
+import {
+  MercadoPagoCardMockFactory,
+  MercadoPagoErrorMockFactory,
+  MercadoPagoOrderMockFactory,
+  MercadoPagoPaymentMockFactory,
+} from "../gateways/mercadopago/GatewayMockFactory";
 import {
   allowAnyOrigin,
   MERCADOPAGO_TOKENIZATION_PREFLIGHT_HEADERS,
@@ -309,7 +314,10 @@ const ORDER_SCENARIOS: ReadonlySet<string> = new Set([
  *   usa `/v1/api`, así que el simulador atiende los dos caminos.
  */
 export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
-  const mockFactory = new GatewayMockFactory();
+  const paymentMocks = new MercadoPagoPaymentMockFactory();
+  const orderMocks = new MercadoPagoOrderMockFactory();
+  const cardMocks = new MercadoPagoCardMockFactory();
+  const errorBodies = new MercadoPagoErrorMockFactory();
 
   /**
    * Mercado Pago no crea nada sin llave de idempotencia, y es la única de las cuatro que la
@@ -400,25 +408,25 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       case "APPROVAL":
         return {
           httpStatus: 201,
-          order: mockFactory.buildCardOrderResponse(requestBody, "processed", "accredited"),
+          order: orderMocks.buildCardOrderResponse(requestBody, "processed", "accredited"),
         };
       case "PENDING": {
         const detail = statusDetail ?? "in_process";
         return {
           httpStatus: 201,
-          order: mockFactory.buildCardOrderResponse(requestBody, "processing", detail),
+          order: orderMocks.buildCardOrderResponse(requestBody, "processing", detail),
         };
       }
       case "EXPIRED":
         return {
           httpStatus: 201,
-          order: mockFactory.buildCardOrderResponse(requestBody, "expired", "expired"),
+          order: orderMocks.buildCardOrderResponse(requestBody, "expired", "expired"),
         };
       case "REJECTED":
       case "DECLINED":
         return {
           httpStatus: 402,
-          order: mockFactory.buildCardOrderResponse(
+          order: orderMocks.buildCardOrderResponse(
             requestBody,
             "failed",
             "failed",
@@ -530,7 +538,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       const statusDetail =
         resolved.source === "gateway_data" ? fromToken?.statusDetail : undefined;
 
-      const failure = await technicalFailure(scenario, request, reply, mockFactory);
+      const failure = await technicalFailure(scenario, request, reply, errorBodies);
 
       if (failure !== undefined) {
         return failure;
@@ -540,7 +548,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         const key = requestBody.external_reference ?? requestBody.description ?? "mp_flapping";
         const isFailing = nextFlappingAttempt(key);
         if (isFailing) {
-          return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+          return reply.code(503).send(errorBodies.buildServerErrorResponse(503));
         }
         scenario = DEFAULT_SCENARIO;
       }
@@ -598,16 +606,16 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
     switch (scenario) {
       case "APPROVED":
       case "APPROVAL":
-        return mockFactory.buildApprovedResponse(requestBody);
+        return paymentMocks.buildApprovedResponse(requestBody);
       case "REJECTED":
       case "DECLINED":
-        return mockFactory.buildRejectedResponse(requestBody, undefined, statusDetail);
+        return paymentMocks.buildRejectedResponse(requestBody, undefined, statusDetail);
       case "EXPIRED":
-        return mockFactory.buildExpiredResponse(requestBody);
+        return paymentMocks.buildExpiredResponse(requestBody);
       // El pendiente con tarjeta nace en revisión y la consulta lo devuelve igual: la tabla
       // de pagos no tiene salida para `in_process` (ver `mercadopagoStateMachine.ts`).
       case "PENDING":
-        return mockFactory.buildInProcessResponse(requestBody, undefined, statusDetail);
+        return paymentMocks.buildInProcessResponse(requestBody, undefined, statusDetail);
       default:
         return undefined;
     }
@@ -668,7 +676,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       const failure = await queryFailure(
         { gateway: "mercadopago", resource: "payment", id },
         reply,
-        mockFactory,
+        errorBodies,
       );
       if (failure !== undefined) {
         return failure;
@@ -753,7 +761,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
     });
     let scenario = resolved.scenario;
 
-    const failure = await technicalFailure(scenario, request, reply, mockFactory);
+    const failure = await technicalFailure(scenario, request, reply, errorBodies);
 
     if (failure !== undefined) {
       return failure;
@@ -764,7 +772,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
     if (scenario === "FLAPPING") {
       const key = `mp_order_${requestBody?.external_reference ?? "flapping"}`;
       if (nextFlappingAttempt(key)) {
-        return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+        return reply.code(503).send(errorBodies.buildServerErrorResponse(503));
       }
       scenario = DEFAULT_SCENARIO;
     }
@@ -808,15 +816,15 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
        * sin la llave `payer`. Por eso se guarda sin `payer`, y no se registra desenlace:
        * `failed` no tiene transición de salida en `mpOrderMachine`.
        */
-      const failed = mockFactory.buildFailedOrderResponse(requestBody);
+      const failed = orderMocks.buildFailedOrderResponse(requestBody);
       const { payer: _payer, ...queried } = failed;
       mercadopagoOrders.save(String(failed.id), queried);
 
       return sendRemembered(reply, idempotencyEntry, 402, failedOrderEnvelope(failed));
     }
 
-    const bankPaymentId = mockFactory.generateBankPaymentId();
-    const response = mockFactory.buildPendingOrderResponse(
+    const bankPaymentId = orderMocks.generateBankPaymentId();
+    const response = orderMocks.buildPendingOrderResponse(
       requestBody,
       requestOrigin(request),
       bankPaymentId,
@@ -909,7 +917,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
       const failure = await queryFailure(
         { gateway: "mercadopago", resource: "order", id },
         reply,
-        mockFactory,
+        errorBodies,
       );
       if (failure !== undefined) {
         return failure;
@@ -965,7 +973,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(401).send(INVALID_TOKEN_ON_PAYMENT_METHODS);
       }
 
-      const failure = bankListFailure(request, reply, mockFactory, "mercadopago");
+      const failure = bankListFailure(request, reply, errorBodies, "mercadopago");
       if (failure !== undefined) {
         return failure;
       }
@@ -1067,7 +1075,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const failure = await technicalFailure(getSimulatorScenario(request), request, reply, mockFactory);
+      const failure = await technicalFailure(getSimulatorScenario(request), request, reply, errorBodies);
       if (failure !== undefined) {
         return failure;
       }
@@ -1087,7 +1095,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
        * identification: {}), con número corto ("1234", con luhn_validation: false) o sin
        * security_code. El fallo por luhn ocurre recién al cobrar con el token (error 400, causa 2062).
        */
-      const response = mockFactory.buildTokenCardResponse(body, publicKey);
+      const response = cardMocks.buildTokenCardResponse(body, publicKey);
 
       // Se recuerda el desenlace que fuerza el nombre, no el nombre (`CardTokenOutcomes.ts`).
       const outcome = cardholderOutcomeFor(body.cardholder?.name);
@@ -1126,7 +1134,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(200).send(stored);
       }
 
-      const { cardholder: _cardholder, ...unknown } = mockFactory.buildTokenCardResponse(
+      const { cardholder: _cardholder, ...unknown } = cardMocks.buildTokenCardResponse(
         {
           card_number: `${UNKNOWN_TOKEN_CARD.firstSixDigits}000000${UNKNOWN_TOKEN_CARD.lastFourDigits}`,
         },
@@ -1158,7 +1166,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
 
       return reply
         .code(200)
-        .send(mockFactory.buildPaymentMethodSearchResponse(query?.bins?.trim() ?? ""));
+        .send(cardMocks.buildPaymentMethodSearchResponse(query?.bins?.trim() ?? ""));
     },
   );
 }
