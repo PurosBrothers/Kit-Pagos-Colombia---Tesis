@@ -71,7 +71,28 @@ export function registerTokenizationPreflight(
   path: string,
   headers: Readonly<Record<string, string>>,
 ): void {
-  app.options(path, async (_request: FastifyRequest, reply: FastifyReply) => {
-    return reply.code(200).headers(headers).send();
-  });
+  app.options(
+    path,
+    {
+      schema: {
+        summary: "Responder preflight CORS de tokenización",
+        description:
+          "Permite que una página de comercio llame la ruta de tokenización desde el navegador.",
+        response: {
+          200: {
+            description: "Preflight CORS aceptado.",
+            headers: Object.fromEntries(
+              Object.entries(headers).map(([name, value]) => [
+                name,
+                { type: "string", example: value },
+              ]),
+            ),
+          },
+        },
+      },
+    },
+    async (_request: FastifyRequest, reply: FastifyReply) => {
+      return reply.code(200).headers(headers).send();
+    },
+  );
 }

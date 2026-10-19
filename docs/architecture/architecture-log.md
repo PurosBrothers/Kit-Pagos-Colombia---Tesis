@@ -3644,6 +3644,50 @@ Capturas en `.cursor/evidencia/155-final/`.
 
 **Estado:** Resuelto. El workflow publicó la 0.6.0 como `latest` cuando el #155 llegó a `main`. El PR de la rama `109-sdk-060` pasó a ella el simulador, A, B y la tienda, con sus pruebas y el `check:sri` de la tienda en verde, y con él se cierra el #109. Render despliega `devops` con cada integración.
 
+### 109. Los schemas de las rutas de simulación validan y documentan, pero no reescriben la petición ni la respuesta (issue #106, PR #137)
+
+**Responsable:** David (issue #106, los schemas) y Orduz (la revisión y sus arreglos, en el mismo PR).
+
+**Contexto.** El #106 pide colgar un `schema` de Fastify de las rutas de simulación de Wompi y Mercado Pago, para que `/docs` las documente y Fastify rechace una petición malformada antes del handler, sin cambiar el comportamiento observable: `npx jest` completo, sin tocar las pruebas existentes. El PR #137 tenía un conflicto con `devops` en `routes/wompi.ts`, porque `devops` había quitado la página de banco propia de Wompi (#109) junto a un comentario que el PR borraba. Por el conflicto, la CI no corría sobre el PR. Sin la mezcla fallaban 15 de 1029 pruebas, y al día con `devops`, 27 de 1234.
+
+**Lo que encontró la revisión (19 de octubre de 2026).**
+
+1. **Fastify reescribe la respuesta con el schema.** Serializa con `fast-json-stringify`, que quita los campos no declarados y convierte los valores al tipo declarado. Se perdían `status_message` en la consulta de Wompi, y `external_reference`, `data`, `capture_mode` y `config` en las órdenes de Mercado Pago; `details` pasaba de lista a texto.
+2. **Fastify también reescribe la petición.** Ajv convierte tipos, rellena valores por omisión y quita los campos que un `additionalProperties: false` no admite. El cuerpo de la transacción de Wompi lo tenía.
+3. **Un `required` del schema se adelanta a la respuesta medida.** Fastify valida antes del handler y responde su `400 INVALID_REQUEST`. Así, una orden de tarjeta sin `payment_method.id` dejaba de recibir el `400 required_properties` de Mercado Pago. El schema de la orden se escribió cuando `/orders` solo atendía PSE; desde el punto 96 atiende también la tarjeta.
+4. **Cambió una regla medida.** `sendsPrivateKey` pasó de `Bearer prv_` a `Bearer priv_`. Las llaves privadas de Wompi empiezan por `prv_`, y la consulta con una llave privada inexistente respondía `200` en vez del `403` medido.
+5. **Las validaciones medidas estaban duplicadas** en un `preValidation` y en el handler de cuatro rutas. La copia de `/payments` se saltaba la credencial inválida, que el handler revisa antes del token.
+6. **Se habían borrado 37 líneas de comentarios** de `wompi.ts`, con lo medido en el sandbox.
+
+**Decisión de Joan (19 de octubre de 2026):** arreglarlo en la rama de David, en commits aparte del suyo.
+
+**Lo que cambió.**
+
+- **`routes/schemas/compileSchemasAsIs.ts`.** Cada plugin de rutas de simulación valida con un Ajv que no convierte tipos, no rellena valores y no quita campos, y serializa con `JSON.stringify`. Los compiladores quedan en el contexto del plugin, así que `/v1/api` conserva los de Fastify. `ajv` y `ajv-formats` pasan a ser dependencias declaradas del simulador; ya estaban instalados como dependencias de Fastify.
+- **Cada validación medida corre una vez, antes del schema y en el orden de antes.** Pasan del handler a `preValidation` las que el schema marca obligatorias:
+  - en `/payments`, la llave de idempotencia, la credencial, el token y las cuotas;
+  - en la tokenización de Wompi, `Authorization`, y en la de Mercado Pago, `public_key`;
+  - en la transacción de Wompi, el método de pago, el token de aceptación y la firma.
+- **En `POST /v1/sim/mercadopago/orders` el schema documenta y no rechaza** (`attachValidation`). Mercado Pago revisa primero la llave, después la credencial y la reserva de la llave, y el cuerpo al final. La reserva no puede pasar a un hook, porque se libera al terminar el cobro.
+- **`prv_` y los comentarios, restaurados.**
+- **La orden de tarjeta y sus dos lecturas, documentadas.** El schema de `/orders` describe PSE y tarjeta, con un ejemplo copiado del simulador. `GET /card_tokens/:id` y `GET /payment_methods/search` (punto 96) tienen schema.
+
+**Alternativas descartadas.**
+
+- *Declarar cada objeto de respuesta con `additionalProperties: true`.* `fast-json-stringify` seguiría convirtiendo tipos, y cada campo nuevo del handler tendría que entrar también al schema para no perderse.
+- *Que ninguna ruta de simulación valide (`attachValidation` en todas).* Es lo más simple, pero deja sin cumplir el criterio del #106 de que Fastify rechace una petición malformada. Solo `/orders` lo necesita.
+
+**Lo medido** (19 de octubre de 2026, sobre la rama al día con `devops`).
+
+- **Pruebas:** 53 suites y 1239 pruebas. Cinco son nuevas: tres de `compileSchemasAsIs` (dejarlo sin efecto pone dos en rojo), la de la orden de tarjeta en `/docs` y la validación de OpenAPI.
+- **Cobertura:** sentencias 97,14 % y ramas 88,98 %.
+- **Lint, tipos y métricas:** lint y tipos en verde, y las 28 clases dentro de los umbrales CK.
+- **Postman:** con Newman, 42 de 42 peticiones y 47 de 47 aserciones.
+- **OpenAPI:** la especificación de `/docs/json` es válida como OpenAPI 3.0.3. Una prueba de `openapi.test.ts` la valida con `@apidevtools/swagger-parser` 12 en cada corrida, y falla si un schema trae un `type` inválido.
+- **Cuántas rutas:** tienen schema 16 operaciones: las 10 del #106, las dos tokenizaciones con sus preflights y las dos lecturas nuevas. No lo tienen las tres páginas HTML que lee una persona: `/wompi/pse/redirect`, `/wompi/terms` y la página de banco de Mercado Pago.
+
+**Estado:** Resuelto en el PR #137 para Wompi y Mercado Pago. El RF-13 sigue pendiente del #107 (Rapyd y Kushki), cuyos routers tienen que llamar también a `compileSchemasAsIs`.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
