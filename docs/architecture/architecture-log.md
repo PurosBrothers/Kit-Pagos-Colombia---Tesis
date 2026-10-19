@@ -3592,6 +3592,58 @@ Capturas en `.cursor/evidencia/153/`.
 
 **Estado:** Resuelto en `simulator-api/` y `sdk/` (publicado como `0.6.0-rc.5`) y en `.github/workflows/ci.yml`. En Render, cuando Joshua despliegue el commit.
 
+### 108. La 0.6.0 sale de las candidatas, y la prueba final antes de integrar el #155 (issues #109 y #153)
+
+**Responsable:** Orduz.
+
+**Qué trae la 0.6.0 frente a la 0.5.0.** Es la versión que se probó como `0.6.0-rc.1` a `rc.5`, sin cambios de código desde la rc.5. Sale como `latest` en npm, en lugar de la 0.5.0. Trae:
+
+- **Tarjeta de Mercado Pago por la Orders API**, y la IP del pagador normalizada (punto 96).
+- **El PSE de Mercado Pago sin URL de banco** pasa a ser un pago pendiente, y el `423` se reintenta (punto 100).
+- **Rapyd en sandbox** muestra solo los 9 bancos que cobra (punto 102).
+- **`KitPagosBrowser` tokeniza con Kushki** (punto 106).
+- **El mensaje de un error HTTP** lleva el código y el motivo de la pasarela (punto 107).
+
+**Cómo sale.** La publica el workflow `Publish SDK to npm` (`.github/workflows/publish.yml`) cuando el #155 llega a `main`, como anticipaba el punto 96. El workflow corre en cada push a `main` que toque `sdk/`: si la versión de `sdk/package.json` no está en npm, corre las pruebas, compila y publica. Así salió la 0.5.0 con el #145. `main` tiene la 0.5.0 y el #155 trae la 0.6.0.
+
+**Decisiones de Joan (18 de octubre de 2026).**
+
+1. **La 0.6.0 sale por el workflow, no a mano.** Publicarla desde la rama del prototipo habría permitido pasar todo a la 0.6.0 dentro del mismo #155, pero la habría publicado una máquina y no el CI.
+2. **Los prototipos A y B también pasan a `^0.6.0`.**
+   - **Por qué no se rompe nada.** En esta rama ninguno de los dos llama al SDK desde el servidor: los dos sirven su módulo de navegador (`/vendor/kit-pagos-colombia/browser.js`). Y el módulo de pagos de B que trae la rama `151-prototipo-b-checkout-con-sdk` (Henao) reemplaza `KitPagos` por un doble en sus pruebas.
+   - **Lo que implica para la Fase 5.** Cuando B cobre de verdad, lo hará con la 0.6.0. Eso incluye la tarjeta de Mercado Pago por la Orders API, que exige las credenciales de una aplicación de Orders (punto 95).
+
+**Por qué en dos PR.** El #155 entra con el simulador en `0.6.0-rc.5` y la tienda en `0.6.0-rc.4`, que es lo que se probó abajo. No pueden pasar a la 0.6.0 en el mismo PR, porque el lockfile del simulador pediría un paquete que todavía no está en npm y el `npm ci` del CI fallaría. Esperar no cambia lo que hacen: el último commit en `sdk/` es `dc50a58`, y la rc.5 se publicó dos minutos después. Cuando el workflow publique, un PR corto desde `devops` hace el cambio:
+
+- **El simulador** pide `^0.6.0`.
+- **Los prototipos A y B** piden `^0.6.0`.
+- **La tienda** carga `kit-pagos-colombia@0.6.0` desde jsDelivr con la misma SRI que la rc.4: el bundle de navegador no cambió desde entonces (21 955 bytes).
+
+**El conflicto del #155.** GitHub marcaba el #155 con 6 conflictos (`ci.yml`, `tokenizationCors.ts` y su prueba, el log, `3-api-de-simulacion.md` y `prototypes/README.md`), y git no veía ninguno. Los commits del esqueleto de los prototipos (#130) entraron dos veces: a `devops` por el PR #152 y a la rama del prototipo por su cuenta. Así las dos ramas quedaron con dos bases comunes (`0a981a1` y `e91bf42`). GitHub mezcló con una sola, y git, al usar las dos, da una mezcla limpia. Se resolvió mezclando `devops` en la rama del prototipo (`f282ed3`). Lo único que trajo fue el commit `995c6c1`, que corrige «punto 88» por «punto 89» en dos comentarios de la tokenización con CORS. La CI del #155 quedó con sus 8 checks en verde, incluidos los pasos nuevos de métricas.
+
+**La prueba final**, del 18 de octubre de 2026 entre las 22:06 y las 22:40, sobre `f282ed3`.
+
+- **Contra los sandboxes oficiales.** La API de la rama corrió detrás de un túnel y la tienda detrás de otro.
+
+  | Pasarela | PSE | Tarjeta |
+  |---|---|---|
+  | Wompi | Aprobado, sin página de banco | Aprobado |
+  | Rapyd | Aprobado, por «Rapyd Bank Payment Simulation» con los 9 bancos | Aprobado, por su página alojada y el simulador de 3DS |
+  | Kushki | `PENDING` tras la página real «Kushki Bank», el límite de su UAT (guía de prueba, §5) | Aprobado |
+  | Mercado Pago | **Rechazado por el sandbox** (ver abajo) | Aprobado |
+
+- **Contra el simulador de la rama.** Las ocho combinaciones salieron aprobadas, el PSE de Mercado Pago incluido.
+
+**El PSE de Mercado Pago dejó de entregar URL de banco también con la tercera aplicación.**
+
+- **Lo medido.** Entre las 22:07 y las 22:10, tres PSE por la tienda nacieron `processing` sin URL y terminaron `failed` / `processing_error`. Uno más, mandado directo a la API de Render, terminó igual (`ORDTST01M592Q7VNVVSBR6V10CTVVJ6C`). Render corre un commit anterior al #153, así que no fue ni el túnel ni este PR.
+- **Lo que había pasado antes.** Es el mismo corte que tuvieron la primera aplicación el 15 de octubre y la segunda el 16. La tercera había entregado URL en sus ocho PSE del 17 de octubre. El 18 cobró tarjetas a las 19:03 y a las 22:07, y no se sabe desde cuándo dejó de entregarla.
+- **Lo que queda abierto.** La hipótesis de que los cobros con tarjeta lo provocan (punto 106) sigue sin probarse. Para volver a ver la página «Banco Prueba PSE» hace falta otra aplicación de prueba.
+
+Capturas en `.cursor/evidencia/155-final/`.
+
+**Estado:** La prueba final y el conflicto, resueltos en el #155. La 0.6.0 la publica el workflow cuando el #155 llega a `main`, y el PR corto que sigue (rama `109-sdk-060`) pasa a ella el simulador, A, B y la tienda; con ese PR se cierran este punto y el #109. Render despliega `devops` al integrar el #155, con el simulador todavía en la rc.5.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
