@@ -87,6 +87,35 @@ describe("GET /docs/json — especificación OpenAPI", () => {
     );
   });
 
+  it("documenta la orden de tarjeta de Mercado Pago y las dos lecturas del SDK 0.6.0 antes de cobrar", async () => {
+    const app = buildApp({ logger: false });
+    const response = await app.inject({ method: "GET", url: "/docs/json" });
+    const paths = response.json<Record<string, unknown>>().paths as Record<string, Record<string, Record<string, unknown>>>;
+
+    expect(paths["/v1/sim/mercadopago/card_tokens/{id}"]?.["get"]?.["responses"]).toHaveProperty("401");
+    expect(paths["/v1/sim/mercadopago/payment_methods/search"]?.["get"]?.["responses"]).toHaveProperty("400");
+
+    const orderPost = paths["/v1/sim/mercadopago/orders"]["post"];
+    expect(orderPost.summary).toContain("tarjeta");
+    const orderResponses = orderPost.responses as Record<string, Record<string, unknown>>;
+    expect(Object.keys(orderResponses)).toEqual(expect.arrayContaining(["201", "400", "402", "409", "423"]));
+
+    // La orden de tarjeta lleva token y cuotas en el medio de pago, y la orden fallida va en `data`.
+    const orderBody = (orderPost.requestBody as Record<string, Record<string, Record<string, unknown>>>).content[
+      "application/json"
+    ].schema as Record<string, Record<string, Record<string, unknown>>>;
+    const method = (orderBody.properties.transactions.properties as Record<string, Record<string, unknown>>).payments
+      .items as Record<string, Record<string, Record<string, Record<string, unknown>>>>;
+    expect(Object.keys(method.properties.payment_method.properties)).toEqual(
+      expect.arrayContaining(["token", "installments"]),
+    );
+    expect(orderBody.required).toBeUndefined();
+    const declined = (orderResponses["402"].content as Record<string, Record<string, Record<string, unknown>>>)[
+      "application/json"
+    ].schema;
+    expect(declined.properties).toHaveProperty("data");
+  });
+
   it("documenta GET /v1/api/gateways con tag Kit Pagos", async () => {
     const app = buildApp({ logger: false });
     const response = await app.inject({ method: "GET", url: "/docs/json" });

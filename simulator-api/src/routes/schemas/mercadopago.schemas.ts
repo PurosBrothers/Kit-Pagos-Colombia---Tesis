@@ -303,19 +303,31 @@ export const getMpPaymentSchema = {
 /**
  * POST /v1/sim/mercadopago/orders
  *
- * Crea una orden PSE. Requiere x-idempotency-key.
- * PSE no va por /payments sino por esta API (issue #64).
+ * Crea una orden de PSE o de tarjeta. Requiere x-idempotency-key.
+ * PSE no va por /payments sino por esta API (issue #64), y desde el SDK 0.6.0 la tarjeta
+ * tampoco (punto 96 del architecture-log.md).
+ *
+ * Este schema documenta y no rechaza (`attachValidation` en la ruta): Mercado Pago revisa la
+ * llave de idempotencia antes que el cuerpo, y el handler responde lo medido cuando falta algo
+ * (`400 required_properties` en una orden de tarjeta sin `id`, `type` o `token`). El cuerpo no
+ * marca campos obligatorios porque PSE y tarjeta piden campos distintos.
  */
 export const postMpOrdersSchema = {
-  summary: "Crear orden PSE Mercado Pago",
+  summary: "Crear orden Mercado Pago (PSE o tarjeta)",
   description:
-    "Simula `POST /v1/orders` de Mercado Pago (API exclusiva para PSE). " +
+    "Simula `POST /v1/orders` de Mercado Pago, que atiende PSE y tarjeta. " +
     "**Requiere la cabecera `x-idempotency-key`** (Mercado Pago responde " +
     "400 \"Missing HTTP header: X-Idempotency-Key.\" si falta; " +
-    "el mensaje es distinto al de /payments). " +
-    "La respuesta tiene `status: action_required` para APPROVED " +
-    "y 402 con `errors[].code = 'failed'` para REJECTED/DECLINED. " +
-    "Los montos viajan como **string sin decimales** (la API real rechaza '2000.00').",
+    "el mensaje es distinto al de /payments). La llave se revisa después de la credencial y " +
+    "antes del cuerpo: repetirla con el mismo cuerpo devuelve la respuesta guardada, y con " +
+    "otro cuerpo responde 409. " +
+    "Es de tarjeta si `payment_method.type` es `credit_card` o `debit_card`, o si trae " +
+    "`token`; si no, es de PSE. Una orden de tarjeta sin `id`, `type` o `token` responde " +
+    "400 `required_properties`, y una de débito con más de una cuota 400 `property_value`. " +
+    "PSE con APPROVED nace `action_required` con la URL del banco; la tarjeta aprobada nace " +
+    "`processed` / `accredited`; REJECTED/DECLINED responde 402 con la orden en `data`. " +
+    "Los montos viajan como **string**. La API real rechaza el PSE con centavos ('2000.50'); " +
+    "el simulador lo acepta, y un monto con centavos nunca coincide con un monto reservado.",
   tags: ["Mercado Pago Simulación"],
   headers: {
     type: "object",
@@ -335,20 +347,17 @@ export const postMpOrdersSchema = {
   },
   body: {
     type: "object",
-    required: ["total_amount", "payer", "transactions"],
     properties: {
       type: { type: "string", example: "online" },
       total_amount: {
         type: "string",
-        description: "Monto total como string sin decimales (p.ej. '150000', no '150000.00')",
+        description: "Monto total como string (p.ej. '150000'). En PSE, la API real no admite centavos.",
         example: "150000",
-        pattern: "^\\d+$",
       },
       external_reference: { type: "string" },
       processing_mode: { type: "string" },
       payer: {
         type: "object",
-        required: ["email"],
         properties: {
           email: { type: "string", format: "email", example: "cliente@ejemplo.com" },
           entity_type: { type: "string", example: "individual" },
@@ -364,23 +373,40 @@ export const postMpOrdersSchema = {
       },
       transactions: {
         type: "object",
-        required: ["payments"],
         properties: {
           payments: {
             type: "array",
-            minItems: 1,
             items: {
               type: "object",
-              required: ["amount", "payment_method"],
               properties: {
-                amount: { type: "string", example: "150000", pattern: "^\\d+$" },
+                amount: { type: "string", example: "150000" },
                 payment_method: {
                   type: "object",
-                  required: ["id", "type"],
                   properties: {
-                    id: { type: "string", example: "pse" },
-                    type: { type: "string", example: "bank_transfer" },
-                    financial_institution: { type: "string", example: "1051" },
+                    id: {
+                      type: "string",
+                      description: "`pse` en PSE; la marca (`visa`, `master`) en tarjeta.",
+                      example: "pse",
+                    },
+                    type: {
+                      type: "string",
+                      description: "`bank_transfer` en PSE; `credit_card` o `debit_card` en tarjeta.",
+                      example: "bank_transfer",
+                    },
+                    financial_institution: {
+                      type: "string",
+                      description: "Solo PSE: el código del banco.",
+                      example: "1051",
+                    },
+                    token: {
+                      type: "string",
+                      description: "Solo tarjeta: el `id` de `POST /v1/sim/mercadopago/card_tokens`.",
+                    },
+                    installments: {
+                      type: "integer",
+                      description: "Solo tarjeta: las cuotas. Débito admite solo 1.",
+                      example: 1,
+                    },
                   },
                 },
               },
@@ -405,7 +431,8 @@ export const postMpOrdersSchema = {
   response: {
     201: {
       description:
-        "Orden creada con status `action_required` (el pagador debe ir al banco).",
+        "Orden creada. En PSE, `action_required` (el pagador debe ir al banco); en tarjeta " +
+        "aprobada, `processed` / `accredited`.",
       type: "object",
       properties: {
         id: { type: "string" },
@@ -420,6 +447,7 @@ export const postMpOrdersSchema = {
           enum: ["created", "processing", "action_required", "processed", "canceled", "failed", "expired"],
         },
         status_detail: { type: "string" },
+        capture_mode: { type: "string", description: "Solo tarjeta." },
         currency: { type: "string" },
         created_date: { type: "string", format: "date-time" },
         last_updated_date: { type: "string", format: "date-time" },
@@ -435,6 +463,7 @@ export const postMpOrdersSchema = {
                 properties: {
                   id: { type: "string" },
                   amount: { type: "string" },
+                  paid_amount: { type: "string", description: "Solo tarjeta." },
                   reference_id: { type: "string" },
                   status: { type: "string" },
                   status_detail: { type: "string" },
@@ -443,8 +472,12 @@ export const postMpOrdersSchema = {
                     properties: {
                       id: { type: "string" },
                       type: { type: "string" },
-                      redirect_url: { type: "string", format: "uri" },
-                      financial_institution: { type: "string" },
+                      redirect_url: { type: "string", format: "uri", description: "Solo PSE." },
+                      financial_institution: { type: "string", description: "Solo PSE." },
+                      token: { type: "string", description: "Solo tarjeta." },
+                      installments: { type: "integer", description: "Solo tarjeta." },
+                      installment_amount: { type: "string", description: "Solo tarjeta." },
+                      transaction_security: { type: "object", additionalProperties: true },
                     },
                   },
                 },
@@ -453,15 +486,69 @@ export const postMpOrdersSchema = {
           },
         },
       },
+      examples: [
+        {
+          id: "ORD010ZETC3YU86",
+          type: "online",
+          processing_mode: "automatic",
+          external_reference: "ord-card-001",
+          total_amount: "20000",
+          total_paid_amount: "20000",
+          country_code: "COL",
+          status: "processed",
+          status_detail: "accredited",
+          capture_mode: "automatic_async",
+          currency: "COP",
+          created_date: "2026-10-19T15:09:58.687Z",
+          last_updated_date: "2026-10-19T15:09:58.687Z",
+          config: { online: { transaction_security: { validation: "never" } } },
+          transactions: {
+            payments: [
+              {
+                id: "PAY010QH2NVCVEY",
+                amount: "20000",
+                paid_amount: "20000",
+                reference_id: "oab3c66oxn",
+                status: "processed",
+                status_detail: "accredited",
+                payment_method: {
+                  id: "visa",
+                  type: "credit_card",
+                  token: "tok_sim_mp_tcz237t2ip",
+                  installments: 1,
+                  installment_amount: "20000",
+                  transaction_security: { validation: "never" },
+                },
+              },
+            ],
+          },
+        },
+      ],
     },
     400: {
-      description: "Cabecera x-idempotency-key faltante.",
+      description:
+        "Cabecera x-idempotency-key faltante (`empty_required_header`), o una orden de tarjeta " +
+        "sin `id`, `type` o `token` (`required_properties`) o de débito con más de una cuota " +
+        "(`property_value`).",
       ...mpOrdersErrorBody,
     },
     402: {
       description:
-        "Orden rechazada (escenarios REJECTED/DECLINED). " +
-        "Mercado Pago usa 402 para indicar que las transacciones fallaron.",
+        "Orden rechazada (escenarios REJECTED/DECLINED, o el titular de la tarjeta). " +
+        "Mercado Pago usa 402 para indicar que las transacciones fallaron, y trae la orden " +
+        "fallida en `data`.",
+      type: "object",
+      properties: {
+        ...mpOrdersErrorBody.properties,
+        data: { type: "object", additionalProperties: true },
+      },
+    },
+    409: {
+      description: "La llave de idempotencia ya se usó con otro cuerpo.",
+      ...mpOrdersErrorBody,
+    },
+    423: {
+      description: "Otra petición con la misma llave de idempotencia sigue en curso.",
       ...mpOrdersErrorBody,
     },
     501: {
@@ -479,12 +566,13 @@ export const postMpOrdersSchema = {
  * PENDING devuelve action_required.
  */
 export const getMpOrderSchema = {
-  summary: "Consultar orden PSE Mercado Pago",
+  summary: "Consultar orden Mercado Pago (PSE o tarjeta)",
   description:
     "Simula `GET /v1/orders/:id` de Mercado Pago. " +
-    "Por defecto devuelve la orden con `status: processed` " +
+    "Por defecto un PSE devuelve la orden con `status: processed` " +
     "(como si el pagador ya completó la transferencia bancaria). " +
-    "Devuelve la orden persistida y el estado resultante de su flujo PSE. " +
+    "Devuelve la orden persistida: en PSE, el estado resultante de su flujo; en tarjeta, el " +
+    "mismo de la creación. " +
     "La cabecera de escenario no cambia una orden ya creada; un identificador inexistente " +
     "responde 404.",
   tags: ["Mercado Pago Simulación"],
@@ -625,8 +713,9 @@ export const postMpTokenCardSchema = {
     "Simula `POST /v1/card_tokens` de Mercado Pago. " +
     "Requiere el parámetro `public_key` en la query; si falta, el handler responde 401. " +
     "Esta ruta no exige Authorization; Mercado Pago responde 400 si se envía esa cabecera. " +
-    "Use el `id` devuelto como `token` en POST /v1/sim/mercadopago/payments, junto con " +
-    "installments y x-idempotency-key. Las respuestas POST, incluidos los errores, " +
+    "Use el `id` devuelto como `token` en POST /v1/sim/mercadopago/orders (SDK 0.6.0) o en " +
+    "POST /v1/sim/mercadopago/payments (SDK 0.5.0), junto con las cuotas y " +
+    "x-idempotency-key. Las respuestas POST, incluidos los errores, " +
     "permiten CORS desde cualquier origen.",
   tags: ["Mercado Pago Simulación"],
   querystring: {
@@ -724,5 +813,157 @@ export const postMpTokenCardSchema = {
     502: { description: "Error de gateway simulado.", ...mpPaymentsErrorBody },
     503: { description: "Servicio no disponible simulado.", ...mpPaymentsErrorBody },
     504: { description: "Tiempo de espera agotado simulado.", ...mpPaymentsErrorBody },
+  },
+} as const;
+
+/**
+ * GET /v1/sim/mercadopago/card_tokens/:id
+ *
+ * La primera lectura del SDK 0.6.0 antes de una orden de tarjeta: de aquí saca el BIN.
+ * `Authorization` no se marca obligatoria porque el handler responde el `401` medido.
+ */
+export const getMpCardTokenSchema = {
+  summary: "Leer un token de tarjeta Mercado Pago",
+  description:
+    "Simula `GET /v1/card_tokens/:id` de Mercado Pago, con el access token del comercio. " +
+    "Devuelve el token emitido por `POST /v1/sim/mercadopago/card_tokens`, con el BIN en " +
+    "`first_six_digits`, sin el titular; leerlo no lo consume. Sin `Authorization` responde " +
+    "401 con la causa `E212`. **Diferencia deliberada con la API real:** un token que el " +
+    "simulador no emitió no responde 404, sino la tarjeta de prueba Visa crédito, para que " +
+    "los ejemplos que cobran con tokens inventados sigan funcionando.",
+  tags: ["Mercado Pago Simulación"],
+  params: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "El `id` del token", example: "tok_sim_mp_tcz237t2ip" },
+    },
+  },
+  headers: {
+    type: "object",
+    properties: {
+      authorization: {
+        type: "string",
+        description: "`Bearer` con el access token del comercio.",
+        example: "Bearer APP_USR-...",
+      },
+    },
+  },
+  response: {
+    200: {
+      description: "El token, sin el titular.",
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        public_key: { type: "string" },
+        live_mode: { type: "boolean" },
+        require_esc: { type: "boolean" },
+        status: { type: "string" },
+        first_six_digits: { type: "string" },
+        last_four_digits: { type: "string" },
+        card_number_length: { type: "integer" },
+        trunc_card_number: { type: "string" },
+        luhn_validation: { type: "boolean" },
+        expiration_month: { type: "integer" },
+        expiration_year: { type: "integer" },
+        security_code_length: { type: "integer" },
+        date_created: { type: "string", format: "date-time" },
+        date_last_updated: { type: "string", format: "date-time" },
+        date_due: { type: "string", format: "date-time" },
+      },
+      examples: [
+        {
+          id: "tok_sim_mp_tcz237t2ip",
+          public_key: "APP_USR-pub-prueba",
+          live_mode: true,
+          require_esc: false,
+          status: "active",
+          first_six_digits: "401354",
+          last_four_digits: "6260",
+          card_number_length: 16,
+          trunc_card_number: "401354XXXXXX6260",
+          luhn_validation: true,
+          expiration_month: 11,
+          expiration_year: 2030,
+          security_code_length: 3,
+          date_created: "2026-10-19T15:09:58.666Z",
+          date_last_updated: "2026-10-19T15:09:58.666Z",
+          date_due: "2026-10-27T15:09:58.666Z",
+        },
+      ],
+    },
+    401: {
+      description:
+        "Sin `Authorization` (causa `E212`), o con un access token inexistente (causa vacía).",
+      ...mpPaymentsErrorBody,
+    },
+  },
+} as const;
+
+/**
+ * GET /v1/sim/mercadopago/payment_methods/search
+ *
+ * La segunda lectura del SDK 0.6.0 antes de una orden de tarjeta: la marca y el tipo del BIN.
+ * `public_key` no se marca obligatoria porque el handler responde el `400` medido.
+ */
+export const getMpPaymentMethodSearchSchema = {
+  summary: "Buscar los medios de pago de un BIN en Mercado Pago",
+  description:
+    "Simula `GET /v1/payment_methods/search` de Mercado Pago. Devuelve la marca y el tipo " +
+    "(`credit_card` o `debit_card`) de un BIN, que la Orders API exige en la orden de tarjeta. " +
+    "Sin `public_key` responde 400 \"public_key is required\" aunque llegue el Bearer, y con " +
+    "una llave pública inexistente 404 \"public key not found\".",
+  tags: ["Mercado Pago Simulación"],
+  querystring: {
+    type: "object",
+    properties: {
+      public_key: { type: "string", description: "Llave pública del comercio.", example: "APP_USR-..." },
+      bins: { type: "string", description: "Los seis primeros dígitos.", example: "401354" },
+      marketplace: { type: "string", example: "NONE" },
+      status: { type: "string", example: "active" },
+    },
+  },
+  response: {
+    200: {
+      description: "Los medios de pago del BIN.",
+      type: "object",
+      properties: {
+        paging: {
+          type: "object",
+          properties: {
+            total: { type: "integer" },
+            limit: { type: "integer" },
+            offset: { type: "integer" },
+          },
+        },
+        results: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              name: { type: "string" },
+              payment_type_id: { type: "string" },
+              status: { type: "string" },
+            },
+          },
+        },
+      },
+      examples: [
+        {
+          paging: { total: 1, limit: 30, offset: 0 },
+          results: [{ id: "visa", name: "Visa", payment_type_id: "credit_card", status: "active" }],
+        },
+      ],
+    },
+    400: {
+      description: "Sin `public_key`.",
+      type: "object",
+      properties: { code: { type: "integer" }, message: { type: "string" } },
+    },
+    404: {
+      description: "Llave pública inexistente.",
+      type: "object",
+      properties: { code: { type: "integer" }, message: { type: "string" } },
+    },
   },
 } as const;

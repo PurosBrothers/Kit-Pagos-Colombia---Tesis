@@ -55,7 +55,9 @@ import {
   rememberQueryFailure,
 } from "../store/ScenarioMarks";
 import {
+  getMpCardTokenSchema,
   getMpOrderSchema,
+  getMpPaymentMethodSearchSchema,
   getMpPaymentMethodsSchema,
   getMpPaymentSchema,
   postMpOrdersSchema,
@@ -1156,6 +1158,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/mercadopago/card_tokens/:id",
+    { schema: getMpCardTokenSchema },
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       if (!request.headers.authorization) {
         return reply.code(401).send(CARD_TOKEN_WITHOUT_ACCESS);
@@ -1189,6 +1192,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/mercadopago/payment_methods/search",
+    { schema: getMpPaymentMethodSearchSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const query = request.query as { public_key?: string; bins?: string } | undefined;
       const publicKey = query?.public_key?.trim();
