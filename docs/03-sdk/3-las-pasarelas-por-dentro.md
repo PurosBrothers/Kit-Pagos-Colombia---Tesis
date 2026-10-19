@@ -93,29 +93,48 @@ Wompi es la única de las cuatro con un endpoint dedicado a los bancos. **En san
 
 **Autenticación:** `Authorization: Bearer <access_token>`, **más un header obligatorio por operación**.
 
-### Cobrar con tarjeta — 1 petición
+### Cobrar con tarjeta — 3 peticiones, por la Orders API (desde la versión 0.6.0)
+
+Hasta la versión 0.5.0 el SDK cobraba la tarjeta con una sola petición a la Payments API (`POST {baseUrl}/payments`). Desde la 0.6.0 va por la **Orders API**, la misma de PSE, porque con las credenciales `APP_USR-` del vendedor de prueba de una aplicación «Checkout API via Orders» la Payments API responde `401 "Unauthorized use of live credentials"` y la Orders API sí cobra (medido el 15 de octubre de 2026). Así, una sola pareja de credenciales cobra tarjeta y PSE.
+
+La Orders API exige la marca y el tipo de la tarjeta (`payment_method.id` y `payment_method.type`): sin ellos responde `400 required_properties`. La Payments API los deducía del token; esta no. Como `PaymentMethod.card(token)` solo trae el token, el adaptador los deduce con dos lecturas antes de cobrar:
 
 ```http
-POST {baseUrl}/payments
-Authorization: Bearer TEST-...
+GET  {baseUrl}/card_tokens/{token}                                   # first_six_digits, con el access token
+GET  {baseUrl}/payment_methods/search?public_key={llave}&bins=401354 # id: visa, payment_type_id: credit_card
+POST {baseUrl}/orders
+Authorization: Bearer APP_USR-...
 Content-Type: application/json
 X-Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
 
 {
-  "transaction_amount": 50000,
-  "token": "ff8080814c11e237014c1ff593b57b4d",
-  "installments": 1,
-  "payer": { "email": "cliente@example.com" }
+  "type": "online",
+  "processing_mode": "automatic",
+  "total_amount": "50000",
+  "external_reference": "ORDEN-001",
+  "payer": { "email": "cliente@example.com" },
+  "transactions": {
+    "payments": [{
+      "amount": "50000",
+      "payment_method": { "id": "visa", "type": "credit_card", "token": "ff8080814c11e237014c1ff593b57b4d", "installments": 1 }
+    }]
+  }
 }
 ```
 
-**`X-Idempotency-Key` no es opcional.** Sin él, Mercado Pago responde `400 "Header X-Idempotency-Key can't be null"`. El SDK genera un UUID por petición. Otro defecto que vivió en el SDK porque el simulador no lo pedía, y que encontró medir contra la API real (punto 48).
+Leer el token no lo consume, y la búsqueda exige la llave pública aunque llegue el Bearer (`400 "public_key is required"`), por eso el SDK necesita `publicKey` en las credenciales para cobrar con tarjeta. `total_amount` no admite decimales, igual que en PSE. El documento del pagador viaja en `payer.identification` solo si el comercio lo informó: la orden se aprobó con y sin él.
 
-Es también la única de las cuatro con soporte nativo de idempotencia, lo cual es coherente con lo explicado en [01-producto/2-conceptos-tecnicos.md](../01-producto/2-conceptos-tecnicos.md) §3: la pasarela reconoce el reintento y devuelve el resultado original en lugar de crear un segundo cobro.
+El desenlace llega como en PSE: aprobado, `201` con la orden en `processed / accredited`; rechazado, `402` con la orden en `failed / failed` dentro de `data` y el motivo en el pago (`insufficient_amount`, `bad_filled_card_data`, `rejected_by_issuer`…), que el SDK entrega como una transacción `DECLINED` con `rejectionReason` y no como un error; pendiente, `201` en `processing / in_process`. La respuesta no trae el email del pagador, así que la `Transaction` lleva el de relleno del normalizador. La orden llega con `transaction_security.validation: "never"` y el SDK no pide 3DS, así que el cobro con tarjeta no devuelve redirección. El detalle de lo medido está en `sdk/src/infrastructure/adapters/mercadopago-card.ts`.
 
-### PSE — 1 petición, a otra API
+**`X-Idempotency-Key` no es opcional.** Sin él, Mercado Pago no crea nada: la Payments API respondía `400 "Header X-Idempotency-Key can't be null"` y la Orders API responde `400 "Missing HTTP header: X-Idempotency-Key."`. El SDK genera un UUID por petición. Otro defecto que vivió en el SDK porque el simulador no lo pedía, y que encontró medir contra la API real (punto 48).
 
-PSE no vive en la Payments API sino en la **Orders API**, `POST {baseUrl}/orders`, con un cuerpo bastante más exigente:
+Es también la única de las cuatro con soporte nativo de idempotencia, lo cual es coherente con lo explicado en [01-producto/2-conceptos-tecnicos.md](../01-producto/2-conceptos-tecnicos.md) §3: la pasarela reconoce el reintento y devuelve el resultado original en lugar de crear un segundo cobro. Medido en la Orders API el 15 de octubre de 2026 (`docs/testing-data/mercado-pago.md`, «Duplicados e idempotencia en la Orders API»): la misma llave con el mismo cuerpo responde una copia byte a byte de la respuesta original, aunque la orden haya cambiado de estado; con otro cuerpo, `409 idempotency_key_already_used`; y mientras la primera petición sigue en curso, `423 resource_locked`, que el SDK traduce a `RESOURCE_LOCKED`, un error transitorio.
+
+**El SDK no aprovecha esa idempotencia, a propósito.** Como genera una llave por llamada, dos llamadas a `createPayment()` son dos cobros. Con una llave derivada de `orderReference`, un rechazo quedaría incobrable: reintentarlo con otra tarjeta da `409`. Y Mercado Pago no protege por la referencia: dos órdenes con la misma `external_reference` y llaves distintas se crearon y se cobraron las dos, con tarjeta y con PSE. Por eso el comercio confirma el estado del intento anterior antes de volver a cobrar ([4-guia-de-implementacion.md](4-guia-de-implementacion.md), §6).
+
+### PSE — 1 petición, a la Orders API
+
+PSE nunca vivió en la Payments API sino en la **Orders API**, `POST {baseUrl}/orders`, con un cuerpo bastante más exigente:
 
 ```json
 {
@@ -137,18 +156,22 @@ PSE no vive en la Payments API sino en la **Orders API**, `POST {baseUrl}/orders
 
 El adaptador valida todo eso **antes** de salir a la red, y si falta algo lanza `INVALID_REQUEST` listando qué falta. Es mejor que mandar la petición y traducir un error remoto que no siempre dice cuál campo era.
 
-**Y tiene un bloqueo duro:** la Orders API **responde `401` con credenciales de prueba** y exige un token de producción. El PSE de Mercado Pago no se puede probar en sandbox en absoluto (punto 45). Sin simulador propio, este camino no se podría ejercitar nunca.
+La respuesta trae la URL del banco en `transactions.payments[0].payment_method.redirect_url`, con la orden en `action_required / waiting_transfer`, y el SDK la devuelve como `REDIRECT_REQUIRED`. Hay dos excepciones, y las dos vuelven como `TRANSACTION`. La primera es el `402` de una orden cuyo pago falló, que llega `DECLINED`. La segunda es una orden que nace sin URL: el 15 de octubre de 2026, entre las 21:33 y las 21:44, 12 de 12 órdenes nacieron `processing / in_process` sin `redirect_url` y en unos 4 segundos pasaron a `failed / processing_error`; a las 13:12 el mismo cuerpo había nacido con la URL. Desde la 0.6.0-rc.2, esa orden vuelve como una transacción `PENDING` con su identificador, y la consulta da el desenlace. `MALFORMED_RESPONSE` queda para una respuesta sin identificador o sin estado.
+
+Desde la versión 0.6.0 la IP del pagador se normaliza antes de enviarla, con la misma regla que aplica `/v1/api`: se quitan los espacios, `::ffff:a.b.c.d` pasa a `a.b.c.d` y `::1` a `127.0.0.1`. Son las formas en que Node entrega `req.ip` en un servidor que escucha en `::`, y Mercado Pago las rechaza con `400` (medido el 15 de octubre de 2026; ver «La IP del pagador» en [3-api-de-simulacion.md](../02-arquitectura/3-api-de-simulacion.md)). Las demás direcciones pasan sin validar, y una IP en blanco cuenta como faltante.
+
+**Y tiene un bloqueo duro:** la Orders API **responde `401` con credenciales `TEST-`** y exige un token `APP_USR-`. El PSE de Mercado Pago no se pudo probar en sandbox con esas credenciales (punto 45). Con las credenciales `APP_USR-` del vendedor de prueba de una aplicación «Checkout API via Orders», la misma API sí cobra tarjeta (medido el 15 de octubre de 2026).
 
 **`baseUrl` como mapa nació de acá.** Al necesitar dos rutas —`/payments` y `/orders`— la segunda no tenía dónde vivir con una `baseUrl` global única. Desde el punto 57, `baseUrl` admite un mapa por pasarela, y eso habilitó además que el SDK hable con los sandboxes reales sin pasar por el simulador.
 
 ### Consultar estado — dos rutas, se elige por el formato del id
 
 ```http
-GET {baseUrl}/payments/{id}    # id numérico: tarjeta
-GET {baseUrl}/orders/{id}      # ULID con prefijo ORD: PSE
+GET {baseUrl}/payments/{id}    # id numérico: tarjeta cobrada con la versión 0.5.0 o anterior
+GET {baseUrl}/orders/{id}      # ULID con prefijo ORD: PSE, y tarjeta desde la 0.6.0
 ```
 
-Mercado Pago no manda ningún discriminador, así que el adaptador lo deduce del identificador. El prefijo `ORD` está documentado y medido, y consultar el recurso equivocado da un 404 que parece "el pago no existe".
+Mercado Pago no manda ningún discriminador, así que el adaptador lo deduce del identificador. El prefijo `ORD` está documentado y medido, y consultar el recurso equivocado da un 404 que parece "el pago no existe". Con las credenciales de un vendedor de prueba las órdenes empiezan con `ORDTST` (medido el 15 de octubre de 2026), que el mismo prefijo cubre.
 
 ### Bancos PSE
 

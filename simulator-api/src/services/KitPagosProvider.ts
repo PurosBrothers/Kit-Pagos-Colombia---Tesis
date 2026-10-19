@@ -7,6 +7,7 @@ import {
   loadServerEnv,
 } from "../auth/CredentialResolver";
 import { resolveTargetEnvironment, TargetEnvironment } from "../auth/targetEnvironment";
+import { serverPort } from "../serverAddress";
 
 /** Cabecera de respuesta con la advertencia del respaldo en sandbox. */
 export const CREDENTIAL_WARNING_HEADER = "x-kit-pagos-warning";
@@ -127,7 +128,7 @@ export class KitPagosProvider {
    */
   public resolveSimulatorBaseUrl(gateway: Gateway): string {
     const configured = this.env.SIMULATOR_SDK_BASE_URL?.trim().replace(/\/$/, "");
-    const base = configured || `http://localhost:${this.env.PORT?.trim() || "3000"}`;
+    const base = configured || `http://localhost:${serverPort(this.env)}`;
     return `${base}/v1/sim/${gateway.toLowerCase()}`;
   }
 

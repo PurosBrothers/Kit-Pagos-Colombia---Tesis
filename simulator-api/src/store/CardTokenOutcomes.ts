@@ -16,6 +16,11 @@ export interface CardTokenOutcome {
   scenario: string;
   /** El `status_detail` nativo, solo en las pasarelas que distinguen varios rechazos. */
   statusDetail?: string;
+  /**
+   * El `status_detail` del pago cuando el cobro llega como orden de la Orders API, que usa
+   * otro vocabulario que la Payments API (Mercado Pago, medido el 15 de octubre de 2026).
+   */
+  orderStatusDetail?: string;
 }
 
 const outcomes = new Map<string, CardTokenOutcome>();

@@ -228,8 +228,9 @@ traduce cada error nativo a la jerarquía `KitPagosError`, que es la otra mitad 
 que el SDK unifica. Hoy solo se ve la mitad feliz.
 
 **Las URL de redirección que salen del simulador.** La demo visita la URL para hacer
-de pagador, pero Kushki devuelve una de `sandbox-pse.kushkipagos.com`, que es lo que
-devuelve de verdad. En ese caso la visita falla y la demo lo explica en vez de
+de pagador. En las cuatro pasarelas es una página del simulador, que avisa que la
+redirección es simulada y no mueve el pago. Si la URL apuntara a un dominio de la
+pasarela, como en una sandbox real, la visita fallaría y la demo lo explica en vez de
 caerse: en un pago real esa página la abre una persona en su navegador.
 
 **La tokenización.** El token de tarjeta es de mentira y la demo no lo pregunta. En

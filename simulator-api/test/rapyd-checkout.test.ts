@@ -132,6 +132,36 @@ describe("Rapyd payment page", () => {
     });
   });
 
+  describe("GET /v1/sim/rapyd/checkout/:checkoutId/pay, the payer's way back (point 106)", () => {
+    async function payPageFor(urls: Record<string, string>) {
+      const app = buildApp();
+      const created = await app.inject({ method: "POST", url: "/v1/sim/rapyd/checkout", payload: { ...validCheckoutBody, ...urls } });
+      const page = await app.inject({ method: "GET", url: paymentRoute(created.json().data.redirect_url) });
+      await app.close();
+      return page.body;
+    }
+
+    it("links back to the complete_payment_url the merchant sent, like the PSE bank pages", async () => {
+      const body = await payPageFor({
+        complete_payment_url: "https://tienda.example.com/?retorno=1&ok=1",
+        error_payment_url: "https://tienda.example.com/?retorno=1&ok=0",
+      });
+
+      expect(body).toContain('<a href="https://tienda.example.com/?retorno=1&amp;ok=1">Volver al comercio</a>');
+    });
+
+    it("falls back to the error_payment_url when there is no complete one", async () => {
+      const body = await payPageFor({ error_payment_url: "https://tienda.example.com/?retorno=1" });
+
+      expect(body).toContain('<a href="https://tienda.example.com/?retorno=1">Volver al comercio</a>');
+    });
+
+    it("says there is nowhere to go back to without a return URL, and never links a javascript: URL", async () => {
+      expect(await payPageFor({})).toContain("El comercio no indicó a dónde devolver al pagador.");
+      expect(await payPageFor({ complete_payment_url: "javascript:alert(1)" })).not.toContain("javascript:");
+    });
+  });
+
   describe("GET /v1/sim/rapyd/checkout/:checkoutId/pagar (the old Spanish route)", () => {
     it("answers 308 to /pay without paying the page", async () => {
       const app = buildApp();
@@ -179,7 +209,9 @@ describe("Rapyd payment page", () => {
       const visit = await app.inject({ method: "GET", url: paymentRoute(data.redirect_url) });
 
       expect(visit.statusCode).toBe(200);
-      expect(visit.json().paid).toBe(true);
+      expect(visit.headers["content-type"]).toBe("text/html; charset=utf-8");
+      expect(visit.body).toContain("API de Simulación de Kit Pagos Colombia");
+      expect(visit.body).not.toContain(data.id);
 
       const queryResponse = await app.inject({
         method: "GET",

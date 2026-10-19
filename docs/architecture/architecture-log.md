@@ -1844,6 +1844,8 @@ Para prevenir fugas accidentales de secretos en terminales, consolas de Render o
 
 **Estado:** Resuelto en código (`simulator-api/src/kit-pagos-api/`, `simulator-api/src/app.ts`, `simulator-api/src/auth/authHook.ts`). El origen permitido por CORS queda en el valor por defecto (`*`); restringirlo por variable de entorno se decide cuando exista el cliente de frontend del issue #109.
 
+> **Revisado en el punto 107.** La decisión 2 cambió en una parte: para una respuesta HTTP fallida, el mensaje ya no es solo la plantilla con el status. Desde el SDK 0.6.0-rc.5 lleva entre paréntesis el código y el motivo que trae el cuerpo nativo, como «Kushki gateway returned an HTTP error status 400 (K220: Monto de la transacción es diferente al monto de la venta inicial)», y pasa por la misma limpieza: `sanitize()` por patrones y `redactCredentials()` para los valores exactos de las credenciales. `originalPayload` sigue sin salir de `/v1/api`.
+>
 > **Revisado en el punto 89.** La decisión 3 dejó de valer para dos rutas de `/v1/sim`: desde el #126 y el #127, el navegador del pagador llama a `POST /v1/sim/wompi/tokens/cards` y `POST /v1/sim/mercadopago/card_tokens`. Esas dos responden el preflight y abren el origen con las cabeceras medidas en cada pasarela; el resto de `/v1/sim` sigue sin CORS.
 
 ---
@@ -2460,6 +2462,8 @@ Tomada por Joan el 4 de octubre de 2026, al aprobar el inventario del alcance de
 
 **Estado:** Resuelto con deuda nombrada.
 
+> **Ratificado en el punto 107 (issue #153).** El 17 de octubre de 2026 Joan ratificó la decisión del 4 de octubre: `WompiTokenizer` sigue con la tokenización simple. La deuda queda nombrada como estaba. Lo que haría falta para revertirla está en el comentario del #153: cifrar con WebCrypto sin dependencias, probar el JWE contra una llave conocida porque Wompi responde `502` a un `payload` mal formado, e imitar la llave y el descifrado en el simulador.
+
 ### 82. Declaración dinámica de ambiente y resolución de URLs mediante catálogo cerrado en el SDK (Issue #123)
 
 **Responsable:** Prieto / Equipo (secciones 9 y 15 del SAD, `sdk/src/domain/value-objects/Environment.ts`, `sdk/src/infrastructure/config/gateway-urls.ts`, `sdk/src/infrastructure/config/SDKConfigurator.ts`, `simulator-api/src/auth/targetEnvironment.ts`, `simulator-api/src/services/KitPagosProvider.ts`).
@@ -2946,6 +2950,8 @@ Era `/pagar`, en español (deuda del punto 84). La ruta vieja responde `308` hac
 
 **Estado:** Resuelto con deuda nombrada: el prefijo de 10 caracteres del `SyntaxError`, el cuerpo original del `402` fuera de la API pública, y las categorías que no tienen fuente (`UNKNOWN`), sobre todo en Kushki con tarjeta, cuya cuenta UAT no rechaza.
 
+> **Ampliado en el punto 107.** Con `--root` sigue sin aplicarse `KNOWN_EXCEPTIONS`, pero un proyecto externo ya puede traer su propio registro con `--exceptions`, indexado por archivo, clase y métrica. El simulador es el primero que lo usa (`simulator-api/ck-exceptions.json`).
+
 ### 88. Despliegue de simulator-api en Render y colección Postman versionada (issue #131)
 
 **Responsable:** Joshua (issue #131, PR #147).
@@ -3045,6 +3051,598 @@ Con la instalación nueva, Fastify 5.12.5 resolvió `light-my-request` 6.8.0, qu
 - `check-skeleton-parity.sh` pasa. Falla con un cambio en el esqueleto de B y con un import del SDK en el módulo de A, y deja pasar el import en el de B.
 
 **Estado:** Resuelto en código (`prototypes/`). Los módulos de pagos de A y B, y sus commits de cierre con Wompi, van en los issues de cada prototipo.
+
+---
+
+### 91. El cliente de navegador contra `/v1/api` y el prototipo C (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.**
+El issue pide un cliente de frontend que cobre contra `/v1/api` sin instalar `kit-pagos-colombia` y sin saber qué pasarela hay detrás, para volver ejecutable el patrón de integración 2. Un comentario del 5 de octubre de 2026 decidió que vive en `prototypes/checkout-frontend-rest/` y que es también el prototipo C. El punto 64 dejó el origen de CORS de `/v1/api` en `*` hasta que existiera este cliente. El 13 de octubre de 2026 Joan decidió: una aplicación con build, con Vite y TypeScript como `landing/`; un servidor estático con `node:http` en otro origen que la API; PSE de punta a punta y tarjeta con `KitPagosBrowser` cargado desde jsDelivr con la versión fija; y subir `simulator-api` a `kit-pagos-colombia@^0.5.0`.
+
+**Decisión 1: Vite y TypeScript, sin framework de UI.**
+La página es un formulario y un resultado: el DOM se maneja con `FormData` y `replaceChildren()` en `src/main.ts`, y la lógica queda en `src/checkout.ts`, que no toca el DOM y se prueba sola. Un framework habría agregado dependencias para nada que la página necesite, y es justo lo que el issue advertía: algo que envejece antes de la sustentación. Vite da el build y el tipado de `landing/`, y el build sale en un solo archivo de JavaScript.
+
+*Alternativa descartada.* Una página sin build, con `fetch` en un `<script>`. No permitía el chequeo de tipos ni separar la lógica para probarla con la misma cadena del resto del repositorio.
+
+**Decisión 2: Vitest y no Jest.**
+El paquete es ESM (`"type": "module"`), igual que la salida de Vite. Vitest corre ese TypeScript sin transformación aparte y lee `vite.config.ts`; Jest exigía `ts-jest` y el modo ESM experimental de Node. La lógica del cliente se prueba en el entorno `node`, con un `fetch` falso que devuelve las formas medidas: no hace falta `jsdom`.
+
+**Decisión 3: el servidor estático es `server.mjs`, con `node:http` y sin dependencias.**
+Sirve `dist/` en `localhost:4100`, otro origen que la API en `localhost:3000`, para que el navegador haga el preflight de verdad. Entrega `/config.json` desde su entorno: la URL de la API, el ambiente de tokenización y las llaves públicas `CHECKOUT_PUBLIC_KEY_<PASARELA>`. Responde solo `GET` y `HEAD` y no sirve nada fuera de `dist/`.
+
+**Decisión 4: el módulo de navegador se carga desde jsDelivr, con la versión fija y solo al pagar con tarjeta.**
+`src/tokenizer.ts` importa `https://cdn.jsdelivr.net/npm/kit-pagos-colombia@0.5.0/dist/browser/index.js`. Con un rango, la página ejecutaría sobre la tarjeta del pagador la próxima versión que se publique, sin revisión. La importación es dinámica, así que el cobro con PSE no descarga código del SDK. Comprobado el 13 de octubre de 2026: jsDelivr entrega ese archivo con `access-control-allow-origin: *`, `x-jsd-version: 0.5.0` y `cache-control: … immutable`, 16 470 bytes, SHA-256 `f1bc1d0f…275334`. Sin integridad de subrecurso: la importación dinámica no la admite. Queda como deuda.
+
+**Decisión 5: ningún nombre de pasarela en el código del cliente, y que lo decida el SDK.**
+Las pasarelas salen de `GET /v1/api/gateways`, los bancos de `GET /v1/api/pse-banks` y el cuerpo del cobro es uno solo para las cuatro, con el pagador completo que pide Mercado Pago para PSE y sin `ipAddress`, que el navegador no conoce. Para la tarjeta, el cliente llama a `KitPagosBrowser.tokenizeCard()` con cualquier pasarela, y es el SDK el que rechaza Kushki y Rapyd con `UNSUPPORTED_OPERATION` antes de enviar nada. `test/no-gateway-names.test.ts` falla si un archivo de `src/`, `index.html` o `server.mjs` nombra una pasarela.
+
+**Decisión 6: el origen de CORS de `/v1/api` se queda en `*`.**
+El cliente no manda cookies ni `Authorization`, así que un origen abierto no expone nada que un `curl` no pueda pedir: la API sin `API_AUTH_TOKEN` ya está abierta a cualquiera, y con el token, el token es la protección. Restringir el origen no le quita nada a un atacante que llama desde un servidor y sí obliga a configurar cada origen de cada comercio. Medido en memoria: el preflight de `POST /v1/api/payments` desde `http://localhost:4100` responde `204` con `access-control-allow-origin: *`, `access-control-allow-methods: GET,HEAD,POST` y `access-control-allow-headers: content-type`.
+
+*Alternativa descartada.* Una variable `API_CORS_ORIGINS` con la lista de orígenes. Se justifica el día que la API acepte credenciales del navegador (cookies o `credentials: "include"`), que es cuando `*` deja de estar permitido ([Fetch Standard, «CORS protocol and credentials»](https://fetch.spec.whatwg.org/#cors-protocol-and-credentials)); hoy no las acepta.
+
+**Decisión 7: la llave pública llega por la configuración del despliegue.**
+Decisión de Joan del 13 de octubre de 2026 (16:50). La llave pública con la que el navegador tokeniza sale de `CHECKOUT_PUBLIC_KEY_<PASARELA>`, que `server.mjs` entrega en `/config.json`: el código no la trae, y es el lugar donde un frontend real guarda su llave publicable. Contra un sandbox real, lo esperable es que tenga que ser de la misma cuenta que las credenciales del servidor, aunque no se midió; en el simulador cualquier valor sirve.
+
+*Alternativa descartada.* Que `/v1/api` expusiera la llave pública del perfil del servidor, para que el cliente no necesitara configuración. Agregaba una ruta a la API para una sola llave, y el cliente igual necesita saber dónde está la API.
+
+**Decisión 8: la tarjeta de Rapyd queda fuera del prototipo C.**
+Decisión de Joan del 13 de octubre de 2026 (16:50). El criterio de tarjeta del issue aplica a las pasarelas que tokenizan en el navegador. Rapyd sí cobra con tarjeta por `/v1/api` sin token, en su página alojada (medido abajo), pero ese camino no pasa por `KitPagosBrowser` y el cliente no lo usa.
+
+**Lo medido** (13 de octubre de 2026, en memoria con `buildApp()` y `app.inject()`, `fetch` desviado a `inject()` sin abrir puertos, `kit-pagos-colombia@0.5.0` y el bundle de navegador bajado de jsDelivr).
+
+- Credenciales del servidor en el ambiente `simulator`: sin ninguna variable, las cuatro pasarelas responden `401`. El mínimo son nueve: las dos llaves de cada pasarela y `WOMPI_INTEGRITY_SECRET`, sin la cual Wompi responde `401 INVALID_CREDENTIALS` porque el SDK no puede firmar.
+- PSE, con `ipAddress` en el cuerpo: las cuatro responden `REDIRECT_REQUIRED` y llegan a `APPROVED` con una consulta del cliente. En Wompi, la consulta que publica la URL del banco la hace el SDK dentro del cobro. Solo la `redirectUrl` de Wompi es una página del simulador; las de Mercado Pago, Kushki y Rapyd apuntan a los dominios reales. Ninguna devuelve al pagador a la URL de retorno.
+- Tarjeta: con Wompi y Mercado Pago, `KitPagosBrowser` en el ambiente `simulator` emitió el token y el cobro llegó a `APPROVED`. Wompi nace `PENDING` y resuelve en la primera consulta. Con Rapyd, el cobro con tarjeta y sin token responde `REDIRECT_REQUIRED` hacia el checkout alojado del simulador; no se usa en este cliente.
+
+**Lo medido en el navegador** (13 de octubre de 2026, de 16:28 a 16:31, UTC−5). Se usó el navegador de Cursor contra `http://localhost:4100`, con la API de Simulación encendida con las nueve variables de prueba. Un espía de `fetch` en la página y el log del simulador registraron cada petición. La salida completa está en `docs/05-ejemplos/checkout-frontend-rest.md`.
+
+- PSE: Wompi (banco `1`, 16:28:42), Kushki (16:29:44) y Rapyd (16:29:59) llegaron a `APPROVED` con una consulta después de la vuelta. En Wompi se abrió la página del banco del simulador; en Kushki y Rapyd la vuelta se hizo con el botón, sin abrir sus dominios reales. *(Corregido en el punto 93: al abrir esas URL, las de Mercado Pago, Kushki y Rapyd no funcionaban.)*
+- Mercado Pago con PSE (16:29:16) respondió `400 INVALID_REQUEST`: «PSE en Mercado Pago requiere estos datos y no llegaron: ipAddress.» Lo lanza la validación del SDK (`mercadopago-pse.ts`) porque Mercado Pago exige la IP del pagador (punto 45). En la medición en memoria la sonda la mandaba; el navegador no la conoce. Con la API tomando la IP de la petición (punto 92), la segunda corrida (16:59:18) respondió `201 REDIRECT_REQUIRED` y llegó a `APPROVED` (`processed`) con una consulta. Wompi (17:00:06) y Rapyd (17:00:29) se repitieron como regresión, con el mismo resultado que en la primera corrida.
+- Tarjeta: Wompi (16:30:21) y Mercado Pago (16:30:40) llegaron a `APPROVED`. El número viajó solo a `POST /v1/sim/wompi/tokens/cards` y a `POST /v1/sim/mercadopago/card_tokens`. A `POST /v1/api/payments` llegó el token, sin `Authorization`. Kushki (16:30:55) y Rapyd (16:30:58) dieron `UNSUPPORTED_OPERATION` sin ninguna petición.
+- CORS: el simulador registró `OPTIONS /v1/api/payments` con `Origin: http://localhost:4100` y `Access-Control-Request-Headers: content-type`, que respondió `204`. Antes de él registró `OPTIONS /v1/sim/wompi/tokens/cards` con `authorization,content-type`, que respondió `200`.
+- jsDelivr: el bundle se cargó al pulsar «Pagar» con tarjeta, con 16 470 bytes descomprimidos y 4 905 transferidos. En los PSE no se cargó.
+
+*Defecto encontrado en la medición.* Al volver del banco con «Atrás», el navegador recargó la página (navegación `back_forward`) y el botón de retorno, que solo existía en la página anterior, desapareció. El pago pendiente seguía en `sessionStorage`, pero nada lo ofrecía. Ahora la página lo lee al cargar (`peekPending()`) y vuelve a mostrar el botón. Las pruebas unitarias no lo veían, porque no navegan.
+
+*La IP del pagador en el patrón 2.* En el patrón 1 la pone el backend del comercio, que la lee de la petición del pagador. En el patrón 2 quien recibe esa petición es la API. Se resolvió en la API, y el razonamiento está en el punto 92.
+
+**Insumo para la Prioridad 3.** Con tarjeta, este cliente cobra solo por Wompi y Mercado Pago. Kushki necesita un token de su propia ruta de tokenización y Rapyd cobra en su página alojada: un frontend que quiera las cuatro tiene que cargar el SDK de navegador de cada pasarela o redirigir a una página de la pasarela. La API REST no lo resuelve, y es el problema que motiva la Prioridad 3.
+
+**Estado:** Resuelto en código (`prototypes/checkout-frontend-rest/`). PSE en las cuatro pasarelas y tarjeta en las dos que tokenizan en el navegador, medidos en el navegador. La integridad de subrecurso del bundle queda como deuda.
+
+---
+
+### 92. La API toma la IP del pagador de la petición, y la página de pago de Rapyd responde HTML (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.**
+La medición en el navegador del punto 91 encontró que el PSE de Mercado Pago no se podía cobrar desde un frontend contra `/v1/api`. Mercado Pago exige la IP del pagador (punto 45), y el SDK rechaza el cobro sin `ipAddress`, pero un navegador no conoce su IP pública. La misma medición dejó a la vista que la página de pago de Rapyd del simulador, `GET /v1/sim/rapyd/checkout/:id/pay`, respondía un JSON (`{"paid":true,"payment_id":…}`) a un pagador que la abre en el navegador. Joan decidió las dos cosas el 13 de octubre de 2026 (16:50).
+
+**Decisión 1: si el cuerpo no trae `ipAddress`, `POST /v1/api/payments` usa la IP de la petición.**
+En el patrón 2 la petición del pagador llega a la API, así que la API está en el mismo lugar donde, en el patrón 1, el backend del comercio lee esa IP. Si el cuerpo la trae, manda la del cuerpo: un backend que llama a la API la sigue enviando, porque la de la petición sería la suya. Un `ipAddress` en blanco cuenta como ausente. Solo el PSE de Mercado Pago la usa (`mercadopago-pse.ts`), así que completarla no cambia lo que el SDK manda a las otras tres pasarelas.
+
+**Decisión 2: detrás de un proxy, la IP sale de `X-Forwarded-For` y solo si se configura, sin activar `trustProxy`.**
+Render pasa el tráfico por Cloudflare y por sus balanceadores, y su documentación indica que la IP real del cliente se lee de `x-forwarded-for`; su ejemplo toma el primer valor ([render.com/articles/how-render-handles-ddos-attacks](https://render.com/articles/how-render-handles-ddos-attacks), consultada el 13 de octubre de 2026). Con `SIMULATOR_TRUST_FORWARDED_FOR=true`, `payerIpOf()` toma ese primer valor; sin la variable, o si la cabecera viene vacía, usa la del socket. `render.yaml` la declara en `"true"`. Por omisión queda apagada, porque sin un proxy que escriba la cabecera cualquier cliente pondría la IP que quisiera.
+
+*Alternativa descartada.* Activar el `trustProxy` de Fastify, que era la propuesta inicial ([fastify.dev, `trustProxy`](https://fastify.dev/docs/latest/Reference/Server/#trustproxy)). Además de `request.ip` cambia `request.protocol` y `request.host`, que pasarían a leer `X-Forwarded-Proto` y `X-Forwarded-Host`. De ellos sale `requestOrigin()`, el origen de las URL que el simulador entrega. El punto 84 ya descartó confiar en esas cabeceras, porque Render no documenta que mande `X-Forwarded-Proto`, y por eso existe `SIMULATOR_PUBLIC_ORIGIN`. Leer la cabecera solo para la IP deja intacto ese razonamiento.
+
+**Decisión 3: la página de pago de Rapyd responde HTML.**
+Es una convención del simulador (nivel 3), no una medición: la ruta no existe en Rapyd y no imita su página alojada. Responde una página mínima que dice que es del simulador, como la del banco del PSE de Wompi y la de términos. No informa si el pago se aprobó, porque eso se lee consultando el checkout, igual que contra la API real, y tampoco repite el identificador que llegó en la URL. Conserva el efecto que tenía: la visita pasa el checkout a `DON` y hace nacer el pago. Un checkout inexistente sigue respondiendo `404` con el cuerpo de Rapyd, y `/pagar` sigue respondiendo `308` hacia `/pay`. Las tres pruebas que leían `paid` o `payment_id` del JSON ahora leen el pago desde la consulta del checkout. Los ejemplos y la colección Postman no leían el cuerpo de la página.
+
+**Lo medido** (13 de octubre de 2026).
+
+- Pruebas nuevas en `simulator-api/test/payer-ip.test.ts` (14), con un proveedor falso que captura lo que la ruta le pasa al SDK: IP del cuerpo, IP del socket, IP en blanco y `X-Forwarded-For` ignorada sin la variable. Con la variable: el primer valor, la del cuerpo antes que la cabecera, y el socket si la cabecera falta o viene vacía. También la lectura de la variable. En `payments.test.ts`, el PSE de Mercado Pago sin `ipAddress`, contra el SDK real, responde `201 REDIRECT_REQUIRED`.
+- Mutaciones: sin el respaldo de la IP de la petición fallan 6 de 43 pruebas; leyendo `X-Forwarded-For` siempre, 1 de 14; tomando la última dirección en vez de la primera, 2 de 14.
+- En el navegador: el PSE de Mercado Pago pasó de `400` (16:29:16) a `APPROVED` (16:59:18, punto 91). La página de Rapyd, abierta directamente a las 17:01:00, respondió `text/html`; la consulta siguiente dio el checkout `APPROVED` (`CLO`), y `/pagar` respondió `308`.
+
+**Estado:** Resuelto en código (`simulator-api/src/kit-pagos-api/payer-ip.ts`, `routes/payments.ts`, `src/routes/rapyd.ts`, `render.yaml`). Falta agregar `SIMULATOR_TRUST_FORWARDED_FOR` a `.env.example`, que va aparte para no chocar con un cambio reciente de `devops` en ese archivo. Que la IP llegue bien detrás de Render solo está probado con `app.inject` y la cabecera escrita a mano; falta comprobarlo en el despliegue.
+
+### 93. Las páginas de banco del PSE son del simulador en las cuatro pasarelas (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.**
+El 14 de octubre de 2026 Joshua revisó el PR #155 y preguntó por qué la página de Mercado Pago salía así: «Esta página no existe». Tenía razón, y el punto 91 no lo había visto. Esa medición comprobó que el PSE llegaba a `APPROVED` en las cuatro pasarelas, pero nunca abrió la URL de banco que la API entrega al pagador en Mercado Pago, Kushki y Rapyd, y dio por buena la vuelta con un botón del cliente que sustituye al banco. Al abrirlas (09:45–09:49): la de Mercado Pago, `https://www.mercadopago.com.co/payments/<id>/bank_transfer`, responde «Esta página no existe», porque el id lo inventó el simulador; la de Kushki apunta a `sandbox-pse.kushkipagos.com`, que no resuelve en DNS; la de Rapyd abre su página real «Bank Payment Simulation», pero con un token que Rapyd no conoce, y con Success y Pay el pagador no vuelve al comercio. Solo Wompi abría una página que existe, la del simulador, y tampoco devolvía al pagador. Joan decidió (14 de octubre) arreglarlo del todo dentro del #109, antes de integrar el PR.
+
+**Decisión 1: la URL de banco de las cuatro pasarelas es una página del simulador.**
+Las cuatro apuntan a `${origen}/v1/sim/<pasarela>/…`, con el origen que ya usa el simulador para las URL que entrega (`requestOrigin()`: `SIMULATOR_PUBLIC_ORIGIN` o el protocolo y host de la petición, punto 84). La ruta conserva la forma de la pasarela: `/payments/<id numérico>/bank_transfer` (Mercado Pago), `/transfer/v1/agent?token=` (Kushki), `/complete-bank-payment?token=` (Rapyd) y `/pse/redirect?ticket_id=` (Wompi). Es lo que el punto 84 ya había hecho con la URL del banco de Wompi y la del checkout de Rapyd, que fijaban `localhost:3000`.
+
+**Decisión 2: la página no decide el resultado; devuelve al pagador a la URL que el comercio pidió.**
+El desenlace de un PSE lo fija el banco de prueba o el escenario al crear el cobro (sección 4.1 de `3-api-de-simulacion.md`) y se lee consultando el pago, que es lo que Wompi hace con el banco `1` y el `2`. Una página con botones «Aprobar» y «Rechazar» contradiría eso: el cobro ya está decidido, y el botón tendría que cambiarlo después. La página tiene un solo enlace, «Volver al comercio», que apunta a lo que el comercio mandó al crear el cobro: `redirect_url` (Wompi), `config.online.callback_url` (Mercado Pago), `callbackUrl` de la solicitud de token (Kushki) y `complete_payment_url` (Rapyd). Esa URL se guarda en el servidor al crear el cobro (`store/BankReturnUrls.ts`, por pasarela e identificador) y no se lee de la URL de la página: una dirección que llega por la query no se convierte en un enlace. Al enlace solo llegan `http` y `https`, escapado, porque lo escribió el comercio y un `javascript:` ejecutaría código en el origen del simulador. En Mercado Pago el enlace lleva `payment_id=<id de la ruta>` agregado, porque es lo que hace la vuelta real (medido, abajo); se agrega al crear el cobro, no al servir la página. Si no hay URL registrada, la página dice «El comercio no indicó a dónde devolver al pagador» y no tiene enlace. Tampoco repite el identificador que recibió.
+
+**Lo que se midió y lo que no.**
+La forma de la ruta de Rapyd está medida (`docs/testing-data/rapyd.md`, sección 5.7) y la de Mercado Pago se midió el 14 de octubre de 2026 contra la API real (`docs/testing-data/mercado-pago.md`, «La URL de banco del PSE y la vuelta al comercio»). La de Kushki sale de su referencia y del simulador anterior, sin medición propia. Lo que Mercado Pago mostró al abrir su URL de banco:
+
+- La ruta es `/payments/<12 dígitos>/bank_transfer?caller_id=…&hash=…`, y el id **no es** el `PAY…` del pago. El simulador publicaba el `PAY…`; ahora genera un id numérico propio y lo registra, y la URL del simulador no lleva `caller_id` ni `hash`.
+- La URL real responde `302` al portal de PSE de ACH Colombia (`registro.pse.com.co`), una página de PSE y no de Mercado Pago. No se siguió por «Continuar» (pide registrarse con un código enviado al correo), así que no se sabe si más adelante aparece el simulador de bancos con escenarios que describe el paso a paso de ese documento, que sale de la documentación de Mercado Pago y no de una medición.
+- Al «Regresar al comercio», el pagador pasa por un comprobante de Mercado Pago y llega a la `callback_url` con `?payment_id=<id de la ruta>`. El simulador solo imita ese último paso.
+- Mercado Pago rechaza con `402 processing_error` una `callback_url` que apunta a `localhost` o `127.0.0.1`, con `http` o `https`. El simulador la acepta, porque el cliente C se sirve desde `localhost`; contra el sandbox real ese cliente no funcionaría desde ahí.
+
+Lo que la página del banco real muestra no se imita en ninguna de las cuatro. Solo se midió la vuelta de **cancelar**; llegar a `approved` exige autorizar en un banco.
+
+**Lo medido** (14 de octubre de 2026).
+
+- Pruebas nuevas en `simulator-api/test/bank-pages.test.ts` (37): por pasarela, la URL sale en el origen del simulador (con host y con `SIMULATOR_PUBLIC_ORIGIN`), la página existe y dice que es simulada, el enlace apunta a la URL del comercio, no repite el identificador y un id desconocido no lleva enlace; para Wompi, además, sin `redirect_url`, sin ticket y que la página no mueve el estado; para el HTML, que `javascript:`, `data:`, `file:`, una cadena que no es URL y una vacía no llegan al enlace, y que se escapa; que el registro separa una pasarela de otra con el mismo identificador, y, en Mercado Pago, que la URL lleva el id numérico y no el `PAY…`, y que la vuelta agrega `payment_id` respetando la query del comercio, y que una `callback_url` que no es una URL queda tal como llegó. Suite completa del simulador: 44 suites y 1080 pruebas pasando, con cobertura de líneas 97.09 % y de ramas 88.33 %; `eslint` y `tsc` limpios.
+- Mutaciones: sin el filtro de protocolo fallan 4 de 31; sin escapar el `href`, 1; con la clave del registro sin identificador, 5; con la clave sin pasarela, 1 (esta última no la detectaba ninguna prueba antes de agregar la del registro); sin el `payment_id` de la vuelta, 3 de 49 (con `mercadopago-pse.test.ts`); con el `PAY…` en la URL de Mercado Pago, 6 de 49; devolviendo `undefined` para una URL que no se puede leer, 1 de 51.
+- En el navegador (10:10–10:13; Mercado Pago repetido a las 11:22 tras el cambio del id): el PSE de las cuatro pasarelas, de punta a punta desde el cliente C: pago, página del banco del simulador, «Volver al comercio» y estado final (`processed` en Mercado Pago, `approvedTransaction` en Kushki, `CLO` en Rapyd, `APPROVED` en Wompi). Wompi con el banco `2` da `DECLINED` sin redirección, y la tarjeta no cambió (Wompi y Mercado Pago `APPROVED`; Kushki y Rapyd `UNSUPPORTED_OPERATION`). Las 14 capturas de antes, las 17 de después y las 4 de la medición real de Mercado Pago, con su `INDICE.md`, están en `.cursor/evidencia/109/`, fuera del repositorio; Joan las adjunta al PR.
+- La colección Postman, con las tres peticiones nuevas de páginas de banco: 36 de 36 con Newman contra el simulador local.
+- Sin probar: el rechazo después de la redirección en Mercado Pago, Kushki y Rapyd (la página no decide el resultado), el desenlace `approved` de la vuelta real de Mercado Pago, y la URL de banco contra el despliegue de Render.
+
+**Regla nueva.** Un prototipo o cualquier flujo que se vea en un navegador no se da por probado sin capturas de cada paso del pagador, incluida cada URL que el sistema le entrega, aunque sea de un dominio externo (`.cursor/rules/evidencia-prototipos.mdc`). El #109 es el caso que la motivó.
+
+**Estado:** Resuelto en código (`simulator-api/src/gateways/bankPage.ts`, `src/store/BankReturnUrls.ts`, `src/routes/{wompi,mercadopago,kushki,rapyd}.ts`, y las fábricas de respuesta de las tres últimas). Actualizados `3-api-de-simulacion.md` (32 endpoints, 30 que imitan a las pasarelas), `docs/05-ejemplos/checkout-frontend-rest.md`, `docs/testing-data/mercado-pago.md`, el README del simulador y su colección Postman (36 peticiones) con la tabla de `4-despliegue-en-render-y-coleccion-postman.md`. Corregidos de paso los conteos de rutas que ya estaban desactualizados en `README.md` (23, ahora 30), `simulator-api/README.md` y `layers-and-components.md` (26, ahora 32). Queda la landing, que dice «25 rutas»: está en `devops` por otro PR y se corrige después de integrar este.
+
+### 94. El cliente C corre contra Render y contra el sandbox, sin simulador local (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.**
+El 14 de octubre de 2026 (5:32 p. m.) Joshua probó el prototipo C y dijo tres cosas: que mandaba siempre a `localhost`, que para él debería poder mandar al sandbox oficial («si no, de qué sirve un prototipo») y que debería funcionar con la API de Simulación desplegada en Render, sin correrla en su máquina. Al intentarlo con `set KIT_PAGOS_API_URL=…` y `npm start`, «explota» y le pide el simulador local. Se revisó el cliente y tenía razón en lo de fondo:
+
+- La API por omisión era `http://localhost:3000/v1/api`.
+- El cliente nunca mandaba `x-kit-pagos-environment` (punto 69), así que no había manera de ir al sandbox: la API usa el simulador si la cabecera falta.
+- El ambiente de la tokenización era otra variable, `TOKENIZATION_ENVIRONMENT`, separada del de las llamadas a la API: se podía tokenizar contra `sandbox` y cobrar contra `simulator`, una combinación sin sentido.
+- Una API que no respondía salía como «Failed to fetch».
+- `set VARIABLE=valor` define la variable en cmd y no en PowerShell. Si Joshua usó PowerShell, el servidor arrancó con la API por omisión, `localhost:3000`, sin avisar, y eso explicaría el «me pide correr el simulador». No se probó en Windows: es una hipótesis, no un hallazgo.
+
+**Decisión 1: el servidor estático lee argumentos, y por omisión apunta a Render.**
+`server.mjs` acepta `--api-url`, `--environment`, `--public-key=<pasarela>:<llave>` (una vez por pasarela), `--port` y `--help`; las mismas opciones existen como variables (`KIT_PAGOS_API_URL`, `KIT_PAGOS_ENVIRONMENT`, `CHECKOUT_PUBLIC_KEY_<PASARELA>`, `PORT`) y un argumento gana sobre su variable. Los argumentos viajan igual en bash, PowerShell y cmd. Tres scripts: `npm start` (Render, `simulator`), `npm run start:sandbox` (Render, `sandbox`) y `npm run start:local` (`localhost:3000`, `simulator`). Un ambiente o una URL inválidos, o la falta del build, terminan con un mensaje que dice qué corregir. El ambiente `production` no se acepta: exigiría llaves privadas del comercio en el navegador.
+
+La API por omisión es la de Render, no `localhost`. Es una decisión de criterio: es lo que Joshua pidió, y deja el cliente usable sin encender nada. Tiene un costo que se dice abajo.
+
+**Decisión 2: un solo ambiente para las llamadas y para la tokenización.**
+El cliente manda `x-kit-pagos-environment` en cada llamada a `/v1/api` y le pasa el mismo valor a `KitPagosBrowser.tokenizeCard()`. `TOKENIZATION_ENVIRONMENT` desaparece. Si la API responde con `x-kit-pagos-warning` (el uso de credenciales del servidor en `sandbox`), la página lo muestra. La página dice arriba a qué API y con qué ambiente habla.
+
+**Decisión 3: la tarjeta contra un simulador remoto se bloquea antes de enviar el número, y el motivo se dice.**
+El tokenizador del SDK tiene fijo `http://localhost:3000/v1/sim/<pasarela>` como destino del ambiente `simulator` (punto 78), y es a propósito: una página no puede mandar un número de tarjeta a un host que ella elija. Con la API en Render y `simulator`, el token que se obtuviera de `localhost:3000` no serviría, y la tarjeta se estaría mandando a un destino que el comercio no eligió. El cliente detecta esa combinación (`cardTokenizationProblem`) y no envía nada: «Con el ambiente simulator, el SDK tokeniza la tarjeta contra localhost:3000, y esta API está en …». No se cambió el SDK. Con Render se paga con PSE; con tarjeta, `start:local` o `start:sandbox`.
+
+**Decisión 4: una API que no responde dice cuál y qué hacer.**
+Un fallo de red sale como `API_UNREACHABLE`: «No se pudo conectar con la API en <origen>. Verifique que esté encendida; si es la desplegada en Render, puede estar despertando».
+
+**Lo medido** (14 de octubre de 2026, 22:47–22:55 UTC−5; la tabla completa está en `docs/05-ejemplos/checkout-frontend-rest.md`, «En Render y en el sandbox»).
+
+- Pruebas del cliente: 64 en total, con cobertura de sentencias 94.43 % y de ramas 97.84 % (`server.mjs`, 88.69 % de líneas; sin cubrir el bloque que escucha en el puerto). Cubren el ambiente en cada llamada, el aviso, el mensaje de red, el bloqueo de la tarjeta, la precedencia de argumentos sobre variables, las opciones inválidas y, en procesos reales, `--help` (código 0), `--environment=production` y un argumento desconocido (código 1). Once mutaciones sobre `api.ts`, `config.ts` y `server.mjs`: las once las detectó alguna prueba.
+- En el navegador, contra Render: el ambiente `sandbox` llega a las pasarelas reales. Wompi, PSE banco `1`: `APPROVED` en la primera respuesta. Wompi, tarjeta con la llave pública de sandbox: la tokenización llegó a Wompi (rechazó el titular `APRO`, de menos de cinco caracteres) y con otro titular terminó `APPROVED`. Rapyd: la página real «Rapyd Bank Payment Simulation», «Success» y «Pay», vuelta a `localhost` y `APPROVED` (`CLO`). Kushki: la página real «Kushki Bank», «Transacción pendiente», vuelta con «Volver al comercio» y estado `PENDING` (`initializedTransaction`) durante las diez consultas, 14 segundos.
+- Con `start:local`: PSE de Kushki y tarjeta de Wompi, `APPROVED`.
+
+**Hallazgos de la medición.**
+
+- La URL real del PSE de Kushki es `https://api-uat.kushkipagos.com/transfer/v1/agent?token=…&mid=…`, que redirige a `uat-sandbox.kushkipagos.com/checkout/transfer?status=pending&…`. La ruta coincide con la de la página del simulador (punto 93, que la había tomado de la referencia); el dominio que el simulador usaba antes no era el real. Al volver, Kushki agrega `&token=` a la URL del comercio, y la página del simulador no. No se cambió. *(Resuelto en el punto 97: la página del simulador también lo agrega.)*
+- El sandbox de Kushki no cierra el PSE por sí solo: el simulador responde `APPROVED` en la primera consulta y el sandbox seguía pendiente. Es una diferencia de comportamiento entre los dos, no un defecto del cliente, que trata «pendiente» como un estado válido.
+- El `APRO` con que viene el formulario es el titular de prueba de Mercado Pago y la tarjeta de Wompi en sandbox lo rechaza. El campo es libre y el cliente no sabe de pasarelas, así que no se cambió el valor por omisión; queda dicho en el documento del ejemplo. *(Cambiado en el punto 99: el formulario trae `APRO Ruiz`, que Mercado Pago aprueba y Wompi acepta.)*
+
+**Lo que no está resuelto.**
+
+- **Render corre código anterior a los puntos 92 y 93.** Contra Render con `simulator`, el PSE de Kushki, Mercado Pago y Rapyd entrega URL de banco que no sirven, y Mercado Pago responde `400` por la IP. Es exactamente lo que Joshua vio en el PR #155, y lo arregla integrar el #109 y volver a desplegar (`autoDeploy` está activo en `render.yaml`; la rama que Render observa no está en el archivo, y según la tabla de `4-despliegue-en-render-y-coleccion-postman.md` es `devops`). Hasta entonces, `npm start` prueba bien el PSE de Wompi y los mensajes del cliente, y no el de las otras tres.
+- **Mercado Pago en `sandbox` no funciona desde este cliente**: rechaza una `callback_url` de `localhost` con `402` (punto 93), y el cliente se sirve desde `localhost`. Haría falta servirlo desde un host público.
+- Windows y PowerShell no se probaron.
+
+**Estado:** Resuelto en código y documentación en `prototypes/checkout-frontend-rest/` (`server.mjs`, `src/{api,checkout,config,main}.ts`, `index.html`, `package.json` y las pruebas) y en `docs/05-ejemplos/checkout-frontend-rest.md`. Pendiente tras integrar el #109: volver a desplegar Render y repetir el PSE de las cuatro pasarelas contra él en `simulator`.
+
+### 95. Las credenciales «de sandbox» de Mercado Pago eran de producción (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.**
+Para que Joshua probara el cliente C contra los sandboxes reales hubo que medir por qué el PSE de Mercado Pago abría el portal real de PSE de ACH (punto 93) y por qué la tarjeta salía `cc_rejected_high_risk` con cualquier titular. El 15 de octubre de 2026, entre las 10:11 y las 10:17 (UTC−5), con el par `APP_USR-` que el `.env` llamaba de sandbox, las cuatro señales apuntaron a producción: `/users/me` devolvió una cuenta normal y no un usuario de prueba; todos los tokens y pagos traían `live_mode: true`; la `redirect_url` del PSE llevaba con `302` a `registro.pse.com.co`, el portal real, y no al banco de prueba que describe la documentación; y los compradores de prueba no podían pagar (`400`, `403` o `402`), como pasa al mezclar un vendedor real con un comprador de prueba. Render tenía el mismo par: a las 12:22 y a las 13:48, el PSE de Mercado Pago por la API desplegada en `sandbox` llevó a `registro.pse.com.co`. Con ese par, el modo `sandbox` del cliente C cobraba de verdad: una tarjeta real se habría cobrado, y seguir por «Continuar» en el PSE habría sido una transferencia real. No se usó ninguna tarjeta real ni se siguió por «Continuar».
+
+**Lo medido con los otros pares** (15 de octubre de 2026).
+
+| Par | Hora | `/users/me` | Tarjeta | PSE |
+|---|---|---|---|---|
+| `TEST-`, de las «Credenciales de prueba» de la aplicación existente | 12:53–12:56 | La cuenta real; el token de tarjeta, `live_mode: false` | Por la Payments API, `APRO` aprobado | `401 INVALID_CREDENTIALS`: la Orders API no acepta un token `TEST-` (punto 45) |
+| `APP_USR-` de las «Credenciales de prueba» de una aplicación nueva de Checkout API vía Orders | 13:03–13:14 | Un vendedor de prueba (nickname `TEST…`, etiqueta `test_user`); el token de tarjeta, `live_mode: true`, que en un vendedor de prueba no cobra de verdad | Por la Orders API, `processed / accredited`; por la Payments API, `401 «Unauthorized use of live credentials»` | `201`, y la URL `https://www.mercadopago.com.co/sandbox/payments/<12 dígitos>/bank_transfer` lleva con `302` al simulador de bancos de Mercado Pago (`api.mercadopago.com/beta/bc_pse_sim/login`), con un correo corriente y con uno `@testuser.com` |
+
+**Decisión: el proyecto usa el par del vendedor de prueba de la aplicación de Checkout API vía Orders**, en el `.env` y en Render. Es el único par que sirve para el PSE y, con la tarjeta por la Orders API, también para la tarjeta (punto 96). Joan reemplazó el `.env` el mismo día; el cambio en Render quedó en el issue #156, con el paso a paso y sin ningún valor, porque el repositorio es público. `.env.example` dice qué par usar y por qué (punto 97).
+
+**Consecuencia para la evidencia.** Las mediciones de Mercado Pago que `docs/testing-data/mercado-pago.md` registraba como de sandbox con el par `APP_USR-` anterior se hicieron con credenciales de producción. Allí quedaron marcadas como tales, sin reescribirlas: lo que dicen sobre la forma de las respuestas sigue valiendo, y lo que dicen sobre desenlaces (el `high_risk`, el portal de ACH, el `402` con `localhost`) es de producción.
+
+**Estado:** Resuelto en el `.env`. Render, en el issue #156.
+
+### 96. La tarjeta de Mercado Pago pasa a la Orders API, y el SDK normaliza la IP del pagador (SDK 0.6.0, issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.** Con el par del punto 95, el cobro con tarjeta por `POST /v1/payments`, que el SDK usaba hasta la 0.5.0, responde `401 «Unauthorized use of live credentials»`, y el mismo par cobra tarjeta y PSE por `POST /v1/orders`. Además, Mercado Pago rechaza con `400` la IP del pagador escrita como `::1` o `::ffff:127.0.0.1` (punto 97), que es como Node entrega la IP en un servidor que escucha en `::`.
+
+**Decisión 1: desde la 0.6.0, la tarjeta de Mercado Pago se cobra por la Orders API.** La API pública no cambia: `PaymentMethod.card(token, { installments })` sigue igual.
+
+**Decisión 2: el adaptador deduce la marca y el tipo antes de cobrar.** La Orders API exige `payment_method.id` y `type`, y el token no los trae. `GET /v1/card_tokens/{token}` con el access token devuelve `first_six_digits` sin consumir el token, y `GET /v1/payment_methods/search?public_key=…&bins=…` devuelve la marca y el tipo. *Descartado:* pedírselos al comercio en `PaymentMethod.card()` o que `tokenizeCard()` los devuelva, porque habría metido en la API pública el primer dato propio de una pasarela; y emparejar el BIN con `GET /v1/payment_methods`, más frágil. El costo: dos lecturas más por cobro, un peor caso de tres plazos de `timeoutMs`, y `publicKey` obligatoria para cobrar con tarjeta.
+
+**Decisión 3: un rechazo es una transacción `DECLINED`, no un error.** El `402` de una orden fallida trae la orden entera; se normaliza con su `rejectionReason`, igual que en el PSE (punto 83). `insufficient_amount` es `INSUFFICIENT_FUNDS` y `bad_filled_card_data` es `INVALID_CARD_DATA`; `high_risk`, `rejected_by_issuer`, `required_call_for_authorize` e `invalid_card_token` quedan en `UNKNOWN`, con el criterio de sus equivalentes `cc_*`.
+
+**Decisión 4: un monto con centavos se rechaza** (`INVALID_REQUEST`), porque `total_amount` no los admite, como ya pasaba en el PSE. Redondear quedó descartado por el criterio de `toMinorUnits`.
+
+**Decisión 5: sin 3DS.** Las órdenes llegan con `transaction_security.validation: "never"` y el cobro con tarjeta nunca devuelve `REDIRECT_REQUIRED`. Se quitó el 3DS de la Payments API, que nunca se midió.
+
+**Decisión 6: `transaction.payer.email` lleva un relleno** (`customer@mercadopago.com`), porque la orden de tarjeta no devuelve el pagador, como ya pasaba al consultar un PSE.
+
+**Decisión 7: el SDK normaliza la IP del PSE** con la misma regla que `/v1/api` (punto 97), en `mercadopago-pse.ts`, que es el único lugar que la usa.
+
+**Decisión 8: versión menor.** 0.6.0, anunciando en el README lo que cambia: el id es el de la orden (`ORD…`, u `ORDTST…` en un vendedor de prueba), el rechazo llega como `DECLINED`, los centavos se rechazan y hay dos llamadas más.
+
+**Decisión 9: el simulador imita la orden de tarjeta, con diferencias deliberadas.** `POST /v1/sim/mercadopago/orders` atiende tarjeta además de PSE, y hay dos rutas nuevas, `GET /card_tokens/:id` y `GET /payment_methods/search`. El camino de la Payments API sigue, porque `/v1/api` usa la 0.5.0 publicada hasta que se publique la nueva. El titular decide por prefijo en los dos caminos. Las diferencias con la API real (un titular fuera de la tabla sigue la convención de monto o cabecera; un token que el simulador no emitió se acepta como Visa crédito; la búsqueda devuelve una entrada) quedan documentadas en `3-api-de-simulacion.md`: no cambian lo que un comercio obtiene contra la API real, y mantienen las convenciones de monto y los ejemplos con tokens inventados.
+
+**Lo medido** (15 de octubre de 2026, `docs/testing-data/mercado-pago.md`, sección 1.3). Los titulares deciden por prefijo: `APRO` y `APRO Ruiz` aprueban (`201 processed/accredited`), `CONT` queda en `201 processing/in_process`, y los demás responden `402` con la orden `failed` y el motivo en el pago. Una tanda de ocho órdenes a las 13:52 recibió `high_risk` en seis titulares, `APRO` incluido, y la misma combinación aprobó un minuto después; Mercado Pago no informa la causa. Las cuotas son opcionales y el débito solo admite una; la Visa débito de prueba dio `422` en esta cuenta, así que el débito no se verificó de punta a punta. SDK: 55 suites y 933 pruebas, sentencias 97,8 % y ramas 90,98 %; lint, tipos, `metrics` (las 34 clases dentro del umbral), build y `check:readme` en verde. Prueba de contrato contra la API real de Mercado Pago: 7 de 7 a las 16:00, y otra vez a las 18:59 sobre el árbol final. Siete mutaciones (estado `processed`, el `402` como `DECLINED`, la orden en vez de `/payments`, el `type`, el prefijo del titular en el simulador y la IP cruda en el cuerpo y en la validación): todas las detectó alguna prueba.
+
+**Estado:** Resuelto en `sdk/` (0.6.0, sin publicar) y en el simulador. Para probar el PR, Joan publicó `0.6.0-rc.1` con la etiqueta `next`, que no afecta a quien instala `^0.5.0`; el simulador usa ahora la `0.6.0-rc.3` (punto 102); al integrar en `main` se publica la 0.6.0 y el simulador pasa a `^0.6.0`.
+
+### 97. La API normaliza la IP del pagador, la vuelta de Kushki lleva el token, y `render.yaml` y `.env.example` usan los nombres que lee el código (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.** Medido el 15 de octubre de 2026 entre las 10:11 y las 10:13 con un PSE por la Orders API, Mercado Pago aceptó `127.0.0.1`, IPv4 privadas y públicas, `2800:484:1a2b:3c00::20` y `0:0:0:0:0:0:0:1`, y rechazó con `400` `::1` («length must be >= 7, but got 3»), `::ffff:127.0.0.1` («does not match pattern») y un valor con un espacio delante. La API mandaba la IP tal como llegaba (punto 92). El punto 94 encontró que Kushki agrega `token=` a la URL del comercio al volver. `render.yaml` declaraba `WOMPI_WEBHOOK_SECRET`, `RAPYD_ACCESS_KEY`, `RAPYD_SECRET_KEY` y `RAPYD_WEBHOOK_SECRET`, que el código no lee. La sección 4.2 del documento de despliegue decía que la configuración se carga con `dotenv.config()`, y `loadServerEnv()` no hace eso.
+
+**Decisión 1: la API normaliza la IP, incluida la del cuerpo, y solo en esas formas.** `normalizePayerIp()` recorta espacios y escribe `::ffff:a.b.c.d` como `a.b.c.d` y `::1` como `127.0.0.1`, también en la primera dirección de `X-Forwarded-For`. *Descartado:* dejar intacta la IP del cuerpo por ser del comercio, porque un backend en Node que escucha en `::` manda justo esa forma y reescribirla no cambia la dirección. *Descartado:* validar la IP, porque más allá de lo medido no se sabe qué acepta Mercado Pago.
+
+**Decisión 2: la vuelta de la página de banco de Kushki agrega `token=<token de la transferencia>`**, al registrar la URL de retorno en el `init`, con el mismo `withQueryParam()` del `payment_id` de Mercado Pago (punto 93) y respetando la query del comercio.
+
+**Decisión 3: `render.yaml` declara con `sync: false` exactamente los secretos que lee el servidor**, sin los alias. Render ignora estas variables al actualizar un servicio que ya existe ([blueprint-spec](https://render.com/docs/blueprint-spec)), así que el panel se revisa a mano: quedó como paso adicional del issue #156.
+
+**Decisión 4: `.env.example` declara `SIMULATOR_TRUST_FORWARDED_FOR`** (vacío en local; `true` solo detrás de un proxy que ponga `X-Forwarded-For`, porque sin proxy cualquiera la falsificaría), qué llaves públicas lee el cliente C (punto 99) y qué par de Mercado Pago usar (punto 95). La sección 4.2 del documento de despliegue describe lo que hace `loadServerEnv()`: lee todos los archivos que existan (`.env` de la raíz, `<cwd>/.env`, `<cwd>/../.env` y `/etc/secrets/.env`), se queda con el primer valor de cada clave y deja que `process.env` gane, así que en Render una variable de «Environment» tapa la del Secret File.
+
+**Lo medido** (15 de octubre de 2026). Con Node 22.22.3 y `HOST=::`, el socket entrega `::ffff:127.0.0.1` y `::1`; con `0.0.0.0`, `127.0.0.1`. Mutaciones: sin la regla de `::1` fallan 4 de 71 pruebas; sin `::ffff:`, 10; sin recortar espacios, 10; con el cuerpo, el socket o `X-Forwarded-For` sin normalizar, 1, 3 y 4; Kushki sin `token`, 4 de 86.
+
+**Estado:** Resuelto en código. Cierra el pendiente del punto 92 sobre `.env.example` y el hallazgo del punto 94 sobre la vuelta de Kushki.
+
+### 98. El puerto sale de un solo lugar, el alias de Kushki acepta un secreto vacío y la ventana de Rapyd se prueba con el reloj fijo (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.** La revisión del punto 97 encontró tres defectos. `server.ts` leía `process.env.PORT`, mientras `KitPagosProvider` y `BankRedirectOrigins` lo leían de `loadServerEnv()`: un `PORT` puesto solo en un `.env` movía las URL que la API arma hacia sí misma, pero no el puerto en el que escuchaba; y con `PORT` vacío, `Number("")` daba 0 y Fastify escuchaba en un puerto al azar. `KUSHKI_WEBHOOK_SECRET ?? KUSHKI_WEBHOOK_SIGNATURE_ID` dejaba sin efecto el alias si se copiaba la línea vacía de `.env.example`. La prueba del límite exacto de −300 s de Rapyd falló una vez en la suite completa: la prueba y la ruta leen la hora por separado, y si cambia el segundo entre las dos lecturas el timestamp llega como −301 s.
+
+**Decisión 1: `serverPort()` (`src/serverAddress.ts`) es la única fuente del puerto**, leída de `loadServerEnv()`, como `SIMULATOR_SLOW_RESPONSE_MS` (punto 87). Vacío vale 3000; un valor que no sea un entero entre 1 y 65535 detiene el arranque.
+
+**Decisión 2: el alias de Kushki usa `||`**, como `authHook`.
+
+**Decisión 3: el bloque de la ventana de timestamps fija `Date.now`** y agrega los bordes −301 s y +3601 s. *Descartado:* alejar la prueba del límite, porque dejaría de verificar el límite medido.
+
+**Lo medido** (15 de octubre de 2026). Siete mutaciones (alias con `??`, el proveedor con `process.env.PORT`, el origen fijo en 3000, `PORT` vacío como 0, sin rango, el límite con `<=` y una ventana de 301 s): todas las detectó alguna prueba. Sin el reloj fijo y con 1,1 s entre la firma y la petición, el límite de −300 s falla siempre; con el reloj fijo pasa, y pasó 30 de 30 corridas. `PORT=abc` detiene el servidor con código 1. De paso se corrigieron los comentarios que decían que la ruta de banco de Kushki no estaba medida (lo está desde el punto 94), el código citado en la sección 2.2 del documento de despliegue, dos valores por omisión del README del simulador y el voseo de `.env.example`.
+
+**Estado:** Resuelto.
+
+### 99. El cliente C lee sus llaves públicas del `.env`, verifica la integridad del módulo del SDK y trae un titular que sirve a dos pasarelas (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.** El cliente pedía las llaves públicas por argumento aunque el `.env` de la raíz ya las tuviera, junto con secretos. Cargaba el módulo de tarjeta desde jsDelivr sin verificar su contenido. Y el titular `APRO` lo rechazaba la tokenización real de Wompi (punto 94).
+
+**Decisión 1: del `.env` se leen solo las llaves públicas.** Solo los nombres `<PASARELA>_PUBLIC_KEY` (hoy `WOMPI_PUBLIC_KEY` y `MERCADOPAGO_PUBLIC_KEY`); ningún secreto llega a `/config.json`. *Descartado:* una lista con los nombres de las pasarelas, porque `server.mjs` no las nombra (`no-gateway-names.test.ts`); una prueba sobre `.env.example` fija que la regla lee exactamente dos variables. La precedencia es argumento, variable de entorno y archivo. El archivo se lee también en `simulator`, porque las rutas de tokenización del simulador aceptan cualquier llave pública no vacía (medido a las 14:03).
+
+**Decisión 2: la opción para indicar el archivo se llama `--dotenv`** (y `KIT_PAGOS_DOTENV`), para correr el cliente desde una copia sin `.env`, como un worktree. *Descartado:* `--env-file`, porque Node revisa esa opción aunque vaya después del script y termina con código 9 si el archivo no existe, sin que el servidor alcance a dar su mensaje (medido en Node 20.20.2, 22.22.3 y 24.19.0).
+
+**Decisión 3: integridad sha384 del módulo en un import map.** `index.html` fija el hash del archivo de esa URL exacta y el navegador rechaza un archivo distinto antes de ejecutarlo; `npm run check:sri` lo compara con lo que sirve jsDelivr. *Descartado:* servir el módulo desde el cliente, que contradice la premisa del punto 91 («sin instalar `kit-pagos-colombia`»). Si el módulo no carga o no pasa la verificación, la página dice «No se pudo cargar el módulo de tarjeta o no pasó la verificación de integridad. La tarjeta no se envió.» y la traza guarda el error del navegador; el mensaje nombra las dos causas porque el navegador no las distingue.
+
+**Decisión 4: el titular por omisión es `APRO Ruiz`.** Mercado Pago aprueba en su sandbox los titulares que empiezan por `APRO` (punto 96), y Wompi exige al menos cinco caracteres.
+
+**Lo medido** (15 de octubre de 2026, UTC−5). El hash del módulo de jsDelivr, idéntico byte a byte al del paquete de npm, que no importa otros módulos. A las 14:47 y a las 15:26, con el import map activo, la tarjeta de Wompi salió `APPROVED` contra el simulador; entre las 14:51 y las 15:25, con un hash alterado, el navegador bloqueó el módulo (Chrome 148 sobre Electron, y Chrome 156), la página mostró el mensaje nuevo y no hubo tokenización ni cobro. 90 pruebas en Node 22 y en Node 20; las mutaciones de la lista permitida, la precedencia, el archivo inexistente, el import map, el mensaje y `--dotenv` las detectó alguna prueba. Según MDN, soportan `integrity` en import maps Chrome y Edge desde la 127, Firefox desde la 138 y Safari desde la 18; los navegadores anteriores no se midieron.
+
+**Estado:** Resuelto en `prototypes/checkout-frontend-rest/`.
+
+### 100. Mercado Pago no rechaza un cobro duplicado, el PSE sin URL de banco es un pago pendiente y el `423` se reintenta (SDK 0.6.0-rc.2, issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.** El monto reservado 10 409 (`DUPLICATE_PAYMENT`) respondía `501` en las órdenes de Mercado Pago porque nadie había medido qué hace la Orders API con un cobro repetido (punto 96). Se midió el 15 de octubre de 2026 entre las 21:37 y las 21:45 (UTC−5) con el vendedor de prueba del punto 95 (`docs/testing-data/mercado-pago.md`, sección 4):
+
+- **La misma referencia con llaves distintas** crea dos órdenes y cobra dos veces, en tarjeta (2 de 2) y en PSE (2 de 2). Mercado Pago no deduplica por `external_reference`, y su referencia no dice que deba ser única.
+- **La única protección es `X-Idempotency-Key`.** La misma llave con el mismo cuerpo devuelve una copia de la respuesta original, aunque la orden haya cambiado de estado; con otro cuerpo, `409 idempotency_key_already_used`; mandada en paralelo, `423 resource_locked`.
+- **Derivar la llave de la referencia bloquearía el reintento legítimo.** Después de un rechazo, reintentar con otra tarjeta y la misma llave dio `409` (2 de 2).
+
+En la misma noche, las 18 órdenes de PSE creadas entre las 21:33 y las 21:44 nacieron `processing / in_process` sin `redirect_url` y en unos 4 segundos terminaron `failed / processing_error`, con varios pagadores y bancos, por Render y en local. A las 13:12 el mismo cuerpo había entregado la URL. El SDK lo trataba como `MALFORMED_RESPONSE`, como si la respuesta estuviera mal formada. Repetido el 16 de octubre a las 09:07 y a las 14:16, pasó lo mismo. Entre las 15:09 y las 15:23 se descartó que fuera nuestra petición: el ejemplo oficial de PSE, enviado tal cual, falla igual, y Mercado Pago no llega a crear el pago de la transferencia (`docs/testing-data/mercado-pago.md`, «La orden de PSE que nace sin URL»).
+
+**Decisión 1: el SDK mantiene una llave de idempotencia aleatoria por cobro.** La documentación del SDK dice que Mercado Pago no protege contra un cobro duplicado y que el comercio debe consultar antes de reintentar. *Descartado:* derivarla de la referencia, por el `409` medido; y un `idempotencyKey` opcional, que cambia la API pública.
+
+**Decisión 2: `423` es `RESOURCE_LOCKED`, un error transitorio que `RetryHandler` reintenta.** Es un código nuevo de `KitPagosErrorCode`, un cambio aditivo. Con la llave aleatoria el SDK no lo provoca; aparece si dos procesos mandan la misma llave a la vez. En `/v1/api` se responde `423`, el mismo estado de Mercado Pago (`simulator-api/src/kit-pagos-api/errors/kitPagosErrorResponse.ts`), y solo puede llegar desde `createPayment()`: las consultas lo reintentan y, si persiste, terminan en `MAX_RETRIES_EXCEEDED` (`502`). Lo señaló el compilador al pasar el simulador a la rc.2, porque esa tabla exige un estado HTTP por cada código del SDK. *Descartado:* `409`, que Mercado Pago ya usa para una llave repetida con otro cuerpo, un error que no se resuelve reintentando.
+
+**Decisión 3: una orden de PSE que nace `processing` sin URL de banco es una transacción `PENDING`** con el id de la orden y el estado nativo `processing`. Al consultarla, el comercio recibe `DECLINED` con `processing_error`. `MALFORMED_RESPONSE` queda para las respuestas que de verdad no se pueden leer.
+
+**Decisión 4: el simulador imita lo medido.** Con 10 409, el segundo cobro con la misma referencia también sale `201` con otra orden, en tarjeta y en PSE. `POST /v1/sim/mercadopago/orders` imita la idempotencia: por credencial y llave guarda la huella del cuerpo y la respuesta, devuelve la respuesta guardada al mismo cuerpo, `409` a otro cuerpo y `423` mientras la primera petición sigue en curso, con los sobres medidos (nivel 1). La vigencia de 24 horas es una convención: Mercado Pago solo la menciona en la documentación de Point y no se midió.
+
+**Lo medido** (16 de octubre de 2026). SDK: 55 suites y 938 pruebas, sentencias 97,81 % y ramas 91,04 %; lint, tipos, `metrics`, build, `check:readme` y los ejemplos, en verde a las 09:04. Prueba de contrato contra la API real de Mercado Pago: 7 de 7 a las 09:07. Simulador: 47 suites y 1189 pruebas, líneas 97,29 % y ramas 88,79 %, a las 09:10. Mutaciones: sin el mapeo del `423`, sin reintentarlo y con la orden sin URL de vuelta a error, en el SDK; sin el `423`, sin recordar el `402` de un PSE fallido y las demás reglas de la idempotencia, en el simulador. Todas las detectó alguna prueba. Con la `0.6.0-rc.2` publicada en npm, a las 16:06: el simulador con 48 suites y 1195 pruebas, líneas 97,29 % y ramas 88,79 %, lint y tipos en verde, y Newman 41 de 41 peticiones y 44 de 44 aserciones. Quitar el `423` de la tabla hace fallar la compilación y una prueba; quitar `RESOURCE_LOCKED` de la descripción del esquema OpenAPI hace fallar `test/openapi.test.ts`, que ahora exige todos los códigos del SDK.
+
+**Estado:** Resuelto en `sdk/` (publicado como `0.6.0-rc.2`) y en el simulador. El PSE de Mercado Pago en el sandbox queda como límite del sandbox, sin causa conocida. Con las credenciales de prueba de una segunda aplicación de Checkout API vía Orders, el 16 de octubre funcionó dos veces: a las 15:44 llegó a «Banco Prueba PSE», se aprobó con «APROBAR PAGO», volvió al comercio con `payment_id=` y la consulta dio `APPROVED` (`processed`). A las 19:07 falló igual que la primera, también con el mismo cuerpo que había funcionado. Las dos aplicaciones comparten el vendedor de prueba, y en las dos las primeras órdenes de PSE entregaron URL y horas después ninguna. Una tercera, el 17 de octubre entre las 12:41 y las 12:46, entregó la URL en sus tres primeros PSE (dos aprobados y uno abandonado en el banco), así que no es un límite de dos por aplicación; falta medir si el corte depende del tiempo o de los cobros con tarjeta que hubo en las dos primeras. Con la tercera, sin cobros con tarjeta, el PSE seguía entregando la URL más de cuatro horas después (15:12, 15:23, 15:46, 16:35 y, por Render, 16:55); los cuatro últimos fueron por la tienda del prototipo C y terminaron `APPROVED` (puntos 103 a 105). Sin «Volver al comercio», un PSE aprobado en el banco simulado siguió en `action_required`, y pasó a `APPROVED` segundos después de pulsarlo. Los dos PSE de la segunda quedaron cerrados en el banco simulado, así que una transacción abierta no lo explica. No es la petición: la misma pasa de funcionar a fallar sin cambios de nuestro lado (`docs/testing-data/mercado-pago.md`). El proyecto usa el par de la tercera aplicación en el `.env` y, desde el 17 de octubre, en Render (issue #156, punto 105). La tarjeta funcionó con las dos primeras; con la tercera, la primera se cobró el 17 de octubre por la tarde, y el PSE de justo después funcionó (punto 106).
+
+### 101. Lo que la corrida contra los sandboxes reales encontró en nuestro código (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.** El 15 de octubre de 2026 entre las 21:47 y las 22:12 (UTC−5) se corrió el cliente C de punta a punta contra los sandboxes oficiales, con la API de la rama detrás de un túnel de Cloudflare (`.cursor/evidencia/109/sandbox-completo/`, fuera del repositorio). Wompi (PSE con los bancos `1`, `2` y `3`, y tarjeta), Rapyd (PSE con «Success» y con «Error») y la tarjeta de Mercado Pago funcionaron. El PSE de Kushki llegó a la página real y volvió, pero quedó pendiente (`docs/testing-data/kushki.md`, 5.2.2), y el de Mercado Pago no entregó URL de banco (punto 100). La corrida encontró además cuatro defectos nuestros.
+
+**Defecto 1: el motivo del rechazo llegaba vacío por `/v1/api`.** El esquema de la respuesta declaraba `code`, `category` y `message`, y el `RejectionReason` del SDK trae `rejectionCode` y `rejectionCategory`. `fast-json-stringify` descarta lo que el esquema no declara, así que a todo cliente le llegaba `{}`. **Decisión:** la API devuelve los campos del SDK; el esquema OpenAPI, la documentación y el cliente C se alinearon con ellos. Una prueba nueva (`simulator-api/test/rejection-reason.test.ts`) pasa por la ruta real y el SDK instalado, y falla si el motivo sale vacío.
+
+**Defecto 2: el mensaje `API_UNREACHABLE` decía que la API estaba apagada cuando estaba encendida.** Un túnel de Cloudflare cambió un `502` de la API por su propia página, sin CORS, y `fetch` falló igual que si no hubiera respuesta: el estándar Fetch trata los dos casos como error de red, y la página no los puede distinguir. **Decisión:** el mensaje nombra las dos causas posibles y conserva el origen y el error original.
+
+**Defecto 3: después de una vuelta que terminaba «pendiente», la página no dejaba consultar otra vez.** Decía «Consulte de nuevo más tarde», pero ya había borrado el pago pendiente y ocultaba «Ya pagué: consultar el estado». **Decisión:** el pago pendiente se conserva hasta un estado final, y el botón se muestra mientras siga pendiente.
+
+**Defecto 4 (menor): al volver del banco, el formulario mostraba los valores por omisión** junto al resultado de otra pasarela. **Decisión:** al volver, el formulario muestra la pasarela y el método del pago; una carga normal empieza un pedido nuevo.
+
+**Lo medido** (16 de octubre de 2026). En el navegador, entre las 09:42 y las 09:45, contra el simulador: una tarjeta de Mercado Pago con titular `OTHE` muestra «Motivo: rejected_by_issuer (categoría UNKNOWN)»; un PSE de Kushki que queda pendiente después de «Volver al comercio» sigue ofreciendo «Ya pagué», con el formulario en `kushki` y PSE (`.cursor/evidencia/109/defectos-corregidos/`). Cliente C: 96 pruebas, typecheck, build y `check:sri`. Simulador: 48 suites y 1194 pruebas, lint y tipos. Mutaciones: el esquema sin `rejectionCode` hace fallar 4 de 5 pruebas; olvidar siempre el pago pendiente, 2 de 32; ocultar «Ya pagué» con el pago pendiente, 2 de 32.
+
+**Estado:** Resuelto en `simulator-api/` y en `prototypes/checkout-frontend-rest/`.
+
+### 102. El sandbox de Rapyd solo cobra 9 de sus 50 bancos de PSE, y Davibank cambió de nombre (SDK 0.6.0-rc.3, issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.** Al probar el PR contra Render en `sandbox`, el 16 de octubre, Joshua encontró que el PSE de Rapyd llevaba a la página de Rapyd con Davivienda y respondía `INVALID_REQUEST: Rapyd gateway returned an HTTP error status 400` con Nequi. El 17 de octubre, entre las 10:52 y las 11:00 (UTC−5), se cobró una vez con cada banco de `getPseBanks()`, con los datos del cliente C: 9 de los 50 redirigen a `sandboxcheckout.rapyd.net` y los otros 41 responden `400 ERROR_GET_GATEWAY`, «Contact Rapyd Client Support.», que dice que la cuenta no tiene procesador para ese método (`docs/testing-data/rapyd.md`, 5.8). No es nuestra petición: es la misma para los 50. La documentación de Rapyd ya advertía que en sandbox la lista de métodos trae todos los de la plataforma y en producción solo los habilitados, y nada en el catálogo ni en `GET /v1/payment_methods/{tipo}/required_fields` distingue a los 9 de los 41: los campos son idénticos.
+
+De paso apareció que el catálogo cambió desde el 26 de septiembre: `co_pse_scotiabank_colpatria_bank` ya no está, en su lugar está `co_pse_davibank_bank`, y hay tres métodos nuevos (`co_pse_banco_contactar_bank`, `co_pse_accion_fiduciaria_bank` y `co_pse_paycash_bank`) que la lista de PSE de Mercado Pago, de donde sale `PseBankCode`, no trae. La prueba de contrato de Rapyd, que exigía la lista igual a la tabla de traducción, habría fallado; no se había corrido desde entonces.
+
+**Decisión 1: contra el sandbox, `getPseBanks()` de Rapyd devuelve solo los 9 que cobran.** Decisión de Joan: un banco que no se puede cobrar no se muestra. La lista está escrita en `RAPYD_SANDBOX_PSE_TYPES` y `chargeablePseBanks()` la aplica solo cuando el host de la URL base es el del sandbox en el catálogo de URL del SDK (`sandboxapi.rapyd.net`). En producción y en el simulador la lista pasa entera. *Descartado:* filtrar en `/v1/api/pse-banks`, que no hace publicar el SDK pero deja la lista sin filtrar a quien use el SDK directo; y averiguar los cobrables en cada consulta, que exigiría crear un pago por banco. El costo: si Rapyd habilita un banco, la lista lo esconde hasta actualizarla.
+
+**Decisión 2: la prueba de contrato cobra con cada banco del catálogo.** Exige que los que cobran sean exactamente los de `RAPYD_SANDBOX_PSE_TYPES`, que `getPseBanks()` devuelva esos mismos, y que ningún código de `RAPYD_PSE_TYPES` apunte a un método que ya no está. Es la que avisa cuando la lista escrita deja de ser cierta.
+
+**Decisión 3: `PseBankCode.DAVIBANK` se traduce a `co_pse_davibank_bank`.** Con el nombre anterior, su cobro iba a un método que no existe. Los tres métodos nuevos salen de `getPseBanks()` sin `achCode`, como prevé el punto 68, y no se agregan a `PseBankCode` porque no tienen código de compensación medido.
+
+**Lo que queda igual.** El mensaje del error no trae el código de Rapyd (`ERROR_GET_GATEWAY`); ponerlo cambia el manejo de errores de las cuatro pasarelas y se deja para después de este PR.
+
+**Lo medido** (17 de octubre de 2026). Prueba de contrato de Rapyd contra el sandbox, 6 de 6, con las dos pruebas nuevas, hacia las 11:40. SDK: 55 suites y 944 pruebas, sentencias 97,82 % y ramas 91,06 %; lint, tipos, `metrics`, `check:readme` y build en verde. Mutaciones: sin el filtro falla 1 de 44 pruebas del adaptador; con el nombre anterior de Davibank, 3 de 12 de la tabla.
+
+**Estado:** Resuelto en `sdk/`, publicado como `0.6.0-rc.3` el 17 de octubre de 2026, y el simulador lo usa. Con la rc.3, a las 12:50: simulador con 48 suites y 1195 pruebas, lint y tipos en verde, Newman 41 de 41 peticiones y 44 de 44 aserciones, y la API local en `sandbox` devuelve los 9 bancos de Rapyd; en `simulator`, los 4 del simulador.
+
+### 103. El prototipo C se ve como una tienda, la traza va a la consola y la redirección se sigue sola (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.** El cliente C era un formulario de pruebas: un campo de monto, la respuesta técnica de cada pago («Estado final: DECLINED (nativo failed)…») y una «Traza de llamadas a la API» en la página. Cuando la pasarela devolvía una URL de banco, la página la mostraba como enlace y había que pulsarlo. Joan pidió, el 17 de octubre de 2026, que se viera como una tienda de internet, que la depuración fuera por logs y que la redirección ocurriera como en una tienda real.
+
+**Decisión 1: una tienda pequeña con tres productos.** «Tostadero Ceiba», con dos cafés y una taza, un carrito con cantidades, los datos de envío precargados con datos de prueba y el checkout al lado. El monto sale del carrito. Los precios (48 000, 29 000 y 36 000) y sus sumas con hasta tres unidades de cada uno no caen entre 10 001 y 10 604, los montos que la API de Simulación reserva para escenarios de fallo; una prueba lo recorre. Las ilustraciones son SVG propios dentro de `index.html`, sin imágenes ni fuentes externas.
+
+**Decisión 2: la pasarela sigue en el formulario.** En una tienda real la elige el comercio, pero el prototipo C existe para mostrar que cambiar de pasarela es cambiar un valor (punto 91). Queda como un selector «Pasarela» con la nota «En la demo puedes cambiarla; en una tienda real la define el comercio». Su etiqueta es el identificador de `/v1/api/gateways` con mayúscula inicial: escribir los nombres comerciales haría que el código nombre pasarelas, y `test/no-gateway-names.test.ts` lo prohíbe.
+
+**Decisión 3: la traza técnica va a la consola del navegador.** Con el prefijo `[tienda C]`: la configuración, cada llamada a `/v1/api` con su código, los avisos de la API, el estado nativo y el motivo de cada pago y la URL a la que se redirige. El comprador lee mensajes de tienda (`src/messages.ts`), con una pista según la categoría del motivo de rechazo y sin códigos nativos. `describeOutcome()` sigue siendo el texto técnico, ahora en la consola.
+
+**Decisión 4: una redirección se sigue sola.** Con `REDIRECT_REQUIRED` la tienda guarda el pago pendiente y el carrito y hace `location.assign(redirectUrl)`. Al volver por la URL de retorno, consulta y muestra la confirmación con el pedido, sus líneas y el total. Con un pago aprobado vacía el carrito; con uno rechazado lo conserva. La pasarela y el método del último intento quedan elegidos para el siguiente. El aviso «Tienes un pago en proceso» y el botón «Consultar de nuevo» reemplazan a «Ya pagué: consultar el estado». En modo `simulator` con una API que no es la local, la opción de tarjeta aparece deshabilitada en lugar de fallar al pagar (`cardTokenizationProblem()`, punto 94).
+
+**Lo medido** (17 de octubre de 2026). En el navegador, contra una API local en `simulator`: el PSE de Mercado Pago fue directo a la página de banco del simulador y, con «Volver al comercio», a «¡Gracias! Tu pago fue aprobado» con el total; Wompi con el banco `2` dio «Tu pago fue rechazado» sin redirección, con el carrito intacto, y con el banco `3` la consola registró `POST /v1/api/payments -> 201` y «Estado final: ERROR (nativo ERROR)». En `sandbox`, con la API local detrás de un túnel y la tercera aplicación de Mercado Pago, a las 15:23: «Pagar $ 84.000», «Banco Prueba PSE» sin pasar por un enlace, «APROBAR PAGO», «Volver al comercio», el comprobante de Mercado Pago y la vuelta a la tienda con `payment_id=184734495674` y «¡Gracias! Tu pago fue aprobado». Cliente C: 121 pruebas, sentencias 95,59 % y ramas 97,61 %, tipos y build. Capturas en `.cursor/evidencia/109/tienda-prototipo-c/`.
+
+**Estado:** Resuelto en `prototypes/checkout-frontend-rest/`.
+
+### 104. El prototipo C cobra por omisión en los sandboxes oficiales; la alternativa es un simulador local (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.** Desde el punto 94, `npm start` apuntaba a la API de Render con el ambiente `simulator`, `npm run start:sandbox` a la misma API con `sandbox` y `npm run start:local` a un simulador en la máquina. El 17 de octubre de 2026 Joan pidió que la forma predeterminada de correr el prototipo fuera contra los sandboxes reales y que la otra fuera la local.
+
+**Decisión.** El ambiente por omisión del servidor estático y del cliente pasa a `sandbox` (`DEFAULT_ENVIRONMENT` en `server.mjs`, `DEFAULT_CONFIG` en `src/config.ts`), con la misma API por omisión, la de Render. Quedan dos comandos: `npm start`, los sandboxes oficiales, y `npm run start:local`, que ahora fija `--environment=simulator` además de la URL local. `start:sandbox` desaparece porque es lo mismo que `npm start`. Un valor de ambiente que el cliente no reconoce cae en el de omisión, `sandbox`; `production` sigue rechazado por el servidor. En `sandbox`, el servidor avisa al arrancar que alguna pasarela no deja volver a `localhost` y que la página se sirve por un túnel, sin nombrar la pasarela (`test/no-gateway-names.test.ts`).
+
+**Lo que se pierde y cómo se recupera.** El simulador de Render ya no es el modo por omisión, que era el que funcionaba sin credenciales en el servidor ni túnel. Sigue disponible con `npm start -- --environment=simulator`. En `sandbox` el resultado depende de cada sandbox: Wompi responde sin página de banco, Rapyd solo cobra 9 bancos (punto 102), Kushki no cierra el PSE (punto 101) y el PSE de Mercado Pago pide un túnel y una aplicación a la que no se le haya cortado (punto 100).
+
+**Lo medido** (17 de octubre de 2026). Cliente C: 122 pruebas, sentencias 95,62 % y ramas 97,62 %, tipos y build en verde, con las pruebas del servidor y de la configuración cambiadas al nuevo valor por omisión y una nueva que comprueba el aviso del túnel solo en `sandbox`. Arrancado sin opciones, el servidor entrega `"environment":"sandbox"`. A las 15:46, con la tienda arrancada sin `--environment` detrás de un túnel y la tercera aplicación de Mercado Pago, un PSE de 65 000 COP llegó solo a «Banco Prueba PSE», se aprobó y volvió con «¡Gracias! Tu pago fue aprobado» (`payment_id=184739554282`).
+
+**Estado:** Resuelto en `prototypes/checkout-frontend-rest/`.
+
+### 105. Lo que cambió en la tienda después de probarla contra Render (issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.** El 17 de octubre de 2026, hacia las 16:00, Joan probó la tienda con `npm start` (los sandboxes por la API de Render) y reportó: PSE de Wompi y de Rapyd bien; Mercado Pago rechazado; Kushki «se queda consultando»; tarjeta de Wompi y de Mercado Pago bien, y con Rapyd y Kushki el error «Esta pasarela no recibe ese medio de pago desde el navegador» después de pulsar «Pagar». Pidió además que la pasarela fuera antes que el banco y un texto que explicara el prototipo.
+
+**Decisión 1: la tarjeta se ofrece solo con las pasarelas que la pueden tokenizar, y la tienda dice por qué no con las demás.** El cliente no puede nombrar pasarelas (`test/no-gateway-names.test.ts`) y `KitPagosBrowser` no expone en tiempo de ejecución cuáles tokeniza: lo dice solo un tipo, `BrowserSupportedGateway`. La señal es la llave pública: tokenizar exige la de la pasarela, y `/config.json` solo trae las de las pasarelas que el SDK de navegador tokeniza, porque el `.env` solo define `WOMPI_PUBLIC_KEY` y `MERCADOPAGO_PUBLIC_KEY`. Sin llave, la opción «Tarjeta» aparece deshabilitada con «Con esta pasarela no ofrecemos tarjeta: la tarjeta se tokeniza en tu navegador y el SDK de Kit Pagos todavía no lo hace con ella. Paga con PSE o elige otra pasarela.» (`cardUnavailableFor()` en `src/config.ts`; el texto cambió con la decisión 6). Si la tarjeta estaba elegida, vuelve a PSE. *Descartado:* cargar el módulo del SDK al abrir la página para preguntarle, que haría descargar código del SDK también a quien paga con PSE (punto 91), y publicar una versión del SDK que exponga la lista. El costo: con una llave de más en el `.env`, la tarjeta se ofrecería y fallaría con el `UNSUPPORTED_OPERATION` de antes, que sigue manejado.
+
+**Decisión 2: la pasarela va antes del medio de pago y del banco.** De ella dependen la lista de bancos y si hay tarjeta. Mientras llega la lista de la pasarela nueva, el banco y el botón de pagar quedan deshabilitados: en la prueba de esta tarde, pulsar «Pagar» justo después de cambiar de pasarela pudo mandar un banco de la anterior.
+
+**Decisión 3: la espera muestra su avance.** Kushki queda pendiente después de la vuelta, como siempre en este comercio de UAT (punto 101): la tienda hace diez consultas, una cada segundo más lo que tarda Render (unos 15 s en total, medido), y termina en «Tu pago está en proceso» con «Consultar de nuevo». Lo que fallaba era que la espera no decía nada, y se veía como colgada. `PollOptions` acepta `onAttempt`, y la tienda muestra «Consultando con la pasarela (3 de 10)…» en la confirmación y en el botón de pagar. No se acortó: es la misma espera que da tiempo a las pasarelas que sí confirman.
+
+**Decisión 4: un recuadro «Este prototipo es» encima del catálogo** explica qué es la página y qué demuestra, sin nombrar pasarelas.
+
+**Mercado Pago rechazado por Render.** Render todavía tiene el par de la segunda aplicación, a la que se le cortó el PSE el 16 de octubre (punto 100); medido a las 16:20, la orden se rechazó en 1,3 s sin página de banco. La tercera aplicación, en el `.env` local, sigue funcionando. No es un cambio de código: es qué par tiene Render.
+
+**Lo medido** (17 de octubre de 2026). Contra Render en `sandbox`: con Kushki, la tarjeta aparece deshabilitada con el motivo; con Mercado Pago, habilitada. Un PSE de Kushki volvió de «Kushki Bank» y la tienda mostró del «(1 de 10)» al «(10 de 10)» y luego «Tu pago está en proceso». Cliente C: 125 pruebas, sentencias 95,66 % y ramas 97,66 %, tipos y build. Capturas en `.cursor/evidencia/109/tienda-prototipo-c/`.
+
+Con la tienda ajustada, la API local y la tercera aplicación, a las 16:35, un PSE de Mercado Pago de 77 000 COP llegó solo a «Banco Prueba PSE», se aprobó y volvió con «¡Gracias! Tu pago fue aprobado» (`payment_id=184748322702`).
+
+**Decisión 5: Render pasa al par de la tercera aplicación.** Decisión de Joan, el 17 de octubre. Joshua lo cambió en Render esa tarde (issue #156) y, mientras no se sepa si los cobros con tarjeta son los que cortan el PSE (punto 100), no se cobran tarjetas con ese par (la regla duró hasta esa tarde: Joan cobró una y el PSE siguió funcionando, punto 106). A las 16:55, con `npm start` (la API de Render en `sandbox`) y la tienda detrás de un túnel, un PSE de Mercado Pago de 77 000 COP llegó solo a «Banco Prueba PSE», se aprobó y volvió con «¡Gracias! Tu pago fue aprobado» (`payment_id=184751088076`): el mismo recorrido que a las 16:20 se había rechazado.
+
+**Decisión 6: sin llaves, el motivo nombra las dos causas, y el arranque y la consola lo avisan.** Decisión de Joan, el 17 de octubre. La tienda que Joan tenía abierta desde las 15:54 corría desde el worktree, que no tiene `.env`: sin llaves públicas, con Wompi y Mercado Pago decía que el SDK no tokeniza con ellas, lo que es falso. El cliente no distingue las dos causas sin nombrar pasarelas, así que el motivo dice «Con esta pasarela no ofrecemos tarjeta: la tarjeta se tokeniza en tu navegador con la llave pública de la pasarela, y esta tienda no la tiene, porque el SDK de Kit Pagos todavía no tokeniza con ella o porque la tienda arrancó sin esa llave. Paga con PSE o elige otra pasarela.» Cuando `/config.json` no trae ninguna llave, `missingPublicKeysProblem()` lo avisa en la consola con `--dotenv=<ruta del .env>`, y el arranque del servidor dice «Llaves públicas para tarjeta: ninguna; la tarjeta queda deshabilitada (pase el .env con --dotenv=<ruta>)». Cada vez que la tarjeta queda deshabilitada por falta de llave, la consola dice con qué pasarela. *Descartado:* dejarlo así y solo documentarlo. Medido a las 17:31 con la tienda arrancada sin `.env`: los tres avisos salieron como se esperaba. Cliente C: 128 pruebas, sentencias 95,70 % y ramas 97,69 %, tipos, build y `check:sri`; tres mutaciones (el umbral de `missingPublicKeysProblem()`, la segunda causa del motivo y el aviso del arranque), las tres detectadas.
+
+**Estado:** Resuelto en `prototypes/checkout-frontend-rest/` y en Render.
+
+### 106. La tarjeta con las cuatro pasarelas en el prototipo C: Kushki tokeniza en el navegador y Rapyd cobra en su página (SDK 0.6.0-rc.4, issue #109)
+
+**Responsable:** Joan (issue #109).
+
+**Contexto.** El 17 de octubre de 2026 Joan pidió que la tienda cobre con PSE y con tarjeta en las cuatro pasarelas. Hasta ese día la tarjeta solo funcionaba con Wompi y Mercado Pago: `KitPagosBrowser` rechazaba Kushki y Rapyd por la decisión del 30 de septiembre del issue #110 (Kushki «exige» campos alojados en iframes y Rapyd no tokeniza en el navegador), y el punto 91 dejó la tarjeta de Rapyd fuera del cliente (decisión 8).
+
+**Lo medido** (17 de octubre de 2026, UTC−5):
+
+- **Kushki tokeniza desde el navegador.** `POST https://api-uat.kushkipagos.com/card/v1/tokens` con `Origin` de otro dominio: el preflight responde `200` con `access-control-allow-origin: *` y admite la cabecera `Public-Merchant-Id`; el `POST` responde `201 { token }` (32 hexadecimales). Pide `totalAmount` y `currency`: sin monto o con un número corto, `400 K001`; sin moneda, `400 K055`; con un merchant id que no existe, `400 K004`; los tres con CORS. Sin `Public-Merchant-Id`, `401` sin CORS. La tarjeta `5451 9515 7492 5480`, que antes respondía `K006`, tokenizó, y una vencida también.
+- **El token de Kushki queda atado al monto.** Tokenizado por 48 000 y cobrado por 48 000 a través de Render, `APPROVED`; cobrado por 50 000, `400 K220` «Monto de la transacción es diferente al monto de la venta inicial». El SDK de servidor lo devuelve como `INVALID_REQUEST` sin el mensaje de Kushki.
+- **Rapyd cobra en su página y acepta volver a `localhost`.** Una tarjeta sin token por Render responde `REDIRECT_REQUIRED` hacia `sandboxcheckout.rapyd.net`, también con el retorno en `http://localhost:4100`. La página pide la tarjeta; después de «Place Your Order», el «Rapyd 3DS Simulator» pide el código `123456`, y Rapyd devuelve solo a la URL de retorno.
+
+**Decisión 1: `KitPagosBrowser` tokeniza con Kushki por REST, como con Wompi (0.6.0-rc.4).** `KushkiTokenizer` tiene su catálogo cerrado (UAT, producción y el simulador), recibe el monto en `TokenizeCardParams.amount`, con el formato de `/v1/api`, y la moneda en `currency`; valida antes de enviar el merchant id, los campos, la expiración y el monto (mayor que cero, hasta dos decimales), y traduce `K004` a `INVALID_CREDENTIALS`. Revierte la conclusión de #110 sobre Kushki: los campos alojados existen, pero la ruta REST acepta el navegador, y el alcance PCI es el mismo que con Wompi, porque la tarjeta pasa por el JavaScript de la página hacia la pasarela y no por el comercio. Rapyd sigue con `UNSUPPORTED_OPERATION`, ahora con un mensaje que dice crear el pago sin token y seguir la redirección. *Descartado:* envolver los campos alojados de Kushki, que obligaba a cargar su SDK y manejar iframes. El módulo pasa de 16 531 a 21 955 bytes sin minificar (de 4 502 a 5 292 con gzip).
+
+**Decisión 2: la API dice cómo recibe la tarjeta cada pasarela.** Decisión de Joan. `GET /v1/api/gateways` agrega `cardCapture`: `BROWSER_TOKEN` (la página tokeniza y manda el token) o `HOSTED_PAGE` (el pago se crea sin token y redirige a la página de la pasarela). Lo declara `simulator-api/src/kit-pagos-api/card-capture.ts` con el tipo `Record<Gateway, …>`, que obliga a una entrada por pasarela, y `test/card-capture.test.ts` comprueba contra el simulador que las `HOSTED_PAGE` redirigen una tarjeta sin token y las `BROWSER_TOKEN` la rechazan con `INVALID_REQUEST`. Así el cliente sigue sin nombrar pasarelas y distingue «falta la llave» de «no se ofrece». *Descartado:* que el cliente mande la tarjeta sin token cuando no tiene llave y siga lo que responda la API, que confunde una llave faltante con una pasarela de página alojada.
+
+**Decisión 3: la llave pública de Kushki va al `.env` como `KUSHKI_PUBLIC_KEY`.** Decisión de Joan. El servidor de la tienda lee `<PASARELA>_PUBLIC_KEY` sin nombrar pasarelas, y Kushki la llama `KUSHKI_PUBLIC_MERCHANT_ID`; la línea nueva lleva el mismo valor y solo la lee la tienda. *Descartado:* que la API entregue las llaves públicas de sus propias credenciales, que quitaba el `.env` local de la tarjeta pero revertía el punto 99.
+
+**Decisión 4: la tienda cobra la tarjeta de las cuatro.** Con `BROWSER_TOKEN` tokeniza con `KitPagosBrowser`, ahora fijado en `0.6.0-rc.4` con su integridad, y manda siempre el monto y la moneda, que las otras pasarelas ignoran. Con `HOSTED_PAGE` oculta los campos, dice «Escribirás los datos de la tarjeta en la página segura de la pasarela; esta tienda no los ve», crea el pago sin token (`payOnHostedPage()`) y sigue la redirección como un PSE; al volver, consulta el pago pendiente. Sin `cardCapture`, la API corre un código anterior y la tarjeta queda deshabilitada con «la API no dice cómo la recibe». El motivo de la decisión 6 del punto 105 se parte en dos: sin la llave de una pasarela que tokeniza, «esta tienda arrancó sin ella».
+
+**Decisión 5: el simulador imita la tokenización de Kushki y la vuelta de la página de Rapyd.** `POST /v1/sim/kushki/card/v1/tokens` responde lo medido, con su CORS (el `401` sin CORS incluido); guarda el monto de cada token, y el cobro de otro monto responde `K220`. Solo aplica el escenario de la cabecera, como la tokenización de Wompi: el desenlace lo decide el cobro, por el monto. La página de pago simulada de Rapyd ofrece «Volver al comercio» hacia la `complete_payment_url` del comercio (nivel 3, como las páginas de banco del punto 93): en la prueba de las 20:33 no lo tenía, y el pagador se quedaba ahí. El simulador pasa a la rc.4; las rutas que imitan a las pasarelas son 33 (35 en total), y la colección Postman, 42 peticiones.
+
+**Lo medido con la tienda** (17 de octubre de 2026). Con la API de la rama en local, el `.env` de la raíz y la tienda en `localhost` en `sandbox`, sin túnel: Kushki, 48 000 COP, `APPROVED` (`APPROVAL`); Rapyd, 29 000 COP por su página y el simulador de 3DS, de vuelta en la tienda, `APPROVED`; Wompi, 36 000, y Mercado Pago, 48 000 (`processed`), `APPROVED`. Con el simulador local (`start:local`): Kushki `APPROVAL`, y Rapyd por la página simulada y «Volver al comercio», `APPROVED`. Capturas en `.cursor/evidencia/109/tarjeta-cuatro-pasarelas/`. Verificación: SDK, 56 suites y 996 pruebas (sentencias 97,89 %, ramas 91,28 %), lint, build, `check:readme` y métricas CK; contrato de Kushki contra UAT, 7 de 7, con la tokenización de `KitPagosBrowser` y el rechazo por monto; simulador, 50 suites y 1229 pruebas (líneas 97,8 %, ramas 89,69 %) y lint; Newman, 42 de 42 peticiones y 47 de 47 aserciones; cliente, 138 pruebas (sentencias 95,76 %, ramas 97,74 %), tipos, build y `check:sri`. Once mutaciones (la validación del monto, `K004`, la cabecera del merchant id, la rama de Kushki en `KitPagosBrowser`, `K220`, el `401` sin CORS, el modo de Rapyd, el modo `HOSTED_PAGE` en el cliente, el pago sin token, el monto en la tokenización y la vuelta de la página de Rapyd), todas detectadas.
+
+**La tarjeta de Mercado Pago con la tercera aplicación.** Joan cobró una tarjeta con ese par la tarde del 17 de octubre y después un PSE, y los dos salieron bien; a las 20:27 la tienda cobró otra (`processed`). Si el PSE se corta en las horas siguientes, la hipótesis de los cobros con tarjeta del punto 100 gana peso.
+
+**Estado:** Resuelto en `sdk/` (publicado como `0.6.0-rc.4`), en el simulador y en `prototypes/checkout-frontend-rest/`. En Render, cuando Joshua despliegue el commit.
+
+### 107. Las métricas CK de la API de Simulación, dentro de los umbrales y verificadas en CI; el código de la pasarela en el mensaje de error (issue #153, SDK 0.6.0-rc.5)
+
+**Responsable:** Orduz (issue #153).
+
+**Contexto.** La condición 4 de la DoD exige WMC ≤ 20, CBO ≤ 5, RFC ≤ 20 y MAX_CC ≤ 10 en las clases modificadas, pero la §6.1 de `methodology.md` decía que las métricas se calculan sobre `sdk/src`, y el simulador nunca se había medido contra esos umbrales. Medido el 17 de octubre de 2026 sobre `5b98d14`, la base de la rama: 7 de 18 clases fuera de umbral. La fábrica de Mercado Pago había empeorado con las rutas de tarjeta del PR #155, de WMC 38 y RFC 25 a WMC 48 y RFC 32. `npm run metrics` tampoco corría en CI, ni siquiera sobre el SDK.
+
+**Las decisiones de Joan.** Del 17 de octubre de 2026:
+
+1. Las cuatro fábricas se dividen en clases por recurso, con nombre único.
+2. `KitPagosProvider` queda como excepción registrada, con este punto.
+3. CI, opción B: el modo guarda corre en el job del SDK y en el del simulador.
+4. El mensaje de error lleva el código y el motivo nativos. Esto revisa la decisión 2 del punto 64.
+5. La tokenización cifrada de Wompi no se implementa: se ratifica el punto 81.
+6. Un solo PR cierra el #153.
+
+Del 18 de octubre:
+
+7. Se publica la `0.6.0-rc.5` y el simulador pasa a esa versión en este PR.
+8. Las dos imprecisiones del conteo de CBO se corrigen aquí.
+
+**La tabla de antes y después.** En la columna «Antes» va lo que reportaba el script el 17 de octubre, con el conteo viejo. En «Antes, conteo nuevo» va el mismo código medido con el conteo corregido (decisión 6). «Después» es el 18 de octubre. Los valores son WMC / CBO / RFC / MAX_CC; en negrita, los que se pasan del umbral.
+
+| Clase (bajo `simulator-api/src/`) | Antes | Antes, conteo nuevo | Después | Qué se hizo |
+|---|---|---|---|---|
+| `auth/CredentialResolver` | **33** / 2 / 7 / **19** | igual | 16 / 2 / 7 / 5 | La tabla `SERVER_PROFILES` (decisión 1) |
+| `webhooks/SignatureGenerator` | **21** / **7** / 14 / 8 | igual | 4 / 4 / 4 / 2 | Un armador por pasarela en su módulo (decisión 2) |
+| `gateways/mercadopago/GatewayMockFactory` | **48** / **8** / **32** / **11** | igual | `Payment` 13 / 2 / 8 / 3 · `Order` 16 / 3 / 14 / 6 · `Card` 11 / 3 / 13 / 8 · `Error` 3 / 0 / 3 / 1 | Clases por recurso (decisión 3) |
+| `gateways/rapyd/GatewayMockFactory` | **31** / **10** / **23** / 8 | igual | `Payment` 11 / 2 / 8 / 5 · `Checkout` 9 / 4 / 5 / 8 · `PseSetup` 5 / 3 / 7 / 4 · `Error` 3 / 0 / 4 / 1 | Clases por recurso |
+| `gateways/kushki/GatewayMockFactory` | **25** / **8** / 18 / 9 | igual | `Charge` 10 / 3 / 8 / 5 · `Transfer` 12 / 4 / 7 / 9 · `Error` 3 / 0 / 3 / 1 | Clases por recurso |
+| `gateways/wompi/GatewayMockFactory` | 11 / **6** / 14 / 3 | 11 / 5 / 14 / 3 | `Transaction` 4 / 2 / 4 / 1 · `Token` 4 / 3 / 7 / 3 · `Error` 3 / 0 / 3 / 1 | Clases por recurso |
+| `services/KitPagosProvider` | 16 / **7** / 7 / 5 | igual | igual | Excepción registrada (decisión 4) |
+| `scenarios/ScenarioEngine` | 14 / 4 / 8 / 10 | 14 / 5 / 8 / 10 | 14 / 5 / 8 / 10 | Nada: el 4 era el alias que el conteo no veía |
+
+En el reporte las fábricas se llaman `MercadoPagoPaymentMockFactory`, `RapydCheckoutMockFactory`, `KushkiErrorMockFactory`, y así; en la tabla se abrevian. Resultado: 28 clases. 27 dentro de los umbrales y `KitPagosProvider` cubierta por la excepción. El modo guarda con el registro sale con 0; sin el registro, con 1.
+
+**Decisión 1: `CredentialResolver` lee el perfil del servidor de una tabla.** `resolveFromServerProfile()` tenía un `case` por pasarela, y los cuatro hacían lo mismo: leer dos claves obligatorias, devolver `undefined` si faltaba una y agregar las opcionales. `SERVER_PROFILES` declara por pasarela las variables de la clave pública, de la privada y de cada opcional, y una sola función de módulo, `credentialsFromProfile()`, recorre la tabla. La tabla expresa los dos casos que no son lectura directa:
+
+- Kushki busca `KUSHKI_WEBHOOK_SECRET` y, si está vacía, `KUSHKI_WEBHOOK_SIGNATURE_ID`. Una línea vacía como la de `.env.example` no tapa el alias.
+- Rapyd usa su `secret_key` también como `webhookSecret` (punto 54).
+
+Se descartó extraer un método privado por pasarela. Por el punto 34, eso pasa el WMC de `1 + D` a `k + D` y no lo baja.
+
+**Decisión 2: un armador de webhook por pasarela, despachado por tabla.** El cuerpo y la firma de cada pasarela se movieron tal cual a `wompiWebhook.ts`, `mercadoPagoWebhook.ts`, `kushkiWebhook.ts` y `rapydWebhook.ts`; los tipos compartidos y `WebhookUnavailableError`, a `webhookTypes.ts`. `SignatureGenerator` conserva su constructor, `generate()` y el secreto del perfil, y despacha con `WEBHOOK_BUILDERS`, tipada como `{ [G in Gateway]: WebhookBuilder<G> }`: si se agrega una pasarela sin armador, no compila, igual que la tabla de códigos del punto 64. `SignatureGenerator.ts` sigue exportando los tipos y el error, así que `routes/webhooks.ts`, `autoEmission.ts`, `webhookDispatch.ts` y las pruebas no cambiaron. Se descartó dejar el `switch` y mover solo los cuerpos a funciones: el `switch` conservaba la complejidad y las firmas seguían nombrando los tipos de las cuatro pasarelas, que es de donde salía el CBO 7.
+
+**Decisión 3: las fábricas, una clase por recurso de la API de cada pasarela.**
+
+- **Las clases.** Mercado Pago queda en pagos de `/v1/payments`, órdenes de `/v1/orders` y la tarjeta antes del cobro (token y medio de pago del BIN). Rapyd queda en pagos de `/v1/payments`, la página de pago de `/v1/checkout` y las dos llamadas que preparan un PSE (cliente y catálogo). Kushki queda en cobros y transferencias, y Wompi en transacciones y los dos tokens previos.
+- **Una clase de errores por pasarela.** Cada una tiene además una clase `…ErrorMockFactory` con los tres cuerpos de error nativos, porque `technicalFailure()`, `queryFailure()` y `bankListFailure()` los usan en todas las rutas y no son de ningún recurso. Por eso son una clase más por pasarela de las que se estimaron al decidir.
+- **El archivo y los nombres.** El archivo `GatewayMockFactory.ts` se conserva como módulo del componente «Gateway Mock Factory» de cada pasarela. Eso deja intacta `test/rapyd-state-machine.test.ts`, que importa `RAPYD_CARD_DECLINE` de ahí. Los nombres ya no se repiten en las cuatro, que era lo que impedía registrar una excepción por clase.
+
+De paso:
+
+- **Dos métodos sin llamador.** Se eliminaron `buildProcessedOrderResponse` de Mercado Pago y `buildTransferStatus` de Kushki. Ninguna ruta ni prueba los usaba desde que la máquina de estados mueve los registros (#124), y el segundo repetía los valores de relleno de `buildTransferSeed`.
+- **El token de tarjeta de Kushki.** La ruta `POST /card/v1/tokens` pedía el token a `buildTransferToken()`. Ahora lo pide a `KushkiChargeMockFactory.buildCardToken()`, con la misma forma medida: 32 hexadecimales (`docs/testing-data/kushki.md` §1.3).
+- **El MAX_CC de Mercado Pago.** El titular del token pasó a `tokenCardholder()`, y eso bajó el MAX_CC de `buildTokenCardResponse` de 11 a 8.
+- **Los ayudantes de Rapyd.** Los estáticos privados de Rapyd (`buildPaymentId`, `buildStatus`, `wrap`) pasaron a funciones de módulo, porque los usan tres clases.
+
+Se descartó convertir los constructores en funciones de módulo sin clase. Las clases saldrían del reporte, y la métrica dejaría de verlas en vez de pasar. También se descartó partir por medio de pago (tarjeta frente a PSE): en Rapyd, la clase de PSE habría tenido que nombrar los tipos de clientes, pagos y catálogo.
+
+**Decisión 4: `KitPagosProvider` queda como excepción de CBO 7.** Es la costura entre la capa REST y el SDK: recibe la pasarela y las cabeceras y devuelve una instancia de `KitPagos`. De los siete tipos de sus firmas, cinco son datos sin comportamiento (`Gateway`, `RequestHeaders`, `TargetEnvironment`, `ResolvedCredentials` y `Credentials`), como `PseBank` en el punto 47. Los otros dos son colaboradores: `CredentialResolver`, que se inyecta, y `KitPagos`, que construye. Se descartaron dos salidas:
+
+- Sacar `instanceFor()` y `createInstance()` a funciones de módulo bajaría el conteo sin cambiar de qué depende la clase.
+- Una clase aparte que construya las instancias movería el acoplamiento sin reducirlo.
+
+La excepción admite hasta 7 (`allowed`). Si la clase sube a 8, la violación vuelve.
+
+**Decisión 5: el registro de excepciones del simulador, por archivo.** `ck-metrics.ts` acepta `--exceptions <archivo>`, solo con `--root`. El registro del simulador es `simulator-api/ck-exceptions.json`, separado de `KNOWN_EXCEPTIONS`. Cada entrada lleva `file`, `className`, `metric`, `allowed`, `logPoint` y `reason`.
+
+- **Errores de uso.** Un registro ilegible o una entrada incompleta sale con código 2: una excepción sin el punto del log que la justifica no es una resolución válida (§6.2).
+- **Entradas vencidas.** Una entrada que ya no cubre ninguna violación hace fallar el modo guarda. Puede ser porque la clase ya cumple, porque cambió de archivo o de nombre, o porque la métrica pasó de `allowed`.
+- **El JSON.** Con `--json` se escriben también las excepciones aplicadas y las vencidas.
+
+Sin argumentos, el script produce exactamente la salida de antes (`diff` vacío contra la medición del 17 de octubre).
+
+**Decisión 6: el CBO cuenta referencias de tipo, no texto.** El script buscaba cada nombre importado como texto dentro de la firma, y tenía dos fallas:
+
+- Un nombre contenido en otro contaba dos veces: la fábrica de Wompi tenía CBO 5 y no 6, porque `WompiTransactionResponse` contaba también `WompiTransaction`.
+- `import { GatewayMockFactory as WompiMockFactory }` dejaba fuera la fábrica de `ScenarioEngine`, cuyo CBO real era 5 y no 4.
+
+Ahora se leen los `TypeReference` y `typeof` de cada firma, también dentro de argumentos genéricos, y se comparan por nombre exacto con los importados, por el alias si lo hay. En el SDK no cambió ningún valor. Con el conteo corregido, el código de antes daba 6 clases fuera de umbral y no 7. Se descartó resolver los símbolos con el verificador de tipos: es más lento y no cambiaba ningún resultado.
+
+**Decisión 7: las métricas en CI.** El job `sdk` corre `npm run metrics` después de las pruebas. El job `simulator-api` instala las dependencias de `sdk/`, porque el script vive ahí, y corre el modo guarda con el registro. La CI se dispara en los PR hacia `devops` y `main`; este PR está apilado sobre `109-cliente-frontend-rest`, así que la corre cuando se le cambie la base.
+
+**Decisión 8: el mensaje de un error HTTP lleva el código y el motivo de la pasarela.** Medido el 17 de octubre: un token de Kushki emitido por 48 000 y cobrado por 50 000 respondía `400 K220`, y a `/v1/api` llegaba solo «Kushki gateway returned an HTTP error status 400» (punto 106).
+
+- **El mensaje nuevo.** `ErrorHandler.fromHttpStatus()` agrega entre paréntesis el detalle que lee `gateway-error-detail.ts`: «Kushki gateway returned an HTTP error status 400 (K220: Monto de la transacción es diferente al monto de la venta inicial)». El `code` normalizado no cambia.
+- **La tabla por pasarela.** `gateway-error-detail.ts` es una tabla en su propio módulo, como las de rechazo del punto 87, para que `ErrorHandler` no gane ramas ni acoplamiento: su WMC sigue en 18 y su CBO en 2. Las formas leídas son las medidas: Kushki `{ code, message }`; Wompi `{ error: { type, reason } }` o `{ error: { type, messages } }`; Mercado Pago `{ errors: [{ code, message }] }`, `{ code, message }` o `{ message, error, cause[] }`; Rapyd `{ status: { error_code, message } }`.
+- **Lo que no se lee.** Un cuerpo que no es JSON no aporta detalle, y el detalle se corta en 300 caracteres.
+- **La limpieza.** El mensaje pasa por `sanitize()` y por `redactCredentials()`, que quita el valor exacto de cada credencial. La prueba que ya existía del `401` de Wompi con la llave `garbage` repetida en el `reason` ahora ejercita justo ese camino.
+- **K004.** `reclassifyKushkiCredentialError()` no repite `K004` cuando el mensaje ya lo trae.
+
+Revisa la decisión 2 del punto 64: el mensaje ya no es solo una plantilla, pero `originalPayload` sigue sin salir de `/v1/api`. Se descartaron tres salidas:
+
+- Exponer `originalPayload` en `/v1/api`: el cuerpo crudo puede repetir datos de la petición.
+- Agregar códigos por pasarela a `KitPagosErrorCode`: cambia la API pública, y el código normalizado es el contrato.
+- Leer cada forma dentro de `ErrorHandler`: subía su WMC y su CBO.
+
+**Decisión 9: la `0.6.0-rc.5`.** El SDK sale como `0.6.0-rc.5` con la etiqueta `next`, y el simulador la pide exacta. El bundle de navegador no cambió (21 955 bytes, la misma SRI que la rc.4), así que la tienda sigue cargando la rc.4 de jsDelivr hasta la `0.6.0` final.
+
+**Lo medido** (18 de octubre de 2026):
+
+- **SDK:** 57 suites y 1 040 pruebas (sentencias 97,93 %, ramas 91,6 %), lint, build, `check:readme`, `npm pack --dry-run` y métricas, con la salida idéntica a la de antes.
+- **Contrato contra Kushki UAT:** 7 de 7, con la aserción nueva del mensaje con `K220`.
+- **Simulador:** 51 suites y 1 232 pruebas, que son las 1 229 de antes, sin tocar, más 3 nuevas (líneas 97,93 %, ramas 89,71 %; antes 97,8 % y 89,69 %). Lint y `tsc` limpios.
+- **El simulador con el SDK nuevo:** con el paquete local en una copia temporal, las 1 229 pruebas de antes pasan y `/v1/api` responde `400 INVALID_REQUEST` con «… (K220: Monto de la transacción es diferente al monto de la venta inicial)». Esa prueba, `test/kushki-k220-through-api.test.ts`, entra al repositorio con el commit que pasa el simulador a la rc.5, porque con la rc.4 no pasaría.
+- **Newman,** sobre una copia sin `.env`: 42 de 42 peticiones y 47 de 47 aserciones.
+- **Ejemplos:** los 11 contra el simulador de la rama, todos con salida 0 (escenarios 61 de 61, intercambiabilidad igual en las cuatro).
+- **Prototipos y landing:** A y B, 42 pruebas cada uno; C, 138 pruebas, build y `check:sri`; la paridad del esqueleto; los ejemplos compilan contra el SDK de la rama; la landing pasa `check:snippets` y build.
+- **La tienda contra el simulador de la rama:** las cuatro pasarelas con PSE y con tarjeta, aprobadas.
+- **La tienda contra los sandboxes oficiales:**
+  - Wompi, Mercado Pago y Kushki con tarjeta, aprobadas.
+  - Rapyd llegó a su página alojada real.
+  - `GET /v1/api/pse-banks` respondió en las cuatro: 3, 47, 7 y 9 bancos.
+  - Todo con las credenciales que arma `SERVER_PROFILES`.
+- **Mutaciones:** 29, todas detectadas. Una por regla nueva: las cuatro lecturas del detalle, el recorte, la limpieza, `K004`, la tabla de credenciales con sus dos casos especiales, el despacho de webhooks, el token de Kushki, el titular de Mercado Pago, el registro por archivo, el tope, la entrada vencida, el alias, `typeof`, los argumentos genéricos y la búsqueda por texto.
+- **Una prueba que faltaba.** La mutación que fijaba el titular del token de Mercado Pago en `APRO` sobrevivía, porque las pruebas existentes mandaban justamente `APRO`. Se agregó `test/mercadopago-card-token-holder.test.ts`.
+
+Capturas en `.cursor/evidencia/153/`.
+
+**Estado:** Resuelto en `simulator-api/` y `sdk/` (publicado como `0.6.0-rc.5`) y en `.github/workflows/ci.yml`. En Render, cuando Joshua despliegue el commit.
+
+### 108. La 0.6.0 sale de las candidatas, y la prueba final antes de integrar el #155 (issues #109 y #153)
+
+**Responsable:** Orduz.
+
+**Qué trae la 0.6.0 frente a la 0.5.0.** Es la versión que se probó como `0.6.0-rc.1` a `rc.5`, sin cambios de código desde la rc.5. Sale como `latest` en npm, en lugar de la 0.5.0. Trae:
+
+- **Tarjeta de Mercado Pago por la Orders API**, y la IP del pagador normalizada (punto 96).
+- **El PSE de Mercado Pago sin URL de banco** pasa a ser un pago pendiente, y el `423` se reintenta (punto 100).
+- **Rapyd en sandbox** muestra solo los 9 bancos que cobra (punto 102).
+- **`KitPagosBrowser` tokeniza con Kushki** (punto 106).
+- **El mensaje de un error HTTP** lleva el código y el motivo de la pasarela (punto 107).
+
+**Cómo sale.** La publica el workflow `Publish SDK to npm` (`.github/workflows/publish.yml`) cuando el #155 llega a `main`, como anticipaba el punto 96. El workflow corre en cada push a `main` que toque `sdk/`: si la versión de `sdk/package.json` no está en npm, corre las pruebas, compila y publica. Así salió la 0.5.0 con el #145. `main` tiene la 0.5.0 y el #155 trae la 0.6.0.
+
+**Decisiones de Joan (18 de octubre de 2026).**
+
+1. **La 0.6.0 sale por el workflow, no a mano.** Publicarla desde la rama del prototipo habría permitido pasar todo a la 0.6.0 dentro del mismo #155, pero la habría publicado una máquina y no el CI.
+2. **Los prototipos A y B también pasan a `^0.6.0`.**
+   - **Por qué no se rompe nada.** En esta rama ninguno de los dos llama al SDK desde el servidor: los dos sirven su módulo de navegador (`/vendor/kit-pagos-colombia/browser.js`). Y el módulo de pagos de B que trae la rama `151-prototipo-b-checkout-con-sdk` (Henao) reemplaza `KitPagos` por un doble en sus pruebas.
+   - **Lo que implica para la Fase 5.** Cuando B cobre de verdad, lo hará con la 0.6.0. Eso incluye la tarjeta de Mercado Pago por la Orders API, que exige las credenciales de una aplicación de Orders (punto 95).
+
+**Por qué en dos PR.** El #155 entra con el simulador en `0.6.0-rc.5` y la tienda en `0.6.0-rc.4`, que es lo que se probó abajo. No pueden pasar a la 0.6.0 en el mismo PR, porque el lockfile del simulador pediría un paquete que todavía no está en npm y el `npm ci` del CI fallaría. Esperar no cambia lo que hacen: el último commit en `sdk/` es `dc50a58`, y la rc.5 se publicó dos minutos después. Cuando el workflow publique, un PR corto desde `devops` hace el cambio:
+
+- **El simulador** pide `^0.6.0`.
+- **Los prototipos A y B** piden `^0.6.0`.
+- **La tienda** carga `kit-pagos-colombia@0.6.0` desde jsDelivr con la misma SRI que la rc.4: el bundle de navegador no cambió desde entonces (21 955 bytes).
+
+**El conflicto del #155.** GitHub marcaba el #155 con 6 conflictos (`ci.yml`, `tokenizationCors.ts` y su prueba, el log, `3-api-de-simulacion.md` y `prototypes/README.md`), y git no veía ninguno. Los commits del esqueleto de los prototipos (#130) entraron dos veces: a `devops` por el PR #152 y a la rama del prototipo por su cuenta. Así las dos ramas quedaron con dos bases comunes (`0a981a1` y `e91bf42`). GitHub mezcló con una sola, y git, al usar las dos, da una mezcla limpia. Se resolvió mezclando `devops` en la rama del prototipo (`f282ed3`). Lo único que trajo fue el commit `995c6c1`, que corrige «punto 88» por «punto 89» en dos comentarios de la tokenización con CORS. La CI del #155 quedó con sus 8 checks en verde, incluidos los pasos nuevos de métricas.
+
+**La prueba final**, del 18 de octubre de 2026 entre las 22:06 y las 22:40, sobre `f282ed3`.
+
+- **Contra los sandboxes oficiales.** La API de la rama corrió detrás de un túnel y la tienda detrás de otro.
+
+  | Pasarela | PSE | Tarjeta |
+  |---|---|---|
+  | Wompi | Aprobado, sin página de banco | Aprobado |
+  | Rapyd | Aprobado, por «Rapyd Bank Payment Simulation» con los 9 bancos | Aprobado, por su página alojada y el simulador de 3DS |
+  | Kushki | `PENDING` tras la página real «Kushki Bank», el límite de su UAT (guía de prueba, §5) | Aprobado |
+  | Mercado Pago | **Rechazado por el sandbox** (ver abajo) | Aprobado |
+
+- **Contra el simulador de la rama.** Las ocho combinaciones salieron aprobadas, el PSE de Mercado Pago incluido.
+
+**El PSE de Mercado Pago dejó de entregar URL de banco también con la tercera aplicación.**
+
+- **Lo medido.** Entre las 22:07 y las 22:10, tres PSE por la tienda nacieron `processing` sin URL y terminaron `failed` / `processing_error`. Uno más, mandado directo a la API de Render, terminó igual (`ORDTST01M592Q7VNVVSBR6V10CTVVJ6C`). Render corre un commit anterior al #153, así que no fue ni el túnel ni este PR.
+- **Lo que había pasado antes.** Es el mismo corte que tuvieron la primera aplicación el 15 de octubre y la segunda el 16. La tercera había entregado URL en sus ocho PSE del 17 de octubre. El 18 cobró tarjetas a las 19:03 y a las 22:07, y no se sabe desde cuándo dejó de entregarla.
+- **Lo que queda abierto.** La hipótesis de que los cobros con tarjeta lo provocan (punto 106) sigue sin probarse. Para volver a ver la página «Banco Prueba PSE» hace falta otra aplicación de prueba.
+
+Capturas en `.cursor/evidencia/155-final/`.
+
+**Estado:** La prueba final y el conflicto, resueltos en el #155. La 0.6.0 la publica el workflow cuando el #155 llega a `main`, y el PR corto que sigue (rama `109-sdk-060`) pasa a ella el simulador, A, B y la tienda; con ese PR se cierran este punto y el #109. Render despliega `devops` al integrar el #155, con el simulador todavía en la rc.5.
 
 ---
 

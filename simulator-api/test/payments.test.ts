@@ -183,6 +183,36 @@ describe("POST /v1/api/payments (issue #102)", () => {
       expect(response.json().redirect.redirectUrl).toContain("mercadopago");
     });
 
+    it("should take the payer IP from the request when a Mercado Pago PSE body has none (point 92)", async () => {
+      const response = await pay({
+        gateway: "mercadopago",
+        amount: "50000.00",
+        currency: "COP",
+        orderReference: `ORDER-PSE-MP-NOIP-${Date.now()}`,
+        payer: {
+          email: "pagador.mp@example.com",
+          firstName: "Juan",
+          lastName: "Perez",
+          documentType: "CC",
+          documentNumber: "1098765432",
+          phone: "3109876543",
+          phoneAreaCode: "57",
+          address: {
+            streetName: "Carrera 7",
+            streetNumber: "71-21",
+            city: "Bogota",
+            zipCode: "110221",
+            neighborhood: "Chapinero",
+          },
+        },
+        paymentMethod: { type: "PSE", bankCode: "1022", payerKind: "NATURAL" },
+        returnUrlConfig: { returnUrl: "https://comercio.example.com/retorno" },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json().outcome).toBe("REDIRECT_REQUIRED");
+    });
+
     it("should accept a Kushki PSE payment with the tax breakdown given as a rate", async () => {
       const response = await pay(kushkiPse({ rate: "0.19" }));
 

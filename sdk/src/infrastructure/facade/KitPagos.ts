@@ -32,7 +32,8 @@ export interface ValidateWebhookOptions extends WebhookVerificationOptions {
   /**
    * Parámetros de la URL con que llegó el webhook (`req.query`). Mercado Pago firma el
    * `data.id` que viaja ahí y no el del cuerpo; sin ellos se verifica con el del cuerpo,
-   * que coincide en la Payments API pero no en los ids alfanuméricos de la Orders API.
+   * que coincide en la Payments API pero no en los ids alfanuméricos de la Orders API (PSE
+   * y, desde la versión 0.6.0, tarjeta).
    */
   query?: Record<string, string>;
 }

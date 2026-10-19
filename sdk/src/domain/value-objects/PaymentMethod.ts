@@ -85,8 +85,10 @@ export class PaymentMethod {
    * `INVALID_REQUEST` si falta, así que la omisión no se descubre como un HTTP 400 de
    * la pasarela. Ver el punto 50 del `architecture-log.md`.
    *
-   * `installments` son las cuotas. Existe porque **Mercado Pago las exige**: un cobro
-   * sin ellas responde `400 Invalid installments`. Wompi las acepta y no las pide,
+   * `installments` son las cuotas. Existe porque **Mercado Pago las exigía** en la Payments
+   * API: un cobro sin ellas respondía `400 Invalid installments`. La Orders API, por donde va
+   * tarjeta desde la versión 0.6.0, las acepta omitidas (la orden sale con 1), pero con
+   * débito solo admite 1 (medido el 15 de octubre de 2026). Wompi las acepta y no las pide,
    * Kushki las llama `months`, y en Rapyd las decide el pagador en la página. El valor
    * por omisión es 1, que es un pago de una cuota, y no se admite 0 ni fracciones.
    */

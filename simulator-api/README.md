@@ -7,7 +7,7 @@
 La **API de Simulación** es el segundo componente del artefacto de Kit Pagos Colombia. Desarrollada sobre [Fastify](https://fastify.dev/) en TypeScript, cumple dos funciones arquitectónicas desacopladas:
 
 1. **Capa REST de Kit Pagos (`/v1/api`)**: Expone las capacidades del SDK a través de una interfaz HTTP unificada, permitiendo procesar cobros, consultar estados, listar bancos PSE y verificar firmas de webhooks sin necesidad de instalar el paquete npm.
-2. **Servidor Mock de Pasarelas (`/v1/sim`)**: Provee 23 rutas simuladas con fidelidad a los contratos de **Wompi**, **Mercado Pago**, **Kushki** y **Rapyd**, permitiendo ejercitar flujos completos (incluyendo escenarios de rechazo, timeout, errores de red y desenlaces de PSE) sin depender de conexión a internet ni incurrir en bloqueos de sandboxes reales.
+2. **Servidor Mock de Pasarelas (`/v1/sim`)**: Provee 33 rutas simuladas con fidelidad a los contratos de **Wompi**, **Mercado Pago**, **Kushki** y **Rapyd**, permitiendo ejercitar flujos completos (incluyendo escenarios de rechazo, timeout, errores de red y desenlaces de PSE) sin depender de conexión a internet ni incurrir en bloqueos de sandboxes reales.
 
 Servicio desplegado en vivo en Render: [https://kit-pagos-colombia.onrender.com](https://kit-pagos-colombia.onrender.com)
 
@@ -40,7 +40,7 @@ Todos los endpoints de la capa REST operan bajo el tag `Kit Pagos` y retornan re
 
 | Método | Ruta | Propósito | Respuesta Exitosa |
 |---|---|---|---|
-| `GET` | `/v1/api/gateways` | Catálogo de pasarelas activas en el SDK. Prueba de vida sin llamadas externas. | `200 OK`: `{"gateways": ["wompi", "mercadopago", "kushki", "rapyd"]}` |
+| `GET` | `/v1/api/gateways` | Catálogo de pasarelas activas en el SDK y cómo recibe cada una la tarjeta (`BROWSER_TOKEN` o `HOSTED_PAGE`, punto 106). Prueba de vida sin llamadas externas. | `200 OK`: `{"gateways": ["wompi", "rapyd", "mercadopago", "kushki"], "cardCapture": {"wompi": "BROWSER_TOKEN", "mercadopago": "BROWSER_TOKEN", "kushki": "BROWSER_TOKEN", "rapyd": "HOSTED_PAGE"}}` |
 | `POST` | `/v1/api/payments` | Creación unificada de cobros con unión discriminada explícita. | `201 Created`: `TRANSACTION` (cobro directo) o `REDIRECT_REQUIRED` (PSE / 3DS con `redirectUrl`) |
 | `GET` | `/v1/api/payments/:id` | Consulta de estado canónico de una transacción por ID y pasarela (`?gateway=...`). | `200 OK`: `{"gateway": "...", "transaction": { "status": "APPROVED", ... }}` |
 | `GET` | `/v1/api/pse-banks` | Catálogo consolidado de bancos PSE con código nativo y código ACH unificado. | `200 OK`: `{"pseBanks": [{ "gateway": "...", "banks": [...] }]}` |
@@ -57,46 +57,69 @@ Las peticiones no conformes o fallidas responden con un payload estructurado:
 }
 ```
 
-Mapeo formal a códigos de estado HTTP según el estándar del proyecto (RF-08):
-- `INVALID_REQUEST` / `MISSING_PARAMETER` → `400 Bad Request`
-- `UNAUTHORIZED` / `INVALID_CREDENTIALS` / `INVALID_SIGNATURE` → `401 Unauthorized`
-- `TRANSACTION_NOT_FOUND` → `404 Not Found`
-- `UNSUPPORTED_OPERATION` → `422 Unprocessable Entity`
-- `GATEWAY_ERROR` / `INTERNAL_ERROR` → `502 Bad Gateway`
+Mapeo formal a códigos de estado HTTP según el estándar del proyecto (RF-08), definido en `src/kit-pagos-api/errors/kitPagosErrorResponse.ts`:
+- `INVALID_REQUEST` / `UNSUPPORTED_OPERATION` → `400 Bad Request` (también cuando el cuerpo no cumple el esquema)
+- `INVALID_CREDENTIALS` / `WEBHOOK_SIGNATURE_INVALID` → `401 Unauthorized`
+- `RESOURCE_NOT_FOUND` → `404 Not Found`
+- `RESOURCE_LOCKED` → `423 Locked`
+- `RATE_LIMIT_EXCEEDED` → `429 Too Many Requests`
+- `CONNECTION_FAILED` / `GATEWAY_SERVER_ERROR` / `MALFORMED_RESPONSE` / `MAX_RETRIES_EXCEEDED` → `502 Bad Gateway`
 - `GATEWAY_TIMEOUT` → `504 Gateway Timeout`
+- `UNKNOWN_ERROR` → `500 Internal Server Error`
+
+Un token de la API ausente o inválido, o una pasarela sin credenciales, responde `401` con `{ "error": "Unauthorized", "message": "…" }`, sin `code`.
 
 ---
 
 ## 2. Servidor Mock de Simulación (`/v1/sim`)
 
-El servidor provee 23 rutas organizadas por pasarela que emulan el comportamiento y formato de carga de cada sandbox oficial:
+El servidor provee 33 rutas organizadas por pasarela que emulan el comportamiento y formato de carga de cada sandbox oficial, más el disparador de webhooks y `GET /health`. Las rutas se enumeran con su nivel de evidencia en [`docs/02-arquitectura/3-api-de-simulacion.md`](../docs/02-arquitectura/3-api-de-simulacion.md).
 
 ### Rutas por Pasarela
 
-- **Wompi (`/v1/sim/wompi`)**:
-  - `GET /v1/sim/wompi/merchants/:key` — Consulta de comercio y aceptación de términos.
+- **Wompi (`/v1/sim/wompi`)** — 7:
+  - `GET /v1/sim/wompi/merchants/:publicKey` — Consulta de comercio y aceptación de términos.
   - `POST /v1/sim/wompi/tokens/cards` — Emisión de token de tarjeta.
   - `POST /v1/sim/wompi/transactions` — Creación de transacción (tarjeta o PSE).
   - `GET /v1/sim/wompi/transactions/:id` — Consulta de estado de transacción.
   - `GET /v1/sim/wompi/pse/financial_institutions` — Lista de instituciones financieras PSE.
+  - `GET /v1/sim/wompi/pse/redirect` — Página de banco del PSE (ver abajo).
   - `GET /v1/sim/wompi/terms` — Términos y condiciones del simulador.
-- **Mercado Pago (`/v1/sim/mercadopago`)**:
-  - `POST /v1/sim/mercadopago/v1/payments` — Cobro directo con tarjeta (exige idempotencia).
-  - `GET /v1/sim/mercadopago/v1/payments/:id` — Consulta de transacción por ID.
-  - `POST /v1/sim/mercadopago/v1/orders` — Creación de orden PSE.
-  - `GET /v1/sim/mercadopago/v1/payment_methods/pse/banks` — Catálogo de bancos PSE.
-- **Kushki (`/v1/sim/kushki`)**:
-  - `POST /v1/sim/kushki/card/v1/charges` — Cobro directo con tarjeta.
-  - `POST /v1/sim/kushki/tokens/v1/card` — Tokenización de tarjeta.
-  - `POST /v1/sim/kushki/transfer-in/v1/init` — Inicio de transferencia bancaria PSE.
-  - `GET /v1/sim/kushki/transfer-in/v1/status/:token` — Consulta de estado de transferencia PSE.
-- **Rapyd (`/v1/sim/rapyd`)**:
-  - `POST /v1/sim/rapyd/v1/checkout` — Creación de página alojada (Hosted Checkout).
-  - `POST /v1/sim/rapyd/v1/payments` — Creación de cobro (tarjeta o PSE).
-  - `GET /v1/sim/rapyd/v1/payments/:id` — Consulta de pago por ID.
-  - `GET /v1/sim/rapyd/v1/payment_methods/banks` — Lista de bancos habilitados.
-- **Disparador de Webhooks (`/v1/sim/webhooks/trigger/:gateway`)**:
-  - `POST /v1/sim/webhooks/trigger/:gateway` — Dispara una notificación HTTP firmada criptográficamente hacia un endpoint destino, permitiendo probar la recepción de webhooks de forma determinista.
+- **Mercado Pago (`/v1/sim/mercadopago`)** — 9:
+  - `POST /v1/sim/mercadopago/payments` — Cobro directo con tarjeta por la Payments API, el camino del SDK 0.5.0 (exige idempotencia).
+  - `GET /v1/sim/mercadopago/payments/:id` — Consulta de pago con tarjeta por ID.
+  - `POST /v1/sim/mercadopago/card_tokens` — Emisión de token de tarjeta.
+  - `GET /v1/sim/mercadopago/card_tokens/:id` — Lectura del token con el access token: el BIN en `first_six_digits`.
+  - `POST /v1/sim/mercadopago/orders` — Creación de orden de PSE o de tarjeta (la tarjeta, desde el SDK 0.6.0).
+  - `GET /v1/sim/mercadopago/orders/:id` — Consulta de orden.
+  - `GET /v1/sim/mercadopago/payment_methods` — Catálogo de medios de pago, con los bancos PSE.
+  - `GET /v1/sim/mercadopago/payment_methods/search` — Marca y tipo de tarjeta por BIN (`?public_key=…&bins=…`).
+  - `GET /v1/sim/mercadopago/payments/:paymentId/bank_transfer` — Página de banco del PSE (ver abajo).
+- **Kushki (`/v1/sim/kushki`)** — 8:
+  - `POST /v1/sim/kushki/card/v1/tokens` — Tokenización de tarjeta desde el navegador, con CORS; el token queda atado al monto (punto 106).
+  - `POST /v1/sim/kushki/card/v1/charges` — Cobro directo con tarjeta; con un token de otro monto, `400 K220`.
+  - `GET /v1/sim/kushki/charges/:ticketNumber` — Consulta de cargo con tarjeta.
+  - `GET /v1/sim/kushki/transfer/v1/bankList` — Lista de bancos PSE.
+  - `POST /v1/sim/kushki/transfer/v1/tokens` — Token de la transferencia, con el banco y la URL de retorno.
+  - `POST /v1/sim/kushki/transfer/v1/init` — Inicio de transferencia bancaria PSE.
+  - `GET /v1/sim/kushki/transfer/v1/status/:token` — Consulta de estado de transferencia PSE.
+  - `GET /v1/sim/kushki/transfer/v1/agent` — Página de banco del PSE (ver abajo).
+- **Rapyd (`/v1/sim/rapyd`)** — 9:
+  - `POST /v1/sim/rapyd/payments` — Creación de cobro (tarjeta o PSE).
+  - `GET /v1/sim/rapyd/payments/:paymentId` — Consulta de pago por ID.
+  - `POST /v1/sim/rapyd/checkout` — Creación de página alojada (Hosted Checkout).
+  - `GET /v1/sim/rapyd/checkout/:checkoutId` — Consulta del checkout.
+  - `GET /v1/sim/rapyd/checkout/:checkoutId/pay` — Página que simula al pagador completando el pago del checkout.
+  - `GET /v1/sim/rapyd/checkout/:checkoutId/pagar` — Redirección `308` hacia `/pay`.
+  - `POST /v1/sim/rapyd/customers` — Creación de cliente.
+  - `GET /v1/sim/rapyd/payment_methods/country` — Medios de pago y bancos del país.
+  - `GET /v1/sim/rapyd/complete-bank-payment` — Página de banco del PSE (ver abajo).
+- **Disparador de Webhooks**:
+  - `POST /v1/sim/webhooks/trigger` — Dispara una notificación HTTP firmada criptográficamente hacia un endpoint destino, permitiendo probar la recepción de webhooks de forma determinista.
+
+### Páginas de banco del PSE
+
+Las cuatro pasarelas entregan, en la respuesta del cobro con PSE, una URL que apunta a una página del propio simulador (las cuatro rutas marcadas arriba). Es HTML: avisa que la redirección es simulada y ofrece «Volver al comercio», a la URL de retorno que el comercio pidió al crear el cobro (Mercado Pago le agrega `payment_id`, como la real). No mueve el pago: el desenlace lo fija el banco de prueba o el escenario al crearlo, y se lee consultando el pago.
 
 ---
 
@@ -148,9 +171,13 @@ Consulte [`postman/README.md`](./postman/README.md) para instrucciones de import
 
 | Variable | Descripción | Valor por Defecto |
 |---|---|---|
-| `PORT` | Puerto HTTP en el que escucha el servidor Fastify. | `3000` |
-| `SIMULATOR_PUBLIC_ORIGIN` | Origen público para construir URLs de retorno, checkout y bancos PSE (esencial tras proxies como Render). | `http://localhost:3000` |
-| `SIMULATOR_SDK_BASE_URL` | URL base que el SDK interno utiliza para alcanzar el simulador. | Mismo que `SIMULATOR_PUBLIC_ORIGIN` |
+| `PORT` | Puerto HTTP en el que escucha el servidor Fastify, y el de las URL que la API arma hacia sí misma cuando no hay `SIMULATOR_SDK_BASE_URL`. Un valor que no es un entero entre 1 y 65535 detiene el arranque. | `3000` |
+| `HOST` | Interfaz en la que escucha. | `0.0.0.0` |
+| `SIMULATOR_PUBLIC_ORIGIN` | Origen público (`protocolo://host`) de las URL que el simulador entrega: las páginas de banco del PSE, el checkout de Rapyd y los términos de Wompi. Hace falta detrás de un proxy que termina TLS, como Render. Un valor con ruta, credenciales u otro protocolo detiene el arranque. | Sin valor: el protocolo y el `Host` de cada petición |
+| `SIMULATOR_SDK_BASE_URL` | URL a la que el SDK interno llama en el ambiente `simulator`; se le agrega `/v1/sim/<pasarela>`. En Render es la URL pública del servicio. | Sin valor: el propio proceso, `http://localhost:<PORT>` |
+| `SIMULATOR_TRUST_FORWARDED_FOR` | Con `true`, la IP del pagador que `POST /v1/api/payments` completa cuando el cuerpo no trae `ipAddress` sale de la primera dirección de `X-Forwarded-For`. Solo detrás de un proxy que escriba esa cabecera, como Render. | Apagada |
+
+La lista completa, con las credenciales de cada pasarela, está en [`.env.example`](../.env.example) y en la sección 4.4 de [`4-despliegue-en-render-y-coleccion-postman.md`](../docs/02-arquitectura/4-despliegue-en-render-y-coleccion-postman.md), que explica además de qué archivos se leen y cuál gana.
 
 ---
 

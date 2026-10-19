@@ -25,6 +25,7 @@ import { kitPagosApi } from "./kit-pagos-api";
 import { toKitPagosErrorResponse } from "./kit-pagos-api/errors/kitPagosErrorResponse";
 import { parsePublicOrigin } from "./store/BankRedirectOrigins";
 import { registerOpenApi } from "./kit-pagos-api/openapi/register";
+import { parseTrustForwardedFor } from "./kit-pagos-api/payer-ip";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -32,6 +33,8 @@ declare module "fastify" {
     kitPagosProvider: KitPagosProvider;
     /** `SIMULATOR_PUBLIC_ORIGIN` ya validado, o `undefined` si no está configurado. */
     publicOrigin: string | undefined;
+    /** `SIMULATOR_TRUST_FORWARDED_FOR`: si la IP del pagador sale de `X-Forwarded-For` (punto 92). */
+    trustForwardedFor: boolean;
   }
 }
 
@@ -47,6 +50,8 @@ export interface BuildAppOptions {
   webhooks?: Partial<WebhookDispatchConfig>;
   /** Reemplaza `SIMULATOR_PUBLIC_ORIGIN`; `null` es «sin origen configurado». */
   publicOrigin?: string | null;
+  /** Reemplaza `SIMULATOR_TRUST_FORWARDED_FOR`. */
+  trustForwardedFor?: boolean;
 }
 
 function webhookConfig(override?: Partial<WebhookDispatchConfig>): WebhookDispatchConfig {
@@ -71,6 +76,8 @@ export function buildApp(options?: BuildAppOptions): FastifyInstance {
       ? loadServerEnv().SIMULATOR_PUBLIC_ORIGIN
       : options.publicOrigin ?? undefined,
   );
+  const trustForwardedFor =
+    options?.trustForwardedFor ?? parseTrustForwardedFor(loadServerEnv().SIMULATOR_TRUST_FORWARDED_FOR);
 
   const app = Fastify({
     logger: loggerConfig,
@@ -118,6 +125,7 @@ export function buildApp(options?: BuildAppOptions): FastifyInstance {
   app.decorate("credentialResolver", credentialResolver);
   app.decorate("kitPagosProvider", kitPagosProvider);
   app.decorate("publicOrigin", publicOrigin);
+  app.decorate("trustForwardedFor", trustForwardedFor);
 
   // Hook de autenticación Bearer de la API REST
   app.addHook("onRequest", createAuthHook(options?.authOptions));

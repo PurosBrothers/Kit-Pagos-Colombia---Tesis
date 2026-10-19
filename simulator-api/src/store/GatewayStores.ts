@@ -2,11 +2,14 @@ import { KushkiChargeResponse, KushkiTransferStatusResponse } from "../gateways/
 import {
   MercadoPagoOrderResponse,
   MercadoPagoPaymentResponse,
+  MercadoPagoStoredCardToken,
 } from "../gateways/mercadopago/types";
 import { RapydCheckout, RapydPayment } from "../gateways/rapyd/types";
 import { WompiTransaction } from "../gateways/wompi/types";
 import { clearBankRedirectOrigins } from "./BankRedirectOrigins";
+import { clearBankReturnUrls } from "./BankReturnUrls";
 import { clearCardTokenOutcomes } from "./CardTokenOutcomes";
+import { clearIdempotencyKeys } from "./IdempotencyKeys";
 import { clearScenarioMarks } from "./ScenarioMarks";
 import { clearScenarioTargets } from "../state/scenarioTarget";
 import { TransactionStore } from "./TransactionStore";
@@ -40,13 +43,20 @@ export const rapydCheckouts = new TransactionStore<RapydCheckout>();
 
 /**
  * Mercado Pago tiene dos almacenes porque cobra por dos APIs distintas: un pago con
- * tarjeta va por `POST /payments` y una orden de PSE va por `POST /orders`. La API de
- * pagos devuelve `424` para un método de PSE, así que no son dos rutas del mismo recurso
- * sino dos recursos que no se pueden pedir por la misma vía.
+ * tarjeta de la versión 0.5.0 del SDK va por `POST /payments`, y una orden de PSE o de
+ * tarjeta (desde la 0.6.0) va por `POST /orders`. La API de pagos devuelve `424` para un
+ * método de PSE, así que no son dos rutas del mismo recurso sino dos recursos que no se
+ * pueden pedir por la misma vía.
  */
 export const mercadopagoPayments = new TransactionStore<MercadoPagoPaymentResponse>();
 
 export const mercadopagoOrders = new TransactionStore<MercadoPagoOrderResponse>();
+
+/**
+ * Los tokens de tarjeta emitidos, para responder `GET /card_tokens/{id}`: la 0.6.0 del SDK
+ * lee ahí el BIN antes de cobrar por la Orders API. Se guardan sin el titular.
+ */
+export const mercadopagoCardTokens = new TransactionStore<MercadoPagoStoredCardToken>();
 
 /**
  * Kushki también tiene dos, y por la razón que el `architecture-log.md` documenta en el
@@ -57,6 +67,12 @@ export const mercadopagoOrders = new TransactionStore<MercadoPagoOrderResponse>(
 export const kushkiCharges = new TransactionStore<KushkiChargeResponse>();
 
 export const kushkiTransfers = new TransactionStore<KushkiTransferStatusResponse>();
+
+/**
+ * El monto por el que se emitió cada token de tarjeta de Kushki: el cobro de otro monto
+ * responde `400 K220`, como en UAT (punto 106). Se guarda sin la tarjeta.
+ */
+export const kushkiCardTokens = new TransactionStore<{ totalAmountCents: number }>();
 
 /**
  * Deja el simulador como recién arrancado.
@@ -71,11 +87,15 @@ export function resetSimulatorState(): void {
   rapydCheckouts.clear();
   mercadopagoPayments.clear();
   mercadopagoOrders.clear();
+  mercadopagoCardTokens.clear();
   kushkiCharges.clear();
   kushkiTransfers.clear();
+  kushkiCardTokens.clear();
   clearScenarioMarks();
   clearScenarioTargets();
   clearCardTokenOutcomes();
   clearBankRedirectOrigins();
+  clearBankReturnUrls();
   clearTraceabilityCodes();
+  clearIdempotencyKeys();
 }

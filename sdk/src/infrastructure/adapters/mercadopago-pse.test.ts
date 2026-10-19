@@ -3,8 +3,11 @@ import {
   buildPseOrderPayload,
   extractOrderRedirect,
   isOrderId,
+  normalizePayerIp,
+  resolveOrderOutcome,
   toWholePesos,
 } from "./mercadopago-pse";
+import { MercadoPagoResponseNormalizer } from "../../application/services/normalizers/MercadoPagoResponseNormalizer";
 import { Amount } from "../../domain/value-objects/Amount";
 import { Currency } from "../../domain/value-objects/Currency";
 import { OrderReference } from "../../domain/value-objects/OrderReference";
@@ -68,6 +71,32 @@ describe("toWholePesos", () => {
       expect(error).toMatchObject({ code: KitPagosErrorCode.INVALID_REQUEST });
       expect((error as Error).message).toContain("2000.50");
     }
+  });
+});
+
+/**
+ * Medido el 15 de octubre de 2026: Mercado Pago rechaza con `400` `::1`, `::ffff:127.0.0.1` y
+ * una IP con un espacio delante, que son las formas en que puede llegar `req.ip` de Node.
+ */
+describe("normalizePayerIp", () => {
+  it.each([
+    ["::1", "127.0.0.1"],
+    ["::ffff:127.0.0.1", "127.0.0.1"],
+    ["::FFFF:186.84.90.12", "186.84.90.12"],
+    ["  200.100.50.25 ", "200.100.50.25"],
+  ])("should rewrite %j as %j", (raw, expected) => {
+    expect(normalizePayerIp(raw)).toBe(expected);
+  });
+
+  it.each([["200.100.50.25"], ["2800:484:1a2b:3c00::20"], ["0:0:0:0:0:0:0:1"]])(
+    "should leave %j as it came",
+    (ip) => {
+      expect(normalizePayerIp(ip)).toBe(ip);
+    },
+  );
+
+  it.each([[undefined], [""], ["   "]])("should not invent an IP from %j", (raw) => {
+    expect(normalizePayerIp(raw)).toBeUndefined();
   });
 });
 
@@ -136,6 +165,12 @@ describe("assertPseRequirements", () => {
 
     expect(() => assertPseRequirements(request)).toThrow(/phoneAreaCode/);
   });
+
+  it("should treat a blank IP as missing", () => {
+    const request = { ...completeRequest(), ipAddress: "   " };
+
+    expect(() => assertPseRequirements(request)).toThrow(/ipAddress/);
+  });
 });
 
 describe("buildPseOrderPayload", () => {
@@ -186,6 +221,18 @@ describe("buildPseOrderPayload", () => {
     };
 
     expect(payload.additional_info["payer.ip_address"]).toBe("200.100.50.25");
+  });
+
+  /** `req.ip` de un servidor Node que escucha en `::`, que Mercado Pago rechaza tal cual. */
+  it.each([
+    ["::1", "127.0.0.1"],
+    ["::ffff:186.84.90.12", "186.84.90.12"],
+  ])("should send the payer IP %j as %j", (raw, expected) => {
+    const payload = buildPseOrderPayload({ ...completeRequest(), ipAddress: raw }) as {
+      additional_info: Record<string, string>;
+    };
+
+    expect(payload.additional_info["payer.ip_address"]).toBe(expected);
   });
 
   /**
@@ -274,6 +321,56 @@ describe("extractOrderRedirect", () => {
       expect(error).toMatchObject({ code: KitPagosErrorCode.MALFORMED_RESPONSE });
       expect((error as Error).message).toContain("ORD01M2V7ZQH9BAZ57V99VG1NY0K1");
     }
+  });
+});
+
+describe("resolveOrderOutcome", () => {
+  const normalize = (raw: unknown) => new MercadoPagoResponseNormalizer().normalize(raw);
+
+  /**
+   * La orden de PSE que nace sin URL, medida el 15 de octubre de 2026 entre las 21:33 y las
+   * 21:44. La medición registró el estado, el detalle y la ausencia de `redirect_url`, no el
+   * cuerpo completo; el resto de los campos repite la forma medida el 18 de septiembre.
+   */
+  const processingOrder = {
+    id: "ORDTST01M50EJ7EF1B8E8KAS3T7FK5SW",
+    status: "processing",
+    status_detail: "in_process",
+    total_amount: "2000",
+    currency: "COP",
+    external_reference: "ord-mp-pse-noche",
+    transactions: {
+      payments: [
+        {
+          id: "PAYTST01M50EJ7EF1B8E8KAS3T7FK5SX",
+          status: "processing",
+          status_detail: "in_process",
+          payment_method: { id: "pse", type: "bank_transfer", financial_institution: "1051" },
+        },
+      ],
+    },
+  };
+
+  it("returns an order born processing without a URL as a PENDING transaction", () => {
+    const result = resolveOrderOutcome(processingOrder, normalize);
+
+    expect(result.outcome).toBe("TRANSACTION");
+    if (result.outcome === "TRANSACTION") {
+      expect(result.transaction.getStatus()).toBe("PENDING");
+      expect(result.transaction.rawStatus).toBe("processing");
+      expect(result.transaction.gatewayTransactionId.value).toBe("ORDTST01M50EJ7EF1B8E8KAS3T7FK5SW");
+    }
+  });
+
+  it("still fails with MALFORMED_RESPONSE when the order cannot be read", () => {
+    const { id: _id, ...withoutId } = processingOrder;
+
+    expect(() => resolveOrderOutcome(withoutId, normalize)).toThrow(
+      expect.objectContaining({ code: KitPagosErrorCode.MALFORMED_RESPONSE }),
+    );
+    expect(() => resolveOrderOutcome({ ...processingOrder, status: "" }, normalize)).toThrow(
+      expect.objectContaining({ code: KitPagosErrorCode.MALFORMED_RESPONSE }),
+    );
   });
 });
 

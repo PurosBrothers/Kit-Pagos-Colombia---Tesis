@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from "fastify";
-import { GatewayMockFactory as WompiMockFactory } from "../gateways/wompi/GatewayMockFactory";
+import { WompiTransactionMockFactory } from "../gateways/wompi/GatewayMockFactory";
 import {
   WompiCreateTransactionRequestBody,
   WompiTransactionResponse,
@@ -72,7 +72,7 @@ export class UnsupportedScenarioError extends Error {
  */
 export class ScenarioEngine {
   constructor(
-    private readonly wompiMockFactory: WompiMockFactory = new WompiMockFactory(),
+    private readonly wompiMockFactory: WompiTransactionMockFactory = new WompiTransactionMockFactory(),
   ) {}
 
   /**

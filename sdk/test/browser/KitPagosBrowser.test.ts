@@ -137,25 +137,46 @@ describe("KitPagosBrowser", () => {
     expect(mpResult.gateway).toBe(Gateway.MERCADOPAGO);
   });
 
-  it("rejects Gateway.KUSHKI with UNSUPPORTED_OPERATION without network calls", async () => {
-    const fetchSpy = jest.fn();
-    globalThis.fetch = fetchSpy;
+  it("delegates tokenization to KushkiTokenizer for Gateway.KUSHKI, with the amount", async () => {
+    const fetchSpy = jest.fn(async () => ({
+      ok: true,
+      status: 201,
+      text: async () => JSON.stringify({ token: "tok_kushki_success" }),
+    }));
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
 
-    await expect(
-      KitPagosBrowser.tokenizeCard({
-        gateway: Gateway.KUSHKI as unknown as BrowserSupportedGateway,
-        publicKey: "pub_kushki",
-        card: validCard,
-      }),
-    ).rejects.toMatchObject({
-      code: KitPagosErrorCode.UNSUPPORTED_OPERATION,
+    const result = await KitPagosBrowser.tokenizeCard({
       gateway: Gateway.KUSHKI,
+      publicKey: "kushki_public",
+      card: validCard,
+      amount: "48000.00",
     });
 
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result.token).toBe("tok_kushki_success");
+    expect(result.gateway).toBe(Gateway.KUSHKI);
+    expect(String((fetchSpy.mock.calls[0] as unknown as [string])[0])).toBe(
+      "https://api-uat.kushkipagos.com/card/v1/tokens",
+    );
   });
 
-  it("rejects Gateway.RAPYD with UNSUPPORTED_OPERATION without network calls", async () => {
+  it("accepts the gateway in lower case, as /v1/api names it", async () => {
+    globalThis.fetch = jest.fn(async () => ({
+      ok: true,
+      status: 201,
+      text: async () => JSON.stringify({ token: "tok_kushki_lower" }),
+    })) as unknown as typeof fetch;
+
+    const result = await KitPagosBrowser.tokenizeCard({
+      gateway: "kushki" as unknown as BrowserSupportedGateway,
+      publicKey: "kushki_public",
+      card: validCard,
+      amount: "48000.00",
+    });
+
+    expect(result.gateway).toBe(Gateway.KUSHKI);
+  });
+
+  it("rejects Gateway.RAPYD with UNSUPPORTED_OPERATION, pointing to its hosted page, without network calls", async () => {
     const fetchSpy = jest.fn();
     globalThis.fetch = fetchSpy;
 
@@ -168,6 +189,7 @@ describe("KitPagosBrowser", () => {
     ).rejects.toMatchObject({
       code: KitPagosErrorCode.UNSUPPORTED_OPERATION,
       gateway: Gateway.RAPYD,
+      message: expect.stringContaining("página alojada"),
     });
 
     expect(fetchSpy).not.toHaveBeenCalled();

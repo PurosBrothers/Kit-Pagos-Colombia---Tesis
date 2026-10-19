@@ -18,6 +18,10 @@ services:
         value: https://kit-pagos-colombia.onrender.com
       - key: SIMULATOR_PUBLIC_ORIGIN
         value: https://kit-pagos-colombia.onrender.com
+      - key: SIMULATOR_TRUST_FORWARDED_FOR
+        value: "true"
+      # Render pide los valores con sync: false solo al crear el Blueprint; en un servicio
+      # que ya existe los ignora, y una variable nueva se agrega a mano en el panel.
       - key: API_AUTH_TOKEN
         sync: false
       - key: WOMPI_PUBLIC_KEY
@@ -26,13 +30,11 @@ services:
         sync: false
       - key: WOMPI_INTEGRITY_SECRET
         sync: false
-      - key: WOMPI_WEBHOOK_SECRET
+      - key: WOMPI_EVENTS_SECRET
         sync: false
-      - key: RAPYD_ACCESS_KEY
+      - key: RAPYD_API_ACCESS_KEY
         sync: false
-      - key: RAPYD_SECRET_KEY
-        sync: false
-      - key: RAPYD_WEBHOOK_SECRET
+      - key: RAPYD_API_SECRET_KEY
         sync: false
       - key: RAPYD_WEBHOOK_URL
         sync: false
