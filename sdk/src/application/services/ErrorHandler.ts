@@ -1,6 +1,7 @@
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
+import { withGatewayDetail } from "./gateway-error-detail";
 
 /**
  * Familias de error para la política de reintentos (RetryHandler).
@@ -277,7 +278,7 @@ export class ErrorHandler {
     }
 
     const gatewayName = formatGatewayName(gateway);
-    const classified = this.classify(rawError, gatewayName);
+    const classified = this.classify(rawError, gateway, gatewayName);
 
     return new KitPagosError(
       classified.code,
@@ -288,9 +289,9 @@ export class ErrorHandler {
   }
 
   /** Reparte el fallo según su forma: status HTTP, Error nativo o string. */
-  private classify(rawError: unknown, gatewayName: string): Classified {
+  private classify(rawError: unknown, gateway: Gateway, gatewayName: string): Classified {
     if (isHttpErrorShape(rawError)) {
-      return this.fromHttpStatus(rawError, gatewayName);
+      return this.fromHttpStatus(rawError, gateway, gatewayName);
     }
     if (isNativeErrorShape(rawError)) {
       return this.fromNativeError(rawError, gatewayName);
@@ -308,15 +309,25 @@ export class ErrorHandler {
     };
   }
 
-  /** Caso A: respuesta HTTP con status, de la forma `{ status, body? }`. */
-  private fromHttpStatus(rawError: object, gatewayName: string): Classified {
+  /**
+   * Caso A: respuesta HTTP con status, de la forma `{ status, body? }`.
+   *
+   * El código sale del status; el mensaje lleva además el código y el motivo nativos del
+   * cuerpo, si los trae (`withGatewayDetail()`, issue #153).
+   */
+  private fromHttpStatus(rawError: object, gateway: Gateway, gatewayName: string): Classified {
     const httpStatus = Number((rawError as { status: unknown }).status);
     const withBody = rawError as { body?: unknown; data?: unknown };
+    const body = withBody.body ?? withBody.data;
 
     return {
       code: mapHttpStatus(httpStatus),
-      originalPayload: withBody.body ?? withBody.data ?? rawError,
-      message: `${gatewayName} gateway returned an HTTP error status ${httpStatus}`,
+      originalPayload: body ?? rawError,
+      message: withGatewayDetail(
+        `${gatewayName} gateway returned an HTTP error status ${httpStatus}`,
+        gateway,
+        body,
+      ),
     };
   }
 

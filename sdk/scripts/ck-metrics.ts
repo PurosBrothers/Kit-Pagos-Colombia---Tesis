@@ -16,7 +16,7 @@
  * Usage:
  *   npm run metrics
  *   npm run metrics -- --root <dir> [--root <dir>] [--tsconfig <file>]
- *                      [--mode guard|measure] [--json <file>]
+ *                      [--mode guard|measure] [--json <file>] [--exceptions <file>]
  *
  * Sin argumentos analiza `sdk/src` y `sdk/src-browser` en modo guarda, igual que
  * antes del issue #130. Con `--root` analiza un proyecto externo (los prototipos de
@@ -24,9 +24,15 @@
  * omisión es medición. Ver docs/04-metricas-y-pruebas/4-medir-los-prototipos.md §3
  * y el punto 87 del architecture-log.md.
  *
+ * `--exceptions` aplica el registro de excepciones del proyecto externo, un JSON indexado
+ * por archivo, clase y métrica (issue #153, `simulator-api/ck-exceptions.json`). Solo vale
+ * con `--root`: el SDK sigue con `KNOWN_EXCEPTIONS`. Ver `loadExceptionRegistry()` y el
+ * punto 107 del architecture-log.md.
+ *
  * Exit codes:
  *   modo guarda:   0 = all classes within thresholds,
- *                  1 = one or more classes exceed thresholds (for CI integration)
+ *                  1 = one or more classes exceed thresholds, or a registered
+ *                      exception no longer covers a violation (for CI integration)
  *   modo medición: 0 siempre que el análisis termine; las violaciones son el dato
  *   2 = argumentos inválidos
  *
@@ -53,7 +59,7 @@ import {
   SyntaxKind,
   Node,
 } from 'ts-morph';
-import { writeFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import * as path from 'path';
 
 // ── Thresholds (methodology.md §6, Definition of Done condition 4) ────────────
@@ -78,7 +84,9 @@ const THRESHOLDS = {
 // no un defecto de diseño. Cada entrada debe enlazar al punto del
 // architecture-log.md que la justifica. Agregar una clase aqui sin ese
 // registro no es una resolucion valida.
-const KNOWN_EXCEPTIONS: Record<string, { metric: 'WMC' | 'CBO' | 'RFC' | 'MAX_CC'; reason: string }[]> = {
+type Metric = 'WMC' | 'CBO' | 'RFC' | 'MAX_CC';
+
+const KNOWN_EXCEPTIONS: Record<string, { metric: Metric; reason: string }[]> = {
   Transaction: [{
     metric: 'CBO',
     reason: 'SAD 15.1: unica Entity del dominio, construida a partir de ' +
@@ -258,19 +266,17 @@ function calcMethodCount(cls: ClassDeclaration): number {
 }
 
 /**
- * CBO: Count distinct external classes imported or referenced in method/constructor signatures.
- * A class reference in a signature creates coupling: parameter types, return types, etc.
- * Only counts names that appear in the imports (not built-ins).
+ * Los nombres que importa el archivo, como aparecen en el código: con alias, el alias.
+ *
+ * Antes se tomaba `getName()`, que en `import { A as B }` es `A`, y la firma dice `B`: el
+ * import con alias no se contaba (issue #153, punto 107).
  */
-function calcCBO(cls: ClassDeclaration, sourceFile: SourceFile): number {
-  const externalTypes = new Set<string>();
-
-  // Step 1: Collect all imported names in this source file
+function importedNamesOf(sourceFile: SourceFile): Set<string> {
   const importedNames = new Set<string>();
   for (const importDecl of sourceFile.getImportDeclarations()) {
-    // Named imports: import { A, B } from 'pkg'
+    // Named imports: import { A, B as C } from 'pkg'
     for (const named of importDecl.getNamedImports()) {
-      importedNames.add(named.getName());
+      importedNames.add(named.getAliasNode()?.getText() ?? named.getName());
     }
     // Default import: import A from 'pkg'
     const defaultImport = importDecl.getDefaultImport();
@@ -278,42 +284,55 @@ function calcCBO(cls: ClassDeclaration, sourceFile: SourceFile): number {
       importedNames.add(defaultImport.getText());
     }
   }
+  return importedNames;
+}
 
-  // Step 2: Check method and constructor signatures for references to imported names
-  const allSignatures = [
-    ...cls.getMethods(),
-    ...cls.getConstructors(),
-  ];
+/** El primer identificador de un nombre de tipo: `A.B.C` da `A`. */
+function leftmostName(name: Node): string {
+  return Node.isQualifiedName(name) ? leftmostName(name.getLeft()) : name.getText();
+}
 
-  for (const sig of allSignatures) {
+/**
+ * Los nombres que un tipo referencia: `Promise<PseBank[]>` da `Promise` y `PseBank`, y
+ * `typeof Gateway` da `Gateway`.
+ *
+ * Antes se buscaba cada nombre importado como texto dentro del tipo, y un nombre contenido en
+ * otro contaba dos veces: `ResolvedCredentials` contaba también `Credentials` (punto 107).
+ */
+function referencedTypeNames(typeNode: Node): string[] {
+  const names: string[] = [];
+  for (const node of [typeNode, ...typeNode.getDescendants()]) {
+    if (Node.isTypeReference(node)) names.push(leftmostName(node.getTypeName()));
+    if (Node.isTypeQuery(node)) names.push(leftmostName(node.getExprName()));
+  }
+  return names;
+}
+
+/**
+ * CBO: Count distinct external classes imported or referenced in method/constructor signatures.
+ * A class reference in a signature creates coupling: parameter types, return types, etc.
+ * Only counts names that appear in the imports (not built-ins).
+ */
+function calcCBO(cls: ClassDeclaration, sourceFile: SourceFile): number {
+  const importedNames = importedNamesOf(sourceFile);
+  const typeNodes: Node[] = [];
+
+  for (const sig of [...cls.getMethods(), ...cls.getConstructors()]) {
     // Parameter types
     for (const param of sig.getParameters()) {
       const typeNode = param.getTypeNode();
-      if (typeNode) {
-        const typeText = typeNode.getText();
-        for (const importedName of importedNames) {
-          if (typeText.includes(importedName)) {
-            externalTypes.add(importedName);
-          }
-        }
-      }
+      if (typeNode) typeNodes.push(typeNode);
     }
-
     // Return type (for methods only)
-    if (sig.getKind && sig.getKind() !== SyntaxKind.Constructor) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const returnType = (sig as any).getReturnTypeNode?.();
-      if (returnType) {
-        const returnText = returnType.getText();
-        for (const importedName of importedNames) {
-          if (returnText.includes(importedName)) {
-            externalTypes.add(importedName);
-          }
-        }
-      }
+    if (Node.isMethodDeclaration(sig)) {
+      const returnType = sig.getReturnTypeNode();
+      if (returnType) typeNodes.push(returnType);
     }
   }
 
+  const externalTypes = new Set(
+    typeNodes.flatMap(referencedTypeNames).filter(name => importedNames.has(name)),
+  );
   return externalTypes.size;
 }
 
@@ -443,6 +462,8 @@ export interface MetricsOptions {
   applyKnownExceptions: boolean;
   /** Si está, se escribe ahí el resultado en JSON para la recolección de la Fase 5. */
   json?: string;
+  /** Registro de excepciones del proyecto externo. Solo con `--root`; ver `loadExceptionRegistry()`. */
+  exceptions?: string;
 }
 
 const SDK_ROOTS = [
@@ -458,20 +479,22 @@ export class UsageError extends Error {}
  * Traduce los argumentos de la línea de comandos.
  *
  * Sin `--root` se analiza el SDK: sus dos raíces, su `tsconfig.json`, modo guarda y
- * con `KNOWN_EXCEPTIONS`. Con `--root` es un proyecto externo, y las excepciones no
+ * con `KNOWN_EXCEPTIONS`. Con `--root` es un proyecto externo, y las excepciones del SDK no
  * se pueden activar desde afuera: están indexadas por nombre de clase y documentan
- * decisiones del SDK, no del proyecto que se mide.
+ * decisiones del SDK, no del proyecto que se mide. El proyecto externo trae las suyas con
+ * `--exceptions`.
  */
 export function parseArgs(argv: readonly string[], cwd: string = process.cwd()): MetricsOptions {
   const roots: string[] = [];
   let tsconfig: string | undefined;
   let mode: MetricsMode | undefined;
   let json: string | undefined;
+  let exceptions: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     const value = argv[i + 1];
-    if (!['--root', '--tsconfig', '--mode', '--json'].includes(flag)) {
+    if (!['--root', '--tsconfig', '--mode', '--json', '--exceptions'].includes(flag)) {
       throw new UsageError(`Unknown argument: ${flag}`);
     }
     if (value === undefined || value.startsWith('--')) {
@@ -481,6 +504,7 @@ export function parseArgs(argv: readonly string[], cwd: string = process.cwd()):
     if (flag === '--root') roots.push(path.resolve(cwd, value));
     if (flag === '--tsconfig') tsconfig = path.resolve(cwd, value);
     if (flag === '--json') json = path.resolve(cwd, value);
+    if (flag === '--exceptions') exceptions = path.resolve(cwd, value);
     if (flag === '--mode') {
       if (value !== 'guard' && value !== 'measure') {
         throw new UsageError(`--mode must be guard or measure, got: ${value}`);
@@ -493,9 +517,122 @@ export function parseArgs(argv: readonly string[], cwd: string = process.cwd()):
     if (tsconfig !== undefined) {
       throw new UsageError('--tsconfig requires --root: the SDK always uses sdk/tsconfig.json');
     }
+    if (exceptions !== undefined) {
+      throw new UsageError('--exceptions requires --root: the SDK keeps its exceptions in KNOWN_EXCEPTIONS');
+    }
     return { roots: SDK_ROOTS, tsconfig: SDK_TSCONFIG, mode: mode ?? 'guard', applyKnownExceptions: true, json };
   }
-  return { roots, tsconfig, mode: mode ?? 'measure', applyKnownExceptions: false, json };
+  return {
+    roots, tsconfig, mode: mode ?? 'measure', applyKnownExceptions: false, json,
+    ...(exceptions ? { exceptions } : {}),
+  };
+}
+
+/**
+ * Una excepción del registro de un proyecto externo: admite que `metric` de la clase
+ * `className` de `file` pase el umbral, hasta `allowed`.
+ *
+ * Va por archivo y no solo por clase porque en un proyecto externo dos clases se pueden
+ * llamar igual (en el simulador había cuatro `GatewayMockFactory`), y `allowed` existe
+ * para que la excepción no cubra en silencio lo que la clase crezca después: si el valor
+ * pasa de ahí, la violación vuelve.
+ */
+export interface RegisteredException {
+  /** Relativo a la primera raíz, como aparece en la columna File del reporte. */
+  file: string;
+  className: string;
+  metric: Metric;
+  /** El valor más alto que admite la excepción: el medido cuando se registró. */
+  allowed: number;
+  /** El punto del architecture-log.md que la justifica (methodology.md §6.2). */
+  logPoint: number;
+  reason: string;
+}
+
+const METRICS: readonly Metric[] = ['WMC', 'CBO', 'RFC', 'MAX_CC'];
+
+const METRIC_VALUE: Record<Metric, (m: ClassMetrics) => number> = {
+  WMC: m => m.WMC,
+  CBO: m => m.CBO,
+  RFC: m => m.RFC,
+  MAX_CC: m => m.maxCC,
+};
+
+/** Una entrada válida del registro, o un `UsageError` que dice qué le falta. */
+function registeredException(entry: unknown, index: number): RegisteredException {
+  const e = (entry ?? {}) as Partial<Record<keyof RegisteredException, unknown>>;
+  const where = `exceptions[${index}]`;
+  for (const key of ['file', 'className', 'reason'] as const) {
+    if (typeof e[key] !== 'string' || (e[key] as string).trim() === '') {
+      throw new UsageError(`${where}.${key} must be a non-empty string`);
+    }
+  }
+  if (!METRICS.includes(e.metric as Metric)) {
+    throw new UsageError(`${where}.metric must be one of ${METRICS.join(', ')}`);
+  }
+  for (const key of ['allowed', 'logPoint'] as const) {
+    if (!Number.isInteger(e[key]) || (e[key] as number) <= 0) {
+      throw new UsageError(`${where}.${key} must be a positive integer`);
+    }
+  }
+  return e as RegisteredException;
+}
+
+/**
+ * Lee el registro de excepciones de un proyecto externo: `{ "exceptions": [ ... ] }`.
+ *
+ * Un registro ilegible o una entrada incompleta es un error de uso (código 2) y no una
+ * lista vacía: una excepción sin el punto del log que la justifica no es una resolución
+ * válida, igual que en `KNOWN_EXCEPTIONS`.
+ */
+export function loadExceptionRegistry(file: string): RegisteredException[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error: unknown) {
+    throw new UsageError(`Cannot read the exceptions registry ${file}: ${(error as Error).message}`);
+  }
+  const entries = (parsed as { exceptions?: unknown } | null)?.exceptions;
+  if (!Array.isArray(entries)) {
+    throw new UsageError(`The exceptions registry ${file} must have an "exceptions" array`);
+  }
+  return entries.map(registeredException);
+}
+
+/** Lo que hizo el registro: las excepciones que cubrieron una violación y las que ya no cubren nada. */
+export interface RegistryOutcome {
+  applied: RegisteredException[];
+  stale: RegisteredException[];
+}
+
+/**
+ * Quita de cada clase las violaciones que cubre el registro, y devuelve cuáles se usaron.
+ *
+ * Una excepción que no cubrió ninguna violación está **vencida**: la clase ya cumple, cambió
+ * de nombre o de archivo, o la métrica pasó de `allowed`. En modo guarda eso falla igual que
+ * una violación, para que el registro no acumule excepciones que ya no describen el código.
+ */
+export function applyExceptionRegistry(
+  metrics: ClassMetrics[],
+  registry: readonly RegisteredException[],
+): RegistryOutcome {
+  const used = new Set<RegisteredException>();
+
+  for (const m of metrics) {
+    m.violations = m.violations.filter(v => {
+      const metric = v.split(' ')[0] as Metric;
+      const exception = registry.find(e =>
+        e.file === m.file && e.className === m.className && e.metric === metric &&
+        METRIC_VALUE[metric](m) <= e.allowed);
+      if (exception) used.add(exception);
+      return !exception;
+    });
+  }
+
+  return {
+    applied: registry.filter(e => used.has(e)),
+    stale: registry.filter(e => !used.has(e)),
+  };
 }
 
 /** Ruta del archivo relativa a la primera raíz que lo contiene; desde la segunda, con su nombre delante. */
@@ -583,13 +720,21 @@ export function analyzeProject(options: Pick<MetricsOptions, 'roots' | 'tsconfig
 }
 
 /** Lo que se escribe con `--json`: la tabla completa y con qué se produjo. */
-function writeJson(file: string, options: MetricsOptions, metrics: ClassMetrics[]): void {
+function writeJson(
+  file: string,
+  options: MetricsOptions,
+  metrics: ClassMetrics[],
+  registry: RegistryOutcome | undefined,
+): void {
   const report = {
     generatedAt: new Date().toISOString(),
     mode: options.mode,
     roots: options.roots,
     tsconfig: options.tsconfig ?? null,
     knownExceptionsApplied: options.applyKnownExceptions,
+    ...(registry
+      ? { exceptionsRegistry: options.exceptions, registeredExceptions: registry.applied, staleExceptions: registry.stale }
+      : {}),
     thresholds: THRESHOLDS,
     totalClasses: metrics.length,
     violatingClasses: metrics.filter(m => m.violations.length > 0).length,
@@ -598,14 +743,33 @@ function writeJson(file: string, options: MetricsOptions, metrics: ClassMetrics[
   writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`);
 }
 
+/** Las excepciones del registro que se aplicaron y las vencidas, debajo de la tabla. */
+function printRegistry(file: string, outcome: RegistryOutcome): void {
+  console.log(`Registered exceptions (${path.relative(process.cwd(), file)}):`);
+  for (const e of outcome.applied) {
+    console.log(
+      `  ${YELLOW}${e.file}  ${e.className}  ${e.metric} ≤ ${e.allowed} — architecture-log.md, point ${e.logPoint}${RESET}`
+    );
+  }
+  for (const e of outcome.stale) {
+    console.log(
+      `  ${RED}✗ stale: ${e.file}  ${e.className}  ${e.metric} ≤ ${e.allowed} covers no violation; ` +
+      `update or remove it (architecture-log.md, point ${e.logPoint})${RESET}`
+    );
+  }
+  console.log('');
+}
+
 /**
  * Corre el análisis completo e imprime el reporte. Devuelve el código de salida en vez
  * de llamar a `process.exit()`, para que las pruebas lo puedan comprobar.
  */
 export function run(argv: readonly string[]): number {
   let options: MetricsOptions;
+  let registry: RegisteredException[] | undefined;
   try {
     options = parseArgs(argv);
+    registry = options.exceptions ? loadExceptionRegistry(options.exceptions) : undefined;
   } catch (error: unknown) {
     if (!(error instanceof UsageError)) throw error;
     console.error(`${RED}${error.message}${RESET}`);
@@ -613,12 +777,13 @@ export function run(argv: readonly string[]): number {
   }
 
   const allMetrics = analyzeProject(options);
+  const outcome = registry ? applyExceptionRegistry(allMetrics, registry) : undefined;
   const isSdk = options.applyKnownExceptions;
   const title = isSdk
     ? 'Kit Pagos Colombia SDK'
     : options.roots.map(root => path.relative(process.cwd(), root) || '.').join(', ');
 
-  if (options.json) writeJson(options.json, options, allMetrics);
+  if (options.json) writeJson(options.json, options, allMetrics, outcome);
 
   // Handle case where no classes are found
   if (allMetrics.length === 0) {
@@ -643,20 +808,22 @@ export function run(argv: readonly string[]): number {
     );
   }
 
+  if (options.exceptions && outcome) printRegistry(options.exceptions, outcome);
   if (!isSdk) {
     console.log('KNOWN_EXCEPTIONS not applied: they document SDK decisions, not this project.');
   }
   if (options.json) console.log(`JSON written to ${options.json}`);
 
+  const staleExceptions = outcome?.stale.length ?? 0;
   if (options.mode === 'measure') {
-    if (violatingClasses > 0) {
+    if (violatingClasses > 0 || staleExceptions > 0) {
       console.log('Measure mode: violations are reported and do not change the exit code.\n');
     }
     return 0;
   }
 
   // Non-zero exit code for CI integration (issue #15, condition 4 of DoD)
-  return violatingClasses > 0 ? 1 : 0;
+  return violatingClasses > 0 || staleExceptions > 0 ? 1 : 0;
 }
 
 if (require.main === module) {

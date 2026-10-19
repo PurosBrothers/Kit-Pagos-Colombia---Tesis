@@ -45,18 +45,50 @@ function passesLuhn(digits: string): boolean {
 }
 
 /**
+ * El titular del token: la identificación vuelve solo si llegaron el tipo y el número.
+ *
+ * Nivel 1 (medido contra api.mercadopago.com el 4 de octubre de 2026): si falta
+ * `cardholder.identification`, la API responde `identification: {}`.
+ */
+function tokenCardholder(
+  requestBody: MercadoPagoTokenizeCardRequestBody,
+): MercadoPagoCardTokenResponse["cardholder"] {
+  const hasId = Boolean(
+    requestBody.cardholder?.identification?.type &&
+    requestBody.cardholder?.identification?.number,
+  );
+
+  const idObj = hasId
+    ? {
+        type: requestBody.cardholder!.identification!.type,
+        number: requestBody.cardholder!.identification!.number,
+      }
+    : {};
+
+  return {
+    name: requestBody.cardholder?.name ?? "APRO",
+    identification: idObj,
+  };
+}
+
+/**
  * Gateway Mock Factory — Mercado Pago (API de Simulación).
  *
  * Responsabilidad única: construir el payload de respuesta que replica la
- * estructura nativa de Mercado Pago (/v1/payments) para los escenarios soportados.
+ * estructura nativa de Mercado Pago para los escenarios soportados.
  *
  * Particularidades nativas de Mercado Pago:
  * - Estados en minúsculas (`approved`, `rejected`, etc.).
  * - Monto en pesos decimales (`transaction_amount`), no en centavos.
  * - Objeto plano sin envoltorio `data`.
  * - `status_detail` con el código nativo de acreditación o rechazo.
+ *
+ * Desde el issue #153 son cuatro clases, una por recurso de la API: los pagos de
+ * `/v1/payments`, las órdenes de `/v1/orders` (PSE y tarjeta), la tarjeta antes del cobro
+ * (`/v1/card_tokens` y `/v1/payment_methods/search`) y los cuerpos de error nativos. Ver el
+ * punto 107 del `architecture-log.md`.
  */
-export class GatewayMockFactory {
+export class MercadoPagoPaymentMockFactory {
   /**
    * Genera un identificador numérico aleatorio al estilo de Mercado Pago (ej. 1234567890).
    */
@@ -169,40 +201,10 @@ export class GatewayMockFactory {
       date_approved: null,
     };
   }
+}
 
-  /**
-   * Respuesta nativa de timeout para Mercado Pago (HTTP 504).
-   */
-  buildTimeoutResponse() {
-    return {
-      message: "Gateway Timeout",
-      error: "gateway_timeout",
-      status: 504,
-    };
-  }
-
-  /**
-   * Respuesta nativa de rate limit para Mercado Pago (HTTP 429).
-   */
-  buildRateLimitResponse() {
-    return {
-      message: "Too many requests",
-      error: "rate_limit_exceeded",
-      status: 429,
-    };
-  }
-
-  /**
-   * Respuesta nativa de error de servidor para Mercado Pago (HTTP 5xx).
-   */
-  buildServerErrorResponse(status = 500) {
-    return {
-      message: "Internal Server Error",
-      error: "server_error",
-      status,
-    };
-  }
-
+/** Las órdenes de `/v1/orders`: la de PSE y la de tarjeta, que cobra la versión 0.6.0 del SDK. */
+export class MercadoPagoOrderMockFactory {
   /**
    * Identificador de orden al estilo de la Orders API: un ULID con prefijo.
    *
@@ -262,27 +264,6 @@ export class GatewayMockFactory {
       statusDetail: "waiting_transfer",
       redirectUrl: `${origin}/v1/sim/mercadopago/payments/${bankPaymentId}/bank_transfer`,
       financialInstitution: requested?.payment_method?.financial_institution,
-    });
-  }
-
-  /**
-   * Construye la respuesta de una orden ya pagada, que es lo que la pasarela
-   * devuelve cuando el pagador completó la transferencia en el banco.
-   *
-   * No lleva `redirect_url`: la orden ya no espera a nadie. Es el estado que el
-   * comercio debería ver al consultar después de que el pagador vuelve.
-   */
-  buildProcessedOrderResponse(
-    requestBody: MercadoPagoCreateOrderRequestBody,
-    customId?: string,
-  ): MercadoPagoOrderResponse {
-    return this.buildOrder(requestBody, {
-      orderId: customId ?? this.generateOrderId("ORD"),
-      paymentId: this.generateOrderId("PAY"),
-      status: "processed",
-      statusDetail: "accredited",
-      financialInstitution:
-        requestBody.transactions?.payments?.[0]?.payment_method?.financial_institution,
     });
   }
 
@@ -374,20 +355,6 @@ export class GatewayMockFactory {
   }
 
   /**
-   * Construye la respuesta de `GET /v1/payment_methods/search` para un BIN.
-   *
-   * Nivel 1 para la forma (`paging` y `results`) y para el BIN sin medio de pago: `999999`
-   * respondió `results: []` con `total: 0` el 15 de octubre de 2026. La API real devuelve dos
-   * entradas iguales para cada BIN medido y decenas de campos por entrada; aquí va una, con
-   * los campos que lee el SDK.
-   */
-  buildPaymentMethodSearchResponse(bin: string): MercadoPagoPaymentMethodSearchResponse {
-    const match = PAYMENT_METHODS_BY_BIN.get(bin) ?? PAYMENT_METHODS_BY_FIRST_DIGIT.get(bin.charAt(0));
-    const results = match ? [match] : [];
-    return { paging: { total: results.length, limit: 30, offset: 0 }, results };
-  }
-
-  /**
    * Parte común de las respuestas de orden.
    *
    * Existe para que los campos que la API real devuelve igual en los dos casos
@@ -445,12 +412,29 @@ export class GatewayMockFactory {
       },
     };
   }
+}
+
+/** La tarjeta antes del cobro: el token de `/v1/card_tokens` y el medio de pago de su BIN. */
+export class MercadoPagoCardMockFactory {
+  /**
+   * Construye la respuesta de `GET /v1/payment_methods/search` para un BIN.
+   *
+   * Nivel 1 para la forma (`paging` y `results`) y para el BIN sin medio de pago: `999999`
+   * respondió `results: []` con `total: 0` el 15 de octubre de 2026. La API real devuelve dos
+   * entradas iguales para cada BIN medido y decenas de campos por entrada; aquí va una, con
+   * los campos que lee el SDK.
+   */
+  buildPaymentMethodSearchResponse(bin: string): MercadoPagoPaymentMethodSearchResponse {
+    const match = PAYMENT_METHODS_BY_BIN.get(bin) ?? PAYMENT_METHODS_BY_FIRST_DIGIT.get(bin.charAt(0));
+    const results = match ? [match] : [];
+    return { paging: { total: results.length, limit: 30, offset: 0 }, results };
+  }
 
   /**
    * Construye la respuesta nativa de tokenización de tarjeta (POST /v1/card_tokens).
    *
    * Nivel de evidencia 1 (medido contra api.mercadopago.com el 4 de octubre de 2026):
-   * Si falta cardholder.identification, responde con identification: {}.
+   * Si falta cardholder.identification, responde con identification: {} (`tokenCardholder()`).
    * Si el número no pasa Luhn, emite el token igual con luhn_validation: false: medido con
    * "1234" y con 4013540682746261, que tiene 16 dígitos pero falla el dígito verificador.
    *
@@ -482,18 +466,6 @@ export class GatewayMockFactory {
     const lastFourDigits = cleanNumber.slice(-4) || "6260";
     const hiddenDigits = Math.max(cleanNumber.length - 10, 0);
 
-    const hasId = Boolean(
-      requestBody.cardholder?.identification?.type &&
-      requestBody.cardholder?.identification?.number,
-    );
-
-    const idObj = hasId
-      ? {
-          type: requestBody.cardholder!.identification!.type,
-          number: requestBody.cardholder!.identification!.number,
-        }
-      : {};
-
     return {
       id: `tok_sim_mp_${Math.random().toString(36).substring(2, 12)}`,
       public_key: publicKey,
@@ -511,10 +483,43 @@ export class GatewayMockFactory {
       date_created: now.toISOString(),
       date_last_updated: now.toISOString(),
       date_due: dueDate.toISOString(),
-      cardholder: {
-        name: requestBody.cardholder?.name ?? "APRO",
-        identification: idObj,
-      },
+      cardholder: tokenCardholder(requestBody),
+    };
+  }
+}
+
+/** Los cuerpos de error nativos de Mercado Pago, los que usa `technicalFailure()` en todas sus rutas. */
+export class MercadoPagoErrorMockFactory {
+  /**
+   * Respuesta nativa de timeout para Mercado Pago (HTTP 504).
+   */
+  buildTimeoutResponse() {
+    return {
+      message: "Gateway Timeout",
+      error: "gateway_timeout",
+      status: 504,
+    };
+  }
+
+  /**
+   * Respuesta nativa de rate limit para Mercado Pago (HTTP 429).
+   */
+  buildRateLimitResponse() {
+    return {
+      message: "Too many requests",
+      error: "rate_limit_exceeded",
+      status: 429,
+    };
+  }
+
+  /**
+   * Respuesta nativa de error de servidor para Mercado Pago (HTTP 5xx).
+   */
+  buildServerErrorResponse(status = 500) {
+    return {
+      message: "Internal Server Error",
+      error: "server_error",
+      status,
     };
   }
 }

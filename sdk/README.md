@@ -489,6 +489,12 @@ async function cobrarConDiagnostico(request: CreatePaymentRequest) {
 }
 ```
 
+> **El mensaje de un error HTTP trae el código y el motivo de la pasarela**, desde la
+> 0.6.0-rc.5: `Kushki gateway returned an HTTP error status 400 (K220: Monto de la transacción
+> es diferente al monto de la venta inicial)`. Para decidir, use `error.code`, que sigue siendo
+> el normalizado (`INVALID_REQUEST` en ese caso); el mensaje es para leerlo, y pasa por la misma
+> limpieza de credenciales que el resto del error. El cuerpo completo está en `originalPayload`.
+
 > **`createPayment()` no se reintenta**, ni siquiera ante `GATEWAY_TIMEOUT`. Que la respuesta
 > no haya llegado a tiempo no prueba que la pasarela no haya creado el cobro, y repetirlo podría
 > cobrar dos veces. Antes de volver a cobrar, confirme el estado con `getPaymentStatus()` o

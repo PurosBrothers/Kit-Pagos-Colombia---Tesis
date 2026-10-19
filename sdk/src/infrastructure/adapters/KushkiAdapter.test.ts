@@ -402,6 +402,31 @@ describe("KushkiAdapter", () => {
       expect((error as KitPagosError).originalPayload).toEqual(body);
     });
 
+    it("says K004 and its reason once in the message", async () => {
+      const body = { message: "ID de comercio o credencial no válido", code: "K004" };
+      global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(400, body));
+
+      const error = await new KushkiAdapter().createPayment(validRequest).catch((e: unknown) => e);
+
+      expect((error as KitPagosError).message).toBe(
+        "Kushki gateway returned an HTTP error status 400 (K004: ID de comercio o credencial no válido)",
+      );
+    });
+
+    // Medido contra Kushki UAT el 17 de octubre de 2026 (docs/testing-data/kushki.md §1.3):
+    // un token emitido por 48 000 y cobrado por 50 000.
+    it("keeps the 400 K220 of a token charged for another amount as INVALID_REQUEST, with its reason", async () => {
+      const body = { code: "K220", message: "Monto de la transacción es diferente al monto de la venta inicial" };
+      global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(400, body));
+
+      const error = await new KushkiAdapter().createPayment(validRequest).catch((e: unknown) => e);
+
+      expect((error as KitPagosError).code).toBe(KitPagosErrorCode.INVALID_REQUEST);
+      expect((error as KitPagosError).message).toContain(
+        "(K220: Monto de la transacción es diferente al monto de la venta inicial)",
+      );
+    });
+
     it("still maps the 400 K001 of an invalid body to INVALID_REQUEST", async () => {
       const body = { message: "Cuerpo de la petición inválido.", code: "K001" };
       global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(400, body));

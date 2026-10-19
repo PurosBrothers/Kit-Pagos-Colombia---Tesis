@@ -97,7 +97,12 @@ describeSandbox(Gateway.KUSHKI, (credentials, baseUrl) => {
     expect(expectTransaction(result).getStatus()).toBe("APPROVED");
   });
 
-  /** El token queda atado al monto: tokenizar por un valor y cobrar otro no se acepta. */
+  /**
+   * El token queda atado al monto: tokenizar por un valor y cobrar otro no se acepta.
+   *
+   * Desde el issue #153 el mensaje trae el código y el motivo de Kushki: antes decía solo
+   * «Kushki gateway returned an HTTP error status 400».
+   */
   it("rejects charging a browser token for another amount", async () => {
     const { token } = await KitPagosBrowser.tokenizeCard({
       gateway: Gateway.KUSHKI,
@@ -115,7 +120,12 @@ describeSandbox(Gateway.KUSHKI, (credentials, baseUrl) => {
         payer: new Payer({ email: "jaime.pavlich@example.com" }),
         paymentMethod: PaymentMethod.card(token),
       }),
-    ).rejects.toMatchObject({ code: KitPagosErrorCode.INVALID_REQUEST });
+    ).rejects.toMatchObject({
+      code: KitPagosErrorCode.INVALID_REQUEST,
+      message: expect.stringContaining(
+        "(K220: Monto de la transacción es diferente al monto de la venta inicial)",
+      ),
+    });
   });
 
   /**

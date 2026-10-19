@@ -1,6 +1,10 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { sendBankPage } from "../gateways/bankPage";
-import { GatewayMockFactory } from "../gateways/kushki/GatewayMockFactory";
+import {
+  KushkiChargeMockFactory,
+  KushkiErrorMockFactory,
+  KushkiTransferMockFactory,
+} from "../gateways/kushki/GatewayMockFactory";
 import {
   KushkiCardTokenRequestBody,
   KushkiChargeResponse,
@@ -137,7 +141,9 @@ function hasTransferIdLength(id: string): boolean {
 }
 
 export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
-  const mockFactory = new GatewayMockFactory();
+  const chargeMocks = new KushkiChargeMockFactory();
+  const transferMocks = new KushkiTransferMockFactory();
+  const errorBodies = new KushkiErrorMockFactory();
 
   /**
    * Traduce un escenario de negocio al vocabulario de **transferencia** de Kushki.
@@ -194,7 +200,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send(CARD_INVALID_CREDENTIAL);
       }
 
-      const failure = await technicalFailure(getSimulatorScenario(request), request, reply, mockFactory);
+      const failure = await technicalFailure(getSimulatorScenario(request), request, reply, errorBodies);
       if (failure !== undefined) {
         return failure;
       }
@@ -219,7 +225,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ code: "K055", message: "Tipo de moneda no permitido" });
       }
 
-      const { token } = mockFactory.buildTransferToken();
+      const { token } = chargeMocks.buildCardToken();
       kushkiCardTokens.save(token, { totalAmountCents: Math.round(body.totalAmount * 100) });
       return reply.code(201).send({ token });
     },
@@ -263,7 +269,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send(CARD_AMOUNT_MISMATCH);
       }
 
-      const failure = await technicalFailure(scenario, request, reply, mockFactory);
+      const failure = await technicalFailure(scenario, request, reply, errorBodies);
 
       if (failure !== undefined) {
         return failure;
@@ -272,7 +278,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       if (scenario === "FLAPPING") {
         const key = requestBody.token;
         if (nextFlappingAttempt(key)) {
-          return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+          return reply.code(503).send(errorBodies.buildServerErrorResponse(503));
         }
         scenario = "APPROVED";
       }
@@ -305,13 +311,13 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       if (scenario === "DECLINED" || scenario === "REJECTED") {
         // HTTP 201 y no 4xx: Kushki nunca usa el status HTTP para señalar
         // un rechazo de negocio.
-        charge = mockFactory.buildDeclinedResponse(requestBody);
+        charge = chargeMocks.buildDeclinedResponse(requestBody);
       } else if (scenario === "EXPIRED") {
-        charge = mockFactory.buildExpiredResponse(requestBody);
+        charge = chargeMocks.buildExpiredResponse(requestBody);
       } else if (scenario === "INITIALIZED" || scenario === "PENDING") {
-        charge = mockFactory.buildInitializedResponse(requestBody);
+        charge = chargeMocks.buildInitializedResponse(requestBody);
       } else if (scenario === "APPROVED" || scenario === "APPROVAL") {
-        charge = mockFactory.buildApprovedResponse(requestBody);
+        charge = chargeMocks.buildApprovedResponse(requestBody);
       } else {
         return reply
           .code(501)
@@ -392,7 +398,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       const failure = await queryFailure(
         { gateway: "kushki", resource: "charge", id: ticketNumber },
         reply,
-        mockFactory,
+        errorBodies,
       );
       if (failure !== undefined) {
         return failure;
@@ -420,12 +426,12 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(403).send(TRANSFER_UNAUTHORIZED);
       }
 
-      const failure = bankListFailure(request, reply, mockFactory, "kushki");
+      const failure = bankListFailure(request, reply, errorBodies, "kushki");
       if (failure !== undefined) {
         return failure;
       }
 
-      return reply.code(200).send(mockFactory.buildBankList());
+      return reply.code(200).send(transferMocks.buildBankList());
     },
   );
 
@@ -455,7 +461,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       });
       let scenario = resolved.scenario;
 
-      const failure = await technicalFailure(scenario, request, reply, mockFactory);
+      const failure = await technicalFailure(scenario, request, reply, errorBodies);
 
       if (failure !== undefined) {
         return failure;
@@ -488,7 +494,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       if (scenario === "FLAPPING") {
         const key = `kushki_transfer_${body.paymentDescription ?? body.bankId}`;
         if (nextFlappingAttempt(key)) {
-          return reply.code(503).send(mockFactory.buildServerErrorResponse(503));
+          return reply.code(503).send(errorBodies.buildServerErrorResponse(503));
         }
         scenario = "APPROVED";
       }
@@ -506,11 +512,11 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
           .send({ error: `Escenario aún no soportado: ${scenario}` });
       }
 
-      const { token } = mockFactory.buildTransferToken();
+      const { token } = transferMocks.buildTransferToken();
 
       kushkiTransfers.save(
         token,
-        mockFactory.buildTransferSeed(token, body),
+        transferMocks.buildTransferSeed(token, body),
       );
 
       /*
@@ -553,7 +559,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       const body = request.body as KushkiTransferInitRequestBody;
 
       if (scenario !== undefined) {
-        const failure = await technicalFailure(scenario, request, reply, mockFactory);
+        const failure = await technicalFailure(scenario, request, reply, errorBodies);
 
         if (failure !== undefined) {
           return failure;
@@ -628,7 +634,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
 
       kushkiTransfers.save(body.token, moved);
 
-      const initResponse = mockFactory.buildTransferInit(body.token, requestOrigin(request));
+      const initResponse = transferMocks.buildTransferInit(body.token, requestOrigin(request));
       rememberTraceabilityCode(body.token, initResponse.trazabilityCode);
       /*
        * Nivel 1 — medido el 14 de octubre de 2026 contra el sandbox UAT: al volver de la página
@@ -712,7 +718,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       const failure = await queryFailure(
         { gateway: "kushki", resource: "transfer", id: token },
         reply,
-        mockFactory,
+        errorBodies,
       );
       if (failure !== undefined) {
         return failure;

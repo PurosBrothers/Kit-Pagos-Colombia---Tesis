@@ -113,7 +113,7 @@ Kit-Pagos-Colombia---Tesis/
 │   │   ├── rapyd.ts                            <-- 9 rutas bajo /v1/sim/rapyd/
 │   │   ├── kushki.ts                           <-- 7 rutas bajo /v1/sim/kushki/
 │   │   └── webhooks.ts                         <-- POST /v1/sim/webhooks/trigger (RF-12)
-│   ├── gateways/                               <-- Una GatewayMockFactory + types.ts por pasarela
+│   ├── gateways/                               <-- GatewayMockFactory.ts (una clase por recurso) + types.ts por pasarela
 │   │   ├── wompi/  mercadopago/  rapyd/  kushki/
 │   ├── scenarios/
 │   │   ├── ScenarioEngine.ts                   <-- Escenarios de creación de Wompi (APPROVED, PENDING, DECLINED, EXPIRED; el resto, 501)
@@ -362,7 +362,7 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 
 - **Responsabilidad:** Es el componente de decisión del simulador, tipado contra el cuerpo y la respuesta de Wompi.
 - **Lógica de ejecución por escenario:**
-  - `APPROVED` (valor por defecto) y `PENDING`: delega la construcción del payload al `GatewayMockFactory` de Wompi y devuelve `201` con `data.status: "PENDING"`, como el sandbox real (punto 50); la consulta lo resuelve según el destino registrado.
+  - `APPROVED` (valor por defecto) y `PENDING`: delega la construcción del payload a `WompiTransactionMockFactory` y devuelve `201` con `data.status: "PENDING"`, como el sandbox real (punto 50); la consulta lo resuelve según el destino registrado.
   - `DECLINED` construye el rechazo nativo con tarjeta; con PSE, la transacción nace `PENDING` como en el camino feliz y la primera consulta la cierra (sección 4.1 de [3-api-de-simulacion.md](3-api-de-simulacion.md)). `EXPIRED` construye un `VOIDED`. Las fallas técnicas no llegan al motor: las resuelve antes `technicalFailure()`, compartida por las cuatro pasarelas.
   - Cualquier otro valor: lanza `UnsupportedScenarioError`, que el router traduce a HTTP `501`. Es una decisión deliberada: producir un `APPROVED` falso para un escenario no implementado invalidaría silenciosamente las pruebas de manejo de rechazos del SDK (RF-10, issue #65). Los routers de Rapyd, Mercado Pago y Kushki no pasan por este motor: resuelven el escenario en su propia ruta, porque el motor hoy está acoplado al tipo de Wompi (ver comentario en `routes/rapyd.ts`).
 - **Responsabilidad y límite:** Detectar el escenario pedido es del router; decidir qué payload construir, de la fábrica. El motor intermedia para Wompi. Los dos extremos lo documentan en el código (`scenarios/ScenarioEngine.ts` y `gateways/<pasarela>/GatewayMockFactory.ts`).
@@ -373,11 +373,11 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 ### 3.3. Gateway Mock Factory (`simulator-api/src/gateways/<pasarela>/GatewayMockFactory.ts`)
 
 - **Responsabilidad:** Orquesta la construcción de payloads JSON que replican con exactitud la estructura de las respuestas nativas de cada pasarela.
-- **Fábricas internas (todas implementadas, una carpeta por pasarela):**
-  - `gateways/wompi/GatewayMockFactory.ts`: genera `data.status: "APPROVED"` o el cuerpo del PSE, con estructura completa de Wompi.
-  - `gateways/rapyd/GatewayMockFactory.ts`: genera el objeto `data` de Rapyd (`id`, `status`, `failure_code` cuando aplique) y la página de pago alojada del checkout. Reemplazó al antiguo `PayUMockFactory` (que generaba `transactionResponse.state` con estructura de PayU) — ver `architecture-log.md`, puntos 16 y 18.
-  - `gateways/mercadopago/GatewayMockFactory.ts`: genera `status` y `status_detail` en minúsculas. Para fondos insuficientes: `status_detail: "cc_rejected_insufficient_amount"`.
-  - `gateways/kushki/GatewayMockFactory.ts`: genera `transaction_status: "APPROVAL"` o `"DECLINED"` respetando el vocabulario propio de Kushki.
+- **Una clase por recurso de la API de cada pasarela** (issue #153, punto 107 del `architecture-log.md`). Cada `GatewayMockFactory.ts` es el módulo de la fábrica de su pasarela. Hasta el #153 tenía una sola clase `GatewayMockFactory`, con el mismo nombre en las cuatro. Ahora agrupa clases con nombre único, más una con los tres cuerpos de error nativos que `technicalFailure()` usa en todas las rutas (`…ErrorMockFactory`):
+  - `gateways/wompi/GatewayMockFactory.ts`: `WompiTransactionMockFactory` construye la transacción (tarjeta `PENDING`, rechazo, `VOIDED` y PSE sin URL) y la usa `ScenarioEngine`. `WompiTokenMockFactory` construye el token de aceptación y el de tarjeta.
+  - `gateways/rapyd/GatewayMockFactory.ts`: `RapydPaymentMockFactory` construye los pagos de `/v1/payments`, con tarjeta y PSE. `RapydCheckoutMockFactory` construye la página de pago alojada y el pago que nace en ella. `RapydPseSetupMockFactory` construye el cliente y el catálogo de métodos que preparan un PSE. Rapyd reemplazó al antiguo `PayUMockFactory` (que generaba `transactionResponse.state` con estructura de PayU); ver `architecture-log.md`, puntos 16 y 18.
+  - `gateways/mercadopago/GatewayMockFactory.ts`: `MercadoPagoPaymentMockFactory` construye los pagos de `/v1/payments`, con `status` y `status_detail` en minúsculas. `MercadoPagoOrderMockFactory` construye las órdenes de PSE y de tarjeta de `/v1/orders`. `MercadoPagoCardMockFactory` construye el token de tarjeta y el medio de pago de un BIN.
+  - `gateways/kushki/GatewayMockFactory.ts`: `KushkiChargeMockFactory` construye el cobro con tarjeta (`APPROVAL`, `DECLINED`, `INITIALIZED`) y el token de tarjeta del navegador. `KushkiTransferMockFactory` construye la lista de bancos, el token, el `init` y el registro de la transferencia de PSE.
 - **Criticidad:** La precisión de este componente es crítica para la validación del framework. Si el formato del Mock no coincide con el de la pasarela real, el `Response Normalizer` del SDK fallará en los escenarios de prueba (medido en los puntos 48 y 50 del `architecture-log.md`).
 
 ---

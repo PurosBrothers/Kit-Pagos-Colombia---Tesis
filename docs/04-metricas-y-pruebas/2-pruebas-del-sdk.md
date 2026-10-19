@@ -85,11 +85,10 @@ El CI ([.github/workflows/ci.yml](../../.github/workflows/ci.yml)) tiene dos tra
 
 `npm pack --dry-run` está ahí por una razón puntual: verifica que lo que se publicaría a npm contenga lo que debe. Un `dist/` mal configurado produce un paquete que se instala y no importa nada, y eso no lo detecta ninguna prueba.
 
-**Cuatro cosas quedan fuera de CI**, y hay que correrlas a mano:
+**Estas cosas quedan fuera de CI**, y hay que correrlas a mano. `npm run metrics` estaba en la lista hasta el issue #153; desde entonces lo corren el job del SDK y el del simulador (ver [1-metricas-ck.md](1-metricas-ck.md), sección 7).
 
 | Fuera de CI | Por qué | Consecuencia |
 |---|---|---|
-| `npm run metrics` | — | Un PR puede estar verde y violar un umbral CK |
 | `npm run check:readme` | — | Un PR puede estar verde con el README roto |
 | `npm run test:sandbox` | Necesita credenciales y red | Los defectos que solo aparecen contra las APIs reales no se detectan en el PR |
 | `npm run check:published` | Verifica el registro de npm, que va por detrás de la rama | Un paquete publicado que no se pueda instalar no se detecta hasta que alguien lo intente |

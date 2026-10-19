@@ -1844,6 +1844,8 @@ Para prevenir fugas accidentales de secretos en terminales, consolas de Render o
 
 **Estado:** Resuelto en código (`simulator-api/src/kit-pagos-api/`, `simulator-api/src/app.ts`, `simulator-api/src/auth/authHook.ts`). El origen permitido por CORS queda en el valor por defecto (`*`); restringirlo por variable de entorno se decide cuando exista el cliente de frontend del issue #109.
 
+> **Revisado en el punto 107.** La decisión 2 cambió en una parte: para una respuesta HTTP fallida, el mensaje ya no es solo la plantilla con el status. Desde el SDK 0.6.0-rc.5 lleva entre paréntesis el código y el motivo que trae el cuerpo nativo, como «Kushki gateway returned an HTTP error status 400 (K220: Monto de la transacción es diferente al monto de la venta inicial)», y pasa por la misma limpieza: `sanitize()` por patrones y `redactCredentials()` para los valores exactos de las credenciales. `originalPayload` sigue sin salir de `/v1/api`.
+>
 > **Revisado en el punto 89.** La decisión 3 dejó de valer para dos rutas de `/v1/sim`: desde el #126 y el #127, el navegador del pagador llama a `POST /v1/sim/wompi/tokens/cards` y `POST /v1/sim/mercadopago/card_tokens`. Esas dos responden el preflight y abren el origen con las cabeceras medidas en cada pasarela; el resto de `/v1/sim` sigue sin CORS.
 
 ---
@@ -2460,6 +2462,8 @@ Tomada por Joan el 4 de octubre de 2026, al aprobar el inventario del alcance de
 
 **Estado:** Resuelto con deuda nombrada.
 
+> **Ratificado en el punto 107 (issue #153).** El 17 de octubre de 2026 Joan ratificó la decisión del 4 de octubre: `WompiTokenizer` sigue con la tokenización simple. La deuda queda nombrada como estaba. Lo que haría falta para revertirla está en el comentario del #153: cifrar con WebCrypto sin dependencias, probar el JWE contra una llave conocida porque Wompi responde `502` a un `payload` mal formado, e imitar la llave y el descifrado en el simulador.
+
 ### 82. Declaración dinámica de ambiente y resolución de URLs mediante catálogo cerrado en el SDK (Issue #123)
 
 **Responsable:** Prieto / Equipo (secciones 9 y 15 del SAD, `sdk/src/domain/value-objects/Environment.ts`, `sdk/src/infrastructure/config/gateway-urls.ts`, `sdk/src/infrastructure/config/SDKConfigurator.ts`, `simulator-api/src/auth/targetEnvironment.ts`, `simulator-api/src/services/KitPagosProvider.ts`).
@@ -2945,6 +2949,8 @@ Era `/pagar`, en español (deuda del punto 84). La ruta vieja responde `308` hac
 **Lo medido.** Las cifras de la suite completa, de los ejemplos, del contrato y del paquete van en la verificación final del PR.
 
 **Estado:** Resuelto con deuda nombrada: el prefijo de 10 caracteres del `SyntaxError`, el cuerpo original del `402` fuera de la API pública, y las categorías que no tienen fuente (`UNKNOWN`), sobre todo en Kushki con tarjeta, cuya cuenta UAT no rechaza.
+
+> **Ampliado en el punto 107.** Con `--root` sigue sin aplicarse `KNOWN_EXCEPTIONS`, pero un proyecto externo ya puede traer su propio registro con `--exceptions`, indexado por archivo, clase y métrica. El simulador es el primero que lo usa (`simulator-api/ck-exceptions.json`).
 
 ### 88. Despliegue de simulator-api en Render y colección Postman versionada (issue #131)
 
@@ -3464,6 +3470,127 @@ Con la tienda ajustada, la API local y la tercera aplicación, a las 16:35, un P
 **La tarjeta de Mercado Pago con la tercera aplicación.** Joan cobró una tarjeta con ese par la tarde del 17 de octubre y después un PSE, y los dos salieron bien; a las 20:27 la tienda cobró otra (`processed`). Si el PSE se corta en las horas siguientes, la hipótesis de los cobros con tarjeta del punto 100 gana peso.
 
 **Estado:** Resuelto en `sdk/` (publicado como `0.6.0-rc.4`), en el simulador y en `prototypes/checkout-frontend-rest/`. En Render, cuando Joshua despliegue el commit.
+
+### 107. Las métricas CK de la API de Simulación, dentro de los umbrales y verificadas en CI; el código de la pasarela en el mensaje de error (issue #153, SDK 0.6.0-rc.5)
+
+**Responsable:** Orduz (issue #153).
+
+**Contexto.** La condición 4 de la DoD exige WMC ≤ 20, CBO ≤ 5, RFC ≤ 20 y MAX_CC ≤ 10 en las clases modificadas, pero la §6.1 de `methodology.md` decía que las métricas se calculan sobre `sdk/src`, y el simulador nunca se había medido contra esos umbrales. Medido el 17 de octubre de 2026 sobre `5b98d14`, la base de la rama: 7 de 18 clases fuera de umbral. La fábrica de Mercado Pago había empeorado con las rutas de tarjeta del PR #155, de WMC 38 y RFC 25 a WMC 48 y RFC 32. `npm run metrics` tampoco corría en CI, ni siquiera sobre el SDK.
+
+**Las decisiones de Joan.** Del 17 de octubre de 2026:
+
+1. Las cuatro fábricas se dividen en clases por recurso, con nombre único.
+2. `KitPagosProvider` queda como excepción registrada, con este punto.
+3. CI, opción B: el modo guarda corre en el job del SDK y en el del simulador.
+4. El mensaje de error lleva el código y el motivo nativos. Esto revisa la decisión 2 del punto 64.
+5. La tokenización cifrada de Wompi no se implementa: se ratifica el punto 81.
+6. Un solo PR cierra el #153.
+
+Del 18 de octubre:
+
+7. Se publica la `0.6.0-rc.5` y el simulador pasa a esa versión en este PR.
+8. Las dos imprecisiones del conteo de CBO se corrigen aquí.
+
+**La tabla de antes y después.** En la columna «Antes» va lo que reportaba el script el 17 de octubre, con el conteo viejo. En «Antes, conteo nuevo» va el mismo código medido con el conteo corregido (decisión 6). «Después» es el 18 de octubre. Los valores son WMC / CBO / RFC / MAX_CC; en negrita, los que se pasan del umbral.
+
+| Clase (bajo `simulator-api/src/`) | Antes | Antes, conteo nuevo | Después | Qué se hizo |
+|---|---|---|---|---|
+| `auth/CredentialResolver` | **33** / 2 / 7 / **19** | igual | 16 / 2 / 7 / 5 | La tabla `SERVER_PROFILES` (decisión 1) |
+| `webhooks/SignatureGenerator` | **21** / **7** / 14 / 8 | igual | 4 / 4 / 4 / 2 | Un armador por pasarela en su módulo (decisión 2) |
+| `gateways/mercadopago/GatewayMockFactory` | **48** / **8** / **32** / **11** | igual | `Payment` 13 / 2 / 8 / 3 · `Order` 16 / 3 / 14 / 6 · `Card` 11 / 3 / 13 / 8 · `Error` 3 / 0 / 3 / 1 | Clases por recurso (decisión 3) |
+| `gateways/rapyd/GatewayMockFactory` | **31** / **10** / **23** / 8 | igual | `Payment` 11 / 2 / 8 / 5 · `Checkout` 9 / 4 / 5 / 8 · `PseSetup` 5 / 3 / 7 / 4 · `Error` 3 / 0 / 4 / 1 | Clases por recurso |
+| `gateways/kushki/GatewayMockFactory` | **25** / **8** / 18 / 9 | igual | `Charge` 10 / 3 / 8 / 5 · `Transfer` 12 / 4 / 7 / 9 · `Error` 3 / 0 / 3 / 1 | Clases por recurso |
+| `gateways/wompi/GatewayMockFactory` | 11 / **6** / 14 / 3 | 11 / 5 / 14 / 3 | `Transaction` 4 / 2 / 4 / 1 · `Token` 4 / 3 / 7 / 3 · `Error` 3 / 0 / 3 / 1 | Clases por recurso |
+| `services/KitPagosProvider` | 16 / **7** / 7 / 5 | igual | igual | Excepción registrada (decisión 4) |
+| `scenarios/ScenarioEngine` | 14 / 4 / 8 / 10 | 14 / 5 / 8 / 10 | 14 / 5 / 8 / 10 | Nada: el 4 era el alias que el conteo no veía |
+
+En el reporte las fábricas se llaman `MercadoPagoPaymentMockFactory`, `RapydCheckoutMockFactory`, `KushkiErrorMockFactory`, y así; en la tabla se abrevian. Resultado: 28 clases. 27 dentro de los umbrales y `KitPagosProvider` cubierta por la excepción. El modo guarda con el registro sale con 0; sin el registro, con 1.
+
+**Decisión 1: `CredentialResolver` lee el perfil del servidor de una tabla.** `resolveFromServerProfile()` tenía un `case` por pasarela, y los cuatro hacían lo mismo: leer dos claves obligatorias, devolver `undefined` si faltaba una y agregar las opcionales. `SERVER_PROFILES` declara por pasarela las variables de la clave pública, de la privada y de cada opcional, y una sola función de módulo, `credentialsFromProfile()`, recorre la tabla. La tabla expresa los dos casos que no son lectura directa:
+
+- Kushki busca `KUSHKI_WEBHOOK_SECRET` y, si está vacía, `KUSHKI_WEBHOOK_SIGNATURE_ID`. Una línea vacía como la de `.env.example` no tapa el alias.
+- Rapyd usa su `secret_key` también como `webhookSecret` (punto 54).
+
+Se descartó extraer un método privado por pasarela. Por el punto 34, eso pasa el WMC de `1 + D` a `k + D` y no lo baja.
+
+**Decisión 2: un armador de webhook por pasarela, despachado por tabla.** El cuerpo y la firma de cada pasarela se movieron tal cual a `wompiWebhook.ts`, `mercadoPagoWebhook.ts`, `kushkiWebhook.ts` y `rapydWebhook.ts`; los tipos compartidos y `WebhookUnavailableError`, a `webhookTypes.ts`. `SignatureGenerator` conserva su constructor, `generate()` y el secreto del perfil, y despacha con `WEBHOOK_BUILDERS`, tipada como `{ [G in Gateway]: WebhookBuilder<G> }`: si se agrega una pasarela sin armador, no compila, igual que la tabla de códigos del punto 64. `SignatureGenerator.ts` sigue exportando los tipos y el error, así que `routes/webhooks.ts`, `autoEmission.ts`, `webhookDispatch.ts` y las pruebas no cambiaron. Se descartó dejar el `switch` y mover solo los cuerpos a funciones: el `switch` conservaba la complejidad y las firmas seguían nombrando los tipos de las cuatro pasarelas, que es de donde salía el CBO 7.
+
+**Decisión 3: las fábricas, una clase por recurso de la API de cada pasarela.**
+
+- **Las clases.** Mercado Pago queda en pagos de `/v1/payments`, órdenes de `/v1/orders` y la tarjeta antes del cobro (token y medio de pago del BIN). Rapyd queda en pagos de `/v1/payments`, la página de pago de `/v1/checkout` y las dos llamadas que preparan un PSE (cliente y catálogo). Kushki queda en cobros y transferencias, y Wompi en transacciones y los dos tokens previos.
+- **Una clase de errores por pasarela.** Cada una tiene además una clase `…ErrorMockFactory` con los tres cuerpos de error nativos, porque `technicalFailure()`, `queryFailure()` y `bankListFailure()` los usan en todas las rutas y no son de ningún recurso. Por eso son una clase más por pasarela de las que se estimaron al decidir.
+- **El archivo y los nombres.** El archivo `GatewayMockFactory.ts` se conserva como módulo del componente «Gateway Mock Factory» de cada pasarela. Eso deja intacta `test/rapyd-state-machine.test.ts`, que importa `RAPYD_CARD_DECLINE` de ahí. Los nombres ya no se repiten en las cuatro, que era lo que impedía registrar una excepción por clase.
+
+De paso:
+
+- **Dos métodos sin llamador.** Se eliminaron `buildProcessedOrderResponse` de Mercado Pago y `buildTransferStatus` de Kushki. Ninguna ruta ni prueba los usaba desde que la máquina de estados mueve los registros (#124), y el segundo repetía los valores de relleno de `buildTransferSeed`.
+- **El token de tarjeta de Kushki.** La ruta `POST /card/v1/tokens` pedía el token a `buildTransferToken()`. Ahora lo pide a `KushkiChargeMockFactory.buildCardToken()`, con la misma forma medida: 32 hexadecimales (`docs/testing-data/kushki.md` §1.3).
+- **El MAX_CC de Mercado Pago.** El titular del token pasó a `tokenCardholder()`, y eso bajó el MAX_CC de `buildTokenCardResponse` de 11 a 8.
+- **Los ayudantes de Rapyd.** Los estáticos privados de Rapyd (`buildPaymentId`, `buildStatus`, `wrap`) pasaron a funciones de módulo, porque los usan tres clases.
+
+Se descartó convertir los constructores en funciones de módulo sin clase. Las clases saldrían del reporte, y la métrica dejaría de verlas en vez de pasar. También se descartó partir por medio de pago (tarjeta frente a PSE): en Rapyd, la clase de PSE habría tenido que nombrar los tipos de clientes, pagos y catálogo.
+
+**Decisión 4: `KitPagosProvider` queda como excepción de CBO 7.** Es la costura entre la capa REST y el SDK: recibe la pasarela y las cabeceras y devuelve una instancia de `KitPagos`. De los siete tipos de sus firmas, cinco son datos sin comportamiento (`Gateway`, `RequestHeaders`, `TargetEnvironment`, `ResolvedCredentials` y `Credentials`), como `PseBank` en el punto 47. Los otros dos son colaboradores: `CredentialResolver`, que se inyecta, y `KitPagos`, que construye. Se descartaron dos salidas:
+
+- Sacar `instanceFor()` y `createInstance()` a funciones de módulo bajaría el conteo sin cambiar de qué depende la clase.
+- Una clase aparte que construya las instancias movería el acoplamiento sin reducirlo.
+
+La excepción admite hasta 7 (`allowed`). Si la clase sube a 8, la violación vuelve.
+
+**Decisión 5: el registro de excepciones del simulador, por archivo.** `ck-metrics.ts` acepta `--exceptions <archivo>`, solo con `--root`. El registro del simulador es `simulator-api/ck-exceptions.json`, separado de `KNOWN_EXCEPTIONS`. Cada entrada lleva `file`, `className`, `metric`, `allowed`, `logPoint` y `reason`.
+
+- **Errores de uso.** Un registro ilegible o una entrada incompleta sale con código 2: una excepción sin el punto del log que la justifica no es una resolución válida (§6.2).
+- **Entradas vencidas.** Una entrada que ya no cubre ninguna violación hace fallar el modo guarda. Puede ser porque la clase ya cumple, porque cambió de archivo o de nombre, o porque la métrica pasó de `allowed`.
+- **El JSON.** Con `--json` se escriben también las excepciones aplicadas y las vencidas.
+
+Sin argumentos, el script produce exactamente la salida de antes (`diff` vacío contra la medición del 17 de octubre).
+
+**Decisión 6: el CBO cuenta referencias de tipo, no texto.** El script buscaba cada nombre importado como texto dentro de la firma, y tenía dos fallas:
+
+- Un nombre contenido en otro contaba dos veces: la fábrica de Wompi tenía CBO 5 y no 6, porque `WompiTransactionResponse` contaba también `WompiTransaction`.
+- `import { GatewayMockFactory as WompiMockFactory }` dejaba fuera la fábrica de `ScenarioEngine`, cuyo CBO real era 5 y no 4.
+
+Ahora se leen los `TypeReference` y `typeof` de cada firma, también dentro de argumentos genéricos, y se comparan por nombre exacto con los importados, por el alias si lo hay. En el SDK no cambió ningún valor. Con el conteo corregido, el código de antes daba 6 clases fuera de umbral y no 7. Se descartó resolver los símbolos con el verificador de tipos: es más lento y no cambiaba ningún resultado.
+
+**Decisión 7: las métricas en CI.** El job `sdk` corre `npm run metrics` después de las pruebas. El job `simulator-api` instala las dependencias de `sdk/`, porque el script vive ahí, y corre el modo guarda con el registro. La CI se dispara en los PR hacia `devops` y `main`; este PR está apilado sobre `109-cliente-frontend-rest`, así que la corre cuando se le cambie la base.
+
+**Decisión 8: el mensaje de un error HTTP lleva el código y el motivo de la pasarela.** Medido el 17 de octubre: un token de Kushki emitido por 48 000 y cobrado por 50 000 respondía `400 K220`, y a `/v1/api` llegaba solo «Kushki gateway returned an HTTP error status 400» (punto 106).
+
+- **El mensaje nuevo.** `ErrorHandler.fromHttpStatus()` agrega entre paréntesis el detalle que lee `gateway-error-detail.ts`: «Kushki gateway returned an HTTP error status 400 (K220: Monto de la transacción es diferente al monto de la venta inicial)». El `code` normalizado no cambia.
+- **La tabla por pasarela.** `gateway-error-detail.ts` es una tabla en su propio módulo, como las de rechazo del punto 87, para que `ErrorHandler` no gane ramas ni acoplamiento: su WMC sigue en 18 y su CBO en 2. Las formas leídas son las medidas: Kushki `{ code, message }`; Wompi `{ error: { type, reason } }` o `{ error: { type, messages } }`; Mercado Pago `{ errors: [{ code, message }] }`, `{ code, message }` o `{ message, error, cause[] }`; Rapyd `{ status: { error_code, message } }`.
+- **Lo que no se lee.** Un cuerpo que no es JSON no aporta detalle, y el detalle se corta en 300 caracteres.
+- **La limpieza.** El mensaje pasa por `sanitize()` y por `redactCredentials()`, que quita el valor exacto de cada credencial. La prueba que ya existía del `401` de Wompi con la llave `garbage` repetida en el `reason` ahora ejercita justo ese camino.
+- **K004.** `reclassifyKushkiCredentialError()` no repite `K004` cuando el mensaje ya lo trae.
+
+Revisa la decisión 2 del punto 64: el mensaje ya no es solo una plantilla, pero `originalPayload` sigue sin salir de `/v1/api`. Se descartaron tres salidas:
+
+- Exponer `originalPayload` en `/v1/api`: el cuerpo crudo puede repetir datos de la petición.
+- Agregar códigos por pasarela a `KitPagosErrorCode`: cambia la API pública, y el código normalizado es el contrato.
+- Leer cada forma dentro de `ErrorHandler`: subía su WMC y su CBO.
+
+**Decisión 9: la `0.6.0-rc.5`.** El SDK sale como `0.6.0-rc.5` con la etiqueta `next`, y el simulador la pide exacta. El bundle de navegador no cambió (21 955 bytes, la misma SRI que la rc.4), así que la tienda sigue cargando la rc.4 de jsDelivr hasta la `0.6.0` final.
+
+**Lo medido** (18 de octubre de 2026):
+
+- **SDK:** 57 suites y 1 040 pruebas (sentencias 97,93 %, ramas 91,6 %), lint, build, `check:readme`, `npm pack --dry-run` y métricas, con la salida idéntica a la de antes.
+- **Contrato contra Kushki UAT:** 7 de 7, con la aserción nueva del mensaje con `K220`.
+- **Simulador:** 51 suites y 1 232 pruebas, que son las 1 229 de antes, sin tocar, más 3 nuevas (líneas 97,93 %, ramas 89,71 %; antes 97,8 % y 89,69 %). Lint y `tsc` limpios.
+- **El simulador con el SDK nuevo:** con el paquete local en una copia temporal, las 1 229 pruebas de antes pasan y `/v1/api` responde `400 INVALID_REQUEST` con «… (K220: Monto de la transacción es diferente al monto de la venta inicial)». Esa prueba, `test/kushki-k220-through-api.test.ts`, entra al repositorio con el commit que pasa el simulador a la rc.5, porque con la rc.4 no pasaría.
+- **Newman,** sobre una copia sin `.env`: 42 de 42 peticiones y 47 de 47 aserciones.
+- **Ejemplos:** los 11 contra el simulador de la rama, todos con salida 0 (escenarios 61 de 61, intercambiabilidad igual en las cuatro).
+- **Prototipos y landing:** A y B, 42 pruebas cada uno; C, 138 pruebas, build y `check:sri`; la paridad del esqueleto; los ejemplos compilan contra el SDK de la rama; la landing pasa `check:snippets` y build.
+- **La tienda contra el simulador de la rama:** las cuatro pasarelas con PSE y con tarjeta, aprobadas.
+- **La tienda contra los sandboxes oficiales:**
+  - Wompi, Mercado Pago y Kushki con tarjeta, aprobadas.
+  - Rapyd llegó a su página alojada real.
+  - `GET /v1/api/pse-banks` respondió en las cuatro: 3, 47, 7 y 9 bancos.
+  - Todo con las credenciales que arma `SERVER_PROFILES`.
+- **Mutaciones:** 29, todas detectadas. Una por regla nueva: las cuatro lecturas del detalle, el recorte, la limpieza, `K004`, la tabla de credenciales con sus dos casos especiales, el despacho de webhooks, el token de Kushki, el titular de Mercado Pago, el registro por archivo, el tope, la entrada vencida, el alias, `typeof`, los argumentos genéricos y la búsqueda por texto.
+- **Una prueba que faltaba.** La mutación que fijaba el titular del token de Mercado Pago en `APRO` sobrevivía, porque las pruebas existentes mandaban justamente `APRO`. Se agregó `test/mercadopago-card-token-holder.test.ts`.
+
+Capturas en `.cursor/evidencia/153/`.
+
+**Estado:** Resuelto en `simulator-api/` y `sdk/` (publicado como `0.6.0-rc.5`) y en `.github/workflows/ci.yml`. En Render, cuando Joshua despliegue el commit.
 
 ---
 

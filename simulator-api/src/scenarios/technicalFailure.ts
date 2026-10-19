@@ -5,8 +5,9 @@ import { QueryFailure } from "./scenarioFromRequest";
 import { nextFlappingAttempt, queryFailureFor } from "../store/ScenarioMarks";
 
 /**
- * Los cuerpos de error nativos de una pasarela. Cada `GatewayMockFactory` ya los tiene; la
- * falla técnica es la misma en las cuatro y lo que cambia es el cuerpo.
+ * Los cuerpos de error nativos de una pasarela. Cada una los tiene en su `…ErrorMockFactory`
+ * (`gateways/<pasarela>/GatewayMockFactory.ts`); la falla técnica es la misma en las cuatro y
+ * lo que cambia es el cuerpo.
  */
 export interface NativeErrorBodies {
   buildTimeoutResponse(): unknown;

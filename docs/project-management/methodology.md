@@ -136,14 +136,24 @@ Un requerimiento se considera implementado exitosamente solo cuando se cumplen *
 
 Los umbrales de la condición 4 solo son verificables si la fórmula está fijada, porque una misma métrica admite definiciones que dan números incomparables. Esta ambigüedad ya costó una vez: mientras la condición 4 decía "WMC ≤ 15" sin definir el cálculo, el script lo implementó como conteo de métodos, y así una clase con un único método de 360 líneas —un `switch` de cuatro ramas con tres `switch` anidados dentro— puntuaba WMC 1, el mejor valor de todo el SDK. La métrica de complejidad era ciega a la complejidad, y premiaba concentrar código en un solo método. El detalle completo está en `docs/architecture/architecture-log.md`, punto 34.
 
-Las cuatro métricas se calculan sobre `sdk/src/**/*.ts` (excluyendo pruebas) con `npm run metrics`, implementado en `sdk/scripts/ck-metrics.ts` mediante análisis del AST con `ts-morph`:
+Las cuatro métricas se calculan con `sdk/scripts/ck-metrics.ts`, mediante análisis del AST con `ts-morph`, sobre dos proyectos (excluyendo pruebas). Los dos entran en la condición 4 y la CI verifica los dos:
+
+- **El SDK**, `sdk/src/**/*.ts` y `sdk/src-browser/**/*.ts`, con `npm run metrics` desde `sdk/`. Usa las excepciones de `KNOWN_EXCEPTIONS`.
+- **La API de Simulación**, `simulator-api/src/**/*.ts`, desde el issue #153 (punto 107 del `architecture-log.md`). Usa su propio registro de excepciones, separado del SDK:
+
+  ```bash
+  npm run metrics -- --root ../simulator-api/src --tsconfig ../simulator-api/tsconfig.json \
+    --exceptions ../simulator-api/ck-exceptions.json --mode guard
+  ```
+
+Los prototipos de la Fase 5 se miden con el mismo script en modo medición: ahí el valor alto es el dato del experimento, no un defecto (`docs/04-metricas-y-pruebas/4-medir-los-prototipos.md`).
 
 | Métrica | Fórmula | Umbral | Qué acota |
 |---|---|---|---|
 | **WMC** (Weighted Methods per Class) | Suma de la complejidad ciclomática de todos los métodos y constructores de la clase. Es la definición de Chidamber & Kemerer. | ≤ 20 | Cuánto hace la clase en total |
 | **CC** (complejidad ciclomática de un método) | `1 + puntos de decisión`. Cuentan `if`, `case`, `for`, `for-in`, `for-of`, `while`, `do`, `catch`, el operador ternario, y los operadores de cortocircuito `&&`, `\|\|` y `??`. No cuentan `default` (es el camino que ya existía si ningún `case` coincide) ni el encadenamiento opcional `?.` (cortocircuita un acceso a propiedad, no una rama que el lector deba seguir). | — | Insumo de WMC y MAX_CC |
 | **MAX_CC** | La CC más alta entre los métodos de la clase. | ≤ 10 | Cuánto hace un método |
-| **CBO** (Coupling Between Objects) | Número de clases externas distintas, importadas en el archivo, que aparecen en las firmas de métodos y constructores (tipos de parámetro y de retorno). | ≤ 5 | Con cuántas clases habla |
+| **CBO** (Coupling Between Objects) | Número de clases externas distintas, importadas en el archivo, que aparecen en las firmas de métodos y constructores (tipos de parámetro y de retorno). Se cuentan las referencias de tipo por su nombre exacto, también dentro de argumentos genéricos y de `typeof`; un import con alias se cuenta por el alias. | ≤ 5 | Con cuántas clases habla |
 | **RFC** (Response For a Class) | Número de métodos y constructores, más el número de nombres de método distintos invocados con notación de punto cuyo receptor no empieza por `this.`. | ≤ 20 | Tamaño del conjunto de respuesta |
 
 Tres consecuencias de estas definiciones que conviene tener presentes al leer un reporte:
@@ -151,6 +161,7 @@ Tres consecuencias de estas definiciones que conviene tener presentes al leer un
 - **WMC no baja al extraer métodos.** La CC de un método es `1 + D`; al partirlo en *k* métodos los puntos de decisión se reparten pero cada método nuevo aporta su propio `1`, así que el total pasa de `1 + D` a `k + D`. Bajar el WMC de una clase exige **eliminar lógica duplicada o dividir la clase**, no reorganizar sus métodos.
 - **WMC y MAX_CC responden preguntas distintas y las dos hacen falta.** Una clase puede tener un total aceptable y esconder un método ilegible; y una clase cohesiva puede tener un total alto compuesto enteramente de métodos triviales. `Amount` es el segundo caso: WMC 23 formado por 12 métodos cuyo máximo es CC 4.
 - **RFC usa el conteo de métodos, no el WMC.** Alimentarlo con el WMC ponderado lo haría crecer con cada `if` agregado dentro de un método existente, que no es lo que mide el tamaño de un conjunto de respuesta.
+- **Hasta el issue #153, el CBO buscaba cada nombre importado como texto dentro de la firma.** Eso tenía dos efectos. Un nombre contenido en otro contaba dos veces: `WompiTransactionResponse` contaba también `WompiTransaction`. Y un import con alias no se contaba, porque la firma usaba el alias. En el SDK la corrección no cambió ningún valor. En el simulador sí: la fábrica de Wompi tenía CBO 5 y no 6, y `ScenarioEngine` tenía 5 y no 4 (punto 107).
 
 **Umbrales:** el WMC subió de 15 a 20 al pasar de conteo de métodos a suma de complejidad ciclomática. No es un relajamiento del criterio: son escalas distintas y el 15 original no era comparable, y el cambio viene acompañado de `MAX_CC ≤ 10`, una restricción nueva que antes no existía y que es más estricta en lo que importa. El 20 es el valor que reporta el SATC de NASA para WMC canónico; el 10 de MAX_CC es el umbral clásico de McCabe.
 
@@ -158,7 +169,7 @@ Tres consecuencias de estas definiciones que conviene tener presentes al leer un
 
 Una violación de umbral puede ser consecuencia directa de una decisión arquitectónica ya registrada y no un defecto de diseño. Para esos casos el script mantiene un registro de excepciones (`KNOWN_EXCEPTIONS` en `ck-metrics.ts`), y cada entrada debe enlazar al punto del `architecture-log.md` que la justifica. **Agregar una clase a ese registro sin ese registro previo no es una resolución válida:** deja el umbral verde en el reporte y rojo en la realidad.
 
-El criterio de admisión es que la violación no sea reorganizable sin romper una decisión de diseño deliberada. Las excepciones vigentes son tres:
+El criterio de admisión es que la violación no sea reorganizable sin romper una decisión de diseño deliberada. Las excepciones vigentes del SDK son tres:
 
 | Excepción | Clases cubiertas | Justificación |
 |---|---|---|
@@ -167,6 +178,12 @@ El criterio de admisión es que la violación no sea reorganizable sin romper un
 | CBO por el tipo `PseBank` | Los cuatro adaptadores y `KitPagos` (CBO 6) | Devolver la lista de bancos de PSE obliga a cada adaptador a conocer el tipo `PseBank`, que suma un punto de acoplamiento a los cinco por igual |
 
 La tercera se agregó al implementar `getPseBanks()` y afecta a cinco clases a la vez, lo que la distingue de las dos primeras: no es una decisión sobre una clase, es el costo de un método del puerto.
+
+**Las excepciones de la API de Simulación van en otro registro**, `simulator-api/ck-exceptions.json`, que el script lee con `--exceptions` (issue #153). No se mezclan con las del SDK. Cada entrada se identifica por archivo, clase y métrica, porque en otro proyecto dos clases pueden llamarse igual: en el simulador había cuatro `GatewayMockFactory`. Cada entrada declara también el valor más alto que admite (`allowed`) y el punto del log que la justifica (`logPoint`). Si la métrica pasa de `allowed`, la violación vuelve. Si la entrada ya no cubre ninguna violación, el modo guarda falla igual que ante una violación, para que el registro no acumule excepciones que ya no describen el código. Hoy tiene una:
+
+| Excepción | Clase cubierta | Justificación |
+|---|---|---|
+| CBO de `KitPagosProvider` | `services/KitPagosProvider.ts` (CBO 7, admite hasta 7) | Punto 107. Es la costura entre la capa REST y el SDK. De los siete tipos de sus firmas, cinco son datos sin comportamiento, como `PseBank` en el punto 47, y dos son colaboradores: `CredentialResolver`, que se inyecta, y `KitPagos`, que construye |
 
 Si un valor de WMC, CBO, RFC o MAX_CC supera su umbral durante la revisión de un pull request, y no está cubierto por una excepción documentada, se registra como defecto y el código no se aprueba hasta resolver la violación. Si la violación persiste dos iteraciones consecutivas sobre la misma clase, se convoca una sesión técnica de refactorización.
 
