@@ -1,4 +1,5 @@
 import { Product } from "../catalog";
+import { CheckoutEnvironment } from "../checkout/environment";
 import { Order, OrderStatus, StatusSource } from "../orders/OrderStore";
 import { COVER_SPRITE } from "./art";
 import { STORE_CSS } from "./styles";
@@ -53,12 +54,21 @@ export function formatPesos(amount: number): string {
   return `$${amount.toLocaleString("es-CO")} COP`;
 }
 
+/**
+ * La franja de arriba dice dónde se cobra. La tienda no nombra la pasarela: así la migración del
+ * #133 cambia solo el módulo de pagos, y no estas páginas (punto 111).
+ */
+const RIBBONS: Record<CheckoutEnvironment, string> = {
+  sandbox: "Tienda de demostración · cobra en el sandbox oficial de la pasarela, sin dinero real",
+  simulator: "Tienda de demostración · cobra en la API de Simulación de Kit Pagos, sin dinero real",
+};
+
 /** Datos para el script de la página, sin que un `<` cierre la etiqueta. */
 function jsonForScript(value: unknown): string {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
-function layout(title: string, main: string): string {
+function layout(title: string, main: string, environment: CheckoutEnvironment): string {
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -69,7 +79,7 @@ function layout(title: string, main: string): string {
 </head>
 <body>
 ${COVER_SPRITE}
-<p class="demo-ribbon">Tienda de demostración · los pagos son de prueba, sin dinero real</p>
+<p class="demo-ribbon">${RIBBONS[environment]}</p>
 <header class="masthead">
   <div class="masthead__inner">
     <a class="brand" href="/">
@@ -85,7 +95,7 @@ ${COVER_SPRITE}
 ${main}
 <footer class="footer">
   <p>La Candelaria Cómics · Bogotá · tienda de ejemplo</p>
-  <p class="footer__small">Prototipo A de Kit Pagos Colombia. Cobra con Wompi integrado a mano, sin el SDK.</p>
+  <p class="footer__small">Prototipo A de Kit Pagos Colombia: integración directa con la pasarela, sin el SDK.</p>
 </footer>
 <script type="module" src="/assets/checkout.js"></script>
 </body>
@@ -110,7 +120,7 @@ function productCard(product: Product): string {
 }
 
 /** La vitrina, el carrito y el checkout. El carrito lo arma el script con los datos de `catalog-data`. */
-export function storePage(products: readonly Product[]): string {
+export function storePage(products: readonly Product[], environment: CheckoutEnvironment): string {
   const catalog = products.map(({ id, title, priceInPesos }) => ({ id, title, priceInPesos }));
   return layout(
     "La Candelaria Cómics · Cómics de DC y Marvel",
@@ -121,12 +131,12 @@ export function storePage(products: readonly Product[]): string {
       <p class="about__title">Este prototipo es</p>
       <p>
         El <strong>prototipo A de Kit Pagos Colombia</strong>, el grupo de control del experimento: una tienda que
-        cobra con Wompi integrado a mano, con <code>fetch</code> contra su API y siguiendo su documentación oficial,
+        integra la pasarela a mano, con <code>fetch</code> contra su API y siguiendo su documentación oficial,
         sin el SDK del framework.
       </p>
       <p>
         El prototipo B cobra con <code>kit-pagos-colombia</code>. El experimento compara el código de pagos de los
-        dos y lo que cuesta migrar cada uno a Mercado Pago. Los pagos van al simulador o al sandbox de Wompi, sin
+        dos y lo que cuesta cambiar cada uno de pasarela. Los pagos van al sandbox oficial o al simulador, sin
         dinero real.
       </p>
     </aside>
@@ -181,7 +191,7 @@ export function storePage(products: readonly Product[]): string {
         <label>CVC <input id="cvc" value="123" inputmode="numeric" autocomplete="cc-csc"></label>
         <label>Cuotas <input id="installments" type="number" min="1" max="36" value="1"></label>
         <label class="grid__wide">Nombre en la tarjeta <input id="cardHolder" value="PEDRO PEREZ" autocomplete="cc-name"></label>
-        <p class="hint grid__wide">Tarjetas de prueba de Wompi: 4242 4242 4242 4242 aprueba y 4111 1111 1111 1111 rechaza. La tarjeta va del navegador a Wompi; la tienda solo recibe un token.</p>
+        <p class="hint grid__wide">Datos de prueba precargados. La tarjeta va del navegador a la pasarela; la tienda solo recibe un token.</p>
       </div>
 
       <div id="pse-fields" class="grid" hidden>
@@ -200,6 +210,7 @@ export function storePage(products: readonly Product[]): string {
   </aside>
 </main>
 <script type="application/json" id="catalog-data">${jsonForScript(catalog)}</script>`,
+    environment,
   );
 }
 
@@ -230,7 +241,7 @@ function summaryLines(order: Order): string {
 }
 
 /** La orden: el resultado para el comprador y, plegado, el historial con el estado nativo (función 6). */
-export function orderPage(order: Order): string {
+export function orderPage(order: Order, environment: CheckoutEnvironment): string {
   const result = RESULTS[order.status];
   return layout(
     `Orden ${order.id} · La Candelaria Cómics`,
@@ -261,10 +272,11 @@ export function orderPage(order: Order): string {
     </details>
   </article>
 </main>`,
+    environment,
   );
 }
 
-export function notFoundPage(): string {
+export function notFoundPage(environment: CheckoutEnvironment): string {
   return layout(
     "Orden no encontrada · La Candelaria Cómics",
     `<main class="result">
@@ -274,5 +286,6 @@ export function notFoundPage(): string {
     <div class="result__actions"><a class="secondary" href="/">Volver a la tienda</a></div>
   </article>
 </main>`,
+    environment,
   );
 }

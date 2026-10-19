@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
 import { PRODUCTS } from "../src/catalog";
@@ -63,6 +65,25 @@ describe("checkout skeleton", () => {
       expect(afterTitle.indexOf("Este prototipo es")).toBeLessThan(afterTitle.indexOf('class="products"'));
       expect(res.body).toContain("prototipo A de Kit Pagos Colombia");
       expect(res.body).toContain("sin el SDK");
+    });
+
+    it("should say in the ribbon that it charges in the gateway's official sandbox by default", async () => {
+      const res = await app.inject({ method: "GET", url: "/" });
+
+      expect(res.body).toContain("cobra en el sandbox oficial de la pasarela");
+    });
+
+    it("should say in the ribbon that it charges in the simulator when the environment says so", async () => {
+      process.env.CHECKOUT_ENVIRONMENT = "simulator";
+      const simulated = buildApp({ payments, publicBaseUrl: BASE_URL, orders });
+      try {
+        const res = await simulated.inject({ method: "GET", url: "/" });
+
+        expect(res.body).toContain("cobra en la API de Simulación");
+      } finally {
+        delete process.env.CHECKOUT_ENVIRONMENT;
+        await simulated.close();
+      }
     });
 
     it("should hand the script the catalog prices without letting a < close the tag", async () => {
@@ -400,5 +421,23 @@ describe("checkout skeleton", () => {
       expect(res.headers["content-type"]).toContain("text/javascript");
       expect(res.body).toContain(content);
     });
+  });
+});
+
+// La migración del #133 tiene que tocar solo src/payments/: si la tienda nombrara la pasarela,
+// el commit de la migración tendría que cambiar también sus páginas (punto 111).
+describe("the storefront does not name a gateway", () => {
+  const root = path.resolve(__dirname, "..");
+  const files = [
+    ...readdirSync(path.join(root, "src/views")).map((name) => `src/views/${name}`),
+    "src/public/checkout.js",
+    "src/catalog.ts",
+    "src/routes/api.ts",
+    "src/routes/pages.ts",
+    "src/orders/OrderStore.ts",
+  ];
+
+  it.each(files)("%s", (file) => {
+    expect(readFileSync(path.join(root, file), "utf8")).not.toMatch(/wompi|mercado\s*pago|kushki|rapyd/i);
   });
 });
