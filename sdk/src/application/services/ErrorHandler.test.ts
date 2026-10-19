@@ -243,6 +243,43 @@ describe("ErrorHandler", () => {
     });
   });
 
+  describe("handle() with the native code and reason in the message (issue #153)", () => {
+    /** Medido contra Kushki UAT el 17 de octubre de 2026: un token de 48 000 cobrado por 50 000. */
+    const k220 = { code: "K220", message: "Monto de la transacción es diferente al monto de la venta inicial" };
+
+    it("appends the native detail without changing the normalized code or the payload", () => {
+      const result = errorHandler.handle({ status: 400, body: k220 }, Gateway.KUSHKI);
+
+      expect(result.code).toBe(KitPagosErrorCode.INVALID_REQUEST);
+      expect(result.originalPayload).toBe(k220);
+      expect(result.message).toBe(
+        "Kushki gateway returned an HTTP error status 400 " +
+          "(K220: Monto de la transacción es diferente al monto de la venta inicial)",
+      );
+    });
+
+    it("reads the detail from data too", () => {
+      const result = errorHandler.handle({ status: 400, data: k220 }, Gateway.KUSHKI);
+
+      expect(result.message).toContain("(K220: ");
+    });
+
+    it("keeps the plain message when the body brings no detail", () => {
+      const result = errorHandler.handle({ status: 502, body: "<html>Bad Gateway</html>" }, Gateway.KUSHKI);
+
+      expect(result.message).toBe("Kushki gateway returned an HTTP error status 502");
+    });
+
+    it("sanitizes the appended detail like the rest of the message", () => {
+      const body = { error: { type: "NOT_FOUND", reason: "Comercio con llave pub_test_abc123 no encontrado" } };
+
+      const result = errorHandler.handle({ status: 404, body }, Gateway.WOMPI);
+
+      expect(result.message).toContain("NOT_FOUND: Comercio con llave [REDACTED_PUBLIC_KEY] no encontrado");
+      expect(result.message).not.toContain("pub_test_abc123");
+    });
+  });
+
   describe("handle() with HTTP response objects ({ status, body / data })", () => {
     it("maps 401 and 403 to INVALID_CREDENTIALS", () => {
       const res401 = errorHandler.handle({ status: 401, body: { error: "unauthorized" } }, Gateway.WOMPI);
