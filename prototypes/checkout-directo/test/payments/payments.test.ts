@@ -110,6 +110,61 @@ describe("Wompi payments module (Prototype A - Direct Integration)", () => {
     });
   });
 
+  describe("the environment of the skeleton", () => {
+    const names = [
+      "WOMPI_BASE_URL",
+      "WOMPI_PUBLIC_KEY",
+      "WOMPI_PRIVATE_KEY",
+      "WOMPI_INTEGRITY_SECRET",
+      "CHECKOUT_ENVIRONMENT",
+      "CHECKOUT_SIMULATOR_URL",
+    ];
+    const sandboxKeys = {
+      WOMPI_PUBLIC_KEY: "pub_test_x",
+      WOMPI_PRIVATE_KEY: "prv_test_x",
+      WOMPI_INTEGRITY_SECRET: "test_integrity_x",
+    };
+
+    // Deja solo estas variables y devuelve las de antes, borrando las que no existían.
+    function withEnv(values: Record<string, string>, run: () => void): void {
+      const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+      for (const name of names) delete process.env[name];
+      Object.assign(process.env, values);
+      try {
+        run();
+      } finally {
+        for (const name of names) {
+          if (saved[name] === undefined) delete process.env[name];
+          else process.env[name] = saved[name];
+        }
+      }
+    }
+
+    it("should charge in Wompi's official sandbox by default", () => {
+      withEnv(sandboxKeys, () => {
+        expect(createPayments().publicConfig().baseUrl).toBe("https://sandbox.wompi.co/v1");
+      });
+    });
+
+    it("should charge in the simulator's Wompi routes when the environment is the simulator", () => {
+      withEnv({ CHECKOUT_ENVIRONMENT: "simulator", CHECKOUT_SIMULATOR_URL: "http://localhost:3000/" }, () => {
+        expect(createPayments().publicConfig().baseUrl).toBe("http://localhost:3000/v1/sim/wompi");
+      });
+    });
+
+    it("should stop at start-up when the sandbox keys are missing, naming them", () => {
+      withEnv({ WOMPI_PUBLIC_KEY: "pub_test_x" }, () => {
+        expect(() => createPayments()).toThrow(/WOMPI_PRIVATE_KEY, WOMPI_INTEGRITY_SECRET/);
+      });
+    });
+
+    it("should not ask for the sandbox keys when WOMPI_BASE_URL says where to charge", () => {
+      withEnv({ WOMPI_BASE_URL: "http://localhost:3000/v1/sim/wompi" }, () => {
+        expect(() => createPayments()).not.toThrow();
+      });
+    });
+  });
+
   describe("listPseBanks()", () => {
     it("should list financial institutions and map them to PseBankOption[]", async () => {
       const mockBanks = [

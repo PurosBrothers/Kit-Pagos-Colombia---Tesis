@@ -9,6 +9,7 @@ import {
   PseBankOption,
   WebhookNotification,
 } from "../checkout/PaymentsPort";
+import { paymentsEnvironment } from "../checkout/environment";
 
 /**
  * Configuración de integración directa con Wompi (Prototipo A - Control).
@@ -27,8 +28,18 @@ export interface WompiPaymentsConfig {
   sleep?: (ms: number) => Promise<void>;
 }
 
-const DEFAULT_WOMPI_BASE_URL = "http://localhost:3000/v1/sim/wompi";
+/** El sandbox oficial: https://docs.wompi.co/docs/colombia/ambientes-y-llaves/ */
+const WOMPI_SANDBOX_URL = "https://sandbox.wompi.co/v1";
 const DEFAULT_INTEGRITY_SECRET = "test_integrity_kit_pagos_simulator";
+
+/** La URL de Wompi según el ambiente del esqueleto: el sandbox oficial o la API de Simulación. */
+function defaultBaseUrl(): string {
+  const { environment, simulatorUrl } = paymentsEnvironment();
+  return environment === "sandbox" ? WOMPI_SANDBOX_URL : `${simulatorUrl}/v1/sim/wompi`;
+}
+
+/** Las llaves sin las que el sandbox oficial no cobra; el simulador tiene valores por omisión. */
+const SANDBOX_KEYS = ["WOMPI_PUBLIC_KEY", "WOMPI_PRIVATE_KEY", "WOMPI_INTEGRITY_SECRET"] as const;
 
 const defaultSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -68,7 +79,17 @@ class WompiPaymentsAdapter implements PaymentsPort {
   private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(config?: Partial<WompiPaymentsConfig>) {
-    this.baseUrl = (config?.baseUrl ?? process.env.WOMPI_BASE_URL ?? DEFAULT_WOMPI_BASE_URL).replace(/\/+$/, "");
+    const configuredBaseUrl = config?.baseUrl ?? process.env.WOMPI_BASE_URL;
+    if (configuredBaseUrl === undefined && paymentsEnvironment().environment === "sandbox") {
+      const missing = SANDBOX_KEYS.filter((name) => !process.env[name]?.trim());
+      if (missing.length > 0) {
+        throw new Error(
+          `Para cobrar en el sandbox de Wompi faltan ${missing.join(", ")} en el .env de la raíz. ` +
+            "Sin ellas, usa el simulador: npm run start:local.",
+        );
+      }
+    }
+    this.baseUrl = (configuredBaseUrl ?? defaultBaseUrl()).replace(/\/+$/, "");
     this.publicKey = (config?.publicKey ?? process.env.WOMPI_PUBLIC_KEY ?? "pub_test_simulator").trim();
     this.privateKey = (config?.privateKey ?? process.env.WOMPI_PRIVATE_KEY ?? "prv_test_simulator").trim();
     this.integritySecret = (config?.integritySecret ?? process.env.WOMPI_INTEGRITY_SECRET ?? DEFAULT_INTEGRITY_SECRET).trim();
