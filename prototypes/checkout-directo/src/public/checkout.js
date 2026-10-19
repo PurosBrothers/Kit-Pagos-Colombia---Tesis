@@ -13,6 +13,65 @@ function show(text) {
   if (message) message.textContent = text;
 }
 
+// La traza del navegador, en la consola (F12) con [tienda A]: cada llamada de la página a la tienda
+// y la tokenización, que sale del navegador directo a la pasarela. Nunca registra el cuerpo de la
+// petición, que lleva la tarjeta, ni una llave completa.
+const KEY_PATTERNS = [
+  [/\b(pub|prv)_(test|prod|stagtest)_[A-Za-z0-9]+/g, "$1_$2_…"],
+  [/\b(APP_USR|TEST)-[A-Za-z0-9-]+/g, "$1-…"],
+];
+
+function traceLine(...parts) {
+  console.info("[tienda A]", ...parts);
+}
+
+/** El sentido de la llamada y su ruta, sin la query y con las llaves tapadas. */
+function describeCall(method, url) {
+  const parsed = new URL(url, window.location.href);
+  const sameOrigin = parsed.origin === window.location.origin;
+  const shown = sameOrigin ? parsed.pathname : `${parsed.host}${parsed.pathname}`;
+  const masked = KEY_PATTERNS.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), shown);
+  return sameOrigin
+    ? `navegador → tienda    ${method} ${masked}`
+    : `navegador → pasarela  ${method} ${masked} (directo, sin pasar por la tienda)`;
+}
+
+function maskToken(id) {
+  return typeof id === "string" && id.length > 10 ? `${id.slice(0, 8)}…` : id;
+}
+
+/** Lo que vale la pena ver de una respuesta: la orden, los bancos, el token o el estado. */
+function summarize(body) {
+  if (!body || typeof body !== "object") return "";
+  if (body.order) {
+    return `orden ${body.order.id} ${body.order.status}${body.redirectUrl ? " · redirige al banco" : ""}${body.error ? ` · ${body.error}` : ""}`;
+  }
+  if (Array.isArray(body.banks)) return `${body.banks.length} bancos`;
+  if (body.publicKey) return "configuración pública del módulo de pagos";
+  if (body.error) return typeof body.error === "string" ? body.error : JSON.stringify(body.error).slice(0, 120);
+  const id = body.data?.id ?? body.id;
+  const status = body.data?.status ?? body.status;
+  if (id) return `id ${maskToken(id)}${status ? ` · ${status}` : ""}`;
+  return "";
+}
+
+const nativeFetch = window.fetch.bind(window);
+window.fetch = async (input, init = {}) => {
+  const url = typeof input === "string" ? input : input.url;
+  const method = (init.method || "GET").toUpperCase();
+  const started = performance.now();
+  try {
+    const response = await nativeFetch(input, init);
+    const body = await response.clone().json().catch(() => undefined);
+    const summary = summarize(body);
+    traceLine(`${describeCall(method, url)} → ${response.status}${summary ? ` · ${summary}` : ""} · ${Math.round(performance.now() - started)} ms`);
+    return response;
+  } catch (error) {
+    traceLine(`${describeCall(method, url)} → sin respuesta: ${error.message}`);
+    throw error;
+  }
+};
+
 const pesos = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 
 async function readJson(response) {
@@ -158,6 +217,7 @@ function setUpStore(form) {
   });
 
   async function cardMethod() {
+    traceLine("tarjeta: el módulo de pagos la tokeniza en el navegador; al servidor de la tienda solo llega el token");
     const config = await readJson(await fetch("/api/payments/config"));
     const { tokenizeCard } = await import("/payments/client.js");
     const cardToken = await tokenizeCard(
@@ -184,6 +244,7 @@ function setUpStore(form) {
     payButton.textContent = "Procesando el pago…";
     try {
       const selected = form.querySelector("input[name=method]:checked").value;
+      traceLine(`pagar ${cartCount(cart)} cómics con ${selected === "PSE" ? "PSE" : "tarjeta"}`);
       const method = selected === "PSE" ? pseMethod() : await cardMethod();
       const payer = {
         fullName: value("fullName"),
@@ -201,6 +262,7 @@ function setUpStore(form) {
       const body = await response.json().catch(() => ({}));
       if (!body.order) throw new Error(body.error || `La tienda respondió ${response.status}`);
       // El carrito se queda hasta que la orden se apruebe: si el pago se rechaza, se reintenta sin armarlo otra vez.
+      traceLine(body.redirectUrl ? `redirigiendo a la página del banco: ${new URL(body.redirectUrl).host}` : `abriendo la orden ${body.order.id}`);
       window.location.assign(body.redirectUrl || `/orders/${body.order.id}`);
     } catch (error) {
       show(`No se pudo completar el pago: ${error.message}`);
@@ -219,6 +281,7 @@ async function refreshOrder(orderId) {
 
 function setUpOrderPage(button) {
   const shown = document.getElementById("order-result").dataset.status;
+  traceLine(`orden ${button.dataset.orderId}: ${shown}${shown === "PENDING" ? "; la página la consulta sola" : ""}`);
   if (shown === "APPROVED") saveCart({});
   renderCount(loadCart());
 

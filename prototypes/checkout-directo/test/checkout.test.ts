@@ -5,6 +5,7 @@ import { buildApp } from "../src/app";
 import { PRODUCTS } from "../src/catalog";
 import { PaymentTechnicalError, PaymentsPort } from "../src/checkout/PaymentsPort";
 import { OrderStore } from "../src/orders/OrderStore";
+import { disableTrace, enableTrace } from "../src/trace";
 import { fakePayments } from "./helpers/fakePayments";
 
 const BASE_URL = "http://checkout.test";
@@ -153,6 +154,34 @@ describe("checkout skeleton", () => {
 
       expect(res.statusCode).toBe(404);
       expect(res.body).toContain("Orden no encontrada");
+    });
+  });
+
+  describe("the store's trace", () => {
+    afterEach(() => disableTrace());
+
+    it("should tell what the order is, what reaches the payments module and how the order changed", async () => {
+      const lines: string[] = [];
+      enableTrace((line) => lines.push(line));
+
+      const { order } = (await createOrder(card)).json();
+      await app.inject({ method: "GET", url: `/api/orders/${order.id}` });
+
+      expect(lines).toEqual([
+        `[checkout]   orden ${order.id}: La Candelaria Cómics · 1 cómic por $68.000 COP, con tarjeta (llega solo el token) → módulo de pagos`,
+        `[checkout]   orden ${order.id} ← creación: APPROVED (nativo APPROVED), transacción tx-card-1`,
+        `[checkout]   orden ${order.id} ← consulta: APPROVED (nativo APPROVED) (sin cambios)`,
+      ]);
+    });
+
+    it("should name the bank of a PSE payment and never the payer's data", async () => {
+      const lines: string[] = [];
+      enableTrace((line) => lines.push(line));
+
+      await createOrder(pse);
+
+      expect(lines[0]).toContain("por PSE (banco 1007)");
+      expect(lines.join("\n")).not.toMatch(/pedro@example\.com|1020304050|3001234567/);
     });
   });
 

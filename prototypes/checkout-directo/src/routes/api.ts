@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyReply } from "fastify";
 import { MAX_QUANTITY, PRODUCTS, RequestedItem, linesTotal, orderDescription, orderLines } from "../catalog";
 import { Payer, PaymentMethodRequest, PaymentTechnicalError } from "../checkout/PaymentsPort";
 import { Order } from "../orders/OrderStore";
+import { trace } from "../trace";
 import { RouteContext } from "./context";
 
 interface CreateOrderBody {
@@ -97,6 +98,10 @@ export async function apiRoutes(app: FastifyInstance, context: RouteContext): Pr
       payer,
       method: method.type,
     });
+    trace(
+      `  orden ${order.id}: ${orderDescription(lines)} por $${order.amountInPesos.toLocaleString("es-CO")} COP, ` +
+        `${method.type === "CARD" ? "con tarjeta (llega solo el token)" : `por PSE (banco ${method.bankCode})`} → módulo de pagos`,
+    );
     try {
       const payment = await payments.createPayment({
         orderReference: order.id,
