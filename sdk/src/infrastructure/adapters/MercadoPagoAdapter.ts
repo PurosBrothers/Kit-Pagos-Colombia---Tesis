@@ -14,20 +14,23 @@ import { Credentials } from "../../domain/value-objects/Credentials";
 import { ResponseNormalizer } from "../../application/services/ResponseNormalizer";
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
+import { httpFailure } from "./http-failure";
 import {
   assertSupportedPaymentMethod,
   requireCardToken,
   resolveInstallments,
 } from "./payment-method-support";
 import {
+  acceptFailedOrder,
   assertPseRequirements,
   buildPseOrderPayload,
-  extractOrderRedirect,
   extractPaymentRedirect,
   isOrderId,
   parseMercadoPagoPseBanks,
+  resolveOrderOutcome,
 } from "./mercadopago-pse";
 import type { PseBank } from "../../domain/value-objects/PseBank";
+import { DEFAULT_REQUEST_TIMEOUT_MS, withRequestTimeout } from "../config/request-timeout";
 
 /**
  * Raíz de la API de Mercado Pago en la API de Simulación.
@@ -61,14 +64,17 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
   /** Ver la nota de WompiAdapter: fuera del constructor para no inflar el CBO. */
   private readonly normalizer = new ResponseNormalizer();
   private readonly webhookVerifier: WebhookVerifier;
+  private readonly timeoutMs: number;
 
   constructor(
     baseUrl: string = DEFAULT_MERCADOPAGO_BASE_URL,
     credentials?: Credentials,
-    webhookVerifier: WebhookVerifier = new WebhookVerifier()
+    webhookVerifier: WebhookVerifier = new WebhookVerifier(),
+    timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
   ) {
     this.baseUrl = baseUrl;
     this.credentials = credentials;
+    this.timeoutMs = timeoutMs;
     this.webhookVerifier = webhookVerifier;
   }
 
@@ -99,8 +105,11 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
       );
 
       // La URL del banco ya viene en la creación, así que no hay sondeo como en
-      // Wompi. Ver el punto 4 de `mercadopago-pse.ts`.
-      return redirectRequired(extractOrderRedirect(rawResponse));
+      // Wompi; y una orden cuyo pago falló llega con 402 y se normaliza DECLINED.
+      // Ver los puntos 3 y 4 de `mercadopago-pse.ts`.
+      return resolveOrderOutcome(rawResponse, (raw) =>
+        this.normalizer.normalize(raw, Gateway.MERCADOPAGO),
+      );
     }
 
     // Mapeo de objetos de valor del dominio a campos nativos de Mercado Pago.
@@ -166,7 +175,7 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
    * Lista los bancos habilitados para PSE.
    *
    * Mercado Pago no tiene endpoint de bancos: tiene uno de métodos de pago, y las
-   * entidades vienen anidadas en la entrada `pse`. Por eso la ruta acá es
+   * entidades vienen anidadas en la entrada `pse`. Por eso la ruta aquí es
    * `/payment_methods` y el filtrado vive en `parseMercadoPagoPseBanks`, que es
    * donde se conoce la forma nativa.
    */
@@ -213,31 +222,33 @@ export class MercadoPagoAdapter implements PaymentGatewayPort {
       headers["X-Idempotency-Key"] = randomUUID();
     }
 
-    let response: Response;
-    try {
-      response = await fetch(url, { method, headers, body });
-    } catch (networkError) {
-      throw new ErrorHandler().handle(networkError, Gateway.MERCADOPAGO);
-    }
+    return withRequestTimeout(
+      this.timeoutMs,
+      async (signal) => {
+        let response: Response;
+        try {
+          response = await fetch(url, { method, headers, body, signal });
+        } catch (networkError) {
+          throw new ErrorHandler().handle(networkError, Gateway.MERCADOPAGO);
+        }
 
-    if (!response.ok) {
-      let errorBody: unknown;
-      try {
-        errorBody = await response.json();
-      } catch {
-        errorBody = await response.text();
-      }
-      throw new ErrorHandler().handle(
-        { status: response.status, body: errorBody },
-        Gateway.MERCADOPAGO,
-      );
-    }
+        if (!response.ok) {
+          // Lanza salvo en el 402 de una orden de PSE que se creó y falló, cuyo cuerpo
+          // `createPayment` normaliza como DECLINED (punto 3 de `mercadopago-pse.ts`).
+          return acceptFailedOrder(
+            response.status,
+            await httpFailure(response, Gateway.MERCADOPAGO, this.credentials),
+          );
+        }
 
-    try {
-      return await response.json();
-    } catch (parseError) {
-      throw new ErrorHandler().handle(parseError, Gateway.MERCADOPAGO);
-    }
+        try {
+          return await response.json();
+        } catch (parseError) {
+          throw new ErrorHandler().handle(parseError, Gateway.MERCADOPAGO);
+        }
+      },
+      (reason) => new ErrorHandler().handle(reason, Gateway.MERCADOPAGO),
+    );
   }
 
   /**

@@ -19,7 +19,7 @@ describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
     baseUrl,
   });
 
-  it("responde la lista de bancos de PSE, con código y nombre", async () => {
+  it("returns the PSE bank list, with code and name", async () => {
     const banks = await kitPagos.getPseBanks();
 
     expect(banks.length).toBeGreaterThan(0);
@@ -53,7 +53,7 @@ describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
    * que sí es del SDK, y lo que se afirma, es que el cobro se cree y que el SDK pueda leer la
    * respuesta y construir una `Transaction` con el monto y la referencia que se mandaron.
    */
-  it("cobra una tarjeta y devuelve una transacción legible", async () => {
+  it("charges a card and returns a readable transaction", async () => {
     const reference = uniqueReference("SBX-MP-CARD");
     const { token } = await tokenizeMercadoPagoCard(credentials);
 
@@ -87,7 +87,7 @@ describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
    * Tokenización de tarjeta desde el navegador con KitPagosBrowser y cobro en servidor.
    * Medido el 4 de octubre de 2026 contra sandbox de Mercado Pago (issue #127).
    */
-  it("tokeniza una tarjeta con KitPagosBrowser y cobra a través del SDK de servidor", async () => {
+  it("tokenizes a card with KitPagosBrowser and charges through the server SDK", async () => {
     const tokenResult = await KitPagosBrowser.tokenizeCard({
       gateway: Gateway.MERCADOPAGO,
       publicKey: credentials.publicKey,
@@ -133,7 +133,7 @@ describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
    * exige siempre, incluso cuando son una, y si algún día dejara de hacerlo, este es el lugar
    * donde se va a notar.
    */
-  it("sigue rechazando un cobro con token y sin cuotas", async () => {
+  it("still rejects a token charge without installments", async () => {
     const { token } = await tokenizeMercadoPagoCard(credentials);
 
     const response = await fetch(`${baseUrl}/payments`, {
@@ -163,7 +163,7 @@ describeSandbox(Gateway.MERCADOPAGO, (credentials, baseUrl) => {
    * mensaje nombrando ese campo es lo que hace valioso que el SDK falle antes, con un error
    * que diga que falta el token y dónde se tokeniza.
    */
-  it("sigue pidiendo el token nombrando payment_method_id", async () => {
+  it("still asks for the token naming payment_method_id", async () => {
     const response = await fetch(`${baseUrl}/payments`, {
       method: "POST",
       headers: {

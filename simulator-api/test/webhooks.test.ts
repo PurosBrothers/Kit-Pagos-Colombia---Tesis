@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { buildApp } from "../src/app";
+import { buildSignedApp as buildApp } from "./helpers/signedRequests";
 import { CredentialResolver } from "../src/auth/CredentialResolver";
 import { parseToleranceSeconds } from "../src/kit-pagos-api/routes/webhooks";
 import {

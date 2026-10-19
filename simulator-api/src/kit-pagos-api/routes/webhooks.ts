@@ -3,6 +3,7 @@ import { Gateway, KitPagosError, KitPagosErrorCode, WebhookEvent } from "kit-pag
 import { loadServerEnv } from "../../auth/CredentialResolver";
 import { SENSITIVE_HEADERS } from "../../logger/redactSerializer";
 import { parseGateway, unsupportedGatewayBody } from "../gateway-param";
+import { PostWebhooksSchema } from "../openapi/schemas";
 
 /**
  * Respuesta única para todo webhook rechazado. Firma falsificada, cuerpo
@@ -107,6 +108,7 @@ export async function webhooksRoute(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: WebhookParams; Body: string }>(
     "/webhooks/:gateway",
+    { schema: PostWebhooksSchema },
     async (request, reply) => {
       const gateway = parseGateway(request.params.gateway);
       if (!gateway) {

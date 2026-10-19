@@ -29,12 +29,12 @@ function buildTransaction(
 
 describe("Transaction", () => {
   describe("isApproved()", () => {
-    it("es true unicamente para APPROVED", () => {
+    it("is true only for APPROVED", () => {
       expect(buildTransaction("APPROVED", "APPROVED").isApproved()).toBe(true);
     });
 
     it.each<TransactionStatus>(["DECLINED", "PENDING", "EXPIRED", "VOIDED", "ERROR"])(
-      "es false para %s",
+      "is false for %s",
       (status) => {
         expect(buildTransaction(status, status).isApproved()).toBe(false);
       },
@@ -42,12 +42,12 @@ describe("Transaction", () => {
   });
 
   describe("isPending()", () => {
-    it("es true unicamente para PENDING", () => {
+    it("is true only for PENDING", () => {
       expect(buildTransaction("PENDING", "PENDING").isPending()).toBe(true);
     });
 
     it.each<TransactionStatus>(["APPROVED", "DECLINED", "EXPIRED", "VOIDED", "ERROR"])(
-      "es false para %s",
+      "is false for %s",
       (status) => {
         expect(buildTransaction(status, status).isPending()).toBe(false);
       },
@@ -55,12 +55,12 @@ describe("Transaction", () => {
   });
 
   describe("isFinal()", () => {
-    it("es false unicamente para PENDING", () => {
+    it("is false only for PENDING", () => {
       expect(buildTransaction("PENDING", "PENDING").isFinal()).toBe(false);
     });
 
     it.each<TransactionStatus>(["APPROVED", "DECLINED", "EXPIRED", "VOIDED", "ERROR"])(
-      "es true para %s, porque ya no se espera ningun cambio adicional",
+      "is true for %s, because no further change is expected",
       (status) => {
         expect(buildTransaction(status, status).isFinal()).toBe(true);
       },
@@ -75,32 +75,32 @@ describe("Transaction", () => {
       "EXPIRED",
       "VOIDED",
       "ERROR",
-    ])("devuelve el mismo estado con el que se construyo (%s)", (status) => {
+    ])("returns the same status it was built with (%s)", (status) => {
       expect(buildTransaction(status, status).getStatus()).toBe(status);
     });
   });
 
   describe("rawStatus", () => {
-    it("conserva el valor nativo de la pasarela sin normalizar", () => {
+    it("keeps the gateway's native value without normalizing it", () => {
       const transaction = buildTransaction("APPROVED", "4");
       expect(transaction.rawStatus).toBe("4");
     });
   });
 
-  describe("campos opcionales", () => {
-    it("rejectionReason y authorizationCode quedan undefined si no se pasan", () => {
+  describe("optional fields", () => {
+    it("rejectionReason and authorizationCode stay undefined if not passed", () => {
       const transaction = buildTransaction("APPROVED", "APPROVED");
       expect(transaction.rejectionReason).toBeUndefined();
       expect(transaction.authorizationCode).toBeUndefined();
     });
 
-    it("conserva rejectionReason cuando el estado es DECLINED", () => {
+    it("keeps rejectionReason when the status is DECLINED", () => {
       const rejectionReason = new RejectionReason("51", "INSUFFICIENT_FUNDS");
       const transaction = buildTransaction("DECLINED", "DECLINED", { rejectionReason });
       expect(transaction.rejectionReason).toBe(rejectionReason);
     });
 
-    it("conserva authorizationCode cuando la pasarela lo devuelve", () => {
+    it("keeps authorizationCode when the gateway returns it", () => {
       const transaction = buildTransaction("APPROVED", "APPROVED", {
         authorizationCode: "AUTH-000123",
       });
@@ -108,8 +108,8 @@ describe("Transaction", () => {
     });
   });
 
-  describe("objetos de valor colaboradores", () => {
-    it("expone gatewayTransactionId, orderReference, amount, currency y payer tal como se construyeron", () => {
+  describe("collaborating value objects", () => {
+    it("exposes gatewayTransactionId, orderReference, amount, currency and payer as they were built", () => {
       const gatewayTransactionId = new GatewayTransactionId("tx-999", Gateway.KUSHKI);
       const orderReference = new OrderReference("order-999");
       const amount = new Amount("250");

@@ -1,7 +1,7 @@
 import { buildApp } from "../src/app";
 
 describe("GET /health", () => {
-  it("responde 200 con status ok, sin abrir un puerto real", async () => {
+  it("answers 200 with status ok, without opening a real port", async () => {
     const app = buildApp();
 
     const response = await app.inject({

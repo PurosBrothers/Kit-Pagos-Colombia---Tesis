@@ -30,14 +30,14 @@ import { TransactionStatus } from "../value-objects/TransactionStatus";
  * Porque los manejadores de webhook viven en el dominio y no pueden importar de
  * `application/` sin invertir la dependencia que la Arquitectura Hexagonal
  * define (ADR-01). Al revés sí se puede: los normalizadores, que son de
- * aplicación, importan de acá.
+ * aplicación, importan de aquí.
  *
  * ## Por qué Rapyd no está
  *
  * Porque su manejador de webhook no traduce un estado sino un **tipo de evento**:
  * Rapyd manda un webhook distinto por resultado (`PAYMENT_COMPLETED`,
  * `PAYMENT_FAILED`) en vez de un evento único con un campo de estado variable.
- * Meterlo acá obligaría a fingir que las dos cosas son lo mismo. Su normalizador
+ * Meterlo aquí obligaría a fingir que las dos cosas son lo mismo. Su normalizador
  * sí traduce estados nativos, pero no tiene con quién compartirlos, así que la
  * duplicación que este archivo corrige no existe en Rapyd.
  */
@@ -90,6 +90,13 @@ export const KUSHKI_NATIVE_STATUS: Readonly<Record<string, TransactionStatus>> =
  * distintos de la misma pasarela, y por eso la tabla es más larga que las otras.
  * `action_required` es el estado de una orden de PSE esperando la transferencia,
  * medido junto a `status_detail: "waiting_transfer"` (punto 45).
+ *
+ * `failed` es `DECLINED` y no `ERROR` (issue #122): es la orden cuyo pago falló, que la
+ * creación entrega en un `402` con la orden en `data` y que la consulta devuelve en
+ * `failed / failed` con `200`. Medido el 7 de octubre de 2026
+ * (`docs/testing-data/mercado-pago.md`, «El `402` de una orden de PSE que falla»). La
+ * orden existe y no cambió en las dos consultas, separadas por 6 segundos: para el
+ * comercio es un pago rechazado, y debe verla igual al crearla que al consultarla.
  */
 export const MERCADOPAGO_NATIVE_STATUS: Readonly<Record<string, TransactionStatus>> = {
   // Payments API (tarjeta).
@@ -105,7 +112,7 @@ export const MERCADOPAGO_NATIVE_STATUS: Readonly<Record<string, TransactionStatu
   processing: "PENDING",
   canceled: "VOIDED",
   expired: "EXPIRED",
-  failed: "ERROR",
+  failed: "DECLINED",
 };
 
 /**

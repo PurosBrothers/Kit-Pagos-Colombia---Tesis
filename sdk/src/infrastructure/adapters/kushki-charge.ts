@@ -28,6 +28,8 @@
  * tarjeta (se probaron catorce candidatas). Ver el punto 50 del `architecture-log.md`.
  */
 import { Gateway } from "../../domain/value-objects/Gateway";
+import { KitPagosError } from "../../domain/errors/KitPagosError";
+import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 import { GatewayTransactionId } from "../../domain/value-objects/GatewayTransactionId";
 import type { PendingRedirect } from "../../domain/value-objects/PaymentResult";
 import type { CreatePaymentRequest } from "../../application/ports/PaymentGatewayPort";
@@ -42,6 +44,35 @@ export const CARD_CHARGE_PATH = "/card/v1/charges";
 
 /** Dónde tokeniza el comercio, para poder decírselo si no manda token. */
 export const CARD_TOKENIZATION_ENDPOINT = "POST /card/v1/tokens";
+
+/** Código con el que el cobro rechaza el `Private-Merchant-Id`. */
+const INVALID_MERCHANT_CREDENTIAL_CODE = "K004";
+
+/**
+ * Corrige la clasificación de un 400 que en realidad es un rechazo de credencial.
+ *
+ * `POST /card/v1/charges` no responde 401 ni 403 ante una llave privada inválida: responde
+ * `400 {"message": "ID de comercio o credencial no válido", "code": "K004"}`, y revisa la
+ * credencial antes que el cuerpo (con la llave válida, el mismo cuerpo da K001). Medido el
+ * 6 de octubre de 2026, docs/testing-data/kushki.md §1.2. Por status, `ErrorHandler` lo
+ * deja en INVALID_REQUEST y el comercio buscaría el defecto en su payload; aquí se decide
+ * por el código del cuerpo, que es lo único que distingue los dos casos.
+ */
+export function reclassifyKushkiCredentialError(error: KitPagosError): KitPagosError {
+  const payload = error.originalPayload as { code?: unknown } | null;
+  if (
+    error.code !== KitPagosErrorCode.INVALID_REQUEST ||
+    payload?.code !== INVALID_MERCHANT_CREDENTIAL_CODE
+  ) {
+    return error;
+  }
+  return new KitPagosError(
+    KitPagosErrorCode.INVALID_CREDENTIALS,
+    error.gateway,
+    error.originalPayload,
+    `${error.message} (${INVALID_MERCHANT_CREDENTIAL_CODE}: invalid merchant credential)`,
+  );
+}
 
 /**
  * Arma el cuerpo de `POST /card/v1/charges`.

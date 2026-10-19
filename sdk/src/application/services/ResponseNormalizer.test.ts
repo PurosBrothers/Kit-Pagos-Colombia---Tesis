@@ -58,7 +58,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.amount.getValue()).toBe("25000.00");
     });
 
-    it("conserva el cero a la derecha al reconstruir el monto desde centavos", () => {
+    it("keeps the trailing zero when rebuilding the amount from cents", () => {
       // La implementación anterior dividía entre 100, y 1990 / 100 da 19.9: el
       // comercio cobraba 19.90 y recibía de vuelta un monto escrito distinto.
       // Ahora el punto decimal se inserta sobre los dígitos.
@@ -77,7 +77,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.amount.toMinorUnits(transaction.currency)).toBe("1990");
     });
 
-    it("lanza KitPagosError(MALFORMED_RESPONSE) si el monto no es un entero de centavos", () => {
+    it("throws KitPagosError(MALFORMED_RESPONSE) if the amount is not an integer number of cents", () => {
       // Un monto ilegible es una respuesta malformada, y debe llegar como error
       // tipado igual que un JSON roto, no como el Error nativo del objeto de valor.
       const payload = {
@@ -160,7 +160,7 @@ describe("ResponseNormalizer", () => {
     });
   });
 
-  describe("normalize() con Gateway.RAPYD", () => {
+  describe("normalize() with Gateway.RAPYD", () => {
     /** Construye una respuesta de Rapyd con el sobre `{ status, data }`. */
     const rapydResponse = (data: Record<string, unknown>) => ({
       status: {
@@ -183,7 +183,7 @@ describe("ResponseNormalizer", () => {
       },
     });
 
-    it("normaliza un pago cerrado y pagado a APPROVED", () => {
+    it("normalizes a closed and paid payment to APPROVED", () => {
       const transaction = normalizer.normalize(
         rapydResponse({ status: "CLO", paid: true }),
         Gateway.RAPYD
@@ -195,7 +195,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.gatewayTransactionId.gateway).toBe(Gateway.RAPYD);
     });
 
-    it("no normaliza a APPROVED un pago cerrado pero no pagado", () => {
+    it("does not normalize a closed but unpaid payment to APPROVED", () => {
       // "CLO" es cerrado, no pagado: son dos campos distintos. Leer solo el
       // estado daria por cobrado lo que no se cobro. Se degrada a ERROR y no a
       // DECLINED porque afirmar un rechazo seria afirmar que el banco respondio.
@@ -208,7 +208,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.isApproved()).toBe(false);
     });
 
-    it("normaliza ACT a PENDING", () => {
+    it("normalizes ACT to PENDING", () => {
       const transaction = normalizer.normalize(
         rapydResponse({ status: "ACT", paid: false }),
         Gateway.RAPYD
@@ -217,7 +217,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.getStatus()).toBe("PENDING");
     });
 
-    it("normaliza EXP a EXPIRED", () => {
+    it("normalizes EXP to EXPIRED", () => {
       const transaction = normalizer.normalize(
         rapydResponse({ status: "EXP", paid: false }),
         Gateway.RAPYD
@@ -226,7 +226,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.getStatus()).toBe("EXPIRED");
     });
 
-    it("normaliza REV a VOIDED", () => {
+    it("normalizes REV to VOIDED", () => {
       // REV ("Reversed by Rapyd") es el codigo real de reversion. El lenguaje
       // ubicuo lo tenia pendiente conjeturando "CAN".
       const transaction = normalizer.normalize(
@@ -237,7 +237,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.getStatus()).toBe("VOIDED");
     });
 
-    it("normaliza ERR a DECLINED cuando el fallo viene del procesador de tarjeta", () => {
+    it("normalizes ERR to DECLINED when the failure comes from the card processor", () => {
       // Rapyd usa "ERR" tanto para el rechazo de negocio como para el fallo
       // tecnico; el prefijo de failure_code es lo que los separa. Es el mismo
       // criterio que aplica WebhookVerifier, para que el mismo pago no se
@@ -254,7 +254,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.getStatus()).toBe("DECLINED");
     });
 
-    it("normaliza ERR a ERROR cuando el fallo es tecnico", () => {
+    it("normalizes ERR to ERROR when the failure is technical", () => {
       const transaction = normalizer.normalize(
         rapydResponse({
           status: "ERR",
@@ -267,7 +267,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.getStatus()).toBe("ERROR");
     });
 
-    it("normaliza un estado desconocido a ERROR sin romperse", () => {
+    it("normalizes an unknown status to ERROR without breaking", () => {
       const transaction = normalizer.normalize(
         rapydResponse({ status: "XYZ", paid: false }),
         Gateway.RAPYD
@@ -278,7 +278,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.rawStatus).toBe("XYZ");
     });
 
-    it("lee el monto en pesos, sin dividirlo entre cien", () => {
+    it("reads the amount in pesos, without dividing it by one hundred", () => {
       // Rapyd trabaja en unidad mayor. Si el normalizador usara
       // fromMinorUnits(), 150000.00 volveria como 1500.00.
       const transaction = normalizer.normalize(
@@ -289,7 +289,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.amount.getValue()).toBe("150000.00");
     });
 
-    it("acepta el monto cuando Rapyd lo envia como numero JSON", () => {
+    it("accepts the amount when Rapyd sends it as a JSON number", () => {
       // Contra la pasarela real el monto puede llegar como number, y en ese caso
       // la escala ya se perdio en el parseo del JSON. No es algo que el SDK pueda
       // recuperar del lado entrante; se documenta y se acepta.
@@ -301,7 +301,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.amount.getValue()).toBe("150000.00");
     });
 
-    it("lee la divisa de currency_code y no de currency", () => {
+    it("reads the currency from currency_code and not from currency", () => {
       const transaction = normalizer.normalize(
         rapydResponse({ status: "CLO", paid: true, currency_code: "USD" }),
         Gateway.RAPYD
@@ -310,7 +310,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.currency.getCode()).toBe("USD");
     });
 
-    it("acepta la respuesta como string JSON", () => {
+    it("accepts the response as a JSON string", () => {
       const transaction = normalizer.normalize(
         JSON.stringify(rapydResponse({ status: "CLO", paid: true })),
         Gateway.RAPYD
@@ -319,7 +319,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.getStatus()).toBe("APPROVED");
     });
 
-    it("lanza MALFORMED_RESPONSE si el JSON no se puede parsear", () => {
+    it("throws MALFORMED_RESPONSE if the JSON cannot be parsed", () => {
       expect(() => normalizer.normalize("{no-es-json", Gateway.RAPYD)).toThrow(
         KitPagosError
       );
@@ -332,13 +332,13 @@ describe("ResponseNormalizer", () => {
       }
     });
 
-    it("lanza MALFORMED_RESPONSE si falta el sobre data", () => {
+    it("throws MALFORMED_RESPONSE if the data envelope is missing", () => {
       expect(() =>
         normalizer.normalize({ status: { status: "SUCCESS" } }, Gateway.RAPYD)
       ).toThrow(KitPagosError);
     });
 
-    it("lanza MALFORMED_RESPONSE si el monto no es interpretable", () => {
+    it("throws MALFORMED_RESPONSE if the amount cannot be interpreted", () => {
       try {
         normalizer.normalize(
           rapydResponse({ status: "CLO", paid: true, amount: "no-es-un-monto" }),
@@ -352,7 +352,7 @@ describe("ResponseNormalizer", () => {
       }
     });
 
-    it("cae a la referencia nativa cuando el comercio no envio merchant_reference_id", () => {
+    it("falls back to the native reference when the merchant did not send merchant_reference_id", () => {
       const transaction = normalizer.normalize(
         rapydResponse({ status: "CLO", paid: true, merchant_reference_id: "" }),
         Gateway.RAPYD
@@ -361,7 +361,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.orderReference.getValue()).toBe("payment_abc");
     });
 
-    it("usa un correo de relleno cuando receipt_email viene vacio", () => {
+    it("uses a placeholder email when receipt_email is empty", () => {
       // Rapyd no expone un email de pagador obligatorio como las otras tres
       // pasarelas, y Payer si lo exige.
       const transaction = normalizer.normalize(
@@ -431,7 +431,7 @@ describe("ResponseNormalizer", () => {
       },
     };
 
-    it("normaliza un pago aprobado de Mercado Pago reflejando monto en pesos y estados nativos", () => {
+    it("normalizes an approved Mercado Pago payment reflecting the amount in pesos and native statuses", () => {
       const transaction = normalizer.normalize(validMpResponse, Gateway.MERCADOPAGO);
 
       expect(transaction).toBeDefined();
@@ -446,7 +446,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.payer.email).toBe("cliente.mp@example.com");
     });
 
-    it("normaliza cuando el payload viene como string JSON", () => {
+    it("normalizes when the payload comes as a JSON string", () => {
       const jsonString = JSON.stringify(validMpResponse);
       const transaction = normalizer.normalize(jsonString, Gateway.MERCADOPAGO);
 
@@ -454,7 +454,7 @@ describe("ResponseNormalizer", () => {
       expect(transaction.amount.getValue()).toBe("50000.00");
     });
 
-    it("mapea correctamente todos los estados nativos en minúsculas", () => {
+    it("maps all native lowercase statuses correctly", () => {
       const testCases: Array<{ raw: string; expected: string }> = [
         { raw: "approved", expected: "APPROVED" },
         { raw: "rejected", expected: "DECLINED" },
@@ -477,7 +477,7 @@ describe("ResponseNormalizer", () => {
       }
     });
 
-    it("usa valores por defecto cuando faltan payer.email o external_reference", () => {
+    it("uses default values when payer.email or external_reference are missing", () => {
       const minimalPayload = {
         id: "mp-tx-999",
         status: "approved",
@@ -490,20 +490,20 @@ describe("ResponseNormalizer", () => {
       expect(transaction.payer.email).toBe("customer@mercadopago.com");
     });
 
-    it("lanza MALFORMED_RESPONSE si el JSON es inválido", () => {
+    it("throws MALFORMED_RESPONSE if the JSON is invalid", () => {
       expect(() => {
         normalizer.normalize("not-a-valid-json", Gateway.MERCADOPAGO);
       }).toThrow(KitPagosError);
     });
 
-    it("lanza MALFORMED_RESPONSE si falta el id", () => {
+    it("throws MALFORMED_RESPONSE if the id is missing", () => {
       const invalid = { status: "approved", transaction_amount: 10000 };
       expect(() => {
         normalizer.normalize(invalid, Gateway.MERCADOPAGO);
       }).toThrow(KitPagosError);
     });
 
-    it("lanza MALFORMED_RESPONSE si el monto es inválido", () => {
+    it("throws MALFORMED_RESPONSE if the amount is invalid", () => {
       const invalid = { ...validMpResponse, transaction_amount: "monto-invalido" };
       expect(() => {
         normalizer.normalize(invalid, Gateway.MERCADOPAGO);

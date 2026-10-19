@@ -25,7 +25,7 @@ describeSandbox(Gateway.RAPYD, (credentials, baseUrl) => {
    * firma **todas** sus peticiones, así que una firma mal calculada no deja pasar ni una
    * lectura. Es la afirmación más barata que cubre más superficie de todo el archivo.
    */
-  it("responde la lista de bancos de PSE, con código y nombre", async () => {
+  it("returns the PSE bank list, with code and name", async () => {
     const banks = await kitPagos.getPseBanks();
 
     expect(banks.length).toBeGreaterThan(0);
@@ -38,7 +38,7 @@ describeSandbox(Gateway.RAPYD, (credentials, baseUrl) => {
 
   /**
    * La tabla de traducción tiene que seguir cubriendo lo que Rapyd publica, en los dos
-   * sentidos. Si Rapyd suma un banco, sale acá sin `achCode`; si renombra o retira uno,
+   * sentidos. Si Rapyd suma un banco, sale aquí sin `achCode`; si renombra o retira uno,
    * un código de `PseBankCode` quedaría traducido a un método que ya no existe (punto 68).
    */
   it("should list exactly the PSE methods of the translation table", async () => {
@@ -58,7 +58,7 @@ describeSandbox(Gateway.RAPYD, (credentials, baseUrl) => {
    * identificador lleve el prefijo `checkout_`, porque es de lo que depende que la consulta de
    * estado elija la ruta correcta.
    */
-  it("crea una página de pago para la tarjeta y devuelve su URL", async () => {
+  it("creates a card checkout page and returns its URL", async () => {
     const result = await kitPagos.createPayment({
       amount: new Amount("20000"),
       currency: new Currency("COP"),
@@ -88,7 +88,7 @@ describeSandbox(Gateway.RAPYD, (credentials, baseUrl) => {
    * Es el estado en el que queda mientras el pagador no ha hecho nada, y la razón de que el
    * adaptador tenga que sintetizar un `PENDING` en vez de leer un pago que no existe.
    */
-  it("deja consultar la página de pago antes de que el pagador pague", async () => {
+  it("allows querying the checkout page before the payer pays", async () => {
     const created = await kitPagos.createPayment({
       amount: new Amount("20000"),
       currency: new Currency("COP"),
@@ -120,7 +120,7 @@ describeSandbox(Gateway.RAPYD, (credentials, baseUrl) => {
    * de Rapyd puede volverse igual al de las otras tres, sin redirección. Mientras falle como
    * hoy, la página alojada es la única opción que no mete al comercio en el alcance de PCI DSS.
    */
-  it("sigue rechazando un cobro de tarjeta con token en /payments", async () => {
+  it("still rejects a card charge with a token on /payments", async () => {
     const url = `${baseUrl}/payments`;
     const payload = {
       amount: 20000,

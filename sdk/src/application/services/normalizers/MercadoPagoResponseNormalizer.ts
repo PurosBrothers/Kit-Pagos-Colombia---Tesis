@@ -18,6 +18,7 @@ import {
   amountToString,
   atCurrencyScale,
 } from "./payload-utils";
+import { readMercadoPagoRejection } from "./mercadopago-rejection";
 
 /** Email de relleno cuando la respuesta no trae el del pagador. */
 const FALLBACK_EMAIL = "customer@mercadopago.com";
@@ -69,15 +70,16 @@ export class MercadoPagoResponseNormalizer implements GatewayResponseNormalizer 
       Gateway.MERCADOPAGO,
     );
 
+    const status = this.mapStatus(rawStatus);
     return new Transaction(
       gatewayTransactionId,
       orderReference,
       amount,
       currency,
       payer,
-      this.mapStatus(rawStatus),
+      status,
       rawStatus,
-      undefined,
+      readMercadoPagoRejection(data, status),
       undefined,
     );
   }

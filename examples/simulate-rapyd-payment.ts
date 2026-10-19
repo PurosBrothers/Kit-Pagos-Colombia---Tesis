@@ -25,6 +25,7 @@ import {
   KitPagosErrorCode,
   type SDKOptions,
 } from "kit-pagos-colombia";
+import { RAPYD_SECRET_KEY } from "./simulator-secrets";
 
 /**
  * Endpoint del mock de Rapyd en la API de Simulación local.
@@ -45,13 +46,16 @@ const SIMULATOR_RAPYD_URL = "http://localhost:3000/v1/sim/rapyd";
  * su `secret_key`, que nunca se transmite sola — solo entra al cálculo de la
  * firma. El comercio no tiene que saber eso: escribe sus dos llaves y el
  * adaptador se encarga.
+ *
+ * El simulador verifica la firma con el `secret_key` de su cuenta, así que ese
+ * valor sale de `simulator-secrets.ts`; el `access_key` puede ser cualquiera.
  */
 const options: SDKOptions = {
   gateway: Gateway.RAPYD,
   credentials: {
     [Gateway.RAPYD]: {
       publicKey: "rapyd_access_key_ejemplo_no_real",
-      privateKey: "rapyd_secret_key_ejemplo_no_real",
+      privateKey: RAPYD_SECRET_KEY,
     },
   },
   baseUrl: SIMULATOR_RAPYD_URL,
@@ -115,7 +119,7 @@ async function main(): Promise<void> {
    * generó un salt aleatorio, tomó el timestamp Unix, serializó el cuerpo una
    * sola vez, calculó la firma HMAC-SHA256 sobre método, path, salt, timestamp y
    * las dos llaves, y mandó los cuatro headers que Rapyd exige. Nada de eso se
-   * ve acá, y por eso el mismo código sirve para las cuatro pasarelas.
+   * ve aquí, y por eso el mismo código sirve para las cuatro pasarelas.
    */
   console.log("Creando el pago...");
   const result = await kitPagos.createPayment(request);
@@ -147,7 +151,7 @@ async function main(): Promise<void> {
   /**
    * Paso 4: el pagador paga.
    *
-   * En una aplicación real acá se responde un redirect HTTP y este paso lo hace una
+   * En una aplicación real aquí se responde un redirect HTTP y este paso lo hace una
    * persona en el navegador. Contra el simulador se representa visitando la URL, que es
    * el único punto donde el cobro se concreta: una página creada y no visitada se queda
    * en `NEW` para siempre, igual que contra el sandbox real.
@@ -200,7 +204,7 @@ main().catch((error: unknown) => {
     error.code === KitPagosErrorCode.CONNECTION_FAILED
   ) {
     console.error("\nNo se pudo conectar con la API de Simulación.");
-    console.error("Asegúrate de haberla iniciado en otra terminal:\n");
+    console.error("Asegúrese de haberla iniciado en otra terminal:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }

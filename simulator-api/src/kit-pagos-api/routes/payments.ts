@@ -15,6 +15,7 @@ import {
 } from "kit-pagos-colombia";
 import { gatewayClientFor } from "../gateway-client";
 import { parseGateway, unsupportedGatewayBody } from "../gateway-param";
+import { GetPaymentStatusSchema, PostPaymentsSchema } from "../openapi/schemas";
 
 export interface CreatePaymentBodyDTO {
   gateway: string;
@@ -266,6 +267,7 @@ function serializeTransaction(transaction: Transaction) {
 export async function paymentsRoute(app: FastifyInstance): Promise<void> {
   app.post(
     "/payments",
+    { schema: PostPaymentsSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const body = (request.body as CreatePaymentBodyDTO) ?? {};
       const gateway = parseGateway(body.gateway);
@@ -390,6 +392,7 @@ export async function paymentsRoute(app: FastifyInstance): Promise<void> {
    */
   app.get<{ Params: { id: string }; Querystring: { gateway?: string } }>(
     "/payments/:id",
+    { schema: GetPaymentStatusSchema },
     async (request: FastifyRequest<{ Params: { id: string }; Querystring: { gateway?: string } }>, reply: FastifyReply) => {
       const gateway = parseGateway(request.query.gateway);
       if (!gateway) {

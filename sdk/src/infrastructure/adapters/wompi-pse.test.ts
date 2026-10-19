@@ -2,9 +2,13 @@ import {
   WOMPI_DOCUMENT_TYPES,
   buildPseFields,
   computeIntegritySignature,
+  extractRedirectSnapshot,
   pollForRedirectUrl,
-  WompiRedirectSnapshot,
+  reclassifyWompiMerchantLookupError,
+  resolvePendingRedirect,
 } from "./wompi-pse";
+import { ResponseNormalizer } from "../../application/services/ResponseNormalizer";
+import { Gateway } from "../../domain/value-objects/Gateway";
 import { Payer } from "../../domain/value-objects/Payer";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
 import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
@@ -26,7 +30,7 @@ describe("computeIntegritySignature", () => {
    * El orden de concatenación es el detalle que Wompi no perdona: cualquier
    * permutación produce una firma que rechaza con 422 y sin explicar por qué.
    * Esta prueba existe para que una refactorización que reordene los campos
-   * falle acá y no contra la pasarela.
+   * falle aquí y no contra la pasarela.
    */
   it("should produce a different signature if the field order changes", () => {
     const correct = computeIntegritySignature("ord-12345", 15000000, "COP", "secreto");
@@ -133,34 +137,91 @@ describe("buildPseFields", () => {
   });
 });
 
-describe("pollForRedirectUrl", () => {
-  /** Reloj y espera falsos para no depender de tiempo real. */
-  function fakeClock(startMs = 0) {
-    let current = startMs;
-    return {
-      now: () => current,
-      sleep: async (ms: number) => {
-        current += ms;
+/** Una transacción de Wompi con la forma de `GET /transactions/{id}`. */
+function wompiTransaction(status: string, asyncPaymentUrl?: string): unknown {
+  return {
+    data: {
+      id: "tx-1",
+      status,
+      amount_in_cents: 15000000,
+      currency: "COP",
+      reference: "ord-pse-1",
+      customer_email: "comprador@example.com",
+      payment_method: {
+        type: "PSE",
+        extra: asyncPaymentUrl ? { async_payment_url: asyncPaymentUrl } : {},
       },
-      advance: (ms: number) => {
-        current += ms;
-      },
-    };
-  }
+    },
+  };
+}
 
+/** Reloj y espera falsos para no depender de tiempo real. */
+function fakeClock(startMs = 0) {
+  let current = startMs;
+  return {
+    now: () => current,
+    sleep: async (ms: number) => {
+      current += ms;
+    },
+  };
+}
+
+describe("pollForRedirectUrl", () => {
   it("should return immediately when the url is already there", async () => {
     const clock = fakeClock();
     const readSnapshot = jest
-      .fn<Promise<WompiRedirectSnapshot>, []>()
-      .mockResolvedValue({ status: "PENDING", redirectUrl: "https://banco.example/redirect" });
+      .fn<Promise<unknown>, []>()
+      .mockResolvedValue(wompiTransaction("PENDING", "https://banco.example/redirect"));
 
     const result = await pollForRedirectUrl("tx-1", readSnapshot, {
       now: clock.now,
       sleep: clock.sleep,
     });
 
-    expect(result.redirectUrl).toBe("https://banco.example/redirect");
+    expect(extractRedirectSnapshot(result).redirectUrl).toBe("https://banco.example/redirect");
     expect(readSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * Lo medido el 6 de octubre de 2026 (docs/testing-data/wompi.md, sección 3): la URL
+   * llega en la misma consulta que el desenlace. El sondeo se detiene ahí, pero por el
+   * desenlace, y devuelve esa respuesta para que se normalice.
+   */
+  it.each(["APPROVED", "DECLINED", "ERROR"])(
+    "should stop at a settled %s status, with or without url",
+    async (status) => {
+      const clock = fakeClock();
+      const settled = wompiTransaction(status);
+      const readSnapshot = jest
+        .fn<Promise<unknown>, []>()
+        .mockResolvedValueOnce(wompiTransaction("PENDING"))
+        .mockResolvedValue(settled);
+
+      const result = await pollForRedirectUrl("tx-1", readSnapshot, {
+        now: clock.now,
+        sleep: clock.sleep,
+        intervalMs: 100,
+      });
+
+      expect(result).toBe(settled);
+      expect(readSnapshot).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("should keep polling while the status is empty, even with a url", async () => {
+    const clock = fakeClock();
+    const readSnapshot = jest
+      .fn<Promise<unknown>, []>()
+      .mockResolvedValueOnce(wompiTransaction(""))
+      .mockResolvedValue(wompiTransaction("DECLINED"));
+
+    await pollForRedirectUrl("tx-1", readSnapshot, {
+      now: clock.now,
+      sleep: clock.sleep,
+      intervalMs: 100,
+    });
+
+    expect(readSnapshot).toHaveBeenCalledTimes(2);
   });
 
   /**
@@ -170,10 +231,10 @@ describe("pollForRedirectUrl", () => {
   it("should keep polling until the url shows up", async () => {
     const clock = fakeClock();
     const readSnapshot = jest
-      .fn<Promise<WompiRedirectSnapshot>, []>()
-      .mockResolvedValueOnce({ status: "PENDING" })
-      .mockResolvedValueOnce({ status: "PENDING" })
-      .mockResolvedValue({ status: "PENDING", redirectUrl: "https://banco.example/redirect" });
+      .fn<Promise<unknown>, []>()
+      .mockResolvedValueOnce(wompiTransaction("PENDING"))
+      .mockResolvedValueOnce(wompiTransaction("PENDING"))
+      .mockResolvedValue(wompiTransaction("PENDING", "https://banco.example/redirect"));
 
     const result = await pollForRedirectUrl("tx-1", readSnapshot, {
       now: clock.now,
@@ -182,15 +243,15 @@ describe("pollForRedirectUrl", () => {
       timeoutMs: 5000,
     });
 
-    expect(result.redirectUrl).toBe("https://banco.example/redirect");
+    expect(extractRedirectSnapshot(result).redirectUrl).toBe("https://banco.example/redirect");
     expect(readSnapshot).toHaveBeenCalledTimes(3);
   });
 
   it("should fail with GATEWAY_TIMEOUT when the url never shows up", async () => {
     const clock = fakeClock();
     const readSnapshot = jest
-      .fn<Promise<WompiRedirectSnapshot>, []>()
-      .mockResolvedValue({ status: "PENDING" });
+      .fn<Promise<unknown>, []>()
+      .mockResolvedValue(wompiTransaction("PENDING"));
 
     await expect(
       pollForRedirectUrl("tx-1", readSnapshot, {
@@ -210,8 +271,8 @@ describe("pollForRedirectUrl", () => {
   it("should carry the transaction id and the last status in the error", async () => {
     const clock = fakeClock();
     const readSnapshot = jest
-      .fn<Promise<WompiRedirectSnapshot>, []>()
-      .mockResolvedValue({ status: "PENDING" });
+      .fn<Promise<unknown>, []>()
+      .mockResolvedValue(wompiTransaction("PENDING"));
 
     try {
       await pollForRedirectUrl("tx-abc-123", readSnapshot, {
@@ -225,5 +286,103 @@ describe("pollForRedirectUrl", () => {
       expect((error as KitPagosError).message).toContain("tx-abc-123");
       expect((error as KitPagosError).message).toContain("PENDING");
     }
+  });
+});
+
+describe("resolvePendingRedirect", () => {
+  const normalizer = new ResponseNormalizer();
+  const normalize = (raw: unknown) => normalizer.normalize(raw, Gateway.WOMPI);
+  const bankUrl = "https://api-sandbox.wompi.co/v1/pse/redirect?ticket_id=11111111";
+
+  function resolve(created: unknown, ...queried: unknown[]) {
+    const clock = fakeClock();
+    const readRaw = jest.fn<Promise<unknown>, [string]>();
+    for (const response of queried) readRaw.mockResolvedValueOnce(response);
+    const result = resolvePendingRedirect(created, readRaw, normalize, {
+      now: clock.now,
+      sleep: clock.sleep,
+      intervalMs: 100,
+    });
+    return { result, readRaw };
+  }
+
+  /**
+   * El defecto: con el banco `2` la URL llega en la misma consulta que `DECLINED`
+   * (medido el 6 de octubre de 2026, docs/testing-data/wompi.md, sección 3). Antes el
+   * SDK devolvía una redirección con `rawStatus: "DECLINED"`.
+   */
+  it.each([
+    ["DECLINED", "DECLINED"],
+    ["ERROR", "ERROR"],
+    ["APPROVED", "APPROVED"],
+  ])("should return the %s transaction when the url arrives with the outcome", async (raw, expected) => {
+    const { result } = resolve(wompiTransaction("PENDING"), wompiTransaction(raw, bankUrl));
+
+    const outcome = await result;
+
+    expect(outcome.outcome).toBe("TRANSACTION");
+    if (outcome.outcome !== "TRANSACTION") return;
+    expect(outcome.transaction.getStatus()).toBe(expected);
+    expect(outcome.transaction.rawStatus).toBe(raw);
+    expect(outcome.transaction.gatewayTransactionId.value).toBe("tx-1");
+  });
+
+  it("should redirect when the transaction is PENDING with a url", async () => {
+    const { result } = resolve(wompiTransaction("PENDING"), wompiTransaction("PENDING", bankUrl));
+
+    const outcome = await result;
+
+    expect(outcome.outcome).toBe("REDIRECT_REQUIRED");
+    if (outcome.outcome !== "REDIRECT_REQUIRED") return;
+    expect(outcome.redirect.redirectUrl).toBe(bankUrl);
+    expect(outcome.redirect.rawStatus).toBe("PENDING");
+    expect(outcome.redirect.gatewayTransactionId.value).toBe("tx-1");
+  });
+
+  it("should not poll when the creation already carries the outcome", async () => {
+    const { result, readRaw } = resolve(wompiTransaction("DECLINED", bankUrl));
+
+    const outcome = await result;
+
+    expect(outcome.outcome).toBe("TRANSACTION");
+    expect(readRaw).not.toHaveBeenCalled();
+  });
+
+  it("should not poll when the creation is PENDING with a url", async () => {
+    const { result, readRaw } = resolve(wompiTransaction("PENDING", bankUrl));
+
+    expect((await result).outcome).toBe("REDIRECT_REQUIRED");
+    expect(readRaw).not.toHaveBeenCalled();
+  });
+});
+
+describe("reclassifyWompiMerchantLookupError", () => {
+  const notFoundBody = {
+    error: { type: "NOT_FOUND_ERROR", reason: "La entidad solicitada no existe" },
+  };
+
+  it("turns RESOURCE_NOT_FOUND into INVALID_CREDENTIALS and keeps the body", () => {
+    const result = reclassifyWompiMerchantLookupError(
+      new KitPagosError(KitPagosErrorCode.RESOURCE_NOT_FOUND, Gateway.WOMPI, notFoundBody, "404"),
+    ) as KitPagosError;
+
+    expect(result.code).toBe(KitPagosErrorCode.INVALID_CREDENTIALS);
+    expect(result.gateway).toBe(Gateway.WOMPI);
+    expect(result.originalPayload).toBe(notFoundBody);
+  });
+
+  it.each([
+    ["un INVALID_REQUEST", KitPagosErrorCode.INVALID_REQUEST],
+    ["un GATEWAY_TIMEOUT", KitPagosErrorCode.GATEWAY_TIMEOUT],
+  ])("leaves %s untouched", (_scenario, code) => {
+    const error = new KitPagosError(code, Gateway.WOMPI, notFoundBody, "fallo");
+
+    expect(reclassifyWompiMerchantLookupError(error)).toBe(error);
+  });
+
+  it("leaves an error that is not a KitPagosError untouched", () => {
+    const error = new Error("otro");
+
+    expect(reclassifyWompiMerchantLookupError(error)).toBe(error);
   });
 });

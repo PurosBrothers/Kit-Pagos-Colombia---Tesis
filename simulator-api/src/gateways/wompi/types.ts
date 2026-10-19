@@ -19,6 +19,8 @@
  */
 export interface WompiPaymentMethod {
   type: string;
+  /** El token de `POST /tokens/cards`, en un cobro con tarjeta (`buildCardFieldsFor` del SDK). */
+  token?: string;
   user_type?: number;
   user_legal_id?: string;
   user_legal_id_type?: string;
@@ -38,10 +40,10 @@ export interface WompiCreateTransactionRequestBody {
    * la pasarela aplica su método por defecto. El SDK solo lo envía para PSE.
    */
   payment_method?: WompiPaymentMethod;
-  /** Los tres campos de autenticación que Wompi exige y el mock no valida. */
   redirect_url?: string;
+  /** El token y la firma los valida `integritySignature.ts` (punto 86). */
   acceptance_token?: string;
-  signature?: string;
+  signature?: string | null;
 }
 
 /** Objeto `transaction` que Wompi retorna dentro de `data` al crear una transacción. */
@@ -62,6 +64,11 @@ export interface WompiTransaction {
   payment_method?: WompiPaymentMethod;
   /** URL de retorno del comercio, que Wompi refleja tal como se la enviaron. */
   redirect_url?: string;
+  /**
+   * Explicación del desenlace. El simulador solo la emite donde está medida: el PSE del
+   * banco de prueba `3` (5 de octubre de 2026). Para los demás desenlaces no hay medición.
+   */
+  status_message?: string;
 }
 
 /** Envoltorio de respuesta real de Wompi: el objeto de negocio siempre viaja dentro de `data`. */

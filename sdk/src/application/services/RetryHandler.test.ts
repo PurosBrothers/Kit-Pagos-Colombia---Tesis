@@ -7,7 +7,7 @@ describe("RetryHandler", () => {
   describe("isTransient()", () => {
     const handler = new RetryHandler();
 
-    it("clasifica como transitorios los códigos de red y servidor de KitPagosError", () => {
+    it("classifies KitPagosError network and server codes as transient", () => {
       const transientCodes = [
         KitPagosErrorCode.CONNECTION_FAILED,
         KitPagosErrorCode.GATEWAY_TIMEOUT,
@@ -21,7 +21,7 @@ describe("RetryHandler", () => {
       }
     });
 
-    it("clasifica como no transitorios los errores de negocio y credenciales", () => {
+    it("classifies business and credential errors as non-transient", () => {
       const nonTransientCodes = [
         KitPagosErrorCode.INVALID_CREDENTIALS,
         KitPagosErrorCode.INVALID_REQUEST,
@@ -35,7 +35,7 @@ describe("RetryHandler", () => {
       }
     });
 
-    it("clasifica errores nativos de conexión y timeout como transitorios", () => {
+    it("classifies native connection and timeout errors as transient", () => {
       const connError = new Error("connect ECONNREFUSED 127.0.0.1:3000");
       (connError as unknown as { code: string }).code = "ECONNREFUSED";
       expect(handler.isTransient(connError)).toBe(true);
@@ -48,7 +48,16 @@ describe("RetryHandler", () => {
       expect(handler.isTransient(fetchFailedError)).toBe(true);
     });
 
-    it("clasifica errores nativos genéricos como no transitorios", () => {
+    it("classifies the AbortSignal.timeout rejection as transient by its name", async () => {
+      const abortReason = await new Promise<unknown>((resolve) => {
+        const signal = AbortSignal.timeout(1);
+        signal.addEventListener("abort", () => resolve(signal.reason));
+      });
+      expect((abortReason as { name: string }).name).toBe("TimeoutError");
+      expect(handler.isTransient(abortReason)).toBe(true);
+    });
+
+    it("classifies generic native errors as non-transient", () => {
       expect(handler.isTransient(new Error("ValidationError: invalid payload"))).toBe(false);
       expect(handler.isTransient("error string")).toBe(false);
       expect(handler.isTransient(null)).toBe(false);
@@ -56,7 +65,7 @@ describe("RetryHandler", () => {
   });
 
   describe("calculateDelay()", () => {
-    it("calcula progresión exponencial base * 2^attempt", () => {
+    it("computes the exponential progression base * 2^attempt", () => {
       // Sin jitter para probar la progresión exacta
       const handler = new RetryHandler({
         baseDelayMs: 1000,
@@ -71,7 +80,7 @@ describe("RetryHandler", () => {
       expect(handler.calculateDelay(5)).toBe(4000); // Capped en maxDelayMs (4000)
     });
 
-    it("agrega jitter acotado dentro del rango [capped, capped + jitterMs]", () => {
+    it("adds bounded jitter within the range [capped, capped + jitterMs]", () => {
       const handler = new RetryHandler({
         baseDelayMs: 1000,
         maxDelayMs: 4000,
@@ -93,7 +102,7 @@ describe("RetryHandler", () => {
       }
     });
 
-    it("produce retardos con variación aleatoria (jitter) entre llamadas consecutivas", () => {
+    it("produces delays with random variation (jitter) between consecutive calls", () => {
       const handler = new RetryHandler({
         baseDelayMs: 1000,
         maxDelayMs: 4000,
@@ -109,7 +118,7 @@ describe("RetryHandler", () => {
       expect(delays.size).toBeGreaterThan(1);
     });
 
-    it("respeta parámetros de configuración personalizados", () => {
+    it("honors custom configuration parameters", () => {
       const custom = new RetryHandler({
         baseDelayMs: 500,
         maxDelayMs: 1500,
@@ -129,7 +138,7 @@ describe("RetryHandler", () => {
   });
 
   describe("execute()", () => {
-    it("retorna el resultado inmediatamente si el primer intento es exitoso sin llamar a sleep", async () => {
+    it("returns the result immediately if the first attempt succeeds without calling sleep", async () => {
       const sleepMock = jest.fn().mockResolvedValue(undefined);
       const handler = new RetryHandler({ sleep: sleepMock });
 
@@ -141,7 +150,7 @@ describe("RetryHandler", () => {
       expect(sleepMock).not.toHaveBeenCalled();
     });
 
-    it("reintenta y se recupera tras un fallo transitorio", async () => {
+    it("retries and recovers after a transient failure", async () => {
       const sleepDelays: number[] = [];
       const sleepMock = jest.fn().mockImplementation(async (ms: number) => {
         sleepDelays.push(ms);
@@ -179,7 +188,7 @@ describe("RetryHandler", () => {
       expect(sleepDelays[0]).toBe(1000); // 1000 * 2^0
     });
 
-    it("reintenta hasta el límite configurado antes de tener éxito en el último intento", async () => {
+    it("retries up to the configured limit before succeeding on the last attempt", async () => {
       const sleepDelays: number[] = [];
       const sleepMock = jest.fn().mockImplementation(async (ms: number) => {
         sleepDelays.push(ms);
@@ -217,7 +226,7 @@ describe("RetryHandler", () => {
       expect(sleepDelays).toEqual([1000, 2000, 4000]); // 1s, 2s, 4s
     });
 
-    it("relanza inmediatamente los errores no transitorios sin reintentar ni pausar", async () => {
+    it("rethrows non-transient errors immediately without retrying or pausing", async () => {
       const sleepMock = jest.fn().mockResolvedValue(undefined);
       const handler = new RetryHandler({ sleep: sleepMock });
 
@@ -236,7 +245,7 @@ describe("RetryHandler", () => {
       expect(sleepMock).not.toHaveBeenCalled();
     });
 
-    it("agota los reintentos y relanza el error si todos los intentos fallan", async () => {
+    it("exhausts the retries and throws MAX_RETRIES_EXCEEDED with the last error as cause", async () => {
       const sleepDelays: number[] = [];
       const sleepMock = jest.fn().mockImplementation(async (ms: number) => {
         sleepDelays.push(ms);
@@ -250,16 +259,27 @@ describe("RetryHandler", () => {
         sleep: sleepMock,
       });
 
+      const gatewayBody = { code: "K429", message: "Too many requests" };
       const rateLimitError = new KitPagosError(
         KitPagosErrorCode.RATE_LIMIT_EXCEEDED,
         Gateway.KUSHKI,
-        null,
+        gatewayBody,
         "HTTP 429 Too Many Requests",
       );
 
       const operation = jest.fn().mockRejectedValue(rateLimitError);
 
-      await expect(handler.execute(operation)).rejects.toThrow(rateLimitError);
+      const thrown = await handler.execute(operation).catch((e: unknown) => e);
+
+      expect(thrown).toBeInstanceOf(KitPagosError);
+      const error = thrown as KitPagosError;
+      expect(error.code).toBe(KitPagosErrorCode.MAX_RETRIES_EXCEEDED);
+      expect(error.gateway).toBe(Gateway.KUSHKI);
+      expect(error.cause).toBe(rateLimitError);
+      expect(error.originalPayload).toBe(gatewayBody);
+      expect(error.message).toContain("4 attempts (1 initial + 3 retries)");
+      expect(error.message).toContain("RATE_LIMIT_EXCEEDED");
+      expect(error.message).toContain("HTTP 429 Too Many Requests");
 
       // Intento inicial (0) + 3 reintentos (1, 2, 3) = 4 ejecuciones totales
       expect(operation).toHaveBeenCalledTimes(4);
@@ -267,7 +287,29 @@ describe("RetryHandler", () => {
       expect(sleepDelays).toEqual([1000, 2000, 4000]);
     });
 
-    it("si maxRetries es 0, no ejecuta ningún reintento y falla de inmediato tras el primer error", async () => {
+    it("MAX_RETRIES_EXCEEDED is not transient: an outer RetryHandler does not retry it again", () => {
+      const handler = new RetryHandler();
+      const exhausted = new KitPagosError(
+        KitPagosErrorCode.MAX_RETRIES_EXCEEDED,
+        Gateway.WOMPI,
+        null,
+      );
+      expect(handler.isTransient(exhausted)).toBe(false);
+    });
+
+    it("rethrows unwrapped a transient native error that exhausts the retries", async () => {
+      const handler = new RetryHandler({ maxRetries: 1, sleep: async () => undefined });
+      const nativeError = new Error("fetch failed");
+
+      const operation = jest.fn().mockRejectedValue(nativeError);
+
+      await expect(handler.execute(operation)).rejects.toBe(nativeError);
+      expect(operation).toHaveBeenCalledTimes(2);
+    });
+
+    // Con maxRetries 0 se relanza el error original y no MAX_RETRIES_EXCEEDED: el comercio
+    // desactivó los reintentos, y el código que explica el fallo es el de la pasarela.
+    it("if maxRetries is 0, runs no retry and fails right after the first error", async () => {
       const sleepMock = jest.fn().mockResolvedValue(undefined);
       const handler = new RetryHandler({
         maxRetries: 0,
@@ -288,7 +330,7 @@ describe("RetryHandler", () => {
       expect(sleepMock).not.toHaveBeenCalled();
     });
 
-    it("utiliza setTimeout nativo si no se suministra función sleep", async () => {
+    it("uses native setTimeout if no sleep function is supplied", async () => {
       jest.useFakeTimers();
       const handler = new RetryHandler({
         maxRetries: 1,

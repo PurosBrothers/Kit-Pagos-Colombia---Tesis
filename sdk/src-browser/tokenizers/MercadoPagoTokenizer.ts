@@ -8,6 +8,7 @@ import {
   TokenizeCardParams,
 } from "../types";
 import { resolveCatalogUrl } from "./base-url-catalog";
+import { sendCardTokenRequest } from "./card-token-request";
 
 /**
  * Catálogo cerrado de URLs base de Mercado Pago. Es el único lugar de donde sale el host al
@@ -40,8 +41,50 @@ interface MercadoPagoCardTokenBody {
   };
 }
 
-/** Valida los campos de la tarjeta requeridos para tokenizar en Mercado Pago. */
-function validateCardData(card: CardData): void {
+/** Mes y año de expiración ya validados, en el formato numérico que espera Mercado Pago. */
+interface CardExpiration {
+  month: number;
+  year: number;
+}
+
+/**
+ * El mes tiene uno o dos dígitos y el año dos o cuatro, sin nada más. `parseInt` aceptaba
+ * `"12abc"` como 12 y `"2030x"` como 2030 (observación del PR #128, issue #122).
+ */
+const EXP_MONTH_PATTERN = /^\d{1,2}$/;
+const EXP_YEAR_PATTERN = /^\d{2}(\d{2})?$/;
+
+/** Valida la expiración y la convierte una sola vez; el año de dos dígitos se lee como 20xx. */
+function parseExpiration(card: CardData): CardExpiration {
+  const monthRaw = card.expMonth.trim();
+  const month = Number(monthRaw);
+  if (!EXP_MONTH_PATTERN.test(monthRaw) || month < 1 || month > 12) {
+    throw new KitPagosError(
+      KitPagosErrorCode.INVALID_REQUEST,
+      Gateway.MERCADOPAGO,
+      null,
+      "El mes de expiración debe ser un número válido entre 1 y 12.",
+    );
+  }
+
+  const yearRaw = card.expYear.trim();
+  if (!EXP_YEAR_PATTERN.test(yearRaw)) {
+    throw new KitPagosError(
+      KitPagosErrorCode.INVALID_REQUEST,
+      Gateway.MERCADOPAGO,
+      null,
+      "El año de expiración debe tener 2 o 4 dígitos.",
+    );
+  }
+  const year = Number(yearRaw);
+  return { month, year: yearRaw.length === 2 ? 2000 + year : year };
+}
+
+/**
+ * Valida los campos de la tarjeta requeridos para tokenizar en Mercado Pago y devuelve la
+ * expiración ya convertida, para que `buildRequestBody` no repita el cálculo.
+ */
+function validateCardData(card: CardData): CardExpiration {
   if (
     !card ||
     !card.number ||
@@ -68,41 +111,15 @@ function validateCardData(card: CardData): void {
     );
   }
 
-  const expMonth = parseInt(card.expMonth.trim(), 10);
-  if (Number.isNaN(expMonth) || expMonth < 1 || expMonth > 12) {
-    throw new KitPagosError(
-      KitPagosErrorCode.INVALID_REQUEST,
-      Gateway.MERCADOPAGO,
-      null,
-      "El mes de expiración debe ser un número válido entre 1 y 12.",
-    );
-  }
-
-  const expYearRaw = card.expYear.trim();
-  const expYear = parseInt(expYearRaw, 10);
-  if (Number.isNaN(expYear) || expYear <= 0) {
-    throw new KitPagosError(
-      KitPagosErrorCode.INVALID_REQUEST,
-      Gateway.MERCADOPAGO,
-      null,
-      "El año de expiración debe ser un número válido.",
-    );
-  }
+  return parseExpiration(card);
 }
 
 /** Construye el cuerpo JSON para POST /v1/card_tokens. */
-function buildRequestBody(card: CardData): MercadoPagoCardTokenBody {
-  const expMonth = parseInt(card.expMonth.trim(), 10);
-  const expYearRaw = card.expYear.trim();
-  const expYear =
-    expYearRaw.length === 2
-      ? 2000 + parseInt(expYearRaw, 10)
-      : parseInt(expYearRaw, 10);
-
+function buildRequestBody(card: CardData, expiration: CardExpiration): MercadoPagoCardTokenBody {
   return {
     card_number: card.number.replace(/\s+/g, ""),
-    expiration_month: expMonth,
-    expiration_year: expYear,
+    expiration_month: expiration.month,
+    expiration_year: expiration.year,
     security_code: card.cvc.trim(),
     cardholder: {
       name: card.cardHolder.trim(),
@@ -209,30 +226,25 @@ export class MercadoPagoTokenizer {
       );
     }
 
-    validateCardData(card);
+    const expiration = validateCardData(card);
 
     const baseUrl = this.resolveBaseUrl(environment);
     const url = `${baseUrl}/card_tokens?public_key=${encodeURIComponent(publicKey.trim())}`;
 
-    let response: Response;
-    try {
-      response = await fetchFn(url, {
+    const { response, text } = await sendCardTokenRequest(
+      url,
+      {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(buildRequestBody(card)),
-      });
-    } catch (error) {
-      throw new KitPagosError(
-        KitPagosErrorCode.CONNECTION_FAILED,
-        Gateway.MERCADOPAGO,
-        error,
-        `Error de conexión al tokenizar tarjeta en Mercado Pago: ${(error as Error).message}`,
-      );
-    }
+        body: JSON.stringify(buildRequestBody(card, expiration)),
+      },
+      fetchFn,
+      params.timeoutMs,
+      Gateway.MERCADOPAGO,
+    );
 
-    const text = await response.text();
     return processResponse(response, text);
   }
 }

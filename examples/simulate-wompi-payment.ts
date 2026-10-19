@@ -23,6 +23,7 @@ import {
   KitPagosErrorCode,
   type SDKOptions,
 } from "kit-pagos-colombia";
+import { WOMPI_INTEGRITY_SECRET } from "./simulator-secrets";
 
 // Raíz de la API de Wompi en el simulador. Desde el issue #64 es la raíz y no el
 // endpoint de transacciones: el adaptador le agrega la ruta que necesite, porque
@@ -35,9 +36,9 @@ const SIMULATOR_WOMPI_URL = "http://localhost:3000/v1/sim/wompi";
  *
  * Es la única decisión que un comercio tiene que tomar: qué pasarela usar y con
  * qué credenciales. `baseUrl` apunta al simulador; en producción se omite y cada
- * adaptador usa el endpoint real de su pasarela. Las credenciales de este ejemplo
- * son ficticias porque el mock no autentica, pero recorren el mismo camino que
- * las reales.
+ * adaptador usa el endpoint real de su pasarela. Las llaves de este ejemplo son
+ * ficticias, pero el secreto de integridad no puede serlo: el simulador verifica
+ * la firma con el secreto de su cuenta (`simulator-secrets.ts`).
  */
 const options: SDKOptions = {
   gateway: Gateway.WOMPI,
@@ -52,7 +53,7 @@ const options: SDKOptions = {
       // que falta en lugar de ese 422. Es un valor distinto del secreto de eventos
       // que verifica los webhooks: uno firma lo que sale, el otro valida lo que
       // entra, y Wompi los entrega juntos en el mismo panel.
-      integritySecret: "test_integrity_ejemplo_no_real",
+      integritySecret: WOMPI_INTEGRITY_SECRET,
     },
   },
   baseUrl: SIMULATOR_WOMPI_URL,
@@ -68,9 +69,9 @@ async function main(): Promise<void> {
   /**
    * Paso 2: describir el pago con vocabulario del dominio.
    *
-   * Acá no se escribe ningún campo nativo de Wompi como `amount_in_cents`. Se usan
+   * Aquí no se escribe ningún campo nativo de Wompi como `amount_in_cents`. Se usan
    * objetos de valor que validan en su propio constructor: un monto con más de dos
-   * decimales, una divisa que no sea ISO 4217 o un pagador sin correo fallan acá,
+   * decimales, una divisa que no sea ISO 4217 o un pagador sin correo fallan aquí,
    * antes de que exista cualquier petición de red.
    *
    * El monto se escribe como string, no como number. Es el único tipo que preserva
@@ -117,7 +118,7 @@ async function main(): Promise<void> {
    * Una sola llamada. Por dentro el SDK resuelve la pasarela activa, obtiene sus
    * credenciales, construye el adaptador de Wompi, traduce los objetos de valor al
    * formato nativo, hace la petición HTTP y normaliza la respuesta. Nada de eso se
-   * filtra hasta acá.
+   * filtra hasta aquí.
    */
   const result = await kitPagos.createPayment(request);
 
@@ -125,7 +126,7 @@ async function main(): Promise<void> {
   // compilador obliga a distinguirlas: `result.transaction` no existe hasta que se
   // descarta el caso de redirección. Un cobro con tarjeta en Wompi nunca redirige
   // —el comercio cobra el token de servidor a servidor— así que esta rama no se
-  // alcanza acá. Es la rama que toma PSE, y también el flujo de tarjeta de Rapyd.
+  // alcanza aquí. Es la rama que toma PSE, y también el flujo de tarjeta de Rapyd.
   if (result.outcome === "REDIRECT_REQUIRED") {
     console.log(`El pago requiere redirigir a: ${result.redirect.redirectUrl}`);
     return;
@@ -151,7 +152,7 @@ async function main(): Promise<void> {
    * de verdad: medido contra `sandbox.wompi.co`, `POST /transactions` responde
    * `PENDING` con `finalized_at: null` y la transacción se resuelve unos 600 ms
    * después. Así que el desenlace de un cobro con tarjeta nunca está en la respuesta
-   * de la creación: el comercio tiene que consultarlo, exactamente como acá abajo.
+   * de la creación: el comercio tiene que consultarlo, exactamente como aquí abajo.
    *
    * El id que se pasa es el identificador nativo que Wompi devolvió al crear el pago.
    */
@@ -180,7 +181,7 @@ main().catch((error: unknown) => {
   // levantada. Se traduce a una instrucción concreta en vez de un volcado de pila.
   if (error instanceof KitPagosError && error.code === KitPagosErrorCode.CONNECTION_FAILED) {
     console.error("\nNo se pudo conectar con la API de Simulación.");
-    console.error("Levantala en otra terminal y volvé a correr el ejemplo:\n");
+    console.error("Levántela en otra terminal y vuelva a ejecutar el ejemplo:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }

@@ -13,12 +13,14 @@ import { Credentials } from "../../domain/value-objects/Credentials";
 import { ResponseNormalizer } from "../../application/services/ResponseNormalizer";
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
+import { httpFailure } from "./http-failure";
 import { assertSupportedPaymentMethod } from "./payment-method-support";
 import { resolveTaxBreakdown } from "./kushki-amount";
 import {
   CARD_CHARGE_PATH,
   buildCardChargePayload,
   extractCardChargeRedirect,
+  reclassifyKushkiCredentialError,
 } from "./kushki-charge";
 import type { PseBank } from "../../domain/value-objects/PseBank";
 import {
@@ -31,6 +33,7 @@ import {
   kushkiStatusFailure,
   kushkiStatusPaths,
 } from "./kushki-pse";
+import { DEFAULT_REQUEST_TIMEOUT_MS, withRequestTimeout } from "../config/request-timeout";
 
 /**
  * Raíz de la API de Kushki (o de su mock en simulator-api).
@@ -65,14 +68,17 @@ export class KushkiAdapter implements PaymentGatewayPort {
   /** Ver la nota de WompiAdapter: fuera del constructor para no inflar el CBO. */
   private readonly normalizer = new ResponseNormalizer();
   private readonly webhookVerifier: WebhookVerifier;
+  private readonly timeoutMs: number;
 
   constructor(
     baseUrl: string = DEFAULT_KUSHKI_BASE_URL,
     credentials?: Credentials,
     webhookVerifier: WebhookVerifier = new WebhookVerifier(),
+    timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
   ) {
     this.baseUrl = baseUrl;
     this.credentials = credentials;
+    this.timeoutMs = timeoutMs;
     this.webhookVerifier = webhookVerifier;
   }
 
@@ -112,17 +118,17 @@ export class KushkiAdapter implements PaymentGatewayPort {
   }
 
   /**
-   * Cobra por PSE, que en Kushki es Transfer In y son **dos llamadas** acá más
+   * Cobra por PSE, que en Kushki es Transfer In y son **dos llamadas** aquí más
    * una que el comercio hizo antes.
    *
    * La secuencia completa que la referencia de Kushki describe son tres pasos, y el
-   * primero —pedir la lista de bancos— no está acá porque no puede estar: el
+   * primero —pedir la lista de bancos— no está aquí porque no puede estar: el
    * pagador tiene que **elegir** de esa lista, y elegir pasa en la interfaz del
    * comercio, no dentro de una llamada a `createPayment()`. Por eso `getPseBanks()`
    * es un método aparte del puerto y no un paso interno: es el único de los tres que
    * necesita una decisión humana en el medio.
    *
-   * Los dos que sí quedan escondidos acá son el token y el inicio, por la misma
+   * Los dos que sí quedan escondidos aquí son el token y el inicio, por la misma
    * razón que en Rapyd: cuántas llamadas hacen falta es un detalle del proveedor.
    * Y con el mismo costo, que conviene nombrar: si el inicio falla, el token ya
    * quedó emitido. Es menos grave que el cliente huérfano de Rapyd, porque un token
@@ -143,7 +149,7 @@ export class KushkiAdapter implements PaymentGatewayPort {
     );
     const token = extractTransferToken(tokenResponse);
 
-    // El monto se repite acá porque Kushki lo exige en los dos pasos: con solo el
+    // El monto se repite aquí porque Kushki lo exige en los dos pasos: con solo el
     // token, `init` responde 400. Medido contra la API UAT (punto 48).
     const initResponse = await this.request(
       "/transfer/v1/init",
@@ -164,10 +170,11 @@ export class KushkiAdapter implements PaymentGatewayPort {
    * identificador. Por qué la de transferencia va primero está en
    * `kushkiStatusPaths()`, y es una conclusión de medir, no de suponer.
    *
-   * "No sabe de ese identificador" son dos respuestas, no una: `404`, que es lo que
-   * responde el simulador, y `400` con `T001`, que es lo que responde la API real de
-   * Kushki cuando el token no le pertenece a esa ruta. Las dos significan lo mismo
-   * para esta decisión.
+   * "No sabe de ese identificador" son dos respuestas, no una: `400` con `T004` (id de
+   * 32 caracteres) o `T001` (otra longitud), que es lo que responden Kushki y el
+   * simulador cuando el id no le pertenece a esa ruta (`docs/testing-data/kushki.md`
+   * §1.1), y `404`, que responde el simulador en `/charges/{id}`. Las dos significan lo
+   * mismo para esta decisión.
    *
    * Cualquier otro error corta el intento en vez de seguir probando: un 401 o un 500
    * en la primera ruta no dice nada sobre la segunda, y reintentar ahí convertiría un
@@ -209,7 +216,7 @@ export class KushkiAdapter implements PaymentGatewayPort {
    *
    * En Kushki este método no es una comodidad sino un paso obligatorio del cobro:
    * su referencia dice que el endpoint *"is required only for Transfer In payment
-   * method in Colombia"*, o sea que el `bankId` tiene que venir de acá. Es la
+   * method in Colombia"*, o sea que el `bankId` tiene que venir de aquí. Es la
    * pasarela que mejor justifica que la lista de bancos esté en el puerto.
    */
   async getPseBanks(): Promise<PseBank[]> {
@@ -266,39 +273,37 @@ export class KushkiAdapter implements PaymentGatewayPort {
       }
     }
 
-    let response: Response;
-    try {
-      response = await fetch(`${this.baseUrl}${path}`, {
-        method,
-        headers,
-        body: payload ? JSON.stringify(payload) : undefined,
-      });
-    } catch (networkError) {
-      const errorHandler = new ErrorHandler();
-      throw errorHandler.handle(networkError, Gateway.KUSHKI);
-    }
+    return withRequestTimeout(
+      this.timeoutMs,
+      async (signal) => {
+        let response: Response;
+        try {
+          response = await fetch(`${this.baseUrl}${path}`, {
+            method,
+            headers,
+            body: payload ? JSON.stringify(payload) : undefined,
+            signal,
+          });
+        } catch (networkError) {
+          const errorHandler = new ErrorHandler();
+          throw errorHandler.handle(networkError, Gateway.KUSHKI);
+        }
 
-    if (!response.ok) {
-      let errorBody: unknown;
-      try {
-        errorBody = await response.json();
-      } catch {
-        errorBody = await response.text();
-      }
+        if (!response.ok) {
+          throw reclassifyKushkiCredentialError(
+            await httpFailure(response, Gateway.KUSHKI, this.credentials),
+          );
+        }
 
-      const errorHandler = new ErrorHandler();
-      throw errorHandler.handle(
-        { status: response.status, body: errorBody },
-        Gateway.KUSHKI,
-      );
-    }
-
-    try {
-      return await response.json();
-    } catch (parseError) {
-      const errorHandler = new ErrorHandler();
-      throw errorHandler.handle(parseError, Gateway.KUSHKI);
-    }
+        try {
+          return await response.json();
+        } catch (parseError) {
+          const errorHandler = new ErrorHandler();
+          throw errorHandler.handle(parseError, Gateway.KUSHKI);
+        }
+      },
+      (reason) => new ErrorHandler().handle(reason, Gateway.KUSHKI),
+    );
   }
 }
 

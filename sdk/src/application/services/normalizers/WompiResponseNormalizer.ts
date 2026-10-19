@@ -64,6 +64,10 @@ export class WompiResponseNormalizer implements GatewayResponseNormalizer {
       payer,
       this.mapStatus(rawStatus),
       rawStatus,
+      // Sin `rejectionReason`: Wompi no da un código de rechazo. Lo único que trae un
+      // `DECLINED` medido es `status_message`, un texto libre que cambia por método (y posiblemente por
+      // ambiente: solo se midió el sandbox) («La transacción fue rechazada (Sandbox)» en tarjeta, «Transacción RECHAZADA
+      // en Sandbox» en PSE; docs/testing-data/wompi.md). Ver el punto 87 del architecture-log.md.
       undefined,
       authorizationCode,
     );

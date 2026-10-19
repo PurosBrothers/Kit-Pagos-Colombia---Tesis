@@ -1,4 +1,6 @@
 import { isRetriable } from "./ErrorHandler";
+import { KitPagosError } from "../../domain/errors/KitPagosError";
+import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode";
 
 export interface RetryOptions {
   /** Número máximo de reintentos tras el fallo inicial. Por defecto: 3 (SAD 2.13) */
@@ -61,6 +63,10 @@ export class RetryHandler {
   /**
    * Ejecuta una operación asíncrona. Si falla con un error RETRIABLE,
    * reintenta hasta agotar maxRetries con retroceso exponencial.
+   *
+   * Un error no transitorio se relanza tal cual en el primer intento. Si se agotan los
+   * reintentos, se lanza `MAX_RETRIES_EXCEEDED` con el último error como `cause`
+   * (ver `retriesExhausted`).
    */
   async execute<T>(operation: () => Promise<T>): Promise<T> {
     let attempt = 0;
@@ -69,12 +75,13 @@ export class RetryHandler {
       try {
         return await operation();
       } catch (error) {
-        // 1. Si no es un error transitorio o ya agotamos los reintentos, relanzar inmediatamente
-        if (!this.isTransient(error) || attempt >= this.maxRetries) {
+        if (!this.isTransient(error)) {
           throw error;
         }
+        if (attempt >= this.maxRetries) {
+          throw retriesExhausted(error, attempt + 1);
+        }
 
-        // 2. Calcular tiempo con backoff + jitter y pausar antes del siguiente intento
         const delay = this.calculateDelay(attempt);
         await this.sleep(delay);
 
@@ -82,4 +89,34 @@ export class RetryHandler {
       }
     }
   }
+}
+
+/**
+ * El error que se lanza cuando un fallo transitorio persiste en todos los intentos.
+ *
+ * Se envuelve en vez de relanzar el último error porque, sin esto, el comercio no podía
+ * distinguir «falló una vez» de «falló cuatro veces seguidas»: los dos llegaban como el
+ * mismo `GATEWAY_TIMEOUT`, y `MAX_RETRIES_EXCEEDED` existía en el enum sin que nada lo
+ * lanzara (issue #122). El último error viaja en `cause` y su `originalPayload` se
+ * conserva, así que no se pierde lo que respondió la pasarela.
+ *
+ * Dos casos se relanzan sin envolver:
+ * - `maxRetries: 0` (un solo intento): el comercio desactivó los reintentos, y decirle que
+ *   se excedieron sería falso y le escondería el código que sí explica el fallo.
+ * - Un error que no es `KitPagosError`: `KitPagosError` exige la pasarela y aquí no hay de
+ *   dónde sacarla. No ocurre desde la fachada, porque los adaptadores traducen todo fallo
+ *   con `ErrorHandler` antes de que llegue aquí.
+ */
+function retriesExhausted(lastError: unknown, attempts: number): unknown {
+  if (attempts === 1 || !(lastError instanceof KitPagosError)) {
+    return lastError;
+  }
+  return new KitPagosError(
+    KitPagosErrorCode.MAX_RETRIES_EXCEEDED,
+    lastError.gateway,
+    lastError.originalPayload,
+    `Gave up after ${attempts} attempts (1 initial + ${attempts - 1} retries); ` +
+      `last error ${lastError.code}: ${lastError.message}`,
+    { cause: lastError },
+  );
 }

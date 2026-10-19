@@ -357,7 +357,9 @@ describe("POST /v1/api/payments (issue #102)", () => {
         headers: {
           "x-gateway-public-key": "pub_custom_client_key",
           "x-gateway-private-key": "prv_custom_client_key",
-          "x-gateway-integrity-secret": "custom_secret_client",
+          // El simulador al que cobra es una sola cuenta de comercio y verifica la firma con
+          // el secreto de su perfil (punto 86); las llaves sí son las del cliente.
+          "x-gateway-integrity-secret": SERVER_CREDENTIALS.WOMPI_INTEGRITY_SECRET,
         },
         payload: {
           gateway: "wompi",
@@ -397,8 +399,6 @@ describe("POST /v1/api/payments (issue #102)", () => {
 
     /** La regla del punto 69 aplicada a esta ruta: `gatewayClientFor()` la cablea. */
     describe("when the gateway points at a real API", () => {
-      const cardAgainst = (baseUrl: string) =>
-        appWith({ ...SERVER_CREDENTIALS, WOMPI_BASE_URL: baseUrl });
       const payload = {
         gateway: "wompi",
         amount: "30000.00",
@@ -420,20 +420,30 @@ describe("POST /v1/api/payments (issue #102)", () => {
       });
 
       it("should refuse the server credentials against production without calling the gateway", async () => {
-        const production = cardAgainst("https://production.wompi.co/v1");
+        const production = appWith(SERVER_CREDENTIALS);
 
-        const response = await production.inject({ method: "POST", url: "/v1/api/payments", payload });
+        const response = await production.inject({
+          method: "POST",
+          url: "/v1/api/payments",
+          payload,
+          headers: { "x-kit-pagos-environment": "production" },
+        });
 
         expect(response.statusCode).toBe(401);
-        expect(response.json().message).toContain("la trata como producción");
+        expect(response.json().message).toContain("producción");
         expect(fetchSpy).not.toHaveBeenCalled();
         await production.close();
       });
 
       it("should warn in the header and the body when it falls back to the server credentials in a sandbox", async () => {
-        const sandbox = cardAgainst("https://sandbox.wompi.co/v1");
+        const sandbox = appWith(SERVER_CREDENTIALS);
 
-        const response = await sandbox.inject({ method: "POST", url: "/v1/api/payments", payload });
+        const response = await sandbox.inject({
+          method: "POST",
+          url: "/v1/api/payments",
+          payload,
+          headers: { "x-kit-pagos-environment": "sandbox" },
+        });
 
         expect(fetchSpy).toHaveBeenCalled();
         expect(response.headers["x-kit-pagos-warning"]).toBeDefined();

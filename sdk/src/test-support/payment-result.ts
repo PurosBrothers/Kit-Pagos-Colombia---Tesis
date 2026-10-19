@@ -17,7 +17,7 @@ import {
  *
  * En una prueba el trato es el contrario. La prueba ya sabe qué rama espera
  * —está montando la respuesta de la pasarela ella misma— y si llega la otra, lo
- * correcto es fallar ruidosamente. Además, lanzar acá estrecha el tipo para el
+ * correcto es fallar ruidosamente. Además, lanzar aquí estrecha el tipo para el
  * resto del caso de prueba, así que las aserciones siguientes se escriben contra
  * `Transaction` sin ceremonia.
  */

@@ -36,6 +36,7 @@ import {
   type CreatePaymentRequest,
   type Transaction,
 } from "kit-pagos-colombia";
+import { RAPYD_SECRET_KEY, WOMPI_INTEGRITY_SECRET } from "./simulator-secrets";
 
 /** Las cuatro pasarelas que el framework unifica, en orden de implementación. */
 const GATEWAYS = [
@@ -90,16 +91,19 @@ const CREDENTIALS: SDKOptions["credentials"] = {
     privateKey: "prv_test_ejemplo_no_real",
     /*
      * Wompi es la única de las cuatro que pide un tercer valor, y no es opcional para
-     * cobrar: sin él no crea la transacción. Que esté acá y las otras tres no lo tengan
+     * cobrar: sin él no crea la transacción. Que esté aquí y las otras tres no lo tengan
      * es parte de lo que este ejemplo muestra: **las credenciales sí cambian entre
      * pasarelas, y el código del pago no.** Lo que el SDK unifica es el cobro, no la
      * cuenta que hay que abrir en cada pasarela.
+     *
+     * Este secreto y el de Rapyd son los de la cuenta del simulador, que verifica las
+     * firmas (`simulator-secrets.ts`).
      */
-    integritySecret: "test_integrity_ejemplo_no_real",
+    integritySecret: WOMPI_INTEGRITY_SECRET,
   },
   [Gateway.RAPYD]: {
     publicKey: "rapyd_access_key_ejemplo_no_real",
-    privateKey: "rapyd_secret_key_ejemplo_no_real",
+    privateKey: RAPYD_SECRET_KEY,
   },
   [Gateway.MERCADOPAGO]: {
     publicKey: "APP_USR_public_ejemplo_no_real",
@@ -111,10 +115,19 @@ const CREDENTIALS: SDKOptions["credentials"] = {
   },
 };
 
-/** Lo que este ejemplo necesita recordar de cada cobro para comparar al final. */
+/**
+ * Lo que este ejemplo necesita recordar de cada cobro para comparar al final.
+ *
+ * `recheck` es la segunda consulta del mismo cobro, y existe para verificar la propiedad
+ * que el issue #124 exige: consultar no cambia el resultado. Antes el simulador respondía
+ * la consulta fabricando el cobro desde cero, así que una segunda consulta podía devolver
+ * otro estado, otro monto y otra referencia —o los de otro cobro—, y nada en el ejemplo lo
+ * notaba porque no había una segunda consulta.
+ */
 interface GatewayOutcome {
   gateway: Gateway;
   transaction: Transaction;
+  recheck: Transaction;
 }
 
 /** Ancho fijo de cada columna de la tabla comparativa. */
@@ -124,6 +137,7 @@ const TABLE_COLUMNS = [
   { title: "Estado nativo", width: 14 },
   { title: "Monto", width: 14 },
   { title: "ID en la pasarela", width: 38 },
+  { title: "Reconsulta", width: 12 },
 ] as const;
 
 /**
@@ -155,7 +169,7 @@ const payment: CreatePaymentRequest = {
   }),
   /*
    * El método de pago es el mismo para las cuatro, y el token es opaco: cada pasarela lo
-   * emite con su propio formato y el SDK no lo interpreta. Acá es de mentira porque quien
+   * emite con su propio formato y el SDK no lo interpreta. Aquí es de mentira porque quien
    * responde es la API de Simulación; en producción lo genera el frontend del comercio, que
    * es el único lugar donde puede tocar la tarjeta sin meter al servidor dentro del alcance
    * de PCI DSS.
@@ -181,7 +195,7 @@ const payment: CreatePaymentRequest = {
  * que además redirige. El comercio escribe el caso de tres y le sirve para las
  * cuatro.
  */
-async function charge(gateway: Gateway): Promise<Transaction> {
+async function charge(gateway: Gateway): Promise<GatewayOutcome> {
   const kitPagos = new KitPagos({
     gateway,
     credentials: CREDENTIALS,
@@ -207,28 +221,65 @@ async function charge(gateway: Gateway): Promise<Transaction> {
    * `POST`. Consultar cuando falta el desenlace es lo que hace que las cuatro terminen
    * comparables, y es la misma línea para todas.
    */
-  if (result.outcome === "REDIRECT_REQUIRED") {
-    /*
-     * Hace de pagador. En producción esto no es código del comercio: es la persona abriendo
-     * la página de la pasarela y poniendo su tarjeta. Contra la API de Simulación alcanza
-     * con visitar la URL, que es a propósito el destino real de `redirect_url`, para que el
-     * ejemplo recorra el flujo en el orden verdadero —crear, redirigir, consultar— en vez
-     * de saltarse el paso del medio.
-     */
-    await fetch(result.redirect.redirectUrl);
+  /*
+   * Resuelve el cobro hasta un estado final, y lo hace una sola vez.
+   *
+   * Las dos ramas se parecen pero no son la misma: la primera llega por redirección y
+   * necesita simular al pagador; la segunda llega por una transacción que nació pendiente
+   * y solo necesita una consulta. Que las dos estén separadas no es estilo: en la primera
+   * el identificador del cobro no es el del resultado de la creación, y en la segunda sí.
+   */
+  const resuelto =
+    result.outcome === "REDIRECT_REQUIRED"
+      ? await resolverRedireccion(result, kitPagos)
+      : await resolverDirecto(result, kitPagos);
 
-    return kitPagos.getPaymentStatus(
-      result.redirect.gatewayTransactionId.value,
-    );
-  }
+  /*
+   * La segunda consulta, que es la que verifica el issue #124.
+   *
+   * Se consulta el mismo identificador otra vez y se compara. Si el simulador moviera el
+   * cobro al consultarlo —o fabricara uno nuevo con otro estado— las dos consultas
+   * discreparían y el ejemplo saldría con código 1. Es la única forma de que un ejemplo
+   * detecte esa regresión: las pruebas unitarias comprueban casos sueltos, esto comprueba
+   * la propiedad sobre las cuatro pasarelas a la vez.
+   *
+   * Y es también el caso que el comercio se lleva a producción: reintentar una consulta
+   * por timeout no puede cambiarle la respuesta.
+   */
+  const recheck = await kitPagos.getPaymentStatus(
+    resuelto.gatewayTransactionId.value,
+  );
 
+  return { gateway, transaction: resuelto, recheck };
+}
+
+/** Resuelve el cobro que llegó por redirección, haciendo de pagador. */
+async function resolverRedireccion(
+  result: Extract<Awaited<ReturnType<KitPagos["createPayment"]>>, { outcome: "REDIRECT_REQUIRED" }>,
+  kitPagos: KitPagos,
+): Promise<Transaction> {
+  /*
+   * Hace de pagador. En producción esto no es código del comercio: es la persona abriendo
+   * la página de la pasarela y poniendo su tarjeta. Contra la API de Simulación alcanza
+   * con visitar la URL, que es a propósito el destino real de `redirect_url`, para que el
+   * ejemplo recorra el flujo en el orden verdadero —crear, redirigir, consultar— en vez
+   * de saltarse el paso del medio.
+   */
+  await fetch(result.redirect.redirectUrl);
+
+  return kitPagos.getPaymentStatus(result.redirect.gatewayTransactionId.value);
+}
+
+/** Resuelve el cobro que nació pendiente, con una consulta. */
+async function resolverDirecto(
+  result: Extract<Awaited<ReturnType<KitPagos["createPayment"]>>, { outcome: "TRANSACTION" }>,
+  kitPagos: KitPagos,
+): Promise<Transaction> {
   if (result.transaction.isFinal()) {
     return result.transaction;
   }
 
-  return kitPagos.getPaymentStatus(
-    result.transaction.gatewayTransactionId.value,
-  );
+  return kitPagos.getPaymentStatus(result.transaction.gatewayTransactionId.value);
 }
 
 /** Imprime la tabla comparativa, que es donde se ve el argumento. */
@@ -240,13 +291,15 @@ function printTable(outcomes: readonly GatewayOutcome[]): void {
   console.log(header);
   console.log("─".repeat(header.length));
 
-  for (const { gateway, transaction } of outcomes) {
+  for (const { gateway, transaction, recheck } of outcomes) {
     const cells = [
       gateway,
       transaction.getStatus(),
       transaction.rawStatus,
       `${transaction.amount.getValue()} ${transaction.currency.getCode()}`,
       transaction.gatewayTransactionId.value,
+      // La última columna es la que protege el issue #124: la misma consulta, repetida.
+      recheck.getStatus(),
     ];
 
     console.log(
@@ -274,7 +327,7 @@ function printTable(outcomes: readonly GatewayOutcome[]): void {
  * comercio para conciliar: una pasarela que devuelve otra referencia rompe la
  * conciliación aunque el estado y el monto coincidan. Es exactamente el defecto
  * que tenía Kushki (punto 41 del `architecture-log.md`), y por eso queda fijado
- * también acá y no solo en una prueba unitaria.
+ * también aquí y no solo en una prueba unitaria.
  */
 function findMismatches(outcomes: readonly GatewayOutcome[]): string[] {
   const mismatches: string[] = [];
@@ -311,6 +364,56 @@ function findMismatches(outcomes: readonly GatewayOutcome[]): string[] {
   return mismatches;
 }
 
+/**
+ * Verifica que consultar dos veces devuelva lo mismo (issue #124).
+ *
+ * Es una propiedad del cobro, no de una pasarela: el mismo identificador consultado dos
+ * veces tiene que devolver el mismo estado normalizado, el mismo estado nativo, el mismo
+ * monto y el mismo identificador de orden. Si no fuera así, el comercio no podría
+ * reintentar una consulta por timeout, y la conciliación dependería de cuántas veces se
+ * preguntó.
+ *
+ * El identificador de la pasarela también se compara. Es el detalle que delata la
+ * implementación que había: una consulta que fabricaba la respuesta desde cero devolvía
+ * datos de otro cobro, así que el `gatewayTransactionId` podía no ser el que se consultó.
+ */
+function findInstability(outcomes: readonly GatewayOutcome[]): string[] {
+  const problemas: string[] = [];
+
+  for (const { gateway, transaction, recheck } of outcomes) {
+    const antes = [
+      ["estado normalizado", transaction.getStatus()],
+      ["estado nativo", transaction.rawStatus],
+      ["identificador", transaction.gatewayTransactionId.value],
+      ["referencia", transaction.orderReference.getValue()],
+      [
+        "monto",
+        `${transaction.amount.getValue()} ${transaction.currency.getCode()}`,
+      ],
+    ] as const;
+
+    const despues = [
+      ["estado normalizado", recheck.getStatus()],
+      ["estado nativo", recheck.rawStatus],
+      ["identificador", recheck.gatewayTransactionId.value],
+      ["referencia", recheck.orderReference.getValue()],
+      ["monto", `${recheck.amount.getValue()} ${recheck.currency.getCode()}`],
+    ] as const;
+
+    for (const [i, campo] of antes.entries()) {
+      if (campo[1] !== despues[i][1]) {
+        problemas.push(
+          `${gateway} devolvió ${campo[1]} como ${campo[0]} en la primera ` +
+            `consulta y ${despues[i][1]} en la segunda: consultar está cambiando el ` +
+            "resultado.",
+        );
+      }
+    }
+  }
+
+  return problemas;
+}
+
 async function main(): Promise<void> {
   console.log(
     "=== Kit Pagos Colombia — intercambiabilidad de las cuatro pasarelas ===\n",
@@ -326,7 +429,7 @@ async function main(): Promise<void> {
 
   for (const gateway of GATEWAYS) {
     console.log(`Cobrando por ${gateway}...`);
-    outcomes.push({ gateway, transaction: await charge(gateway) });
+    outcomes.push(await charge(gateway));
   }
 
   console.log("\n=== Lo que devolvió cada pasarela ===\n");
@@ -338,7 +441,10 @@ async function main(): Promise<void> {
       "normalizado es la que el comercio programa contra, y es una sola.\n",
   );
 
-  const mismatches = findMismatches(outcomes);
+  const mismatches = [
+    ...findMismatches(outcomes),
+    ...findInstability(outcomes),
+  ];
 
   if (mismatches.length > 0) {
     console.error("=== La intercambiabilidad está rota ===\n");
@@ -346,9 +452,11 @@ async function main(): Promise<void> {
       console.error(`  - ${mismatch}`);
     }
     console.error(
-      "\nUna diferencia acá no es un detalle del ejemplo: significa que el\n" +
+      "\nUna diferencia aquí no es un detalle del ejemplo: significa que el\n" +
         "comercio tendría que escribir código distinto según la pasarela, que es\n" +
-        "justo lo que el framework existe para evitar.\n",
+        "justo lo que el framework existe para evitar. Si la discrepancia es de la\n" +
+        "reconsulta, el simulador está moviendo un cobro al consultarlo, y eso\n" +
+        "rompe el reintento por timeout.\n",
     );
     process.exit(1);
   }
@@ -357,7 +465,11 @@ async function main(): Promise<void> {
   console.log(
     `  Las ${outcomes.length} pasarelas coinciden en estado normalizado, monto y referencia.`,
   );
-  console.log("  El código del comercio fue idéntico para las cuatro.\n");
+  console.log("  El código del comercio fue idéntico para las cuatro.");
+  console.log(
+    "  Y consultar dos veces devuelve lo mismo en las cuatro, así que un reintento\n" +
+      "  por timeout no le cambia la respuesta al comercio (issue #124).\n",
+  );
 }
 
 main().catch((error: unknown) => {
@@ -371,7 +483,7 @@ main().catch((error: unknown) => {
     error.code === KitPagosErrorCode.CONNECTION_FAILED
   ) {
     console.error("\nNo se pudo conectar con la API de Simulación.");
-    console.error("Iníciala en otra terminal y vuelve a ejecutar el ejemplo:\n");
+    console.error("Iníciela en otra terminal y vuelva a ejecutar el ejemplo:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }

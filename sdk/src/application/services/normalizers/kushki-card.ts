@@ -22,7 +22,7 @@
  * comercio y el mapeo de estados ya están escritos y probados una vez en
  * `KushkiResponseNormalizer`. Duplicarlos para la forma anidada sería el mismo defecto
  * que el punto 46 corrigió en los estados: dos copias de la misma traducción, que se
- * desincronizan en cuanto una cambia. Acá se traduce **solo la forma**, y el significado
+ * desincronizan en cuanto una cambia. Aquí se traduce **solo la forma**, y el significado
  * lo sigue dando un único lugar.
  *
  * La forma plana, entonces, es la forma canónica interna. Sigue existiendo de verdad en
@@ -42,6 +42,7 @@ interface KushkiChargeDetails {
   readonly iceValue?: unknown;
   readonly currencyCode?: unknown;
   readonly contactDetails?: unknown;
+  readonly responseCode?: unknown;
 }
 
 /**
@@ -77,6 +78,7 @@ export function flattenKushkiCharge(
     transaction_status: details.transactionStatus,
     trackingCode: details.trackingCode,
     contactDetails: details.contactDetails,
+    responseCode: details.responseCode,
     amount: {
       subtotalIva0: details.subtotalIva0 ?? 0,
       subtotalIva: details.subtotalIva ?? 0,

@@ -8,6 +8,7 @@ import {
   TokenizeCardParams,
 } from "../types";
 import { resolveCatalogUrl } from "./base-url-catalog";
+import { sendCardTokenRequest } from "./card-token-request";
 
 /**
  * Catálogo cerrado de URLs base de Wompi. Es el único lugar de donde sale el host al
@@ -72,6 +73,11 @@ function errorMessageFor(status: number, error: WompiErrorBody | undefined): str
  *
  * Usa solo `fetch` nativo, sin dependencias de Node.js. CORS fue medido: Wompi admite
  * el preflight y la llamada directa desde el navegador del pagador a `/v1/tokens/cards`.
+ *
+ * Usa la variante **simple** de tokenización: la tarjeta viaja en el cuerpo JSON de
+ * `POST /v1/tokens/cards` sobre HTTPS. Wompi recomienda por defecto cifrar la tarjeta,
+ * pero la variante simple es la que este tokenizador usa y declara; que el SDK no siga
+ * la recomendación por defecto es deuda nombrada en el punto 81 del `architecture-log.md`.
  */
 export class WompiTokenizer {
   /** Resuelve la URL base de Wompi desde el catálogo cerrado. */
@@ -104,26 +110,22 @@ export class WompiTokenizer {
 
     const url = `${this.resolveBaseUrl(environment)}/tokens/cards`;
 
-    let response: Response;
-    try {
-      response = await fetchFn(url, {
+    const { response, text } = await sendCardTokenRequest(
+      url,
+      {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${publicKey.trim()}`,
         },
         body: JSON.stringify(this.buildRequestBody(card)),
-      });
-    } catch (error) {
-      throw new KitPagosError(
-        KitPagosErrorCode.CONNECTION_FAILED,
-        Gateway.WOMPI,
-        error,
-        `Error de conexión al tokenizar tarjeta en Wompi: ${(error as Error).message}`,
-      );
-    }
+      },
+      fetchFn,
+      params.timeoutMs,
+      Gateway.WOMPI,
+    );
 
-    return this.handleResponse(response);
+    return this.handleResponse(response, text);
   }
 
   private static buildRequestBody(card: CardData): Record<string, string> {
@@ -155,8 +157,7 @@ export class WompiTokenizer {
     }
   }
 
-  private static async handleResponse(response: Response): Promise<CardTokenResult> {
-    const text = await response.text();
+  private static handleResponse(response: Response, text: string): CardTokenResult {
     let json: Record<string, unknown>;
     try {
       json = JSON.parse(text) as Record<string, unknown>;

@@ -54,6 +54,58 @@ Detalles de la página que importan al integrar:
 - **No se paga sola.** Una página creada y no visitada se queda en `NEW`, así que el desenlace
   no se puede observar sin que una persona llene el formulario.
 
+**Identificadores que no existen.** Medido contra el sandbox el 5 de octubre de 2026, entre las
+11:58 y las 12:11 (UTC−5):
+
+| Consulta | Respuesta |
+| --- | --- |
+| `GET /v1/payments/payment_<32 hex>` inexistente | `400 ERROR_GET_PAYMENT`, con un mensaje que empieza `"The request tried to retrieve a payment, but the payment was not found."` y termina `"Use a valid payment ID."`; el texto completo es el de [Retrieve Payment](https://docs.rapyd.net/en/retrieve-payment.html) |
+| `GET /v1/checkout/checkout_<32 hex>` inexistente | `400 ERROR_GET_HOSTED_PAGE_PAYMENT`, con un mensaje que empieza `"The request tried to retrieve a hosted page, but the page was not found."` |
+
+La medición registró solo el comienzo del segundo mensaje. El texto completo de la
+[documentación oficial](https://docs.rapyd.net/en/retrieve-checkout-page.html) empieza igual y
+sigue `"The request was rejected. Corrective action: Use the ID of a valid hosted page."`.
+Los dos son `400` y no `404`, así que el SDK los traduce a `INVALID_REQUEST`. El primero se
+volvió a medir el 6 de octubre de 2026, con el mismo texto.
+
+**Credenciales inválidas.** Medido contra `sandboxapi.rapyd.net` el 6 de octubre de 2026, entre
+las 10:37 y las 10:39 (UTC−5), con `GET /v1/payment_methods/country?country=CO&currency=COP`:
+
+| Qué se varió | HTTP | `status.message` |
+| --- | --- | --- |
+| Firma calculada con una llave secreta equivocada | `401` | `"The API received a request, but the signature did not match. The request was rejected. Corrective action: (1) Remove all whitespace that is not inside a string. (2) Remove trailing zeroes and decimal points, or wrap numbers in a string."` |
+| `access_key` inexistente, de 24 o de 36 caracteres | `401` | `"The request was rejected due to an authentication issue. Corrective action: Check the status of your account in the 'Account Details' page of the Client Portal."` |
+
+Entre las 14:05 y las 14:12 del mismo día, `POST /v1/checkout`, `GET /v1/checkout/{id existente}` y
+`GET /v1/payments/{id}` con una `access_key` inexistente (firmada con el secreto real) dieron el
+mismo `401` con el mensaje de «authentication issue», exista o no el recurso.
+
+En todos los casos el cuerpo es
+`{"status":{"error_code":"UNAUTHENTICATED_API_CALL","status":"ERROR","message":"…","response_code":"UNAUTHENTICATED_API_CALL","operation_id":"<uuid>"}}`.
+
+**La firma, el `timestamp` y el `salt`.** Medido el 7 de octubre de 2026 entre las 21:25 y las
+21:27 (UTC−5), para el issue #130, firmando como `sdk/src/infrastructure/adapters/rapyd-signature.ts`.
+`GET /v1/payment_methods/country?country=CO&currency=COP` y `POST /v1/checkout` respondieron igual
+en todos los casos. El reloj local coincidió en el mismo segundo con la cabecera `Date` de Rapyd.
+
+| Caso | HTTP | `error_code` | `message` |
+| --- | --- | --- | --- |
+| Firma calculada con un secreto equivocado | `401` | `UNAUTHENTICATED_API_CALL` | `"The API received a request, but the signature did not match. The request was rejected. Corrective action: (1) Remove all whitespace that is not inside a string. (2) Remove trailing zeroes and decimal points, or wrap numbers in a string."` |
+| `timestamp` de 360 a 600 s atrás, con la firma correcta | `401` | `UNAUTHENTICATED_API_CALL` | `"timestamp header is out of allowed range"` |
+| `timestamp` de 45 a 300 s atrás, o de 600 a 3 600 s adelante | `200` | `""` (`SUCCESS`) | — |
+| `salt` ya aceptado en otra petición, aunque cambien el `timestamp` y la firma | `401` | `UNAUTHENTICATED_API_CALL` | `"salt header value is not valid, same value used not long ago"` |
+| Sin la cabecera `signature` | `400` | `MISSING_AUTHENTICATION_HEADERS` | `"The request did not contain the required headers for authentication. The request was rejected. Corrective action: Add authentication headers."` |
+
+- `error_code` y `response_code` traen siempre el mismo valor, y el `operation_id` es un uuid
+  nuevo en cada respuesta.
+- **Con varios problemas a la vez**, Rapyd responde primero por la cabecera que falta (`400`),
+  después por la firma, y al final por el `timestamp` o el `salt`.
+- **Un `salt` usado en una petición rechazada por firma no queda gastado:** la misma petición con
+  la firma correcta pasa.
+- **La ventana del `timestamp` no es de 60 s.** Hacia atrás termina entre 300 y 360 s; hacia
+  adelante, nada se rechazó hasta +3 600 s, y más allá no se midió. Tampoco se midió cuánto tiempo
+  recuerda Rapyd un `salt`.
+
 ---
 
 ## 2. Tarjetas de Crédito / Débito (Transacciones con Error)

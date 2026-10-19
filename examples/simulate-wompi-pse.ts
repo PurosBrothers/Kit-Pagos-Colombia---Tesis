@@ -36,6 +36,7 @@ import {
   KitPagosErrorCode,
   type SDKOptions,
 } from "kit-pagos-colombia";
+import { WOMPI_INTEGRITY_SECRET } from "./simulator-secrets";
 
 /** Raíz de la API de Wompi en el simulador, no el endpoint de transacciones. */
 const SIMULATOR_WOMPI_URL = "http://localhost:3000/v1/sim/wompi";
@@ -49,9 +50,9 @@ const options: SDKOptions = {
       privateKey: "prv_test_ejemplo_no_real",
       // Wompi firma cada transacción con este secreto. Es distinto del secreto
       // de eventos con el que se validan los webhooks: uno firma lo que sale, el
-      // otro valida lo que entra. El simulador no las valida, pero el dato viaja
-      // por el mismo camino que uno real.
-      integritySecret: "test_integrity_ejemplo_no_real",
+      // otro valida lo que entra. El simulador verifica la firma con el secreto
+      // de su cuenta, así que este valor sale de `simulator-secrets.ts`.
+      integritySecret: WOMPI_INTEGRITY_SECRET,
     },
   },
   baseUrl: SIMULATOR_WOMPI_URL,
@@ -74,7 +75,7 @@ async function main(): Promise<void> {
   /**
    * El banco sale de la pasarela, no del código del comercio.
    *
-   * Antes acá había un `"1"` escrito a mano, y era una deuda visible: en PSE el
+   * Antes aquí había un `"1"` escrito a mano, y era una deuda visible: en PSE el
    * pagador elige de una lista viva, y un código fijo muestra bancos que ya no están o
    * esconde los que sí. `getPseBanks()` la trae, y el `code` entra en
    * `PaymentMethod.pse()` sin transformarlo.
@@ -115,7 +116,7 @@ async function main(): Promise<void> {
 
   const result = await kitPagos.createPayment(request);
 
-  // Acá está el punto del ejemplo. Con tarjeta esta rama no se alcanza nunca;
+  // Aquí está el punto del ejemplo. Con tarjeta esta rama no se alcanza nunca;
   // con PSE es la única que se alcanza. Y no se puede omitir: mientras no se
   // descarte, TypeScript no deja leer `result.transaction`.
   if (result.outcome !== "REDIRECT_REQUIRED") {
@@ -129,7 +130,7 @@ async function main(): Promise<void> {
   console.log(`  Pasarela:        ${result.redirect.gatewayTransactionId.gateway}`);
   console.log(`  Estado nativo:   ${result.redirect.rawStatus}\n`);
 
-  console.log("En una integración real, acá el comercio redirige al pagador a esa URL.");
+  console.log("En una integración real, aquí el comercio redirige al pagador a esa URL.");
   console.log("El pago NO está aprobado todavía: sigue pendiente de que pague en el banco.\n");
 
   /**
@@ -153,7 +154,7 @@ async function main(): Promise<void> {
 main().catch((error: unknown) => {
   if (error instanceof KitPagosError && error.code === KitPagosErrorCode.CONNECTION_FAILED) {
     console.error("\nNo se pudo conectar con la API de Simulación.");
-    console.error("Levantala en otra terminal y volvé a correr el ejemplo:\n");
+    console.error("Levántela en otra terminal y vuelva a ejecutar el ejemplo:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }

@@ -227,8 +227,9 @@ const res = await fetch("https://api.mercadopago.com/v1/payments", {
   }),
 });`;
 
-export const SNIPPET_REST_CURL = `curl -X POST http://localhost:3000/v1/api/payments \\
+export const SNIPPET_REST_CURL = `curl -X POST https://kit-pagos-colombia.onrender.com/v1/api/payments \\
   -H "Content-Type: application/json" \\
+  -H "x-kit-pagos-environment: sandbox" \\
   -d '{
     "gateway": "wompi",
     "amount": "150000.00",

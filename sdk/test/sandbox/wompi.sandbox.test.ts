@@ -23,7 +23,7 @@ describeSandbox(Gateway.WOMPI, (credentials, baseUrl) => {
     baseUrl,
   });
 
-  it("responde la lista de bancos de PSE, con código y nombre", async () => {
+  it("returns the PSE bank list, with code and name", async () => {
     const banks = await kitPagos.getPseBanks();
 
     expect(banks.length).toBeGreaterThan(0);
@@ -42,7 +42,7 @@ describeSandbox(Gateway.WOMPI, (credentials, baseUrl) => {
    * creación** y el comercio tiene que consultar. Si algún día Wompi empezara a resolverlo de
    * una, esta prueba lo diría, y el paso de consulta pasaría de obligatorio a redundante.
    */
-  it("cobra una tarjeta y la deja consultable", async () => {
+  it("charges a card and leaves it queryable", async () => {
     const { token } = await tokenizeWompiCard(credentials);
 
     const result = await kitPagos.createPayment({
@@ -80,7 +80,7 @@ describeSandbox(Gateway.WOMPI, (credentials, baseUrl) => {
     );
   });
 
-  it("permite tokenizar con KitPagosBrowser y cobrar con KitPagos", async () => {
+  it("allows tokenizing with KitPagosBrowser and charging with KitPagos", async () => {
     const tokenResult = await KitPagosBrowser.tokenizeCard({
       gateway: Gateway.WOMPI,
       publicKey: credentials.publicKey!,
@@ -131,7 +131,7 @@ describeSandbox(Gateway.WOMPI, (credentials, baseUrl) => {
    * O sea que exigir el secreto de integridad sin exigir también el token de aceptación
    * dejaría al comercio igual de lejos de poder cobrar, con un error menos.
    */
-  it("sigue rechazando una transacción sin firma de integridad", async () => {
+  it("still rejects a transaction without an integrity signature", async () => {
     const { token } = await tokenizeWompiCard(credentials);
     const acceptanceToken = await fetchAcceptanceToken();
 
@@ -155,7 +155,7 @@ describeSandbox(Gateway.WOMPI, (credentials, baseUrl) => {
     expect(await response.text()).toContain("Firma de integridad");
   });
 
-  /** Lo mismo que hace el adaptador, acá a mano para poder omitir la firma a propósito. */
+  /** Lo mismo que hace el adaptador, aquí a mano para poder omitir la firma a propósito. */
   async function fetchAcceptanceToken(): Promise<string> {
     const response = await fetch(
       `${baseUrl}/merchants/${credentials.publicKey}`,

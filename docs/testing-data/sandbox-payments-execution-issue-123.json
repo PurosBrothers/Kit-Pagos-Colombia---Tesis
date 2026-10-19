@@ -1,0 +1,93 @@
+{
+  "timestamp": "2026-10-05T18:48:23.170Z",
+  "results": {
+    "wompi": {
+      "statusCode": 201,
+      "warningHeader": "Para pruebas futuras se recomienda utilizar las credenciales propias. Se usaron las credenciales de sandbox del servidor porque falta: x-gateway-public-key, x-gateway-private-key.",
+      "body": {
+        "outcome": "TRANSACTION",
+        "transaction": {
+          "gatewayTransactionId": "12066420-1791226107-72286",
+          "orderReference": "SBX-WOMPI-1791226106067",
+          "amount": "15000.00",
+          "currency": "COP",
+          "payer": {
+            "email": "usuario@ejemplo.com"
+          },
+          "status": "PENDING",
+          "rawStatus": "PENDING",
+          "isApproved": false,
+          "isPending": true,
+          "isFinal": false
+        },
+        "rawStatus": "PENDING",
+        "warnings": [
+          {
+            "code": "SERVER_SANDBOX_CREDENTIALS_USED",
+            "message": "Para pruebas futuras se recomienda utilizar las credenciales propias. Se usaron las credenciales de sandbox del servidor porque falta: x-gateway-public-key, x-gateway-private-key."
+          }
+        ]
+      }
+    },
+    "mercadopago": {
+      "statusCode": 400,
+      "warningHeader": "Para pruebas futuras se recomienda utilizar las credenciales propias. Se usaron las credenciales de sandbox del servidor porque falta: x-gateway-public-key, x-gateway-private-key.",
+      "body": {
+        "code": "INVALID_REQUEST",
+        "message": "Mercado Pago gateway returned an HTTP error status 400",
+        "warnings": [
+          {
+            "code": "SERVER_SANDBOX_CREDENTIALS_USED",
+            "message": "Para pruebas futuras se recomienda utilizar las credenciales propias. Se usaron las credenciales de sandbox del servidor porque falta: x-gateway-public-key, x-gateway-private-key."
+          }
+        ]
+      }
+    },
+    "kushki": {
+      "statusCode": 201,
+      "warningHeader": "Para pruebas futuras se recomienda utilizar las credenciales propias. Se usaron las credenciales de sandbox del servidor porque falta: x-gateway-public-key, x-gateway-private-key.",
+      "body": {
+        "outcome": "TRANSACTION",
+        "transaction": {
+          "gatewayTransactionId": "105752898821505149",
+          "orderReference": "SBX-KUSHKI-1791226109513",
+          "amount": "10000.00",
+          "currency": "COP",
+          "payer": {
+            "email": "usuario@ejemplo.com"
+          },
+          "status": "APPROVED",
+          "rawStatus": "APPROVAL",
+          "isApproved": true,
+          "isPending": false,
+          "isFinal": true
+        },
+        "rawStatus": "APPROVAL",
+        "warnings": [
+          {
+            "code": "SERVER_SANDBOX_CREDENTIALS_USED",
+            "message": "Para pruebas futuras se recomienda utilizar las credenciales propias. Se usaron las credenciales de sandbox del servidor porque falta: x-gateway-public-key, x-gateway-private-key."
+          }
+        ]
+      }
+    },
+    "rapyd": {
+      "statusCode": 201,
+      "warningHeader": "Para pruebas futuras se recomienda utilizar las credenciales propias. Se usaron las credenciales de sandbox del servidor porque falta: x-gateway-public-key, x-gateway-private-key.",
+      "body": {
+        "outcome": "REDIRECT_REQUIRED",
+        "redirect": {
+          "redirectUrl": "https://sandboxcheckout.rapyd.net/?token=checkout_baa825af10b3c7ce282f2799d2149b51",
+          "gatewayTransactionId": "checkout_baa825af10b3c7ce282f2799d2149b51",
+          "rawStatus": "NEW"
+        },
+        "warnings": [
+          {
+            "code": "SERVER_SANDBOX_CREDENTIALS_USED",
+            "message": "Para pruebas futuras se recomienda utilizar las credenciales propias. Se usaron las credenciales de sandbox del servidor porque falta: x-gateway-public-key, x-gateway-private-key."
+          }
+        ]
+      }
+    }
+  }
+}

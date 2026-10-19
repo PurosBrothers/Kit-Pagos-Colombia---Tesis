@@ -3,6 +3,7 @@ import { Gateway, KitPagosErrorCode, PseBank } from "kit-pagos-colombia";
 import { CLIENT_CREDENTIAL_HEADERS, RequestHeaders } from "../../auth/CredentialResolver";
 import { gatewayClientFor } from "../gateway-client";
 import { SUPPORTED_GATEWAYS, parseGateway, unsupportedGatewayBody } from "../gateway-param";
+import { GetPseBanksSchema } from "../openapi/schemas";
 
 /**
  * Serializa un `PseBank` del SDK a JSON para la respuesta HTTP.
@@ -48,7 +49,7 @@ function gatewayRequiredBody(): { code: KitPagosErrorCode; message: string } {
  * Se mira la presencia y no la completitud a proposito: con media pareja de llaves la
  * peticion tampoco puede atribuirse a una pasarela, y mandarla a las cuatro seria peor.
  */
-function traeCredencialesPropias(headers: RequestHeaders): boolean {
+function bringsOwnCredentials(headers: RequestHeaders): boolean {
   return CLIENT_CREDENTIAL_HEADERS.some((header) => headers[header] !== undefined);
 }
 
@@ -79,24 +80,25 @@ function traeCredencialesPropias(headers: RequestHeaders): boolean {
 export async function pseBanksRoute(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { gateway?: string } }>(
     "/pse-banks",
+    { schema: GetPseBanksSchema },
     async (
       request: FastifyRequest<{ Querystring: { gateway?: string } }>,
       reply: FastifyReply,
     ) => {
-      const pedida = parseGateway(request.query.gateway);
+      const requestedGateway = parseGateway(request.query.gateway);
 
       // Un valor presente que no es una pasarela es una peticion mal formada, con o sin
       // credenciales: se responde antes de mirar las cabeceras para no seguir leyendo una
       // peticion que ya se sabe invalida.
-      if (request.query.gateway !== undefined && !pedida) {
+      if (request.query.gateway !== undefined && !requestedGateway) {
         return reply.status(400).send(unsupportedGatewayBody());
       }
 
-      if (!pedida && traeCredencialesPropias(request.headers)) {
+      if (!requestedGateway && bringsOwnCredentials(request.headers)) {
         return reply.status(400).send(gatewayRequiredBody());
       }
 
-      const gateways = pedida ? [pedida] : Object.values(Gateway);
+      const gateways = requestedGateway ? [requestedGateway] : Object.values(Gateway);
       const byGateway: Array<{
         gateway: string;
         banks: ReturnType<typeof serializePseBank>[];

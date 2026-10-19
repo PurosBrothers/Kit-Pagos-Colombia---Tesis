@@ -34,6 +34,8 @@ El token no lo produce el SDK: lo produce la librería de navegador de cada pasa
 
 Wompi es el caso más simple: la tokenización es una llamada REST estándar que cualquier cliente HTTP puede hacer, sin librería propietaria. El widget HTML (`data-widget-operation="tokenize"`) es una alternativa con formulario visual, pero la tokenización pura no lo necesita.
 
+**Variante simple, declarada (punto 81 del `architecture-log.md`).** `WompiTokenizer` envía la tarjeta en el cuerpo JSON de `POST /v1/tokens/cards` sobre HTTPS: es la tokenización **simple**. La documentación oficial recomienda por defecto cifrar la información de la tarjeta — *«By default we recommend tokenizing by encrypting the card information. If your use case does not support encryption, select the simple tokenization tab»* ([docs.wompi.co — Métodos de pago](https://docs.wompi.co/en/docs/colombia/metodos-de-pago/)) —, con la variante simple como alternativa para los casos que no soportan cifrado. La variante cifrada exige una llamada previa para obtener la llave de cifrado y generar un JWE; se descartó por las razones registradas en el punto 81. La documentación oficial no explica qué protege el cifrado adicional sobre HTTPS ni si cambia el alcance PCI DSS, y el punto 81 no lo afirma.
+
 **Nivel de evidencia:** Nivel 1 — medido contra el sandbox el 27 de septiembre de 2026. Un `POST /v1/tokens/cards` con la clave pública del sandbox devolvió un token `tok_staging_…` que se usó en un cobro exitoso de $5 000 COP.
 
 ---

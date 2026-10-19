@@ -1,6 +1,6 @@
-import { buildApp } from "../src/app";
+import { buildSignedApp as buildApp } from "./helpers/signedRequests";
 
-describe("mock de Rapyd", () => {
+describe("Rapyd mock", () => {
   /**
    * El monto va como string con dos decimales a proposito: es lo que la propia
    * documentacion de firma de Rapyd recomienda para no perder los ceros a la
@@ -14,7 +14,7 @@ describe("mock de Rapyd", () => {
   };
 
   describe("POST /v1/sim/rapyd/payments", () => {
-    it("responde aprobado con el sobre { status, data } que Rapyd usa siempre", async () => {
+    it("answers approved with the { status, data } envelope that Rapyd always uses", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -38,7 +38,7 @@ describe("mock de Rapyd", () => {
       await app.close();
     });
 
-    it("identifica el pago con el prefijo payment_ que usa Rapyd", async () => {
+    it("identifies the payment with the payment_ prefix that Rapyd uses", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -52,7 +52,7 @@ describe("mock de Rapyd", () => {
       await app.close();
     });
 
-    it("refleja el monto en pesos, sin convertirlo a centavos", async () => {
+    it("reflects the amount in pesos, without converting it to cents", async () => {
       // Es la prueba que fija la diferencia con Wompi: si el adaptador o el mock
       // multiplicaran por 100, el monto de vuelta seria 15000000.
       const app = buildApp();
@@ -68,7 +68,7 @@ describe("mock de Rapyd", () => {
       await app.close();
     });
 
-    it("devuelve la divisa como currency_code, no como currency", async () => {
+    it("returns the currency as currency_code, not as currency", async () => {
       // La peticion la envia en `currency` y la respuesta la devuelve en
       // `currency_code`. Son nombres distintos en el contrato real de Rapyd, y
       // es un error facil de cometer al normalizar.
@@ -87,7 +87,7 @@ describe("mock de Rapyd", () => {
       await app.close();
     });
 
-    it("refleja la referencia del comercio y el correo del recibo", async () => {
+    it("reflects the merchant reference and the receipt email", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -103,7 +103,7 @@ describe("mock de Rapyd", () => {
       await app.close();
     });
 
-    it("acepta el escenario APPROVED enviado de forma explicita", async () => {
+    it("accepts the APPROVED scenario sent explicitly", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -119,7 +119,7 @@ describe("mock de Rapyd", () => {
       await app.close();
     });
 
-    it("responde DECLINED con status ERR y paid false cuando el escenario es DECLINED", async () => {
+    it("answers DECLINED with status ERR and paid false when the scenario is DECLINED", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -139,7 +139,7 @@ describe("mock de Rapyd", () => {
       await app.close();
     });
 
-    it("responde EXPIRED con status EXP y paid false cuando el escenario es EXPIRED", async () => {
+    it("answers EXPIRED with status EXP and paid false when the scenario is EXPIRED", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -157,7 +157,7 @@ describe("mock de Rapyd", () => {
       await app.close();
     });
 
-    it("responde 504 Gateway Timeout cuando el escenario es TIMEOUT", async () => {
+    it("answers 504 Gateway Timeout when the scenario is TIMEOUT", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -173,7 +173,7 @@ describe("mock de Rapyd", () => {
       await app.close();
     });
 
-    it("simula NETWORK_ERROR respondiendo con error 500", async () => {
+    it("simulates NETWORK_ERROR by answering with a 500 error", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -188,7 +188,7 @@ describe("mock de Rapyd", () => {
       await app.close();
     });
 
-    it("responde 429 Too Many Requests cuando el escenario es RATE_LIMIT", async () => {
+    it("answers 429 Too Many Requests when the scenario is RATE_LIMIT", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -204,7 +204,7 @@ describe("mock de Rapyd", () => {
       await app.close();
     });
 
-    it("responde 500 cuando el escenario es SERVER_ERROR", async () => {
+    it("answers 500 when the scenario is SERVER_ERROR", async () => {
       const app = buildApp();
 
       const response = await app.inject({
@@ -220,7 +220,7 @@ describe("mock de Rapyd", () => {
       await app.close();
     });
 
-    it("responde con flapping (503 en intentos iniciales, éxito en el siguiente)", async () => {
+    it("answers with flapping (503 on the first attempts, success on the next one)", async () => {
       const app = buildApp();
       const flapBody = { ...validRequestBody, merchant_reference_id: "rapyd-flap-1" };
 
@@ -252,7 +252,7 @@ describe("mock de Rapyd", () => {
       await app.close();
     });
 
-    it("detecta pagos duplicados cuando el escenario es DUPLICATE_PAYMENT", async () => {
+    it("detects duplicate payments when the scenario is DUPLICATE_PAYMENT", async () => {
       const app = buildApp();
       const dupBody = { ...validRequestBody, merchant_reference_id: "rapyd-dup-1" };
 
@@ -276,7 +276,7 @@ describe("mock de Rapyd", () => {
       await app.close();
     });
 
-    it("responde 501 ante un escenario que todavia no sabe producir", async () => {
+    it("answers 501 for a scenario it cannot produce yet", async () => {
       // 501 y no 400: el escenario es legitimo, falta implementarlo (issue #65).
       // Lo importante es que no devuelva un aprobado falso.
       const app = buildApp();
@@ -295,21 +295,60 @@ describe("mock de Rapyd", () => {
     });
   });
 
+  /*
+   * El pago se crea antes de consultarse. Antes `buildStatusResponse` devolvía `CLO`,
+   * `paid: true`, `amount: "0"` y la referencia vacía para cualquier identificador: un pago
+   * inexistente pasaba por cobrado, y uno declinado se reportaba aprobado porque el método
+   * no miraba el estado guardado.
+   */
   describe("GET /v1/sim/rapyd/payments/:paymentId", () => {
-    it("devuelve el pago consultado con el mismo identificador y el sobre de Rapyd", async () => {
+    it("returns the created payment with its real identifier, envelope and amount", async () => {
       const app = buildApp();
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/sim/rapyd/payments",
+        payload: {
+          amount: "50000",
+          currency: "COP",
+          payment_method: { type: "co_visa_card" },
+          merchant_reference_id: "orden-rapyd-456",
+        },
+      });
+
+      const { data } = created.json();
 
       const response = await app.inject({
         method: "GET",
-        url: "/v1/sim/rapyd/payments/payment_abc123",
+        url: `/v1/sim/rapyd/payments/${data.id}`,
       });
 
       expect(response.statusCode).toBe(200);
 
       const body = response.json();
       expect(body.status.status).toBe("SUCCESS");
-      expect(body.data.id).toBe("payment_abc123");
+      expect(body.data.id).toBe(data.id);
       expect(body.data.status).toBe("CLO");
+      expect(body.data.paid).toBe(true);
+      // El monto y la referencia son los que se mandaron, no `"0"` y cadena vacía.
+      expect(body.data.amount).toBe("50000");
+      expect(body.data.merchant_reference_id).toBe("orden-rapyd-456");
+
+      await app.close();
+    });
+
+    it("returns 400 ERROR_GET_PAYMENT with Rapyd's envelope if the payment does not exist", async () => {
+      const app = buildApp();
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/sim/rapyd/payments/payment_inexistente",
+      });
+
+      // 400 y no 404: es el código que midió el sandbox ante un identificador que no es
+      // de un pago, y el que documenta Rapyd para un pago que no existe.
+      expect(response.statusCode).toBe(400);
+      expect(response.json().status.error_code).toBe("ERROR_GET_PAYMENT");
 
       await app.close();
     });

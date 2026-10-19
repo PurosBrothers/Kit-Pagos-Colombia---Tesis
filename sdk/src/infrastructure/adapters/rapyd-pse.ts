@@ -11,7 +11,7 @@ import {
 } from "./rapyd-pse-banks";
 
 /**
- * PSE en Rapyd Collect. Todo lo específico de PSE vive acá y no en el adaptador,
+ * PSE en Rapyd Collect. Todo lo específico de PSE vive aquí y no en el adaptador,
  * por la misma razón que `wompi-pse.ts` y `mercadopago-pse.ts`: son funciones sin
  * estado, se prueban sin montar una petición HTTP y no le cuestan CBO a ninguna
  * clase (`architecture-log.md`, punto 34).
@@ -63,7 +63,7 @@ import {
  * y queda **huérfano**: un cliente sin ningún pago asociado, que el SDK no puede
  * limpiar porque no sabe si el comercio lo quería reutilizar.
  *
- * Validar acá convierte ese estado a medias en un error que ocurre antes de la
+ * Validar aquí convierte ese estado a medias en un error que ocurre antes de la
  * primera llamada. No lo elimina —una caída de red entre las dos llamadas sigue
  * pudiendo dejarlo— pero saca del camino la causa prevenible.
  *
@@ -97,7 +97,7 @@ export function assertPseRequirements(request: CreatePaymentRequest): void {
 
   // El código de banco **no** se verifica por ausencia, y no es un olvido:
   // `PaymentMethod.pse()` ya rechaza construirse sin él, así que un PSE sin banco no
-  // puede llegar hasta acá. Comprobarlo otra vez sería una rama inalcanzable, que es
+  // puede llegar hasta aquí. Comprobarlo otra vez sería una rama inalcanzable, que es
   // lo que el punto 46 registra como defecto en espera de que algo la alcance. Lo que
   // el dominio no puede saber es si el código es **de esta pasarela**, y eso sí se
   // verifica más abajo.
@@ -135,7 +135,7 @@ export function assertPseRequirements(request: CreatePaymentRequest): void {
  * Arma el cuerpo de la primera llamada, `POST /v1/customers`.
  *
  * Manda lo mínimo que el sandbox aceptó: nombre, correo y teléfono. Se midió que
- * agregarle `payment_method` acá también funciona, y que la dirección es
+ * agregarle `payment_method` aquí también funciona, y que la dirección es
  * opcional, pero ninguno de los dos cambia el resultado, y un campo que no
  * cambia nada es un campo que después hay que explicar.
  */
@@ -176,7 +176,7 @@ export function buildPsePaymentPayload(
     merchant_reference_id: request.orderReference.getValue(),
   };
 
-  // Las dos URL del comercio viajan acá y **sí importan**: se midió que Rapyd las
+  // Las dos URL del comercio viajan aquí y **sí importan**: se midió que Rapyd las
   // incrusta en la `redirect_url` que devuelve. El armado es el mismo que en el
   // camino de tarjeta, y está compartido en `rapyd-payload.ts`.
   applyReturnUrls(payload, request);
@@ -189,7 +189,7 @@ export function buildPsePaymentPayload(
  *
  * Si Rapyd respondió 200 pero sin identificador, seguir con el pago sería mandar
  * `customer: undefined` y recibir un rechazo confuso de la segunda llamada. Falla
- * acá, donde el diagnóstico todavía apunta al paso que salió mal.
+ * aquí, donde el diagnóstico todavía apunta al paso que salió mal.
  */
 export function extractCustomerId(rawResponse: unknown): string {
   const payload = rawResponse as { data?: { id?: unknown } } | null;
@@ -220,7 +220,7 @@ export function extractCustomerId(rawResponse: unknown): string {
  * `co_pse_`, todos con `category: "bank_redirect"` y con el nombre del banco en
  * `name` ("Bancolombia", "Banco Davivienda").
  *
- * El `code` que sale de acá es el `type` completo, y el `achCode` es el código de
+ * El `code` que sale de aquí es el `type` completo, y el `achCode` es el código de
  * PSE que le corresponde según `RAPYD_PSE_TYPES`. Un método que Rapyd agregue y que
  * la tabla no tenga sale sin `achCode`, pero sale: se puede cobrar con su `type`
  * aunque el catálogo todavía no lo conozca.

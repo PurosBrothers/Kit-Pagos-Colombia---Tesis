@@ -87,12 +87,34 @@ segunda (punto 50 del `architecture-log.md`):
   | `/transfer/v1/bankList` (control positivo) | `401` de la aplicación | `200` | existe |
   | `/card-async/v1/status/{id}` | `400 CAS004 "No existe la transacción"` | `401` | **existe** |
   | `/card-async/v1/status` (sin identificador) | `403 "Missing Authentication Token"` | — | el id es parte de la ruta |
-  | `/transfer/v1/status/{id}` (la de PSE) | `400 T001` | `401` | existe |
+  | `/transfer/v1/status/{id}` (la de PSE) | `400 T001` (ver la nota de abajo: depende de la longitud del id) | `401` | existe |
   | `/card/v1/status/{id}` | `403` sin ruta | `403` sin ruta | **no existe** |
   | `/card/v1/charges/{ticket}` | `403` sin ruta | `403` sin ruta | **no existe** |
   | `/charges/{ticket}` | `403 "Forbidden"` | `403 "Forbidden"` | **no existe** |
   | `/card/v1/transaction/{id}`, `/card/v1/transactions/{id}`, `/analytics/v1/transaction/{id}`, `/transaction/v1/status/{id}`, `/card/v1/charges/{id}/status`, `/v1/charges/{id}`, `/card/v2/charges/{id}`, `/card-async/v1/charges/{id}`, `/payouts/card/v1/status/{id}`, `/subscriptions/v1/card/status/{id}` | `403` sin ruta | `403` sin ruta | **no existen** |
   | `/rutaInventada/abc123` y `/card/v1/rutaInventada/{ticket}` (controles) | `403` sin ruta | `403` sin ruta | no existen |
+
+  > **Remedido el 5 de octubre de 2026, entre las 11:58 y las 12:11 (UTC−5).** La consulta
+  > `GET /transfer/v1/status/{id}` se reprodujo a las 12:49 con identificadores de 32, 18 y 31
+  > caracteres, con el mismo resultado; las demás filas no se repitieron. El `T001` de
+  > `/transfer/v1/status/{id}` no vale para cualquier identificador desconocido: lo que decide la
+  > respuesta es la longitud.
+  >
+  > | Identificador o cuerpo | Respuesta |
+  > | --- | --- |
+  > | `GET /transfer/v1/status/{id}`, id de exactamente 32 caracteres que no existe (hex o no, mayúsculas o minúsculas) | `400 {"code":"T004","message":"No existe la transacción"}` |
+  > | `GET /transfer/v1/status/{id}`, id de otra longitud (6, 18, 31, 33 y 36 medidos) | `400 {"code":"T001","message":"Cuerpo de la petición inválido."}` |
+  > | `POST /transfer/v1/init` con `{ token: <32 hex inexistente>, amount }` | `400 T004 "No existe la transacción"` |
+  > | `POST /transfer/v1/init` con `{ token: "abc123", amount }` o sin `amount` | `400 T001 "Cuerpo de la petición inválido."`: valida el cuerpo antes que la existencia |
+  > | `GET /card-async/v1/status/{cualquiera}` | `400 CAS004 "No existe la transacción"`, igual que en la tabla de arriba |
+  > | `GET /charges/<32 hex>` | `403 {"message":"Forbidden"}`, igual que en la tabla de arriba |
+  >
+  > La fila de `/transfer/v1/status/{id}` de arriba dice `T001`. **Hipótesis, no comprobada:** la
+  > medición del 18 y 19 de septiembre posiblemente usó identificadores de otra longitud, como el
+  > ticket de tarjeta de 18 caracteres. La apoya que el sondeo de esa medición,
+  > `sdk/test/sandbox/probe-kushki-status.ts` (líneas 108 a 121), consulta esa ruta con el
+  > `ticketNumber` y el `transactionId` de un cobro con tarjeta, no con un token de transferencia.
+  > Para el SDK no cambia nada, porque los dos códigos son `400` y llegan como `INVALID_REQUEST`.
 
   `CAS004` es la aplicación contestando **después** del autorizador, igual que el `T001` de PSE:
   la ruta está publicada. Lo que dice es que el cobro no está en ese almacén, y se probó con los
@@ -118,6 +140,29 @@ segunda (punto 50 del `architecture-log.md`):
   sus controles) y `probe-kushki-card-async.ts` (el detalle de la ruta que sí existe), en
   `sdk/test/sandbox/`, para que esto se pueda volver a medir en vez de creerle a este párrafo.
   Que la primera versión de este párrafo fuera falsa es el argumento de por qué están.
+
+### 1.2. Credenciales inválidas (6 de octubre de 2026)
+
+> **Medido contra `api-uat.kushkipagos.com` entre las 10:37 y las 10:39 (UTC−5), para el issue #122.**
+
+| Petición | Qué se varió | HTTP | Respuesta |
+| --- | --- | --- | --- |
+| `GET /transfer/v1/bankList` | `Public-Merchant-Id` con 32 ceros | `403` | `{"Message":"User is not authorized to access this resource because no identity-based policy allows the execute-api:Invoke action"}` |
+| `GET /transfer/v1/status/{token}` | `Private-Merchant-Id` con 32 ceros | `403` | El mismo cuerpo |
+| `POST /transfer/v1/tokens` (14:05-14:12) | `Public-Merchant-Id` inexistente de 32 caracteres | `403` | El mismo cuerpo |
+| `POST /transfer/v1/init` (14:05-14:12) | `Private-Merchant-Id` inexistente, token válido | `403` | El mismo cuerpo |
+| `GET /transfer/v1/status/{token}` | Llave válida, token inexistente de 32 caracteres | `400` | `{"code":"T004","message":"No existe la transacción"}` |
+| `POST /card/v1/charges` | `Private-Merchant-Id` con 32 ceros o con 3 caracteres, token mal formado | **`400`** | `{"message": "ID de comercio o credencial no válido", "code": "K004"}` |
+| `POST /card/v1/charges` | Llave válida, el mismo token mal formado | `400` | `K001 "Cuerpo de la petición inválido."`, el token debe cumplir `^[a-zA-Z0-9]{32}$` |
+
+- Las rutas de transferencia responden con el cuerpo de AWS API Gateway: la clave es `Message`,
+  con mayúscula, y no hay `code`.
+- **El cobro con tarjeta rechaza una credencial inválida con `400 K004`, no con `401` ni `403`**,
+  y la revisa antes que el cuerpo. Como el SDK traduce por el código HTTP, ese `400` llegaría al
+  comercio como `INVALID_REQUEST` si nada lo distingue. Esto último sale de leer el código, no de
+  correrlo.
+- Que haya dos autorizadores distintos (uno propio para tarjeta y una política de IAM para
+  transferencias) es una explicación posible, no medida.
 
 ---
 

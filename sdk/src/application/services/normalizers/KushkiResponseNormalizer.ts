@@ -28,6 +28,7 @@ import {
   flattenKushkiCharge,
   isKushkiFullResponseCharge,
 } from "./kushki-card";
+import { readKushkiRejection } from "./kushki-rejection";
 
 const FALLBACK_EMAIL = "customer@kushki.com";
 
@@ -91,7 +92,7 @@ export class KushkiResponseNormalizer implements GatewayResponseNormalizer {
 
     /*
      * La referencia de la orden es la del comercio, que viaja en `trackingCode`.
-     * `transactionReference` lo genera Kushki y es otra cosa: usarlo acá le
+     * `transactionReference` lo genera Kushki y es otra cosa: usarlo aquí le
      * devuelve al comercio un identificador que nunca envió, con el que no puede
      * conciliar. Se conserva como respaldo solo para respuestas que no traen
      * `trackingCode`, como la consulta de estado por `ticketNumber`.
@@ -114,14 +115,16 @@ export class KushkiResponseNormalizer implements GatewayResponseNormalizer {
       Gateway.KUSHKI,
     );
 
+    const status = this.mapStatus(rawStatus);
     return new Transaction(
       gatewayTransactionId,
       orderReference,
       amount,
       currency,
       payer,
-      this.mapStatus(rawStatus),
+      status,
       rawStatus,
+      readKushkiRejection(payload, status),
     );
   }
 

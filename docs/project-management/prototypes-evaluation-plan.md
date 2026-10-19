@@ -134,13 +134,13 @@ La fase comprimida de dos semanas solo cabe si al llegar el 5 de octubre ya es c
 
 1. Los cuatro adaptadores implementados y probados. **Hecho:** cerró al final de la Iteración 2, con 586 pruebas unitarias y el ejemplo de intercambiabilidad verificando por código que las cuatro normalizan igual.
 2. **Los dos prototipos construidos y ejecutables.** Es el cuarto entregable de la Iteración 3 (sección 2.1 de `methodology.md`). Son el objeto de medición: medir tarda poco, construir lo que se mide tarda semanas, así que este es el prerrequisito que menos se puede correr.
-3. La API de Simulación con los escenarios de rechazo, timeout y error de red (Iteración 3). Sin ellos no se puede medir la variable 3 del checklist funcional, que es la distinción entre rechazo de negocio y fallo técnico. **Hoy el simulador responde `501`** a cualquier valor de `x-simulate-scenario` distinto de `APPROVED`.
+3. La API de Simulación con los escenarios de rechazo, timeout y error de red (Iteración 3). Sin ellos no se puede medir la variable 3 del checklist funcional, que es la distinción entre rechazo de negocio y fallo técnico. **Implementado en el issue #122:** los escenarios se alcanzan desde el SDK con los datos de prueba, los montos reservados y las marcas en la credencial (punto 83 del `architecture-log.md`; sección 4 de `docs/02-arquitectura/3-api-de-simulacion.md`, con las combinaciones que siguen en `501`).
 4. El script de métricas CK aplicable a un proyecto externo, no solo a `sdk/`. Hacen falta tres cambios concretos, y el tercero es el que se pasa por alto:
    - un argumento para la raíz de código a medir, porque hoy resuelve `__dirname/../src` de forma fija;
    - un argumento para el `tsconfig.json`, porque cada prototipo tendrá el suyo;
    - **separar el modo guarda del modo medición.** Hoy el script sale con código 1 ante cualquier violación de umbral, que es exactamente lo que se quiere cuando corre sobre el SDK en un pull request. Pero el prototipo B **va a** exceder los umbrales, y eso es el resultado del experimento, no un fallo: un script que aborte al medirlo no sirve para medirlo.
 
-   El procedimiento completo está en [`../04-metricas-y-pruebas/4-medir-los-prototipos.md`](../04-metricas-y-pruebas/4-medir-los-prototipos.md).
+   El procedimiento completo está en [`../04-metricas-y-pruebas/4-medir-los-prototipos.md`](../04-metricas-y-pruebas/4-medir-los-prototipos.md). **Resuelto en el issue #130** (punto 87 del `architecture-log.md`).
 5. Este documento revisado y aprobado por el equipo, para no discutir el diseño durante la fase.
 
 **Los prerrequisitos 2 y 4 son los que sostienen el Hito H5**, y ninguno de los dos es trabajo de la Fase 5: los dos tienen que estar listos al entrar. El 4 es el más fácil de subestimar porque el script ya existe y funciona —mide las 31 clases del SDK en cada pull request—, y es tentador suponer que apuntarlo a otra carpeta es trivial.
@@ -151,7 +151,7 @@ La fase comprimida de dos semanas solo cabe si al llegar el 5 de octubre ya es c
 
 **Los prototipos se construyen en la Iteración 3, no en la Fase 5.** Eso cambia dónde van sus issues: son el cuarto entregable de la Iteración 3 según la sección 2.1 de `methodology.md`, así que van en el milestone semanal correspondiente de esa iteración, junto con los otros tres entregables (la API de Simulación completa, la documentación de datos y la página de presentación).
 
-Lo mismo aplica a la parametrización de `ck-metrics.ts`: es un issue de la Iteración 3, porque es un prerrequisito y no parte del experimento.
+Lo mismo aplica a la parametrización de `ck-metrics.ts`: es un issue de la Iteración 3, porque es un prerrequisito y no parte del experimento. Se resolvió en el issue #130 (punto 87 del `architecture-log.md`).
 
 Al cerrar la Iteración 3 (Hito H4, ~5 de octubre), crear el milestone `Fase 5 – Demostración y evaluación` sin sufijo semanal, según la sección 3 de `methodology.md`, y abrir los issues de lo que sí es trabajo de la fase: el experimento de migración, la recolección de métricas sobre los prototipos ya construidos, y el informe comparativo.
 

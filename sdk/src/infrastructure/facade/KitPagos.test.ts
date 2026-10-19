@@ -1,3 +1,4 @@
+import { jsonErrorResponse } from "../../test-support/http-response";
 import * as crypto from "crypto";
 import { KitPagos } from "./KitPagos";
 import { Amount } from "../../domain/value-objects/Amount";
@@ -248,17 +249,15 @@ describe("KitPagos", () => {
     });
 
     it("should propagate KitPagosError(RESOURCE_NOT_FOUND) when transaction is not found", async () => {
+      // `GET /transactions/{id}` inexistente, medido el 5 de octubre de 2026
+      // (docs/testing-data/wompi.md §1.2).
       const notFoundPayload = {
         error: {
-          type: "NOT_FOUND",
-          reason: "Transaction not found",
+          type: "NOT_FOUND_ERROR",
+          reason: "La entidad solicitada no existe",
         },
       };
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: false,
-        status: 404,
-        json: async () => notFoundPayload,
-      });
+      global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(404, notFoundPayload));
 
       try {
         await buildConfiguredSdk().getPaymentStatus("non-existent-id");
@@ -384,7 +383,8 @@ describe("KitPagos", () => {
 
         const payload = JSON.stringify({
           transaction_status: "APPROVAL",
-          transaction_id: "kushki-tx-888",
+          ticket_number: "kushki-tx-888",
+          transaction_id: "781482485839103928",
         });
 
         const signature = crypto
@@ -691,7 +691,7 @@ describe("KitPagos", () => {
         };
       }
 
-      it("verifica con webhookSecret cuando está configurado", () => {
+      it("verifies with webhookSecret when it is configured", () => {
         const { payload, headers } = signWompiWebhook(eventsSecret);
 
         const sdk = new KitPagos({
@@ -709,7 +709,7 @@ describe("KitPagos", () => {
         expect(event.gatewayTransactionId).toBe("wompi-tx-secreto-de-eventos");
       });
 
-      it("rechaza un webhook firmado con la llave de API cuando hay webhookSecret", () => {
+      it("rejects a webhook signed with the API key when there is a webhookSecret", () => {
         // El SDK no prueba los dos secretos: prefiere uno. Sin esta prueba, un
         // respaldo silencioso a `privateKey` pasaría por verificación correcta.
         const { payload, headers } = signWompiWebhook(wompiCredentials.privateKey);
@@ -724,7 +724,7 @@ describe("KitPagos", () => {
         expect(() => sdk.validateWebhook(payload, headers)).toThrow(KitPagosError);
       });
 
-      it("cae a privateKey cuando no hay webhookSecret, que es lo correcto en Rapyd", () => {
+      it("falls back to privateKey when there is no webhookSecret, which is correct for Rapyd", () => {
         // Rapyd firma sus webhooks con el mismo `secret_key` que autentica la API, así
         // que para esa pasarela el respaldo no es compatibilidad sino el comportamiento
         // correcto. En las otras tres es solo no romper el código escrito antes del campo.
@@ -747,7 +747,7 @@ describe("KitPagos", () => {
      * parámetro había que instanciar un segundo `KitPagos`.
      */
     describe("webhooks from a gateway that is not the active one", () => {
-      it("verifica un webhook de Wompi mientras la pasarela activa es Mercado Pago", () => {
+      it("verifies a Wompi webhook while the active gateway is Mercado Pago", () => {
         const timestamp = 1602113476;
         const txId = "wompi-tx-de-la-pasarela-vieja";
         const status = "APPROVED";
@@ -787,7 +787,7 @@ describe("KitPagos", () => {
         expect(event.gatewayTransactionId).toBe(txId);
       });
 
-      it("sigue usando la pasarela activa cuando no se le pasa ninguna", () => {
+      it("keeps using the active gateway when none is passed", () => {
         // Es lo que hace que agregar el parámetro no rompa a quien ya llamaba con dos
         // argumentos, que importa porque el cambio entra justo antes de publicar en npm.
         const timestamp = 1602113476;
@@ -816,7 +816,7 @@ describe("KitPagos", () => {
         expect(event.gateway).toBe(Gateway.WOMPI);
       });
 
-      it("exige credenciales de la pasarela que se le pide, no de la activa", () => {
+      it("requires credentials for the requested gateway, not the active one", () => {
         // La pasarela tiene que estar en `credentials`, aunque no esté activa. Sin esto,
         // el error señalaría a la pasarela equivocada y mandaría a revisar la config buena.
         const sdk = new KitPagos({
@@ -946,7 +946,7 @@ describe("KitPagos", () => {
   });
 
   describe("Retry policy on operations (RetryHandler integration)", () => {
-    it("getPaymentStatus() reintenta ante un fallo transitorio de red y se recupera en el siguiente intento", async () => {
+    it("getPaymentStatus() retries on a transient network failure and recovers on the next attempt", async () => {
       jest.useFakeTimers();
       const sdk = new KitPagos({
         gateway: Gateway.WOMPI,
@@ -979,7 +979,7 @@ describe("KitPagos", () => {
       jest.useRealTimers();
     });
 
-    it("getPaymentStatus() NO reintenta ante un error no transitorio (ej. 404 / RESOURCE_NOT_FOUND)", async () => {
+    it("getPaymentStatus() does NOT retry on a non-transient error (e.g. 404 / RESOURCE_NOT_FOUND)", async () => {
       const sdk = new KitPagos({
         gateway: Gateway.WOMPI,
         credentials: { [Gateway.WOMPI]: wompiCredentials },
@@ -989,20 +989,16 @@ describe("KitPagos", () => {
       let callCount = 0;
       global.fetch = jest.fn().mockImplementation(async () => {
         callCount++;
-        return {
-          ok: false,
-          status: 404,
-          json: async () => ({
-            error: { type: "NOT_FOUND", reason: "Transaction not found" },
-          }),
-        };
+        return jsonErrorResponse(404, {
+          error: { type: "NOT_FOUND_ERROR", reason: "La entidad solicitada no existe" },
+        });
       });
 
       await expect(sdk.getPaymentStatus("non-existent-id")).rejects.toThrow(KitPagosError);
       expect(callCount).toBe(1); // Exactamente 1 intento, 0 reintentos
     });
 
-    it("createPayment() NO se reintenta automaticamente ante un error de red por seguridad e idempotencia", async () => {
+    it("createPayment() is NOT retried automatically on a network error, for safety and idempotency", async () => {
       const sdk = new KitPagos({
         gateway: Gateway.WOMPI,
         credentials: { [Gateway.WOMPI]: wompiCredentials },
@@ -1019,7 +1015,7 @@ describe("KitPagos", () => {
       expect(callCount).toBe(1); // No reintenta: previene doble cobro
     });
 
-    it("permite configurar baseUrl como mapeo por pasarela y resuelve la URL de la pasarela activa", async () => {
+    it("allows configuring baseUrl as a per-gateway map and resolves the active gateway URL", async () => {
       const customWompiUrl = "https://production.wompi.co/v1";
       const sdk = new KitPagos({
         gateway: Gateway.WOMPI,

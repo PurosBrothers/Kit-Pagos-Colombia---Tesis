@@ -15,10 +15,20 @@
  *
  * Usage:
  *   npm run metrics
+ *   npm run metrics -- --root <dir> [--root <dir>] [--tsconfig <file>]
+ *                      [--mode guard|measure] [--json <file>]
+ *
+ * Sin argumentos analiza `sdk/src` y `sdk/src-browser` en modo guarda, igual que
+ * antes del issue #130. Con `--root` analiza un proyecto externo (los prototipos de
+ * la Fase 5): las excepciones de `KNOWN_EXCEPTIONS` no se aplican y el modo por
+ * omisión es medición. Ver docs/04-metricas-y-pruebas/4-medir-los-prototipos.md §3
+ * y el punto 87 del architecture-log.md.
  *
  * Exit codes:
- *   0 = all classes within thresholds
- *   1 = one or more classes exceed thresholds (for CI integration)
+ *   modo guarda:   0 = all classes within thresholds,
+ *                  1 = one or more classes exceed thresholds (for CI integration)
+ *   modo medición: 0 siempre que el análisis termine; las violaciones son el dato
+ *   2 = argumentos inválidos
  *
  * Thresholds source: docs/project-management/methodology.md §6, Definition of Done
  * Calculation formulas:
@@ -43,6 +53,7 @@ import {
   SyntaxKind,
   Node,
 } from 'ts-morph';
+import { writeFileSync } from 'fs';
 import * as path from 'path';
 
 // ── Thresholds (methodology.md §6, Definition of Done condition 4) ────────────
@@ -142,7 +153,7 @@ const YELLOW = '\x1b[33m';
 const BOLD  = '\x1b[1m';
 const RESET = '\x1b[0m';
 
-interface ClassMetrics {
+export interface ClassMetrics {
   file: string;
   className: string;
   WMC: number;
@@ -352,7 +363,7 @@ function calcRFC(cls: ClassDeclaration, methodCount: number): number {
  * Print a formatted table of metrics with color coding for violations.
  * Column widths are computed dynamically from actual content so nothing overflows.
  */
-function printReport(metrics: ClassMetrics[]): void {
+function printReport(metrics: ClassMetrics[], title: string): void {
   // Dynamic column widths based on actual content
   const fileW  = Math.max('File'.length,  ...metrics.map(m => m.file.length))      + 2;
   const classW = Math.max('Class'.length, ...metrics.map(m => m.className.length)) + 2;
@@ -361,7 +372,7 @@ function printReport(metrics: ClassMetrics[]): void {
   const totalW = fileW + classW + numW * 4 + '  Status'.length;
   const hr = '─'.repeat(totalW);
 
-  console.log(`\n${BOLD}${YELLOW}CK Metrics Report${RESET} — Kit Pagos Colombia SDK\n`);
+  console.log(`\n${BOLD}${YELLOW}CK Metrics Report${RESET} — ${title}\n`);
   console.log(`${YELLOW}Thresholds${RESET} (methodology.md §6): WMC ≤ ${THRESHOLDS.WMC}  CBO ≤ ${THRESHOLDS.CBO}  RFC ≤ ${THRESHOLDS.RFC}  MAX_CC ≤ ${THRESHOLDS.MAX_CC}\n`);
   console.log(hr);
 
@@ -416,39 +427,110 @@ function printReport(metrics: ClassMetrics[]): void {
 }
 
 /**
- * Main entry point: set up ts-morph project, traverse SDK source files,
- * calculate metrics, and report violations.
+ * `guard` falla con código 1 ante una violación: es la condición 4 de la DoD sobre
+ * el SDK. `measure` reporta y sale con 0: en un prototipo el valor alto es el dato
+ * que se recolecta, no un error.
  */
-function main(): void {
-  const sdkRoot = path.resolve(__dirname, '..', 'src');
-  const browserRoot = path.resolve(__dirname, '..', 'src-browser');
+export type MetricsMode = 'guard' | 'measure';
 
-  // Load TypeScript project using SDK's tsconfig.json
+export interface MetricsOptions {
+  /** Raíces de fuentes. La primera da las rutas relativas; las demás se prefijan con su nombre. */
+  roots: string[];
+  /** `tsconfig.json` del proyecto analizado. Sin él, ts-morph usa sus opciones por omisión. */
+  tsconfig?: string;
+  mode: MetricsMode;
+  /** Solo es `true` al analizar el SDK. Ver `analyzeProject()`. */
+  applyKnownExceptions: boolean;
+  /** Si está, se escribe ahí el resultado en JSON para la recolección de la Fase 5. */
+  json?: string;
+}
+
+const SDK_ROOTS = [
+  path.resolve(__dirname, '..', 'src'),
+  path.resolve(__dirname, '..', 'src-browser'),
+];
+const SDK_TSCONFIG = path.resolve(__dirname, '..', 'tsconfig.json');
+
+/** Error de uso del script: se reporta con código 2, distinto del de una violación. */
+export class UsageError extends Error {}
+
+/**
+ * Traduce los argumentos de la línea de comandos.
+ *
+ * Sin `--root` se analiza el SDK: sus dos raíces, su `tsconfig.json`, modo guarda y
+ * con `KNOWN_EXCEPTIONS`. Con `--root` es un proyecto externo, y las excepciones no
+ * se pueden activar desde afuera: están indexadas por nombre de clase y documentan
+ * decisiones del SDK, no del proyecto que se mide.
+ */
+export function parseArgs(argv: readonly string[], cwd: string = process.cwd()): MetricsOptions {
+  const roots: string[] = [];
+  let tsconfig: string | undefined;
+  let mode: MetricsMode | undefined;
+  let json: string | undefined;
+
+  for (let i = 0; i < argv.length; i++) {
+    const flag = argv[i];
+    const value = argv[i + 1];
+    if (!['--root', '--tsconfig', '--mode', '--json'].includes(flag)) {
+      throw new UsageError(`Unknown argument: ${flag}`);
+    }
+    if (value === undefined || value.startsWith('--')) {
+      throw new UsageError(`Missing value for ${flag}`);
+    }
+    i++;
+    if (flag === '--root') roots.push(path.resolve(cwd, value));
+    if (flag === '--tsconfig') tsconfig = path.resolve(cwd, value);
+    if (flag === '--json') json = path.resolve(cwd, value);
+    if (flag === '--mode') {
+      if (value !== 'guard' && value !== 'measure') {
+        throw new UsageError(`--mode must be guard or measure, got: ${value}`);
+      }
+      mode = value;
+    }
+  }
+
+  if (roots.length === 0) {
+    if (tsconfig !== undefined) {
+      throw new UsageError('--tsconfig requires --root: the SDK always uses sdk/tsconfig.json');
+    }
+    return { roots: SDK_ROOTS, tsconfig: SDK_TSCONFIG, mode: mode ?? 'guard', applyKnownExceptions: true, json };
+  }
+  return { roots, tsconfig, mode: mode ?? 'measure', applyKnownExceptions: false, json };
+}
+
+/** Ruta del archivo relativa a la primera raíz que lo contiene; desde la segunda, con su nombre delante. */
+function relativeTo(roots: readonly string[], filePath: string): string {
+  const index = roots.findIndex(root => filePath.startsWith(root + path.sep));
+  const root = roots[Math.max(index, 0)];
+  const relative = path.relative(root, filePath);
+  return index > 0 ? path.join(path.basename(root), relative) : relative;
+}
+
+/**
+ * Calcula las métricas de todas las clases de las raíces, sin imprimir nada.
+ *
+ * Las exclusiones de pruebas (`*.test.ts`, `*.spec.ts`) se aplican relativas a cada
+ * raíz recibida. `KNOWN_EXCEPTIONS` se aplica solo con `applyKnownExceptions`: una
+ * clase de un prototipo que se llame `Amount` no hereda la excepción del `Amount`
+ * del SDK, porque sería un umbral verde en el reporte y rojo en la realidad.
+ */
+export function analyzeProject(options: Pick<MetricsOptions, 'roots' | 'tsconfig' | 'applyKnownExceptions'>): ClassMetrics[] {
+  const roots = options.roots.map(root => path.normalize(root));
+
   const project = new Project({
-    tsConfigFilePath: path.resolve(__dirname, '..', 'tsconfig.json'),
+    ...(options.tsconfig ? { tsConfigFilePath: options.tsconfig } : {}),
     skipAddingFilesFromTsConfig: true,
   });
 
-  // Add all source files matching sdk/src/**/*.ts and sdk/src-browser/**/*.ts (exclude tests)
-  project.addSourceFilesAtPaths([
-    `${sdkRoot}/**/*.ts`,
-    `!${sdkRoot}/**/*.test.ts`,
-    `!${sdkRoot}/**/*.spec.ts`,
-    `${browserRoot}/**/*.ts`,
-    `!${browserRoot}/**/*.test.ts`,
-    `!${browserRoot}/**/*.spec.ts`,
-  ]);
+  project.addSourceFilesAtPaths(
+    roots.flatMap(root => [`${root}/**/*.ts`, `!${root}/**/*.test.ts`, `!${root}/**/*.spec.ts`]),
+  );
 
   const allMetrics: ClassMetrics[] = [];
 
   // Process each source file
   for (const sourceFile of project.getSourceFiles()) {
-    const filePath = path.normalize(sourceFile.getFilePath());
-    const normBrowserRoot = path.normalize(browserRoot);
-    const normSdkRoot = path.normalize(sdkRoot);
-    const relPath = filePath.startsWith(normBrowserRoot)
-      ? path.join('src-browser', path.relative(normBrowserRoot, filePath))
-      : path.relative(normSdkRoot, filePath);
+    const relPath = relativeTo(roots, path.normalize(sourceFile.getFilePath()));
     const classes = sourceFile.getClasses();
 
     // Process each class in the file
@@ -483,26 +565,69 @@ function main(): void {
     }
   }
 
-  // Handle case where no classes are found
-  if (allMetrics.length === 0) {
-    console.log('\nNo classes found in sdk/src/. Nothing to report.\n');
-    process.exit(0);
-  }
-
   // Filtrar violaciones ya cubiertas por excepciones documentadas
   // (arquitectura registrada en architecture-log.md), antes de imprimir
   // y de contarlas, para que la tabla refleje el estado real.
-  for (const m of allMetrics) {
-    const realViolations = m.violations.filter(v => {
-      const metric = v.split(' ')[0]; // "CBO 7 exceeds..." -> "CBO"
-      const exceptions = KNOWN_EXCEPTIONS[m.className] ?? [];
-      return !exceptions.some(e => e.metric === metric);
-    });
-    m.violations = realViolations;
+  if (options.applyKnownExceptions) {
+    for (const m of allMetrics) {
+      const realViolations = m.violations.filter(v => {
+        const metric = v.split(' ')[0]; // "CBO 7 exceeds..." -> "CBO"
+        const exceptions = KNOWN_EXCEPTIONS[m.className] ?? [];
+        return !exceptions.some(e => e.metric === metric);
+      });
+      m.violations = realViolations;
+    }
+  }
+
+  return allMetrics;
+}
+
+/** Lo que se escribe con `--json`: la tabla completa y con qué se produjo. */
+function writeJson(file: string, options: MetricsOptions, metrics: ClassMetrics[]): void {
+  const report = {
+    generatedAt: new Date().toISOString(),
+    mode: options.mode,
+    roots: options.roots,
+    tsconfig: options.tsconfig ?? null,
+    knownExceptionsApplied: options.applyKnownExceptions,
+    thresholds: THRESHOLDS,
+    totalClasses: metrics.length,
+    violatingClasses: metrics.filter(m => m.violations.length > 0).length,
+    classes: metrics,
+  };
+  writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`);
+}
+
+/**
+ * Corre el análisis completo e imprime el reporte. Devuelve el código de salida en vez
+ * de llamar a `process.exit()`, para que las pruebas lo puedan comprobar.
+ */
+export function run(argv: readonly string[]): number {
+  let options: MetricsOptions;
+  try {
+    options = parseArgs(argv);
+  } catch (error: unknown) {
+    if (!(error instanceof UsageError)) throw error;
+    console.error(`${RED}${error.message}${RESET}`);
+    return 2;
+  }
+
+  const allMetrics = analyzeProject(options);
+  const isSdk = options.applyKnownExceptions;
+  const title = isSdk
+    ? 'Kit Pagos Colombia SDK'
+    : options.roots.map(root => path.relative(process.cwd(), root) || '.').join(', ');
+
+  if (options.json) writeJson(options.json, options, allMetrics);
+
+  // Handle case where no classes are found
+  if (allMetrics.length === 0) {
+    console.log(`\nNo classes found in ${isSdk ? 'sdk/src/' : title}. Nothing to report.\n`);
+    return 0;
   }
 
   // Print results
-  printReport(allMetrics);
+  printReport(allMetrics, title);
 
   // Summary
   const totalClasses = allMetrics.length;
@@ -518,9 +643,22 @@ function main(): void {
     );
   }
 
+  if (!isSdk) {
+    console.log('KNOWN_EXCEPTIONS not applied: they document SDK decisions, not this project.');
+  }
+  if (options.json) console.log(`JSON written to ${options.json}`);
+
+  if (options.mode === 'measure') {
+    if (violatingClasses > 0) {
+      console.log('Measure mode: violations are reported and do not change the exit code.\n');
+    }
+    return 0;
+  }
+
   // Non-zero exit code for CI integration (issue #15, condition 4 of DoD)
-  process.exit(violatingClasses > 0 ? 1 : 0);
+  return violatingClasses > 0 ? 1 : 0;
 }
 
-// Run script
-main();
+if (require.main === module) {
+  process.exit(run(process.argv.slice(2)));
+}

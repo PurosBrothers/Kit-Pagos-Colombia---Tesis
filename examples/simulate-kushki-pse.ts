@@ -11,7 +11,7 @@
  * reproducía lo que el código esperaba. Están en el punto 48 del `architecture-log.md`.
  *
  * Lo único que **no** está medido es el desenlace: llevar una transferencia hasta
- * `APPROVED` o `DECLINED` exige que una persona autorice en el portal del banco. Acá
+ * `APPROVED` o `DECLINED` exige que una persona autorice en el portal del banco. Aquí
  * el simulador la aprueba para que el ejemplo muestre el ciclo completo.
  *
  * ## Qué demuestra
@@ -84,7 +84,7 @@ async function main(): Promise<void> {
   console.log(`Elegido:            ${banco.name}  (bankId ${banco.code})`);
   // La lista nativa de Kushki encabeza con `{ code: "0", name: "A continuación
   // seleccione su banco" }`, el relleno de un `<select>` viajando dentro de los datos.
-  // El SDK lo descarta, así que acá tomar el primer elemento es seguro.
+  // El SDK lo descarta, así que aquí tomar el primer elemento es seguro.
   console.log("                    (el SDK ya descartó el elemento de relleno con el que");
   console.log("                     Kushki encabeza su lista, que no es un banco)\n");
 
@@ -101,7 +101,7 @@ async function main(): Promise<void> {
       documentNumber: "1099888777",
     }),
     paymentMethod: PaymentMethod.pse({ bankCode: banco.code }),
-    // Obligatoria en PSE, y opcional en tarjeta. Acá está la diferencia de Kushki:
+    // Obligatoria en PSE, y opcional en tarjeta. Aquí está la diferencia de Kushki:
     // esta URL viaja en el paso del token, antes de que exista el cobro.
     returnUrlConfig: new ReturnUrlConfig(
       "https://comercio-de-prueba.example.com/retorno",
@@ -169,7 +169,7 @@ main().catch((error: unknown) => {
     error.code === KitPagosErrorCode.CONNECTION_FAILED
   ) {
     console.error("\nNo se pudo conectar con la API de Simulación.");
-    console.error("Levantala en otra terminal y volvé a correr el ejemplo:\n");
+    console.error("Levántela en otra terminal y vuelva a ejecutar el ejemplo:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }

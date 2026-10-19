@@ -28,7 +28,7 @@ const baseUrl = SANDBOX_BASE_URL[Gateway.KUSHKI];
  * Authentication Token" dice que no hay ruta que autorizar. `Forbidden` pelado es el mismo
  * caso que el segundo, y se confirma porque es lo que contesta una ruta inventada.
  */
-function interpretar(status: number, body: string): string {
+function interpret(status: number, body: string): string {
   if (status < 400) return "EXISTE (respondió)";
   if (body.includes("no identity-based policy")) return "EXISTE (rechazó el autorizador)";
   if (body.includes("Missing Authentication Token")) return "no existe";
@@ -39,19 +39,19 @@ function interpretar(status: number, body: string): string {
 async function probe(
   path: string,
   header: string,
-  valor: string,
-  etiqueta: string,
+  rawValue: string,
+  label: string,
 ): Promise<void> {
   const response = await fetch(`${baseUrl}${path}`, {
     method: "GET",
-    headers: { "Content-Type": "application/json", [header]: valor },
+    headers: { "Content-Type": "application/json", [header]: rawValue },
   });
 
   const body = await response.text();
-  const veredicto = interpretar(response.status, body);
+  const verdict = interpret(response.status, body);
 
   console.log(
-    `${String(response.status).padEnd(4)} ${etiqueta.padEnd(8)} ${veredicto.padEnd(32)} ${path}`,
+    `${String(response.status).padEnd(4)} ${label.padEnd(8)} ${verdict.padEnd(32)} ${path}`,
   );
 }
 
@@ -105,20 +105,20 @@ async function main(): Promise<void> {
   console.log(`ticketNumber: ${ticket || "(no vino)"}`);
   console.log(`transactionId: ${transactionId || "(no vino)"}\n`);
 
-  const candidatas: Array<[string, string]> = [];
+  const candidateRoutes: Array<[string, string]> = [];
   for (const id of [ticket, transactionId].filter(Boolean)) {
-    const nombre = id === ticket ? "ticket" : "txId";
-    candidatas.push(
-      [`/card/v1/charges/${id}`, nombre],
-      [`/charges/${id}`, nombre],
-      [`/card/v1/transaction/${id}`, nombre],
-      [`/card/v1/transactions/${id}`, nombre],
-      [`/analytics/v1/transaction/${id}`, nombre],
-      [`/transaction/v1/status/${id}`, nombre],
-      [`/card/v1/charges/${id}/status`, nombre],
-      [`/v1/charges/${id}`, nombre],
-      [`/card/v2/charges/${id}`, nombre],
-      [`/transfer/v1/status/${id}`, nombre],
+    const idKind = id === ticket ? "ticket" : "txId";
+    candidateRoutes.push(
+      [`/card/v1/charges/${id}`, idKind],
+      [`/charges/${id}`, idKind],
+      [`/card/v1/transaction/${id}`, idKind],
+      [`/card/v1/transactions/${id}`, idKind],
+      [`/analytics/v1/transaction/${id}`, idKind],
+      [`/transaction/v1/status/${id}`, idKind],
+      [`/card/v1/charges/${id}/status`, idKind],
+      [`/v1/charges/${id}`, idKind],
+      [`/card/v2/charges/${id}`, idKind],
+      [`/transfer/v1/status/${id}`, idKind],
       /*
        * Segunda ronda. La primera medición dejó fuera las dos formas más plausibles, y no
        * por azar: se buscaron rutas con nombre de recurso ("charges", "transaction") y no la
@@ -130,25 +130,25 @@ async function main(): Promise<void> {
        * (procesador Transbank, Webpay), así que se mide con credenciales colombianas para
        * ver si la ruta está publicada igual o si de verdad no está para Colombia.
        */
-      [`/card/v1/status/${id}`, nombre],
-      [`/card-async/v1/status/${id}`, nombre],
-      [`/card-async/v1/charges/${id}`, nombre],
-      [`/payouts/card/v1/status/${id}`, nombre],
-      [`/subscriptions/v1/card/status/${id}`, nombre],
+      [`/card/v1/status/${id}`, idKind],
+      [`/card-async/v1/status/${id}`, idKind],
+      [`/card-async/v1/charges/${id}`, idKind],
+      [`/payouts/card/v1/status/${id}`, idKind],
+      [`/subscriptions/v1/card/status/${id}`, idKind],
     );
   }
 
   // Variantes con el identificador por query, no por ruta: si la ruta existe y el
   // identificador va mal, el autorizador contesta distinto que la ausencia de ruta.
   if (ticket) {
-    candidatas.push(
+    candidateRoutes.push(
       [`/card/v1/status?ticketNumber=${ticket}`, "query"],
       [`/card-async/v1/status?ticketNumber=${ticket}`, "query"],
     );
   }
 
   // Controles: rutas que con seguridad no existen. Sin ellas el resultado no se puede leer.
-  candidatas.push(
+  candidateRoutes.push(
     ["/rutaDeControlQueNoExiste/abc123", "control"],
     [`/card/v1/rutaDeControlQueNoExiste/${ticket || "abc"}`, "control"],
     // Control positivo: una ruta que sabemos que existe, para comprobar que el
@@ -159,13 +159,13 @@ async function main(): Promise<void> {
   // Se prueban las dos llaves porque no está documentado con cuál se consulta, y una ruta
   // que exista pero rechace la llave se delata igual: el autorizador contesta distinto que
   // la ausencia de ruta.
-  for (const [header, valor, etiquetaLlave] of [
+  for (const [header, rawValue, keyLabel] of [
     ["Private-Merchant-Id", credentials.privateKey, "privada"],
     ["Public-Merchant-Id", credentials.publicKey, "publica"],
   ] as const) {
-    console.log(`\n=== Con la llave ${etiquetaLlave} (${header}) ===\n`);
-    for (const [path, etiqueta] of candidatas) {
-      await probe(path, header, valor, `${etiqueta}`);
+    console.log(`\n=== Con la llave ${keyLabel} (${header}) ===\n`);
+    for (const [path, label] of candidateRoutes) {
+      await probe(path, header, rawValue, `${label}`);
     }
   }
 }

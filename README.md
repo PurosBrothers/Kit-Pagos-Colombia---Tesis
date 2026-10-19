@@ -2,17 +2,27 @@
 
 Integre una vez. Cambie de pasarela cambiando un valor.
 
-Sitio web y demostración interactiva: [https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/](https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/)
+- 🌐 **Página Web y Documentación Oficial:** [https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/](https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/)
+- 📖 **Documentación Interactiva OpenAPI (Swagger UI):** [https://kit-pagos-colombia.onrender.com/docs](https://kit-pagos-colombia.onrender.com/docs)
+- 📚 **Ruta de Lectura de la Documentación Técnica:** [`docs/README.md`](docs/README.md)
 
 Kit Pagos Colombia son **tres componentes**, no uno:
 
 | Componente | Qué es | Dónde vive |
 |---|---|---|
-| **SDK** | Un paquete de TypeScript con arquitectura hexagonal que unifica cuatro pasarelas colombianas en el servidor y expone `kit-pagos-colombia/browser` para tokenización de tarjeta en el navegador | [`sdk/`](sdk/) |
-| **API de Simulación** | Un servidor con dos caras: en `/v1/sim`, cuatro mocks de las pasarelas para probar los flujos que los sandboxes reales no permiten probar; en `/v1/api`, el SDK expuesto como API REST, para cobrar sin instalarlo | [`simulator-api/`](simulator-api/) |
-| **Documentación de datos** | Las tarjetas, bancos y credenciales de prueba de las cuatro pasarelas, con su nivel de evidencia | [`docs/testing-data/`](docs/testing-data/README.md) |
+| **SDK** | Paquete de TypeScript con arquitectura hexagonal que unifica cuatro pasarelas colombianas en el backend y expone `kit-pagos-colombia/browser` para tokenización PCI DSS en el frontend | [`sdk/`](sdk/) · [README del SDK](sdk/README.md) |
+| **API de Simulación y Capa REST** | Servidor Fastify con dos caras: en `/v1/sim`, 23 rutas mock para probar flujos que los sandboxes bloquean; en `/v1/api`, el SDK expuesto como API REST. Documentado formalmente con OpenAPI 3.0 en [`/docs`](https://kit-pagos-colombia.onrender.com/docs) (Swagger UI) y desplegado en Render: [https://kit-pagos-colombia.onrender.com](https://kit-pagos-colombia.onrender.com) | [`simulator-api/`](simulator-api/) · [README de la API](simulator-api/README.md) |
+| **Documentación de datos** | Tarjetas, bancos PSE y credenciales de prueba de las cuatro pasarelas, con nivel de evidencia 1 | [`docs/testing-data/`](docs/testing-data/README.md) |
 
-Los tres juntos son el artefacto de un trabajo de grado. Métodos soportados: **tarjeta y PSE**.
+Los tres juntos son el artefacto de un trabajo de grado en Ingeniería de Sistemas (Pontificia Universidad Javeriana). Métodos soportados: **tarjeta de crédito/débito y PSE**.
+
+---
+
+## Documentación Interactiva de la API (OpenAPI 3.0)
+
+La capa REST y las rutas del simulador están completamente documentadas mediante **OpenAPI 3.0.3**:
+- **Swagger UI interactivo:** [`https://kit-pagos-colombia.onrender.com/docs`](https://kit-pagos-colombia.onrender.com/docs)
+- **Especificación cruda en JSON:** [`https://kit-pagos-colombia.onrender.com/docs/json`](https://kit-pagos-colombia.onrender.com/docs/json)
 
 ---
 
@@ -33,21 +43,21 @@ Cuatro algoritmos de firma distintos y cuatro vocabularios de estado distintos �
 
 ## Empezar
 
-Las dos formas necesitan el SDK compilado, porque la API de Simulación y los ejemplos lo consumen desde `sdk/dist`. Después se levanta la API de Simulación y se deja corriendo:
+Las dos formas necesitan el SDK compilado, porque la API de Simulación y los ejemplos lo consumen desde `sdk/dist`. Después se levanta la API de Simulación y se deja corriendo (o se interactúa directamente con el despliegue en la nube en [Render](https://kit-pagos-colombia.onrender.com)):
 
 ```bash
 cd sdk && npm install && npm run build
 cd simulator-api && npm install && npm run dev
 ```
 
-**Por la API REST, sin escribir código.** Con la API corriendo, desde otra terminal:
+**Por la API REST, sin escribir código.** Con la API corriendo (localmente en `http://localhost:3000` o en la nube en `https://kit-pagos-colombia.onrender.com`), desde otra terminal:
 
 ```bash
 curl http://localhost:3000/v1/api/gateways
 curl -X POST http://localhost:3000/v1/api/payments -H "content-type: application/json" -H "x-gateway-public-key: demo" -H "x-gateway-private-key: demo" -d '{"gateway":"mercadopago","amount":"150000.00","currency":"COP","orderReference":"ORD-1","payer":{"email":"comprador@example.com"},"paymentMethod":{"type":"CARD","token":"tok_test","installments":1}}'
 ```
 
-La primera lista las cuatro pasarelas. La segunda responde `201` con la transacción normalizada en `APPROVED`. Con el mismo cuerpo y otro valor de `gateway` responden también `201` las otras tres, cada una con el desenlace que el simulador reproduce para ella: Kushki `APPROVED`, Wompi `PENDING` (resuelve al consultar) y Rapyd `REDIRECT_REQUIRED` (su tarjeta pasa por un checkout alojado). Wompi exige además la cabecera `x-gateway-integrity-secret`. Contra el simulador, las cabeceras `x-gateway-*` aceptan cualquier valor, pero son obligatorias si el `.env` no trae credenciales: sin ellas la respuesta es `401`. Si el `.env` define `API_AUTH_TOKEN`, cada petición debe llevar además `Authorization: Bearer <token>`; sin definirlo, la API opera abierta, que es el modo de desarrollo local. Las rutas y sus reglas están en [`docs/02-arquitectura/3-api-de-simulacion.md`](docs/02-arquitectura/3-api-de-simulacion.md).
+La primera lista las cuatro pasarelas. La segunda responde `201` con la transacción normalizada. Con el mismo cuerpo y otro valor de `gateway` responden también las otras tres, cada una con el desenlace correspondiente. Mediante la cabecera `x-kit-pagos-environment` (`simulator`, `sandbox` o `production`), el cliente declara el ambiente y la API resuelve la URL desde un catálogo cerrado sin exponer credenciales a servidores externos (Issue #123). Las rutas y sus reglas están en [`docs/02-arquitectura/3-api-de-simulacion.md`](docs/02-arquitectura/3-api-de-simulacion.md).
 
 **Por el SDK, desde código.** Con la API corriendo:
 
@@ -59,9 +69,23 @@ El ejemplo rápido de código, con la firma exacta de cada llamada, está en la 
 
 ---
 
+## Estructura del Monorepositorio
+
+| Directorio | Propósito | Documentación |
+|---|---|---|
+| [`sdk/`](sdk/) | Código fuente del SDK en TypeScript, pruebas unitarias y métricas CK | [`sdk/README.md`](sdk/README.md) |
+| [`simulator-api/`](simulator-api/) | Servidor Fastify con los 23 mocks de pasarelas y los 5 endpoints de Kit Pagos documentados con OpenAPI 3.0 | [`simulator-api/README.md`](simulator-api/README.md) |
+| [`landing/`](landing/) | Página web interactiva y especificación técnica (Vite / Vanilla CSS) | [`docs/06-landing/`](docs/06-landing/) |
+| [`examples/`](examples/) | Once programas ejecutables que demuestran la integración | [`examples/README.md`](examples/README.md) |
+| [`docs/`](docs/) | Documentación completa: DSR, arquitectura C4, métricas y datos de prueba | [`docs/README.md`](docs/README.md) |
+
+---
+
 ## Documentación
 
-**Empiece por [`docs/README.md`](docs/README.md)**, que tiene el camino de lectura completo, ordenado por concepto.
+- **Página Web y Especificación Técnica Interactiva:** [https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/](https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/)
+- **Documentación Interactiva OpenAPI (Swagger UI):** [https://kit-pagos-colombia.onrender.com/docs](https://kit-pagos-colombia.onrender.com/docs)
+- **Camino de lectura completo en el repositorio:** **Empiece por [`docs/README.md`](docs/README.md)**, que tiene el orden conceptual completo.
 
 | Sección | Para qué sirve |
 |---|---|
@@ -76,7 +100,7 @@ El ejemplo rápido de código, con la firma exacta de cada llamada, está en la 
 
 ### Referencia y contexto académico
 
-- [`docs/architecture/architecture-log.md`](docs/architecture/architecture-log.md) — El registro de decisiones del proyecto: más de setenta puntos numerados con los defectos medidos, las decisiones tomadas y las que siguen abiertas. Es la fuente de verdad de por qué el código es como es.
+- [`docs/architecture/architecture-log.md`](docs/architecture/architecture-log.md) — El registro de decisiones del proyecto: más de 87 puntos técnicos documentados con los defectos medidos, las decisiones tomadas y las que siguen abiertas. Es la fuente de verdad de por qué el código es como es.
 - [`docs/architecture/money-representation-analysis.md`](docs/architecture/money-representation-analysis.md) — Por qué el dinero es una cadena y no un número, auditado contra las cuatro pasarelas.
 - [`docs/project-management/`](docs/project-management/) — La metodología (Design Science Research), los objetivos específicos y los prototipos, el cronograma y el plan de evaluación de los prototipos.
 - [SAD (Software Architecture Document)](https://docs.google.com/document/d/1woixOGOkZ3N4OQ1YdFYthfP15brxFDec/edit) — El documento formal de arquitectura, fuera del repositorio.

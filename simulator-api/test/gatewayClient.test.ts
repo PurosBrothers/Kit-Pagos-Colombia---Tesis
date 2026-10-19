@@ -7,18 +7,17 @@ import { gatewayClientFor, logCredentialPolicy } from "../src/kit-pagos-api/gate
 import { KitPagosProvider } from "../src/services/KitPagosProvider";
 
 /**
- * La regla de credenciales vista desde HTTP (puntos 69 y 70).
+ * La regla de credenciales vista desde HTTP (puntos 69, 70 y 80).
  *
  * La prueba monta dos rutas propias que usan `gatewayClientFor()`, dentro de un contexto
  * armado por el mismo `kitPagosApi()`: así prueba el helper sin depender de lo que haga
  * cada ruta real, y cubre también el cableado del hook y de CORS. Que `POST /payments`
  * pase por él lo prueba `payments.test.ts`.
  */
-function appPointingTo(baseUrl: string): FastifyInstance {
+function createTestApp(): FastifyInstance {
   const env = {
     WOMPI_PUBLIC_KEY: "pub_prod_del_operador",
     WOMPI_PRIVATE_KEY: "prv_prod_del_operador",
-    WOMPI_BASE_URL: baseUrl,
   };
   const credentialResolver = new CredentialResolver(env);
   const app = buildApp({
@@ -48,12 +47,12 @@ const AUTH = { authorization: "Bearer token-de-prueba" };
 
 describe("gatewayClientFor over HTTP", () => {
   it("should answer 401 with the reason when production is called without own credentials", async () => {
-    const app = appPointingTo("https://production.wompi.co/v1");
+    const app = createTestApp();
 
     const response = await app.inject({
       method: "GET",
       url: "/v1/api/test-only/client",
-      headers: AUTH,
+      headers: { ...AUTH, "x-kit-pagos-environment": "production" },
     });
 
     expect(response.statusCode).toBe(401);
@@ -68,12 +67,12 @@ describe("gatewayClientFor over HTTP", () => {
   });
 
   it("should serve a sandbox request with the server credentials and the warning header", async () => {
-    const app = appPointingTo("https://sandbox.wompi.co/v1");
+    const app = createTestApp();
 
     const response = await app.inject({
       method: "GET",
       url: "/v1/api/test-only/client",
-      headers: AUTH,
+      headers: { ...AUTH, "x-kit-pagos-environment": "sandbox" },
     });
 
     expect(response.statusCode).toBe(200);
@@ -84,12 +83,16 @@ describe("gatewayClientFor over HTTP", () => {
   });
 
   it("should also put the warning in the JSON body, next to the route's own fields", async () => {
-    const app = appPointingTo("https://sandbox.wompi.co/v1");
+    const app = createTestApp();
 
     const response = await app.inject({
       method: "GET",
       url: "/v1/api/test-only/client",
-      headers: { ...AUTH, "x-gateway-public-key": "pub_test_cliente" },
+      headers: {
+        ...AUTH,
+        "x-kit-pagos-environment": "sandbox",
+        "x-gateway-public-key": "pub_test_cliente",
+      },
     });
 
     expect(response.json()).toEqual({
@@ -105,12 +108,12 @@ describe("gatewayClientFor over HTTP", () => {
   });
 
   it("should keep the warning in the body when the gateway call fails", async () => {
-    const app = appPointingTo("https://sandbox.wompi.co/v1");
+    const app = createTestApp();
 
     const response = await app.inject({
       method: "GET",
       url: "/v1/api/test-only/client-then-gateway-error",
-      headers: AUTH,
+      headers: { ...AUTH, "x-kit-pagos-environment": "sandbox" },
     });
 
     expect(response.statusCode).toBeGreaterThanOrEqual(400);
@@ -121,12 +124,12 @@ describe("gatewayClientFor over HTTP", () => {
   });
 
   it("should not add warnings to the body against the local simulator", async () => {
-    const app = appPointingTo("http://localhost:3000/v1/sim/wompi");
+    const app = createTestApp();
 
     const response = await app.inject({
       method: "GET",
       url: "/v1/api/test-only/client",
-      headers: AUTH,
+      headers: { ...AUTH, "x-kit-pagos-environment": "simulator" },
     });
 
     expect(response.json()).toEqual({ ok: true });
@@ -135,13 +138,14 @@ describe("gatewayClientFor over HTTP", () => {
   });
 
   it("should not send the warning header when the client brings its own credentials", async () => {
-    const app = appPointingTo("https://sandbox.wompi.co/v1");
+    const app = createTestApp();
 
     const response = await app.inject({
       method: "GET",
       url: "/v1/api/test-only/client",
       headers: {
         ...AUTH,
+        "x-kit-pagos-environment": "sandbox",
         "x-gateway-public-key": "pub_test_cliente",
         "x-gateway-private-key": "prv_test_cliente",
       },
@@ -154,7 +158,7 @@ describe("gatewayClientFor over HTTP", () => {
 
   /** Sin esto, un frontend recibiría la advertencia pero su JavaScript no podría leerla. */
   it("should expose the warning header to browsers through CORS", async () => {
-    const app = appPointingTo("https://sandbox.wompi.co/v1");
+    const app = createTestApp();
 
     const response = await app.inject({
       method: "GET",
@@ -168,29 +172,19 @@ describe("gatewayClientFor over HTTP", () => {
 });
 
 describe("logCredentialPolicy", () => {
-  it("should log, per gateway, where it points and which credentials it accepts", () => {
-    const env = {
-      WOMPI_BASE_URL: "https://sandbox.wompi.co/v1",
-      RAPYD_BASE_URL: "https://api.rapyd.net/v1",
-    };
+  it("should log per gateway the dynamic environment policy and simulator URL", () => {
     const info = jest.fn();
-    const warn = jest.fn();
     const app = {
-      kitPagosProvider: new KitPagosProvider(new CredentialResolver(env), env),
-      log: { info, warn },
+      kitPagosProvider: new KitPagosProvider(new CredentialResolver({})),
+      log: { info },
     } as unknown as FastifyInstance;
 
     logCredentialPolicy(app);
 
-    expect(warn).toHaveBeenCalledWith(
-      { gateway: "wompi", target: "sandbox" },
-      expect.stringContaining("with a warning"),
+    expect(info).toHaveBeenCalledTimes(4);
+    expect(info).toHaveBeenCalledWith(
+      expect.objectContaining({ gateway: "wompi" }),
+      expect.stringContaining("Dynamic environment resolution"),
     );
-    expect(warn).toHaveBeenCalledWith(
-      { gateway: "rapyd", target: "production" },
-      expect.stringContaining("never used"),
-    );
-    expect(info).toHaveBeenCalledWith({ gateway: "kushki", target: "simulator" }, expect.any(String));
-    expect(info).toHaveBeenCalledWith({ gateway: "mercadopago", target: "simulator" }, expect.any(String));
   });
 });

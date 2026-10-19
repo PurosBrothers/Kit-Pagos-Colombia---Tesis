@@ -33,11 +33,11 @@ function completeRequest(): CreatePaymentRequest {
   };
 }
 
-const exento = (request: CreatePaymentRequest): TaxBreakdown =>
+const exemptBreakdown = (request: CreatePaymentRequest): TaxBreakdown =>
   TaxBreakdown.exempt(request.amount, request.currency);
 
 describe("assertPseRequirements", () => {
-  it("acepta una solicitud completa", () => {
+  it("accepts a complete request", () => {
     expect(() => assertPseRequirements(completeRequest())).not.toThrow();
   });
 
@@ -46,8 +46,8 @@ describe("assertPseRequirements", () => {
    * `PaymentMethod.pse()` rechaza construirse sin él, así que el objeto de valor ya
    * hizo imposible ese estado y el adaptador no necesita volver a comprobarlo.
    */
-  it("junta todos los datos que faltan en un solo error", () => {
-    const sinNada: CreatePaymentRequest = {
+  it("gathers all missing data into a single error", () => {
+    const emptyRequest: CreatePaymentRequest = {
       amount: new Amount("150000.00"),
       currency: new Currency("COP"),
       orderReference: new OrderReference("ord-kushki-pse-1"),
@@ -56,7 +56,7 @@ describe("assertPseRequirements", () => {
     };
 
     try {
-      assertPseRequirements(sinNada);
+      assertPseRequirements(emptyRequest);
       throw new Error("debió lanzar");
     } catch (error) {
       const message = (error as Error).message;
@@ -71,13 +71,13 @@ describe("assertPseRequirements", () => {
    * viaja al pedir el token. Sin ella el pagador llega al banco sin camino de vuelta
    * al comercio, así que el SDK no deja arrancar el cobro.
    */
-  it("exige la URL de retorno, que en tarjeta es opcional", () => {
-    const sinRetorno: CreatePaymentRequest = {
+  it("requires the return URL, which is optional for cards", () => {
+    const withoutReturnUrl: CreatePaymentRequest = {
       ...completeRequest(),
       returnUrlConfig: undefined,
     };
 
-    expect(() => assertPseRequirements(sinRetorno)).toThrow(/returnUrlConfig/);
+    expect(() => assertPseRequirements(withoutReturnUrl)).toThrow(/returnUrlConfig/);
   });
 
   /**
@@ -85,8 +85,8 @@ describe("assertPseRequirements", () => {
    * API los liste no los hace válidos para Colombia, y aceptarlos localmente sería
    * dejar pasar algo que Kushki va a rechazar después.
    */
-  it("rechaza tipos de documento que no son de Colombia", () => {
-    const conDocumentoExtranjero: CreatePaymentRequest = {
+  it("rejects document types that are not from Colombia", () => {
+    const withForeignDocument: CreatePaymentRequest = {
       ...completeRequest(),
       payer: new Payer({
         email: "cliente@example.com",
@@ -97,7 +97,7 @@ describe("assertPseRequirements", () => {
     };
 
     try {
-      assertPseRequirements(conDocumentoExtranjero);
+      assertPseRequirements(withForeignDocument);
       throw new Error("debió lanzar");
     } catch (error) {
       expect((error as { code: string }).code).toBe(
@@ -107,7 +107,7 @@ describe("assertPseRequirements", () => {
     }
   });
 
-  it("acepta los cinco tipos de documento colombianos", () => {
+  it("accepts the five Colombian document types", () => {
     for (const documentType of KUSHKI_DOCUMENT_TYPES) {
       const request: CreatePaymentRequest = {
         ...completeRequest(),
@@ -123,9 +123,9 @@ describe("assertPseRequirements", () => {
 });
 
 describe("buildTransferTokenPayload", () => {
-  it("manda el banco, el documento y el monto desglosado", () => {
+  it("sends the bank, the document and the itemized amount", () => {
     const request = completeRequest();
-    const payload = buildTransferTokenPayload(request, exento(request));
+    const payload = buildTransferTokenPayload(request, exemptBreakdown(request));
 
     expect(payload.bankId).toBe("007");
     expect(payload.documentType).toBe("CC");
@@ -146,27 +146,27 @@ describe("buildTransferTokenPayload", () => {
    * comercio viaja en el paso del token, no en el del cobro. Esta prueba es la que
    * cierra la pieza 3 del issue #64 para esta pasarela.
    */
-  it("envía la URL de retorno del comercio como callbackUrl", () => {
+  it("sends the merchant return URL as callbackUrl", () => {
     const request = completeRequest();
-    const payload = buildTransferTokenPayload(request, exento(request));
+    const payload = buildTransferTokenPayload(request, exemptBreakdown(request));
 
     expect(payload.callbackUrl).toBe("https://comercio.example.com/retorno");
   });
 
-  it("traduce la naturaleza del pagador al userType de Kushki", () => {
+  it("maps the payer type to Kushki's userType", () => {
     const request = completeRequest();
-    expect(buildTransferTokenPayload(request, exento(request)).userType).toBe("0");
+    expect(buildTransferTokenPayload(request, exemptBreakdown(request)).userType).toBe("0");
 
-    const juridica: CreatePaymentRequest = {
+    const legalEntity: CreatePaymentRequest = {
       ...request,
       paymentMethod: PaymentMethod.pse({ bankCode: "007", payerKind: "LEGAL" }),
     };
-    expect(buildTransferTokenPayload(juridica, exento(juridica)).userType).toBe("1");
+    expect(buildTransferTokenPayload(legalEntity, exemptBreakdown(legalEntity)).userType).toBe("1");
   });
 });
 
 describe("extractTransferToken", () => {
-  it("saca el token del primer paso", () => {
+  it("extracts the token from the first step", () => {
     expect(extractTransferToken({ token: "abc123" })).toBe("abc123");
   });
 
@@ -174,8 +174,8 @@ describe("extractTransferToken", () => {
     ["sin token", {}],
     ["token vacío", { token: "" }],
     ["nulo", null],
-  ])("falla con MALFORMED_RESPONSE cuando viene %s", (_caso, respuesta) => {
-    expect(() => extractTransferToken(respuesta)).toThrow(
+  ])("fails with MALFORMED_RESPONSE when %s comes back", (_scenario, nativeResponse) => {
+    expect(() => extractTransferToken(nativeResponse)).toThrow(
       expect.objectContaining({ code: KitPagosErrorCode.MALFORMED_RESPONSE }),
     );
   });
@@ -187,7 +187,7 @@ describe("extractTransferRedirect", () => {
    * la consulta de estado en Kushki es por token. El comercio lo usa en
    * `getPaymentStatus()` sin tener que saber que es un token.
    */
-  it("usa el token como identificador de la transacción", () => {
+  it("uses the token as the transaction identifier", () => {
     const redirect = extractTransferRedirect(
       { redirectUrl: "https://pse.example.com/authorize?token=abc" },
       "abc123",
@@ -203,7 +203,7 @@ describe("extractTransferRedirect", () => {
    * reporta es el estado nativo que la consulta devuelve en ese momento, medido
    * contra la API UAT. Antes decía `INITIALIZED`, del vocabulario de tarjeta.
    */
-  it("reporta initializedTransaction cuando la respuesta de init no trae estado", () => {
+  it("reports initializedTransaction when the init response has no status", () => {
     const redirect = extractTransferRedirect(
       {
         bankId: "0001",
@@ -218,7 +218,7 @@ describe("extractTransferRedirect", () => {
     expect(redirect.rawStatus).toBe("initializedTransaction");
   });
 
-  it("falla si no hay URL, porque sin ella el pagador no puede autorizar", () => {
+  it("fails if there is no URL, because without it the payer cannot authorize", () => {
     expect(() => extractTransferRedirect({ status: "INITIALIZED" }, "abc")).toThrow(
       expect.objectContaining({ code: KitPagosErrorCode.MALFORMED_RESPONSE }),
     );
@@ -230,9 +230,10 @@ describe("kushkiStatusPaths", () => {
    * La transferencia va **primero**, y eso salió de medir: `GET /charges/{id}`
    * responde `403 Forbidden` para cualquier identificador, igual que una ruta que no
    * existe, así que por esa ruta no se puede encadenar nada. La de transferencia sí
-   * discrimina: `200` para un token que conoce y `400 T001` para uno que no.
+   * discrimina: `200` para un token que conoce, `400 T004` para un id de 32 caracteres que
+   * no existe y `400 T001` para uno de otra longitud (`docs/testing-data/kushki.md` §1.1).
    */
-  it("ofrece primero la ruta de transferencia, que es la que sabe decir que no conoce el id", () => {
+  it("offers the transfer route first, which is the one able to say it does not know the id", () => {
     expect(kushkiStatusPaths("abc123")).toEqual([
       "/transfer/v1/status/abc123",
       "/card-async/v1/status/abc123",
@@ -247,7 +248,7 @@ describe("kushkiStatusPaths", () => {
    * nombres de recurso en vez de la analogía de la ruta de PSE, y de ahí salió la
    * afirmación —falsa— de que Kushki no publica ninguna consulta de tarjeta.
    */
-  it("incluye la consulta asincrona de tarjeta, que es la que Kushki si publica", () => {
+  it("includes the asynchronous card query, which is the one Kushki does publish", () => {
     expect(kushkiStatusPaths("abc123")).toContain("/card-async/v1/status/abc123");
   });
 
@@ -255,7 +256,7 @@ describe("kushkiStatusPaths", () => {
    * El mismo identificador produce las mismas rutas siempre. Es lo que diferencia
    * esto de una heurística: no hay ningún formato que lo pueda hacer fallar.
    */
-  it("no depende de la forma del identificador", () => {
+  it("does not depend on the shape of the identifier", () => {
     expect(kushkiStatusPaths("123456789012345678")).toHaveLength(3);
     expect(kushkiStatusPaths("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4")).toHaveLength(3);
   });
@@ -267,7 +268,7 @@ describe("buildTransferInitPayload", () => {
    * `{ token, amount }` responde `201`. Hay que repetir el monto que ya viajó al
    * pedir el token, aunque Kushki lo tenga guardado.
    */
-  it("manda el token y repite el monto, porque con solo el token Kushki responde 400", () => {
+  it("sends the token and repeats the amount, because with only the token Kushki answers 400", () => {
     const payload = buildTransferInitPayload(
       "06555daf6e1f41188d6a06e0c8656e7e",
       TaxBreakdown.exempt(new Amount("50000"), new Currency("COP")),
@@ -290,7 +291,7 @@ describe("buildTransferInitPayload", () => {
    * El monto del inicio tiene que ser el mismo que el del token: si las dos copias
    * se separaran, Kushki responde 400 sin decir qué componente no coincide.
    */
-  it("descompone el monto igual que el paso del token", () => {
+  it("breaks down the amount the same way as the token step", () => {
     const taxBreakdown = TaxBreakdown.fromTaxIncluded(
       new Amount("119000"),
       "19",
@@ -311,7 +312,7 @@ describe("parseKushkiPseBanks", () => {
    * Sin este filtro, un comercio que muestre la lista tal cual ofrece ese texto como
    * si fuera un banco, y quien tome el primer elemento cobra contra el banco "0".
    */
-  it("descarta el elemento de relleno con el que la API real encabeza la lista", () => {
+  it("drops the filler element the real API puts at the head of the list", () => {
     const banks = parseKushkiPseBanks([
       { code: "0", name: "A continuación seleccione su banco" },
       { code: "0001", name: "Kushki bank Colombia" },
@@ -321,7 +322,7 @@ describe("parseKushkiPseBanks", () => {
   });
 
 
-  it("traduce la lista a códigos y nombres", () => {
+  it("maps the list to codes and names", () => {
     expect(
       parseKushkiPseBanks([
         { code: "007", name: "Davivienda" },
@@ -336,26 +337,26 @@ describe("parseKushkiPseBanks", () => {
   /**
    * La API real usa `code`, medido. Se aceptan igual las tres variantes porque la
    * referencia de Kushki no es consistente entre secciones sobre cómo se llama el
-   * campo, y equivocarse acá deja al comercio con una lista vacía y sin ninguna pista
+   * campo, y equivocarse aquí deja al comercio con una lista vacía y sin ninguna pista
    * de por qué.
    */
   it.each([
     ["code", [{ code: "007", name: "Davivienda" }]],
     ["id", [{ id: "007", name: "Davivienda" }]],
     ["bankId", [{ bankId: "007", name: "Davivienda" }]],
-  ])("acepta el código en el campo %s", (_campo, lista) => {
-    expect(parseKushkiPseBanks(lista)).toEqual([
+  ])("accepts the code in the %s field", (_fieldName, items) => {
+    expect(parseKushkiPseBanks(items)).toEqual([
       { code: "007", name: "Davivienda" },
     ]);
   });
 
-  it("acepta la lista envuelta en un objeto y códigos numéricos", () => {
+  it("accepts the list wrapped in an object and numeric codes", () => {
     expect(parseKushkiPseBanks({ banks: [{ code: 7, name: "Davivienda" }] })).toEqual([
       { code: "7", name: "Davivienda" },
     ]);
   });
 
-  it("no revienta con respuestas vacías o inesperadas", () => {
+  it("does not crash on empty or unexpected responses", () => {
     expect(parseKushkiPseBanks([])).toEqual([]);
     expect(parseKushkiPseBanks({})).toEqual([]);
     expect(parseKushkiPseBanks(null)).toEqual([]);

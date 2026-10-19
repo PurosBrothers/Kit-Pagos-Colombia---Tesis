@@ -50,7 +50,7 @@ Dos ajustes acompañaron la corrección:
 
 ## 4. Cómo las calcula el script
 
-[sdk/scripts/ck-metrics.ts](../../sdk/scripts/ck-metrics.ts), 516 líneas, con `ts-morph` para analizar el árbol sintáctico. No usa expresiones regulares ni cuenta líneas: recorre nodos.
+[sdk/scripts/ck-metrics.ts](../../sdk/scripts/ck-metrics.ts), 663 líneas, con `ts-morph` para analizar el árbol sintáctico. No usa expresiones regulares ni cuenta líneas: recorre nodos.
 
 La complejidad ciclomática de un método es `1 + puntos de decisión`, y qué cuenta como punto de decisión está fijado en la metodología. Dos decisiones que vale la pena conocer porque no son obvias:
 
@@ -131,11 +131,25 @@ Según la metodología: si un valor supera su umbral durante la revisión de un 
 
 Son la variable 3 de las seis que mide el experimento, y la que el Hito H5 exige literalmente. Se corren sobre las clases de pago de cada prototipo y se comparan.
 
-**Hay un bloqueo concreto antes de poder hacerlo**, y está en [4-medir-los-prototipos.md](4-medir-los-prototipos.md): el script resuelve sus rutas de forma fija contra `sdk/src`, así que hoy no se puede correr sobre `prototypes/`. Es el prerrequisito 3 del plan de evaluación, el que ese plan señala como el más fácil de pasar por alto y el que sostiene el Hito H5.
+Desde el issue #130 el script acepta un proyecto externo (punto 87 del `architecture-log.md`). Sin argumentos se comporta como antes: analiza `sdk/src` y `sdk/src-browser`, aplica las excepciones de la sección 6 y sale con código 1 ante una violación. Para un prototipo:
+
+```bash
+cd sdk
+npm run metrics -- --root ../prototypes/checkout-directo/src --tsconfig ../prototypes/checkout-directo/tsconfig.json --json ../docs/evaluation/ck-checkout-directo.json
+```
+
+| Opción | Qué hace |
+|---|---|
+| `--root <carpeta>` | Raíz de fuentes. Se puede repetir. Excluye `*.test.ts` y `*.spec.ts` dentro de cada raíz. |
+| `--tsconfig <archivo>` | El `tsconfig.json` del proyecto analizado. Solo se admite con `--root`. |
+| `--mode guard\|measure` | `guard` sale con 1 ante una violación; `measure` la reporta y sale con 0. Por omisión, `guard` para el SDK y `measure` con `--root`. |
+| `--json <archivo>` | Escribe la tabla completa en JSON, con el modo, las raíces, el `tsconfig` y los umbrales. |
+
+Con `--root`, `KNOWN_EXCEPTIONS` no se aplica: una clase del prototipo que se llame `Amount` no hereda la excepción del `Amount` del SDK. Un argumento inválido sale con código 2. El procedimiento completo está en [4-medir-los-prototipos.md](4-medir-los-prototipos.md), sección 3.
 
 ---
 
 ## 9. Qué sigue
 
 - Las pruebas: [2-pruebas-del-sdk.md](2-pruebas-del-sdk.md).
-- El bloqueo para medir los prototipos: [4-medir-los-prototipos.md](4-medir-los-prototipos.md).
+- Cómo medir los prototipos: [4-medir-los-prototipos.md](4-medir-los-prototipos.md).

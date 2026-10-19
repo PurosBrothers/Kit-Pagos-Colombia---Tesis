@@ -9,7 +9,7 @@
  * Wompi, `"1051"` en Mercado Pago), y para armar el selector de verdad había que
  * hablarle directo a la pasarela, perdiendo justo lo que el SDK promete.
  *
- * Lo que se ve acá es que el mismo `getPseBanks()` funciona en las cuatro **aunque
+ * Lo que se ve aquí es que el mismo `getPseBanks()` funciona en las cuatro **aunque
  * ninguna publique la lista igual**:
  *
  * | Pasarela     | Dónde está la lista                                        |
@@ -45,6 +45,7 @@ import {
   type SDKOptions,
   type PseBank,
 } from "kit-pagos-colombia";
+import { RAPYD_SECRET_KEY, WOMPI_INTEGRITY_SECRET } from "./simulator-secrets";
 
 /**
  * Las cuatro pasarelas, cada una apuntada a la raíz de su API en el simulador.
@@ -81,9 +82,12 @@ function buildOptions(gateway: Gateway, baseUrl: string): SDKOptions {
   return {
     gateway,
     credentials: {
+      // Rapyd firma cada petición, también la lista de bancos, y el simulador la verifica
+      // con el secreto de su cuenta (`simulator-secrets.ts`).
       [gateway]: {
         publicKey: "pub_test_ejemplo_no_real",
-        privateKey: "prv_test_ejemplo_no_real",
+        privateKey: gateway === Gateway.RAPYD ? RAPYD_SECRET_KEY : "prv_test_ejemplo_no_real",
+        integritySecret: gateway === Gateway.WOMPI ? WOMPI_INTEGRITY_SECRET : undefined,
       },
     },
     baseUrl,
@@ -200,7 +204,7 @@ main().catch((error: unknown) => {
     error.code === KitPagosErrorCode.CONNECTION_FAILED
   ) {
     console.error("\nNo se pudo conectar con la API de Simulación.");
-    console.error("Levantala en otra terminal y volvé a correr el ejemplo:\n");
+    console.error("Levántela en otra terminal y vuelva a ejecutar el ejemplo:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }

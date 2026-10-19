@@ -1,3 +1,4 @@
+import vm from "vm";
 import { ErrorHandler, ErrorFamily, classifyError, isRetriable } from "./ErrorHandler";
 import { Gateway } from "../../domain/value-objects/Gateway";
 import { KitPagosError } from "../../domain/errors/KitPagosError";
@@ -10,8 +11,8 @@ describe("ErrorHandler", () => {
     errorHandler = new ErrorHandler();
   });
 
-  describe("classifyError() y isRetriable()", () => {
-    it("clasifica como RETRIABLE los errores transitorios de red y servidor (KitPagosError)", () => {
+  describe("classifyError() and isRetriable()", () => {
+    it("classifies transient network and server errors (KitPagosError) as RETRIABLE", () => {
       const retriableCodes = [
         KitPagosErrorCode.CONNECTION_FAILED,
         KitPagosErrorCode.GATEWAY_TIMEOUT,
@@ -26,7 +27,7 @@ describe("ErrorHandler", () => {
       }
     });
 
-    it("clasifica como FINAL los errores no recuperables de negocio o validación (KitPagosError)", () => {
+    it("classifies non-recoverable business or validation errors (KitPagosError) as FINAL", () => {
       const finalCodes = [
         KitPagosErrorCode.INVALID_CREDENTIALS,
         KitPagosErrorCode.INVALID_REQUEST,
@@ -45,12 +46,12 @@ describe("ErrorHandler", () => {
       }
     });
 
-    it("clasifica directamente códigos de error en formato string", () => {
+    it("classifies string error codes directly", () => {
       expect(classifyError(KitPagosErrorCode.CONNECTION_FAILED)).toBe(ErrorFamily.RETRIABLE);
       expect(classifyError(KitPagosErrorCode.INVALID_CREDENTIALS)).toBe(ErrorFamily.FINAL);
     });
 
-    it("clasifica errores nativos de JavaScript por código o mensaje de red", () => {
+    it("classifies native JavaScript errors by network code or message", () => {
       expect(classifyError(new Error("fetch failed"))).toBe(ErrorFamily.RETRIABLE);
       expect(classifyError(new Error("network error"))).toBe(ErrorFamily.RETRIABLE);
       expect(classifyError(new Error("connect ECONNRESET"))).toBe(ErrorFamily.RETRIABLE);
@@ -74,14 +75,59 @@ describe("ErrorHandler", () => {
     });
   });
 
-  describe("handle() con excepciones crudas", () => {
-    it("retorna la instancia tal cual si ya es un KitPagosError", () => {
+  describe("handle() with the rejection of an AbortSignal", () => {
+    /** El motivo real con que Node aborta la señal, no un objeto que lo imite. */
+    async function timeoutReason(): Promise<unknown> {
+      const signal = AbortSignal.timeout(1);
+      await new Promise((resolve) => signal.addEventListener("abort", resolve));
+      return signal.reason;
+    }
+
+    it("maps the AbortSignal.timeout DOMException TimeoutError to GATEWAY_TIMEOUT without failing on its numeric code", async () => {
+      const reason = await timeoutReason();
+      expect((reason as { code: unknown }).code).toBe(23);
+
+      const result = errorHandler.handle(reason, Gateway.KUSHKI);
+
+      expect(result.code).toBe(KitPagosErrorCode.GATEWAY_TIMEOUT);
+      expect(result.gateway).toBe(Gateway.KUSHKI);
+      expect(result.originalPayload).toBe(reason);
+      expect(result.message).toContain("Gateway request timed out for Kushki");
+      expect(isRetriable(reason)).toBe(true);
+    });
+
+    it("maps the AbortController.abort() AbortError to GATEWAY_TIMEOUT", () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      const result = errorHandler.handle(controller.signal.reason, Gateway.WOMPI);
+
+      expect(result.code).toBe(KitPagosErrorCode.GATEWAY_TIMEOUT);
+    });
+
+    it("decides by name and not by the message text", () => {
+      const renamed = Object.assign(new Error("deadline reached"), { name: "TimeoutError" });
+
+      expect(errorHandler.handle(renamed, Gateway.RAPYD).code).toBe(KitPagosErrorCode.GATEWAY_TIMEOUT);
+      expect(classifyError(renamed)).toBe(ErrorFamily.RETRIABLE);
+    });
+
+    it("ignores a non-text code instead of failing", () => {
+      const numericCode = Object.assign(new Error("something odd"), { code: 7 });
+
+      expect(errorHandler.handle(numericCode, Gateway.WOMPI).code).toBe(KitPagosErrorCode.UNKNOWN_ERROR);
+      expect(isRetriable(numericCode)).toBe(false);
+    });
+  });
+
+  describe("handle() with raw exceptions", () => {
+    it("returns the instance as is if it is already a KitPagosError", () => {
       const existing = new KitPagosError(KitPagosErrorCode.INVALID_REQUEST, Gateway.WOMPI, null);
       const result = errorHandler.handle(existing, Gateway.WOMPI);
       expect(result).toBe(existing);
     });
 
-    it("traduce fallos de conexión a CONNECTION_FAILED", () => {
+    it("maps connection failures to CONNECTION_FAILED", () => {
       const error = new Error("fetch failed");
       const result = errorHandler.handle(error, Gateway.WOMPI);
 
@@ -92,7 +138,7 @@ describe("ErrorHandler", () => {
       expect(result.message).toContain("Failed to connect to Wompi gateway");
     });
 
-    it("resuelve la asimetría traduciendo errores con mensaje 'network' o código ENETUNREACH a CONNECTION_FAILED retriable", () => {
+    it("resolves the asymmetry by mapping errors with a 'network' message or ENETUNREACH code to a retriable CONNECTION_FAILED", () => {
       const networkError = new Error("network error occurred during request");
       expect(isRetriable(networkError)).toBe(true);
 
@@ -108,7 +154,7 @@ describe("ErrorHandler", () => {
       expect(isRetriable(handledUnreachable)).toBe(true);
     });
 
-    it("traduce errores con código ECONNREFUSED / ENOTFOUND / ECONNRESET a CONNECTION_FAILED", () => {
+    it("maps errors with ECONNREFUSED / ENOTFOUND / ECONNRESET codes to CONNECTION_FAILED", () => {
       const error = Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
       const result = errorHandler.handle(error, Gateway.RAPYD);
 
@@ -123,7 +169,7 @@ describe("ErrorHandler", () => {
       expect(errorHandler.handle(notFoundErr, Gateway.MERCADOPAGO).code).toBe(KitPagosErrorCode.CONNECTION_FAILED);
     });
 
-    it("traduce timeouts de socket o petición a GATEWAY_TIMEOUT", () => {
+    it("maps socket or request timeouts to GATEWAY_TIMEOUT", () => {
       const error = Object.assign(new Error("operation timed out"), { code: "ETIMEDOUT" });
       const result = errorHandler.handle(error, Gateway.KUSHKI);
 
@@ -135,7 +181,7 @@ describe("ErrorHandler", () => {
       expect(errorHandler.handle(abortErr, Gateway.WOMPI).code).toBe(KitPagosErrorCode.GATEWAY_TIMEOUT);
     });
 
-    it("traduce errores de parseo JSON a MALFORMED_RESPONSE", () => {
+    it("maps JSON parse errors to MALFORMED_RESPONSE", () => {
       const error = new SyntaxError("Unexpected token in JSON at position 0");
       const result = errorHandler.handle(error, Gateway.WOMPI);
 
@@ -147,7 +193,7 @@ describe("ErrorHandler", () => {
       expect(errorHandler.handle(jsonErr, Gateway.RAPYD).code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
     });
 
-    it("traduce operaciones no soportadas a UNSUPPORTED_OPERATION", () => {
+    it("maps unsupported operations to UNSUPPORTED_OPERATION", () => {
       const error = new Error("status query is not supported by this gateway");
       const result = errorHandler.handle(error, Gateway.WOMPI);
 
@@ -160,7 +206,7 @@ describe("ErrorHandler", () => {
       expect(errorHandler.handle(unsupportedErr, Gateway.RAPYD).code).toBe(KitPagosErrorCode.UNSUPPORTED_OPERATION);
     });
 
-    it("maneja errores genéricos de Error", () => {
+    it("handles generic Error errors", () => {
       const generic = new Error("Something unexpected broke");
       const result = errorHandler.handle(generic, Gateway.WOMPI);
 
@@ -168,7 +214,7 @@ describe("ErrorHandler", () => {
       expect(result.message).toBe("Something unexpected broke");
     });
 
-    it("maneja strings o tipos primitivos desconocidos como UNKNOWN_ERROR", () => {
+    it("handles strings or unknown primitive types as UNKNOWN_ERROR", () => {
       const emptyResult = errorHandler.handle("", Gateway.WOMPI);
       expect(emptyResult.code).toBe(KitPagosErrorCode.UNKNOWN_ERROR);
       expect(emptyResult.message).toBe("");
@@ -188,7 +234,7 @@ describe("ErrorHandler", () => {
       expect(undefinedResult.code).toBe(KitPagosErrorCode.UNKNOWN_ERROR);
     });
 
-    it("da formato adecuado a los nombres de las pasarelas, incluyendo el caso por defecto", () => {
+    it("formats gateway names properly, including the default case", () => {
       const error = new Error("fetch failed");
       const customGw = "CUSTOM_GATEWAY" as Gateway;
       const result = errorHandler.handle(error, customGw);
@@ -196,8 +242,8 @@ describe("ErrorHandler", () => {
     });
   });
 
-  describe("handle() con objetos de respuesta HTTP ({ status, body / data })", () => {
-    it("traduce 401 y 403 a INVALID_CREDENTIALS", () => {
+  describe("handle() with HTTP response objects ({ status, body / data })", () => {
+    it("maps 401 and 403 to INVALID_CREDENTIALS", () => {
       const res401 = errorHandler.handle({ status: 401, body: { error: "unauthorized" } }, Gateway.WOMPI);
       expect(res401.code).toBe(KitPagosErrorCode.INVALID_CREDENTIALS);
       expect(res401.originalPayload).toEqual({ error: "unauthorized" });
@@ -208,23 +254,23 @@ describe("ErrorHandler", () => {
       expect(res403.originalPayload).toEqual({ error: "forbidden" });
     });
 
-    it("traduce 404 a RESOURCE_NOT_FOUND", () => {
+    it("maps 404 to RESOURCE_NOT_FOUND", () => {
       const result = errorHandler.handle({ status: 404, body: "Not Found" }, Gateway.WOMPI);
       expect(result.code).toBe(KitPagosErrorCode.RESOURCE_NOT_FOUND);
       expect(result.originalPayload).toBe("Not Found");
     });
 
-    it("traduce 408 a GATEWAY_TIMEOUT", () => {
+    it("maps 408 to GATEWAY_TIMEOUT", () => {
       const result = errorHandler.handle({ status: 408, body: "Request Timeout" }, Gateway.WOMPI);
       expect(result.code).toBe(KitPagosErrorCode.GATEWAY_TIMEOUT);
     });
 
-    it("traduce 429 a RATE_LIMIT_EXCEEDED", () => {
+    it("maps 429 to RATE_LIMIT_EXCEEDED", () => {
       const result = errorHandler.handle({ status: 429, body: "Too Many Requests" }, Gateway.WOMPI);
       expect(result.code).toBe(KitPagosErrorCode.RATE_LIMIT_EXCEEDED);
     });
 
-    it("traduce 400 y 422 a INVALID_REQUEST", () => {
+    it("maps 400 and 422 to INVALID_REQUEST", () => {
       const res400 = errorHandler.handle(
         { status: 400, body: { message: "Invalid payload" } },
         Gateway.WOMPI
@@ -238,7 +284,17 @@ describe("ErrorHandler", () => {
       expect(res422.code).toBe(KitPagosErrorCode.INVALID_REQUEST);
     });
 
-    it("traduce códigos 5xx a GATEWAY_SERVER_ERROR", () => {
+    it("should map 409 to INVALID_REQUEST and not retry it", () => {
+      const result = errorHandler.handle(
+        { status: 409, body: { error: { type: "DUPLICATE_TRANSACTION" } } },
+        Gateway.WOMPI,
+      );
+
+      expect(result.code).toBe(KitPagosErrorCode.INVALID_REQUEST);
+      expect(classifyError(result)).toBe(ErrorFamily.FINAL);
+    });
+
+    it("maps 5xx codes to GATEWAY_SERVER_ERROR", () => {
       const res500 = errorHandler.handle({ status: 500, body: "Internal Server Error" }, Gateway.WOMPI);
       expect(res500.code).toBe(KitPagosErrorCode.GATEWAY_SERVER_ERROR);
 
@@ -249,20 +305,20 @@ describe("ErrorHandler", () => {
       expect(res503.code).toBe(KitPagosErrorCode.GATEWAY_SERVER_ERROR);
     });
 
-    it("traduce otros códigos HTTP no manejados a UNKNOWN_ERROR", () => {
+    it("maps other unhandled HTTP codes to UNKNOWN_ERROR", () => {
       const result = errorHandler.handle({ status: 418, body: "I'm a teapot" }, Gateway.WOMPI);
       expect(result.code).toBe(KitPagosErrorCode.UNKNOWN_ERROR);
     });
 
-    it("usa el objeto completo como originalPayload si no contiene ni body ni data", () => {
+    it("uses the whole object as originalPayload if it contains neither body nor data", () => {
       const rawHttpObj = { status: 500 };
       const result = errorHandler.handle(rawHttpObj, Gateway.WOMPI);
       expect(result.originalPayload).toBe(rawHttpObj);
     });
   });
 
-  describe("Seguridad y Sanitización (RF-08)", () => {
-    it("nunca filtra llaves privadas (prv_...) en el mensaje del error", () => {
+  describe("Security and sanitization (RF-08)", () => {
+    it("never leaks private keys (prv_...) in the error message", () => {
       const sensitiveMessage = "Failed when using private key prv_test_987654321_secret";
       const error = errorHandler.handle(new Error(sensitiveMessage), Gateway.WOMPI);
 
@@ -270,7 +326,7 @@ describe("ErrorHandler", () => {
       expect(error.message).toContain("[REDACTED_PRIVATE_KEY]");
     });
 
-    it("nunca filtra llaves públicas (pub_...) en el mensaje del error", () => {
+    it("never leaks public keys (pub_...) in the error message", () => {
       const sensitiveMessage = "Request with public key pub_prod_abcdef123456 rejected";
       const error = errorHandler.handle(new Error(sensitiveMessage), Gateway.WOMPI);
 
@@ -278,7 +334,7 @@ describe("ErrorHandler", () => {
       expect(error.message).toContain("[REDACTED_PUBLIC_KEY]");
     });
 
-    it("nunca filtra tokens de autorización ni cabeceras Bearer en el mensaje del error", () => {
+    it("never leaks authorization tokens or Bearer headers in the error message", () => {
       const sensitiveMessage =
         "Network failure sending Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
       const error = errorHandler.handle(new Error(sensitiveMessage), Gateway.WOMPI);
@@ -291,7 +347,7 @@ describe("ErrorHandler", () => {
       expect(bearerErr.message).toContain("Bearer [REDACTED]");
     });
 
-    it("redacta patrones de credenciales en formato JSON o query string dentro del mensaje", () => {
+    it("redacts credential patterns in JSON or query string format inside the message", () => {
       const error = errorHandler.handle(
         new Error('Server failed processing privateKey: "super_secret_val" and apiKey: "api_999"'),
         Gateway.WOMPI
@@ -303,7 +359,7 @@ describe("ErrorHandler", () => {
       expect(error.message).toContain('apiKey: "[REDACTED]"');
     });
 
-    it("redacta los dos secretos de Wompi, que no son la llave privada ni son el mismo", () => {
+    it("redacts both Wompi secrets, which are neither the private key nor the same one", () => {
       // La lista de `sanitize()` es por nombre, así que **cada campo nuevo de
       // `Credentials` hay que agregarlo o se filtra**. `webhookSecret` entró con el
       // issue #92 y esta prueba es la que evita que el próximo campo se olvide:
@@ -321,7 +377,7 @@ describe("ErrorHandler", () => {
       expect(error.message).toContain('webhookSecret: "[REDACTED]"');
     });
 
-    it("preserva el errorBody original en originalPayload para auditoría sin exponerlo en message", () => {
+    it("preserves the original errorBody in originalPayload for auditing without exposing it in message", () => {
       const rawPayload = {
         wompiError: "GWS_999",
         internalDetails: "Internal database timeout on host 10.0.0.1",
@@ -331,6 +387,58 @@ describe("ErrorHandler", () => {
 
       expect(error.originalPayload).toBe(rawPayload);
       expect(error.message).not.toContain("10.0.0.1");
+    });
+  });
+
+  /**
+   * Dentro de Jest, los errores que crean el `fetch` y el `JSON.parse` de Node nacen en
+   * otro reino de JavaScript, y `instanceof Error` da `false` aunque sean errores normales.
+   * `vm.runInNewContext` los fabrica igual, sin depender de una red.
+   */
+  describe("native errors from another JavaScript realm", () => {
+    const foreignSyntaxError = vm.runInNewContext(
+      '(() => { try { JSON.parse("<html>"); } catch (e) { return e; } })()',
+    ) as unknown;
+    const foreignFetchFailed = vm.runInNewContext(
+      'new TypeError("fetch failed", { cause: { code: "ECONNREFUSED" } })',
+    ) as unknown;
+    const foreignSocketFailure = vm.runInNewContext(
+      'new TypeError("request failed", { cause: { code: "ECONNRESET" } })',
+    ) as unknown;
+
+    it("the factories really produce errors from another realm", () => {
+      expect(foreignSyntaxError).not.toBeInstanceOf(Error);
+      expect(foreignFetchFailed).not.toBeInstanceOf(Error);
+    });
+
+    it("maps a JSON.parse SyntaxError to MALFORMED_RESPONSE", () => {
+      const error = errorHandler.handle(foreignSyntaxError, Gateway.WOMPI);
+
+      expect(error.code).toBe(KitPagosErrorCode.MALFORMED_RESPONSE);
+      expect(error.originalPayload).toBe(foreignSyntaxError);
+    });
+
+    it("maps `fetch failed` with an ECONNREFUSED cause to CONNECTION_FAILED", () => {
+      const error = errorHandler.handle(foreignFetchFailed, Gateway.RAPYD);
+
+      expect(error.code).toBe(KitPagosErrorCode.CONNECTION_FAILED);
+      expect(isRetriable(foreignFetchFailed)).toBe(true);
+    });
+
+    it("takes the network code from `cause.code` even if the message does not say it", () => {
+      expect(errorHandler.handle(foreignSocketFailure, Gateway.KUSHKI).code).toBe(
+        KitPagosErrorCode.CONNECTION_FAILED,
+      );
+      expect(isRetriable(foreignSocketFailure)).toBe(true);
+    });
+
+    it.each([
+      ["un objeto sin message", { name: "Error" }],
+      ["un message que no es texto", { message: 42 }],
+      ["null", null],
+    ])("does not mistake %s for a native error", (_scenario, raw) => {
+      expect(errorHandler.handle(raw, Gateway.WOMPI).code).toBe(KitPagosErrorCode.UNKNOWN_ERROR);
+      expect(isRetriable(raw)).toBe(false);
     });
   });
 });

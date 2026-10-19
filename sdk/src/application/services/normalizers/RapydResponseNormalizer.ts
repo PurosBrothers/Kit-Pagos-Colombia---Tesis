@@ -7,6 +7,7 @@ import { OrderReference } from "../../../domain/value-objects/OrderReference";
 import { Payer } from "../../../domain/value-objects/Payer";
 import { GatewayTransactionId } from "../../../domain/value-objects/GatewayTransactionId";
 import { GatewayResponseNormalizer } from "./GatewayResponseNormalizer";
+import { readRapydRejection } from "./rapyd-rejection";
 import {
   parsePayload,
   requireData,
@@ -69,14 +70,16 @@ export class RapydResponseNormalizer implements GatewayResponseNormalizer {
       Gateway.RAPYD,
     );
 
+    const status = this.mapStatus(rawStatus, data);
     return new Transaction(
       gatewayTransactionId,
       orderReference,
       amount,
       currency,
       payer,
-      this.mapStatus(rawStatus, data),
+      status,
       rawStatus,
+      readRapydRejection(data, status),
     );
   }
 
@@ -107,7 +110,7 @@ export class RapydResponseNormalizer implements GatewayResponseNormalizer {
         return "PENDING";
       case "NEW":
         // No es un estado de pago sino de **checkout**: la página existe y nadie la
-        // completó todavía. Entra acá porque desde el issue #64 un cobro con tarjeta en
+        // completó todavía. Entra aquí porque desde el issue #64 un cobro con tarjeta en
         // Rapyd devuelve un checkout, y consultarlo antes de que el pagador pague
         // responde `status: "NEW"` con `payment.id` en null (ver `rapyd-checkout.ts`).
         // Sin esta rama caía en `default` y un cobro recién creado se reportaba como

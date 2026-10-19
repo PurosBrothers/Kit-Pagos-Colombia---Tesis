@@ -8,6 +8,7 @@ import { Credentials } from "../../domain/value-objects/Credentials";
 import { ResponseNormalizer } from "../../application/services/ResponseNormalizer";
 import { WebhookVerifier } from "../../domain/services/WebhookVerifier";
 import { ErrorHandler } from "../../application/services/ErrorHandler";
+import { httpFailure } from "./http-failure";
 import { buildRapydHeaders, serializeBody } from "./rapyd-signature";
 import {
   PaymentResult,
@@ -29,6 +30,7 @@ import {
   parseRapydPseBanks,
 } from "./rapyd-pse";
 import type { PseBank } from "../../domain/value-objects/PseBank";
+import { DEFAULT_REQUEST_TIMEOUT_MS, withRequestTimeout } from "../config/request-timeout";
 
 /**
  * URL raíz de la API de Rapyd (o de su mock en simulator-api, issue #52).
@@ -72,6 +74,7 @@ export class RapydAdapter implements PaymentGatewayPort {
   /** Ver la nota de WompiAdapter: fuera del constructor para no inflar el CBO. */
   private readonly normalizer = new ResponseNormalizer();
   private readonly webhookVerifier: WebhookVerifier;
+  private readonly timeoutMs: number;
 
   /**
    * Las credenciales llegan resueltas desde el SdkConfigurator vía
@@ -89,10 +92,12 @@ export class RapydAdapter implements PaymentGatewayPort {
   constructor(
     baseUrl: string = DEFAULT_RAPYD_URL,
     credentials?: Credentials,
-    webhookVerifier: WebhookVerifier = new WebhookVerifier()
+    webhookVerifier: WebhookVerifier = new WebhookVerifier(),
+    timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
   ) {
     this.baseUrl = baseUrl;
     this.credentials = credentials;
+    this.timeoutMs = timeoutMs;
     this.webhookVerifier = webhookVerifier;
   }
 
@@ -188,10 +193,10 @@ export class RapydAdapter implements PaymentGatewayPort {
    * Cobra por PSE, que en Rapyd son **dos llamadas**: primero el cliente y
    * después el pago.
    *
-   * ## Por qué la secuencia queda escondida acá y no en el puerto
+   * ## Por qué la secuencia queda escondida aquí y no en el puerto
    *
    * Porque el número de llamadas antes de redirigir es distinto en cada pasarela
-   * —una en Wompi y Mercado Pago, dos acá, tres en Kushki— y es un detalle del
+   * —una en Wompi y Mercado Pago, dos aquí, tres en Kushki— y es un detalle del
    * proveedor, no del cobro. Meterlo en el contrato le impondría a las pasarelas
    * de una llamada una ceremonia que no necesitan, y expondría en la API pública
    * una diferencia entre proveedores, que es justamente el criterio con el que el
@@ -277,56 +282,39 @@ export class RapydAdapter implements PaymentGatewayPort {
     const bodyString = payload ? serializeBody(payload) : "";
     const headers = buildRapydHeaders(httpMethod, url, bodyString, this.credentials);
 
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method: httpMethod.toUpperCase(),
-        headers,
-        body: payload ? bodyString : undefined,
-      });
-    } catch (networkError) {
-      const errorHandler = new ErrorHandler();
-      throw errorHandler.handle(networkError, Gateway.RAPYD);
-    }
+    return withRequestTimeout(
+      this.timeoutMs,
+      async (signal) => {
+        let response: Response;
+        try {
+          response = await fetch(url, {
+            method: httpMethod.toUpperCase(),
+            headers,
+            body: payload ? bodyString : undefined,
+            signal,
+          });
+        } catch (networkError) {
+          const errorHandler = new ErrorHandler();
+          throw errorHandler.handle(networkError, Gateway.RAPYD);
+        }
 
-    return this.readRawResponse(response);
-  }
-
-  /**
-   * Valida el código HTTP, parsea el cuerpo y normaliza hacia Transaction.
-   *
-   * Está extraído porque la creación y la consulta hacen exactamente lo mismo a
-   * partir de la respuesta; duplicarlo en los dos métodos solo daría dos sitios
-   * donde arreglar el mismo error.
-   */
-  private async readTransaction(response: Response): Promise<Transaction> {
-    const rawResponse = await this.readRawResponse(response);
-    return this.normalizer.normalize(rawResponse, Gateway.RAPYD);
+        return this.readRawResponse(response);
+      },
+      (reason) => new ErrorHandler().handle(reason, Gateway.RAPYD),
+    );
   }
 
   /**
    * Valida el código HTTP y devuelve el cuerpo crudo, sin normalizar.
    *
-   * Se separó de `readTransaction` en el issue #64 porque la creación de pago ya
-   * no siempre produce una `Transaction`: cuando Rapyd exige redirección, hay que
-   * mirar el cuerpo crudo antes de normalizar. La consulta de estado sigue
-   * normalizando siempre, así que las dos comparten esta parte y difieren en la
-   * siguiente.
+   * Devuelve el cuerpo crudo porque la creación de pago no siempre produce una
+   * `Transaction`: cuando Rapyd exige redirección, hay que mirar el cuerpo antes de
+   * normalizar. La consulta de estado normaliza siempre, así que las dos comparten
+   * esta parte y difieren en la siguiente.
    */
   private async readRawResponse(response: Response): Promise<unknown> {
     if (!response.ok) {
-      let errorBody: unknown;
-      try {
-        errorBody = await response.json();
-      } catch {
-        errorBody = await response.text();
-      }
-
-      const errorHandler = new ErrorHandler();
-      throw errorHandler.handle(
-        { status: response.status, body: errorBody },
-        Gateway.RAPYD
-      );
+      throw await httpFailure(response, Gateway.RAPYD, this.credentials);
     }
 
     try {

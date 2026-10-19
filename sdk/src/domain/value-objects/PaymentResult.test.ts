@@ -24,7 +24,7 @@ describe("PaymentResult", () => {
     );
 
   describe("transactionResult", () => {
-    it("etiqueta el resultado como TRANSACTION y conserva la transacción", () => {
+    it("tags the result as TRANSACTION and keeps the transaction", () => {
       const transaction = buildTransaction();
       const result = transactionResult(transaction);
 
@@ -34,7 +34,7 @@ describe("PaymentResult", () => {
   });
 
   describe("redirectRequired", () => {
-    it("etiqueta el resultado como REDIRECT_REQUIRED y conserva la redirección", () => {
+    it("tags the result as REDIRECT_REQUIRED and keeps the redirect", () => {
       const gatewayTransactionId = new GatewayTransactionId(
         "payment_abc",
         Gateway.RAPYD,
@@ -53,7 +53,7 @@ describe("PaymentResult", () => {
       expect(result.redirect.rawStatus).toBe("ACT");
     });
 
-    it("rechaza una redirección sin URL", () => {
+    it("rejects a redirect without a URL", () => {
       // Decirle al comercio que redirija sin decirle a dónde deja el pago
       // colgado igual que antes de este cambio, pero además en silencio.
       expect(() =>
@@ -66,8 +66,8 @@ describe("PaymentResult", () => {
     });
   });
 
-  describe("garantía de la unión etiquetada", () => {
-    it("obliga a descartar la redirección antes de llegar a la transacción", () => {
+  describe("tagged union guarantee", () => {
+    it("forces the redirect to be ruled out before reaching the transaction", () => {
       // Esta prueba documenta el motivo de existir del tipo. Lo que realmente la
       // verifica es el compilador: si `PaymentResult` volviera a ser
       // `Transaction` con un `redirectUrl?` opcional, el acceso a
@@ -82,13 +82,13 @@ describe("PaymentResult", () => {
         }),
       ];
 
-      const descripciones = results.map((result) =>
+      const descriptions = results.map((result) =>
         result.outcome === "REDIRECT_REQUIRED"
           ? `redirigir a ${result.redirect.redirectUrl}`
           : `estado ${result.transaction.getStatus()}`,
       );
 
-      expect(descripciones).toEqual([
+      expect(descriptions).toEqual([
         "estado APPROVED",
         "redirigir a https://banco.example.com/pse/abc",
       ]);

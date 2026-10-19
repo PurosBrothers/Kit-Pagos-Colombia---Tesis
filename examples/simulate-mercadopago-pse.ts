@@ -75,7 +75,7 @@ async function main(): Promise<void> {
   /**
    * El banco sale de la pasarela, no del código del comercio.
    *
-   * Antes acá había un `"1051"` escrito a mano, y era una deuda visible: en PSE el
+   * Antes aquí había un `"1051"` escrito a mano, y era una deuda visible: en PSE el
    * pagador elige de una lista viva, y un código fijo muestra bancos que ya no están o
    * esconde los que sí. `getPseBanks()` la trae, y el `code` entra en
    * `PaymentMethod.pse()` sin transformarlo.
@@ -146,8 +146,8 @@ async function main(): Promise<void> {
   console.log(`  ID en pasarela:  ${result.redirect.gatewayTransactionId.value}`);
   console.log(`  Estado nativo:   ${result.redirect.rawStatus}\n`);
 
-  // Diferencia medible con Wompi: allá la URL no viene en la creación y hay que
-  // consultar hasta que aparezca; acá llega de una, en una sola llamada.
+  // Diferencia medible con Wompi: allí la URL no viene en la creación y hay que
+  // consultar hasta que aparezca; aquí llega de una, en una sola llamada.
   console.log("La URL llegó en la respuesta de creación: Mercado Pago no necesita sondeo.");
   console.log("El identificador empieza con ORD porque es una orden, no un pago con tarjeta:");
   console.log("el SDK usa eso para saber a qué endpoint consultarle el estado.\n");
@@ -169,7 +169,7 @@ async function main(): Promise<void> {
 main().catch((error: unknown) => {
   if (error instanceof KitPagosError && error.code === KitPagosErrorCode.CONNECTION_FAILED) {
     console.error("\nNo se pudo conectar con la API de Simulación.");
-    console.error("Levantala en otra terminal y volvé a correr el ejemplo:\n");
+    console.error("Levántela en otra terminal y vuelva a ejecutar el ejemplo:\n");
     console.error("  cd simulator-api && npm run dev\n");
     process.exit(1);
   }

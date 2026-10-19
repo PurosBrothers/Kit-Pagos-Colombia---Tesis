@@ -27,6 +27,13 @@ const DATA_ID_QUERY_PARAM = "data.id";
  * firmado, así que si trae otro `data.id` la notificación se rechaza: de lo
  * contrario el evento reportaría un id distinto del que se verificó (punto 67).
  * Sin parámetro en la URL se usa el del cuerpo, que en la Payments API coincide.
+ *
+ * Si falta `data.id` (en la URL y en el cuerpo) o la cabecera `x-request-id`, su parte se
+ * quita del manifiesto en vez de rechazar la notificación: «If any of the values (`data.id`,
+ * `x-request-id`) are not present in the received notification, you must remove them from
+ * the manifest before computing the `HMAC`.» Mercado Pago Developers, Webhooks, «Validate
+ * notification origin» (`/developers/en/docs/subscriptions/additional-content/your-integrations/notifications/webhooks`),
+ * consultada el 7 de octubre de 2026.
  */
 export class MercadoPagoWebhookHandler implements GatewayWebhookHandler {
   verify(
@@ -35,12 +42,8 @@ export class MercadoPagoWebhookHandler implements GatewayWebhookHandler {
     options?: WebhookVerificationOptions,
   ): boolean {
     const xSignature = webhook.headers["x-signature"];
-    const requestId = webhook.headers["x-request-id"];
     if (!xSignature) {
       throw new Error("Missing required header: x-signature");
-    }
-    if (!requestId) {
-      throw new Error("Missing required header: x-request-id");
     }
 
     const dataId = signedDataId(webhook.query, JSON.parse(webhook.payload));
@@ -57,7 +60,7 @@ export class MercadoPagoWebhookHandler implements GatewayWebhookHandler {
       return false;
     }
 
-    const manifest = `id:${dataId.toLowerCase()};request-id:${requestId};ts:${parts["ts"]};`;
+    const manifest = buildManifest(dataId, webhook.headers["x-request-id"], parts["ts"]);
 
     return safeCompare(parts["v1"], hmacSha256(context.secret, manifest, "hex"));
   }
@@ -65,7 +68,10 @@ export class MercadoPagoWebhookHandler implements GatewayWebhookHandler {
   /**
    * El evento sale siempre en `PENDING`: la firma no cubre el cuerpo, así que ningún
    * estado que venga en él es confiable, y el estado real se consulta con
-   * `getPaymentStatus(gatewayTransactionId)` (punto 70).
+   * `getPaymentStatus(gatewayTransactionId)` (punto 70). Es el diseño, no un defecto: la
+   * misma página de Webhooks indica obtener «the complete information of the notified
+   * resource» con `GET /v1/payments/[ID]` o `GET /v1/orders/{id}` después de recibir la
+   * notificación.
    */
   parse(webhook: IncomingWebhook): WebhookEvent {
     const body = JSON.parse(webhook.payload);
@@ -82,22 +88,29 @@ export class MercadoPagoWebhookHandler implements GatewayWebhookHandler {
 
 /**
  * El `data.id` que Mercado Pago firmó: el de la URL si viene y, si no, el del cuerpo.
- * Devuelve `null` cuando el cuerpo trae otro id, porque el cuerpo no está firmado.
+ * Devuelve `undefined` cuando no viene en ninguno de los dos, y `null` cuando el cuerpo trae
+ * otro id, porque el cuerpo no está firmado.
  */
 function signedDataId(
   query: Record<string, string> | undefined,
   body: { data?: { id?: unknown } } | null,
-): string | null {
+): string | undefined | null {
   const queryId = query?.[DATA_ID_QUERY_PARAM];
   const bodyId = body?.data?.id === undefined ? undefined : String(body.data.id);
-  const dataId = queryId ?? bodyId;
-  if (!dataId) {
-    throw new Error("Missing data.id in Mercado Pago webhook URL and payload");
-  }
   if (queryId !== undefined && bodyId !== undefined && queryId.toLowerCase() !== bodyId.toLowerCase()) {
     return null;
   }
-  return dataId;
+  return (queryId ?? bodyId) || undefined;
+}
+
+/**
+ * `id:[data.id];request-id:[x-request-id];ts:[ts];` sin las partes cuyo valor no llegó. El
+ * `data.id` va en minúsculas porque los ids alfanuméricos de la Orders API llegan en mayúsculas.
+ */
+function buildManifest(dataId: string | undefined, requestId: string | undefined, ts: string): string {
+  const idPart = dataId ? `id:${dataId.toLowerCase()};` : "";
+  const requestIdPart = requestId ? `request-id:${requestId};` : "";
+  return `${idPart}${requestIdPart}ts:${ts};`;
 }
 
 /** Descompone `ts={timestamp},v1={hash}` en sus partes. */

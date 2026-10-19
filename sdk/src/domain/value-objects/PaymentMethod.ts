@@ -7,10 +7,10 @@
  * cada pasarela, que en las cuatro es tarjeta. `CreatePaymentRequest` no tenía
  * dónde decir "esto es un PSE contra Bancolombia", así que PSE era inexpresable.
  *
- * ## Qué NO va acá, y por qué
+ * ## Qué NO va aquí, y por qué
  *
  * El **documento del pagador** no vive en este objeto: vive en `Payer`, que ya
- * declara `documentType` y `documentNumber`. Duplicarlo acá crearía dos fuentes
+ * declara `documentType` y `documentNumber`. Duplicarlo aquí crearía dos fuentes
  * de verdad para el mismo dato y la pregunta "¿cuál gana?" no tendría respuesta
  * buena. Lo que sí aporta este objeto es saber **cuándo ese dato pasa a ser
  * obligatorio**, que es lo que expone `requiresPayerDocument()`.
@@ -72,7 +72,7 @@ export class PaymentMethod {
    * Tarjeta, a partir de un token emitido por la pasarela.
    *
    * El SDK nunca recibe el número de tarjeta: tokenizar es responsabilidad del
-   * frontend contra la pasarela, y aceptar el número acá metería al SDK y a todo
+   * frontend contra la pasarela, y aceptar el número aquí metería al SDK y a todo
    * lo que lo integre dentro del alcance de PCI DSS.
    *
    * **`cardToken` es opcional, y no por comodidad.** Tres de las cuatro pasarelas

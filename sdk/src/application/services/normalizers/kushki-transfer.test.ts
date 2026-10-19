@@ -27,7 +27,7 @@ import { KitPagosErrorCode } from "../../../domain/value-objects/KitPagosErrorCo
  * El cuerpo de `respuestaMedida()` es literalmente el que devolvió la API, con los
  * valores cambiados por unos de prueba.
  */
-function respuestaMedida(
+function measuredResponse(
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
   return {
@@ -68,8 +68,8 @@ function respuestaMedida(
  * trae catorce campos más que la anterior, y entre ellos `ticketNumber`, que Kushki
  * asigna al llegar al procesador.
  */
-function respuestaIniciadaMedida(): Record<string, unknown> {
-  return respuestaMedida({
+function measuredInitiatedResponse(): Record<string, unknown> {
+  return measuredResponse({
     ticketNumber: "9777055831970452",
     entityCode: "9010003304",
     processorId: "6000000000178390266153836897835",
@@ -83,8 +83,8 @@ function respuestaIniciadaMedida(): Record<string, unknown> {
 }
 
 describe("isKushkiTransferResponse", () => {
-  it("reconoce una respuesta de transferencia recién tokenizada", () => {
-    expect(isKushkiTransferResponse(respuestaMedida())).toBe(true);
+  it("recognizes a freshly tokenized transfer response", () => {
+    expect(isKushkiTransferResponse(measuredResponse())).toBe(true);
   });
 
   /**
@@ -94,11 +94,11 @@ describe("isKushkiTransferResponse", () => {
    * tarjeta, que no encuentra `transaction_status` y devuelve `ERROR` sobre un pago
    * vivo. Y es justo la respuesta que un comercio consulta.
    */
-  it("reconoce una transferencia ya iniciada, que además trae ticketNumber", () => {
-    expect(isKushkiTransferResponse(respuestaIniciadaMedida())).toBe(true);
+  it("recognizes an already initiated transfer, which also has a ticketNumber", () => {
+    expect(isKushkiTransferResponse(measuredInitiatedResponse())).toBe(true);
   });
 
-  it("no confunde un cobro con tarjeta, que nombra su estado transaction_status", () => {
+  it("does not mistake a card charge, which names its status transaction_status", () => {
     expect(
       isKushkiTransferResponse({
         ticketNumber: "123456789012345678",
@@ -108,14 +108,14 @@ describe("isKushkiTransferResponse", () => {
   });
 
   /** Sin ningún campo de estado no hay nada que enrutar: no es una transferencia. */
-  it("no toma por transferencia una respuesta sin estado", () => {
+  it("does not take a response without status for a transfer", () => {
     expect(isKushkiTransferResponse({ token: "tok-de-tarjeta" })).toBe(false);
   });
 });
 
 describe("normalizeKushkiTransfer", () => {
-  it("lee la respuesta medida de la API real", () => {
-    const transaction = normalizeKushkiTransfer(respuestaMedida(), null);
+  it("reads the measured response of the real API", () => {
+    const transaction = normalizeKushkiTransfer(measuredResponse(), null);
 
     expect(transaction.gatewayTransactionId.value).toBe(
       "7a932344733646f3b3a48187f8715e8e",
@@ -136,14 +136,14 @@ describe("normalizeKushkiTransfer", () => {
     ["initializedTransaction", "PENDING"],
     ["approvedTransaction", "APPROVED"],
     ["declinedTransaction", "DECLINED"],
-  ])("traduce el estado nativo %s a %s", (nativo, esperado) => {
+  ])("maps the native status %s to %s", (nativeStatus, expected) => {
     const transaction = normalizeKushkiTransfer(
-      respuestaMedida({ status: nativo }),
+      measuredResponse({ status: nativeStatus }),
       null,
     );
 
-    expect(transaction.getStatus()).toBe(esperado);
-    expect(transaction.rawStatus).toBe(nativo);
+    expect(transaction.getStatus()).toBe(expected);
+    expect(transaction.rawStatus).toBe(nativeStatus);
   });
 
   /**
@@ -152,15 +152,15 @@ describe("normalizeKushkiTransfer", () => {
    * lo genera Kushki, y devolvérselo al comercio le daría un identificador que nunca
    * envió y con el que no puede conciliar.
    */
-  it("devuelve la referencia del comercio y no la que genera Kushki", () => {
-    const transaction = normalizeKushkiTransfer(respuestaMedida(), null);
+  it("returns the merchant reference and not the one Kushki generates", () => {
+    const transaction = normalizeKushkiTransfer(measuredResponse(), null);
 
     expect(transaction.orderReference.getValue()).toBe("ORDER-PSE-1789775019380");
   });
 
-  it("cae en la referencia de Kushki solo si no hay descripción del comercio", () => {
+  it("falls back to the Kushki reference only if there is no merchant description", () => {
     const transaction = normalizeKushkiTransfer(
-      respuestaMedida({ paymentDescription: "" }),
+      measuredResponse({ paymentDescription: "" }),
       null,
     );
 
@@ -174,8 +174,8 @@ describe("normalizeKushkiTransfer", () => {
    * un `ticketNumber`: es el que el SDK le entregó al comercio en la redirección y el
    * que la ruta de consulta acepta.
    */
-  it("mantiene el token como identificador aunque ya exista un ticketNumber", () => {
-    const transaction = normalizeKushkiTransfer(respuestaIniciadaMedida(), null);
+  it("keeps the token as the identifier even if a ticketNumber already exists", () => {
+    const transaction = normalizeKushkiTransfer(measuredInitiatedResponse(), null);
 
     expect(transaction.gatewayTransactionId.value).toBe(
       "7a932344733646f3b3a48187f8715e8e",
@@ -183,24 +183,24 @@ describe("normalizeKushkiTransfer", () => {
     expect(transaction.getStatus()).toBe("PENDING");
   });
 
-  it("falla con un error tipado si la respuesta no trae monto", () => {
-    const sinMonto = respuestaMedida();
-    delete sinMonto.amount;
+  it("fails with a typed error if the response has no amount", () => {
+    const withoutAmount = measuredResponse();
+    delete withoutAmount.amount;
 
-    expect(() => normalizeKushkiTransfer(sinMonto, null)).toThrow(
+    expect(() => normalizeKushkiTransfer(withoutAmount, null)).toThrow(
       expect.objectContaining({ code: KitPagosErrorCode.MALFORMED_RESPONSE }),
     );
   });
 });
 
-describe("KushkiResponseNormalizer con las dos formas de Kushki", () => {
+describe("KushkiResponseNormalizer with both Kushki shapes", () => {
   /**
    * Es la prueba de regresión del defecto: antes de separar las dos formas, esta
    * misma llamada lanzaba `MALFORMED_RESPONSE: missing ticketNumber`.
    */
-  it("normaliza una transferencia iniciada, la que un comercio consulta de verdad", () => {
+  it("normalizes an initiated transfer, the one a merchant really queries", () => {
     const transaction = new KushkiResponseNormalizer().normalize(
-      respuestaIniciadaMedida(),
+      measuredInitiatedResponse(),
     );
 
     expect(transaction.getStatus()).toBe("PENDING");
@@ -209,7 +209,7 @@ describe("KushkiResponseNormalizer con las dos formas de Kushki", () => {
     );
   });
 
-  it("sigue normalizando un cobro con tarjeta por el camino de siempre", () => {
+  it("still normalizes a card charge the usual way", () => {
     const transaction = new KushkiResponseNormalizer().normalize({
       ticketNumber: "123456789012345678",
       transaction_status: "APPROVAL",
