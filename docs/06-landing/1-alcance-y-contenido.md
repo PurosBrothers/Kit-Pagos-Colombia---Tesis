@@ -42,6 +42,8 @@ Antes de decir qué hace el Kit Pagos, la página muestra **por qué existe**. L
 
 Nadie tiene que leer ese código. Tiene que **verse** que no se parecen.
 
+Debajo de las cuatro diferencias, un bloque «Lo que encontramos en los sandboxes» (`#sandboxes`) lista los límites de las pasarelas que aparecieron probando el prototipo C contra los sandboxes oficiales: las credenciales de prueba de Mercado Pago, su PSE que no vuelve a `localhost`, el PSE de Kushki que no cierra en UAT, el token de Kushki atado al monto, los 9 bancos que cobra el sandbox de Rapyd, su tarjeta solo en la página alojada, el PSE de Wompi sin página de banco y las llaves públicas que tienen que ser del mismo par que las del servidor. Son los mismos que el README lista en «Lo que encontramos en los sandboxes», con el detalle en `docs/testing-data/`; el bloque deja claro que son límites de cada pasarela y no del SDK (punto 106).
+
 ### 3.2 La demostración
 
 El bloque central: el mismo pago, cobrado por las cuatro, con una sola línea distinta resaltada.
@@ -79,7 +81,7 @@ Que el Kit Pagos son tres cosas y no una es la idea que más se pierde cuando al
 | Componente | Qué es | Para qué sirve |
 |---|---|---|
 | **SDK** | El paquete npm con la arquitectura hexagonal | Integrar una vez y cambiar de pasarela por configuración |
-| **API de Simulación** | Cuatro mocks locales con 23 rutas y capa REST | Probar flujos que los sandboxes reales no permiten probar y evaluar cobros vía HTTP |
+| **API de Simulación** | Cuatro mocks locales con 33 rutas y capa REST | Probar flujos que los sandboxes reales no permiten probar y evaluar cobros vía HTTP |
 | **Documentación de datos** | Las tarjetas, bancos y credenciales de prueba | Reproducir cualquiera de los flujos sin adivinar |
 
 El tercero es el que más se subestima y el que más tiempo ahorra: es el que responde "¿qué número de tarjeta pongo para que me rechace el pago en Kushki?". Además, la página documenta para cada pasarela sus peculiaridades de sandbox (URL oficial de sandbox, números de tarjetas de prueba, credenciales y trampas operativas).

@@ -3,15 +3,16 @@ import { Gateway } from "../src/domain/value-objects/Gateway";
 /**
  * Datos de la tarjeta ingresados en el formulario del navegador.
  *
- * La forma está pensada para las dos pasarelas soportadas, no solo para Wompi:
- * - Wompi requiere: number, cvc, expMonth, expYear, cardHolder.
+ * La forma está pensada para las tres pasarelas soportadas, no solo para Wompi:
+ * - Wompi y Kushki requieren: number, cvc, expMonth, expYear, cardHolder (Kushki pide
+ *   además el monto, en `TokenizeCardParams.amount`).
  * - Mercado Pago (issue #127): el SDK exige además el documento del titular, aunque
  *   la API emite el token sin él (punto 78 del log).
  *
  * `docType` y `docNumber` son opcionales en el tipo porque Wompi no los pide, y
  * exigirlos ahí obligaría a un comercio que solo cobra por Wompi a pedirle al
  * pagador un dato que la pasarela no usa. El tokenizador de Mercado Pago es el que
- * los valida. Así el mismo formulario sirve para las dos (punto 77 del log).
+ * los valida. Así el mismo formulario sirve para las tres (punto 77 del log).
  *
  * PCI DSS: estos datos solo viajan desde el navegador hacia el host de la pasarela,
  * que sale de un catálogo cerrado. Nunca al backend del comercio ni a `/v1/api`.
@@ -33,8 +34,11 @@ export interface CardData {
   docNumber?: string;
 }
 
-/** Pasarelas soportadas para tokenización en el navegador. */
-export type BrowserSupportedGateway = Gateway.WOMPI | Gateway.MERCADOPAGO;
+/**
+ * Pasarelas soportadas para tokenización en el navegador. Rapyd no está: cobra la tarjeta en
+ * su página alojada, y el pago se crea sin token (punto 106 del `architecture-log.md`).
+ */
+export type BrowserSupportedGateway = Gateway.WOMPI | Gateway.MERCADOPAGO | Gateway.KUSHKI;
 
 /**
  * Ambientes disponibles. Cada uno resuelve a una URL de un catálogo cerrado dentro
@@ -66,6 +70,14 @@ export interface TokenizeCardParams {
   card: CardData;
   /** Ambiente de ejecución. Por defecto: "sandbox". */
   environment?: BrowserEnvironment;
+  /**
+   * Monto del cobro, con el formato de `CreatePaymentRequest.amount` y de `/v1/api`
+   * (`"48000.00"`). Obligatorio con Kushki, que ata el token a ese valor: cobrar otro responde
+   * `400`. Wompi y Mercado Pago lo ignoran, así que el mismo formulario puede mandarlo siempre.
+   */
+  amount?: string;
+  /** Moneda del cobro, para Kushki. Por defecto: "COP". */
+  currency?: string;
   /**
    * Límite de la petición a la pasarela, en milisegundos. Por defecto: 30 000. Un entero
    * entre 1 y 2 147 483 647, igual que `SDKOptions.timeoutMs`; fuera de ese rango lanza

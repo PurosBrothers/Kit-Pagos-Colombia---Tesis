@@ -2,7 +2,7 @@
 
 Wompi, Mercado Pago, Kushki y Rapyd resuelven el mismo problema de negocio y no se parecen en nada. Este documento es la ficha de cada una: cómo autentica, cómo expresa el monto, cuántas llamadas necesita cada flujo, cómo firma y qué trampas tiene.
 
-Casi todo lo que sigue está **medido contra los sandboxes reales** entre el 18 y el 20 de septiembre de 2026, no leído de la documentación oficial. Cuando las dos fuentes no coincidieron —y pasó varias veces— manda la medición, y se dice cuál era la discrepancia. El detalle campo por campo está en [ubiquitous-language.md](../02-arquitectura/ubiquitous-language.md); el registro de cada hallazgo, en el [architecture-log](../architecture/architecture-log.md).
+Casi todo lo que sigue está **medido contra los sandboxes reales** entre el 18 y el 20 de septiembre de 2026, no leído de la documentación oficial. Cuando las dos fuentes no coincidieron —y pasó varias veces— manda la medición, y se dice cuál era la discrepancia. Mercado Pago se volvió a medir el 15 de octubre de 2026, con las credenciales de un vendedor de prueba, y los bancos de Rapyd el 17 de octubre (puntos 95, 96, 100 y 102). El detalle campo por campo está en [ubiquitous-language.md](../02-arquitectura/ubiquitous-language.md); el registro de cada hallazgo, en el [architecture-log](../architecture/architecture-log.md).
 
 > **Por qué estas cuatro.** Wompi, Mercado Pago y Kushki son tres de las pasarelas más usadas en Colombia. La cuarta era PayU, pero PayU fue adquirida en 2025 y su futuro como producto independiente quedó incierto, así que se reemplazó por Rapyd, que opera en Colombia con tarjeta y PSE. La decisión y su justificación están en la sección C del architecture-log.
 
@@ -14,11 +14,11 @@ Casi todo lo que sigue está **medido contra los sandboxes reales** entre el 18 
 |---|---|---|---|---|
 | **Autenticación** | `Bearer` con llave pública | `Bearer` con access token | Header propio: `Private-Merchant-Id` o `Public-Merchant-Id` | Firma HMAC por petición, con `salt`, `timestamp` y `access_key` |
 | **Formato del monto** | `amount_in_cents`, entero en centavos | `transaction_amount`, pesos | Objeto con desglose de IVA | `amount`, pesos |
-| **Llamadas para cobrar con tarjeta** | 2 (token de aceptación + cobro) | 1 | 1 | 1, y devuelve redirección |
+| **Llamadas para cobrar con tarjeta** | 2 (token de aceptación + cobro) | 3 (marca, tipo y orden), desde la 0.6.0 | 1 | 1, y devuelve redirección |
 | **Llamadas para PSE** | 1 + sondeo | 1 | 2 (token + init) | 2 (cliente + pago) |
 | **Consulta de estado** | 1 ruta | 2 rutas, se elige por el formato del id | Hasta 3 tanteos | 2 rutas, se elige por el prefijo del id |
 | **Lista de bancos PSE** | Endpoint dedicado | Se filtra de `payment_methods` | Endpoint dedicado | Se filtra de `payment_methods/country` |
-| **Estado de éxito** | `APPROVED` | `approved` | `APPROVAL` | `CLO` **más** `paid: true` |
+| **Estado de éxito** | `APPROVED` | `processed` en una orden, `approved` en un pago | `APPROVAL` | `CLO` **más** `paid: true` |
 | **Firma de webhook** | SHA-256 con secreto embebido | HMAC-SHA256 hex sobre manifiesto | HMAC-SHA256 hex sobre cuerpo + id | HMAC-SHA256 en base64 sobre hex |
 | **Secreto del webhook** | Distinto de la llave de API | Distinto | Distinto | El mismo que la llave de API |
 | **Firma en lo que el comercio envía** | Sí, obligatoria | No | No | Sí, en cada petición |
@@ -71,17 +71,17 @@ Las propiedades a concatenar las declara el propio webhook en `signature.propert
 
 **Host de pruebas:** `https://api.mercadopago.com`
 
-**Autenticación.** Un access token `TEST-*` como `Authorization: Bearer`. Sencillo, y el único que además exige un header por operación: **`X-Idempotency-Key`**. Sin él la API responde `400 "Header X-Idempotency-Key can't be null"`. No es opcional ni recomendado: es obligatorio, y el SDK genera un UUID por petición.
+**Autenticación.** Un access token como `Authorization: Bearer`: un `TEST-*` sirve para la Payments API, pero la Orders API pide el `APP_USR-*` de un vendedor de prueba (ver PSE). Sencillo, y el único que además exige un header por operación: **`X-Idempotency-Key`**. Sin él la Payments API responde `400 "Header X-Idempotency-Key can't be null"`, y la Orders API `400 "Missing HTTP header: X-Idempotency-Key."`. No es opcional ni recomendado: es obligatorio, y el SDK genera un UUID por petición.
 
-**Monto.** `transaction_amount` en pesos enteros.
+**Monto.** En pesos enteros: `transaction_amount` en la Payments API y `total_amount` en la Orders API.
 
-**Cobrar con tarjeta — 1 llamada.** `POST /v1/payments` con el token de la tarjeta. La más directa de las cuatro.
+**Cobrar con tarjeta — 3 llamadas desde la 0.6.0.** Hasta la 0.5.0 era una, `POST /v1/payments` con el token de la tarjeta, la más directa de las cuatro. Con las credenciales del vendedor de prueba esa API responde `401 "Unauthorized use of live credentials"`, así que la 0.6.0 cobra la tarjeta por la Orders API, como PSE. La orden exige la marca y el tipo de la tarjeta, que la Payments API deducía del token, y el SDK los consulta antes: `GET /v1/card_tokens/{token}` da los seis primeros dígitos y `GET /v1/payment_methods/search` la marca y el tipo (punto 96).
 
 **PSE — 1 llamada, pero a otra API.** PSE no vive en la Payments API sino en la **Orders API**: `POST /v1/orders`, con un cuerpo bastante más exigente. Pide tipo y número de documento, nombre y apellido, teléfono **con indicativo separado del número**, dirección, dirección IP del pagador y una URL de retorno obligatoria.
 
-**Y tiene un bloqueo duro:** la Orders API **responde `401` con credenciales de prueba** y exige un token de producción. O sea que el flujo de PSE de Mercado Pago no se puede probar en sandbox en absoluto (punto 45). Sin simulador propio, este camino no se podría ejercitar nunca.
+**Y tenía un bloqueo:** la Orders API **responde `401` con credenciales `TEST-`** (punto 45), y hasta el 14 de octubre de 2026 el PSE de Mercado Pago no se pudo probar en sandbox. Las que sirven son las de «Pruebas > Credenciales de prueba» de una aplicación de Checkout API vía Orders, cuya cuenta es un vendedor de prueba; empiezan por `APP_USR-` (punto 95). Con ellas la orden llega a «Banco Prueba PSE», el simulador de bancos de Mercado Pago. Pero ese sandbox deja de entregar la URL del banco sin causa conocida: a dos aplicaciones del proyecto les pasó horas después de creadas, y la orden nace `processing` y termina `processing_error` (punto 100). El simulador propio es lo que permite ejercitar este camino siempre.
 
-**Estado — dos rutas, y hay que elegir.** Los pagos con tarjeta se consultan en `/v1/payments/{id}` con un id numérico; las órdenes de PSE en `/v1/orders/{id}` con un ULID prefijado `ORD`. Mercado Pago no manda ningún discriminador, así que el adaptador **deduce la ruta del formato del identificador**: el prefijo `ORD` está documentado y medido, y consultar el recurso equivocado da un 404 que parece "el pago no existe".
+**Estado — dos rutas, y hay que elegir.** Los pagos de la Payments API se consultan en `/v1/payments/{id}` con un id numérico; las órdenes, de PSE y desde la 0.6.0 también de tarjeta, en `/v1/orders/{id}` con un ULID prefijado `ORD`. Mercado Pago no manda ningún discriminador, así que el adaptador **deduce la ruta del formato del identificador**: el prefijo `ORD` está documentado y medido, y consultar el recurso equivocado da un 404 que parece "el pago no existe".
 
 **Bancos PSE.** No hay endpoint dedicado: se pide `GET /v1/payment_methods` y se filtra el método `pse`, de donde salen 47 entidades financieras. Bancolombia es `1007`, Davivienda `1051`, y el banco de prueba del sandbox es `1013`.
 
@@ -167,7 +167,7 @@ La URL del banco viene en la respuesta de creación, sin sondeo: se midió `stat
 
 **Estado — dos recursos.** Un id de checkout no se consulta en `/payments/{id}`: son recursos distintos. El adaptador elige según el prefijo del identificador.
 
-**Bancos PSE.** `GET /payment_methods/country?country=CO`, del que se filtran los métodos PSE. Los códigos son cadenas descriptivas como `co_pse_bancolombia_bank`, no números; son 47.
+**Bancos PSE.** `GET /payment_methods/country?country=CO`, del que se filtran los métodos PSE. Los códigos son cadenas descriptivas como `co_pse_bancolombia_bank`, no números; eran 47 en septiembre y 50 el 17 de octubre de 2026. **El sandbox solo cobra con 9:** con los otros el pago responde `400 ERROR_GET_GATEWAY`, y el catálogo no dice cuáles son, así que contra el sandbox el SDK devuelve solo esos 9 (punto 102).
 
 **Estado de éxito — el más engañoso.** `CLO` significa "cerrado", **no "pagado"**. Un checkout que se cerró sin pagar también queda en `CLO`. Traducirlo a `APPROVED` solo es correcto si la respuesta además trae `paid: true`, y el SDK verifica las dos cosas. Un comercio que asumiera que `CLO` es éxito estaría despachando producto sin haber cobrado.
 
@@ -179,9 +179,9 @@ La URL del banco viene en la respuesta de creación, sin sondeo: se midió `stat
 
 Tres conclusiones que sostienen el resto del proyecto:
 
-1. **La diferencia no está en los detalles, está en la forma del flujo.** No es que una pasarela llame `amount` a lo que otra llama `amount_in_cents`: es que cobrar con tarjeta cuesta una llamada en Mercado Pago, dos en Wompi, y en Rapyd devuelve una redirección. Un comercio no puede escribir un solo código y esperar que sirva para las cuatro, y un diccionario de nombres de campo no alcanza para unificarlas.
+1. **La diferencia no está en los detalles, está en la forma del flujo.** No es que una pasarela llame `amount` a lo que otra llama `amount_in_cents`: es que cobrar con tarjeta cuesta una llamada en Kushki, dos en Wompi, tres en Mercado Pago desde que va por la Orders API, y en Rapyd devuelve una redirección. Un comercio no puede escribir un solo código y esperar que sirva para las cuatro, y un diccionario de nombres de campo no alcanza para unificarlas.
 2. **La documentación oficial no alcanza.** Cada trampa de este documento se descubrió ejecutando código contra el sandbox, y varias contradicen lo que estaba escrito en la documentación del proveedor.
-3. **Los sandboxes tampoco alcanzan.** El de Wompi no permite ejercitar PSE, el de Mercado Pago no permite ejercitar PSE en absoluto, y el de Kushki no registra los cobros síncronos en su ruta de consulta. De ahí sale el segundo componente del proyecto.
+3. **Los sandboxes tampoco alcanzan.** El de Wompi no tiene página de banco en PSE; el de Mercado Pago solo lo permitió con unas credenciales de prueba que costó encontrar, y deja de entregar la URL del banco sin causa conocida; el de Kushki no registra los cobros síncronos en su ruta de consulta ni cierra las transferencias de PSE de este comercio, y el de Rapyd solo cobra con 9 de sus 50 bancos. De ahí sale el segundo componente del proyecto.
 
 ---
 

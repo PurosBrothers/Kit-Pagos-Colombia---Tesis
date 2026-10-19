@@ -13,7 +13,9 @@ import { DEFAULT_REQUEST_TIMEOUT_MS } from "../config/request-timeout";
  * corta la espera y que el SDK traduce ese corte a `GATEWAY_TIMEOUT`.
  */
 describe("KitPagos request timeout against a server that never responds", () => {
-  const TIMEOUT_MS = 200;
+  // Con un plazo de 200 ms y los demás archivos corriendo en paralelo, la petición a veces no
+  // alcanzaba a llegar al servidor antes del corte, y la prueba no podía contarla.
+  const TIMEOUT_MS = 1_000;
   const credentials = { publicKey: "pub_test_timeout", privateKey: "prv_test_timeout" };
 
   let server: http.Server;

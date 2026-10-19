@@ -100,7 +100,8 @@ Este es el bloque completo. Si algo de acá falla, el cambio no está listo, y n
 
 ```bash
 cd sdk && npx jest && npm run lint && npm run metrics && npm run build && npm run check:readme
-cd simulator-api && npx jest
+cd sdk && npm run metrics -- --root ../simulator-api/src --tsconfig ../simulator-api/tsconfig.json --exceptions ../simulator-api/ck-exceptions.json --mode guard
+cd simulator-api && npx jest && npm run lint
 cd examples && npm run typecheck
 ```
 
@@ -108,12 +109,14 @@ Y si el cambio toca un adaptador, además hay que correr el ejemplo correspondie
 
 ### Qué corre en CI y qué no
 
-El CI ([.github/workflows/ci.yml](../.github/workflows/ci.yml)) tiene dos trabajos, ambos sobre Node 20:
+El CI ([.github/workflows/ci.yml](../.github/workflows/ci.yml)) corre sobre Node 20. Sus dos trabajos principales:
 
-- **sdk:** `npm ci` → `lint` → `test -- --coverage` → `build` → `npm pack --dry-run`.
-- **simulator-api:** `npm ci` → `lint` → `test -- --coverage`.
+- **sdk:** `npm ci` → `lint` → `test -- --coverage` → `metrics` → `build` → `npm pack --dry-run`.
+- **simulator-api:** `npm ci` → `lint` → `test -- --coverage` → `npm ci` en `sdk/` → `metrics` en modo guarda sobre `simulator-api/src` con `simulator-api/ck-exceptions.json`.
 
-**Fuera de CI quedan cuatro cosas**, y hay que correrlas a mano: `npm run metrics`, `npm run check:readme`, `npm run test:sandbox` y todo lo de `examples/`. Vale la pena saberlo porque un pull request puede estar verde en GitHub y romper igual una métrica CK o un fragmento del README.
+Los dos pasos de `metrics` son del issue #153. Además hay trabajos para los ejemplos, la landing y los prototipos.
+
+**Fuera de CI quedan tres cosas**, y hay que correrlas a mano: `npm run check:readme`, `npm run test:sandbox` y ejecutar lo de `examples/` (la CI solo lo compila). Vale la pena saberlo porque un pull request puede estar verde en GitHub y romper igual un fragmento del README. La CI corre en los pull requests hacia `devops` y `main`; uno apilado sobre otra rama no la dispara hasta que se le cambie la base.
 
 ---
 

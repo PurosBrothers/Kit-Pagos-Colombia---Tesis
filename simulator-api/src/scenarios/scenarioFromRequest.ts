@@ -151,15 +151,17 @@ export function wholePesosFromDecimal(value: unknown): number | undefined {
 
 /** El total del objeto `amount` de Kushki (la suma de su desglose), en pesos enteros. */
 export function wholePesosFromKushkiAmount(amount: KushkiAmount | undefined): number | undefined {
+  const cents = centsFromKushkiAmount(amount);
+  return cents === undefined ? undefined : wholePesosFromCents(cents);
+}
+
+/** El total del objeto `amount` de Kushki en centavos. Se suma en centavos para no arrastrar el error de punto flotante de 0,1 + 0,2. */
+export function centsFromKushkiAmount(amount: KushkiAmount | undefined): number | undefined {
   if (!amount || typeof amount !== "object") {
     return undefined;
   }
-
-  // Se suma en centavos para no arrastrar el error de punto flotante de 0,1 + 0,2.
-  const cents = [amount.subtotalIva0, amount.subtotalIva, amount.iva, amount.ice].reduce<number>(
+  return [amount.subtotalIva0, amount.subtotalIva, amount.iva, amount.ice].reduce<number>(
     (total, part) => total + Math.round((typeof part === "number" ? part : 0) * 100),
     0,
   );
-
-  return wholePesosFromCents(cents);
 }

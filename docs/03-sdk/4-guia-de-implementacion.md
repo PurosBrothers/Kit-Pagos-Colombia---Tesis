@@ -41,14 +41,14 @@ Los cuatro son valores distintos. Confundir el de integridad con el de eventos p
 ### Mercado Pago
 
 ```bash
-MERCADOPAGO_PUBLIC_KEY=TEST-xxxxxxxx
-MERCADOPAGO_ACCESS_TOKEN=TEST-xxxxxxxx
+MERCADOPAGO_PUBLIC_KEY=APP_USR-xxxxxxxx
+MERCADOPAGO_ACCESS_TOKEN=APP_USR-xxxxxxxx
 MERCADOPAGO_WEBHOOK_SECRET=xxxxxxxx
 ```
 
-El *access token* va como `privateKey` en el SDK. La clave secreta de webhooks se genera en la configuración de notificaciones del panel, y es un valor distinto del token.
+El *access token* va como `privateKey` en el SDK y la llave pública como `publicKey`. Desde la versión 0.6.0 la llave pública no es decorativa en el servidor: el SDK la usa para deducir la marca de la tarjeta antes de cobrar (`GET /v1/payment_methods/search` no responde sin ella), y sin ella el cobro con tarjeta falla con `INVALID_REQUEST`. La clave secreta de webhooks se genera en la configuración de notificaciones del panel, y es un valor distinto del token.
 
-**Advertencia de alcance:** el PSE de Mercado Pago necesita la Orders API, que **responde `401` con credenciales de prueba**. Para probar PSE de Mercado Pago hacen falta credenciales de producción, o el simulador del proyecto.
+**Advertencia de alcance:** desde la versión 0.6.0 tarjeta y PSE van por la Orders API, que **responde `401` con credenciales `TEST-`** (punto 45). Para probar en sandbox hacen falta las credenciales `APP_USR-` de un vendedor de prueba de una aplicación «Checkout API via Orders», con las que se cobró tarjeta el 15 de octubre de 2026, o el simulador del proyecto. Con esas credenciales la Payments API, por donde cobraba la 0.5.0, responde `401 "Unauthorized use of live credentials"`.
 
 ### Kushki
 
@@ -137,7 +137,7 @@ PaymentMethod.pse({ bankCode: PseBankCode.BANCOLOMBIA });
 
 **`PseBankCode` sirve igual en las cuatro pasarelas.** Es el código de compensación de cuatro dígitos que publica el Banco de la República y que usa ACH Colombia (`1007` es Bancolombia). Mercado Pago, Wompi y Kushki lo reciben tal cual, y el SDK lo traduce para Rapyd, que nombra cada banco con un método propio (`co_pse_bancolombia_bank`). Cada banco de `getPseBanks()` trae además su `achCode` cuando lo tiene.
 
-**El `code` de la lista, en cambio, solo vale en la pasarela que lo dio.** Los bancos de prueba de los sandboxes solo existen así: `1`, `2` y `3` en Wompi, y `0001` en Kushki. Tenga en cuenta que Wompi no valida el código al crear el pago, así que en su sandbox un código de `PseBankCode` no falla al crear, sino después. El razonamiento está en el punto 68 del `architecture-log.md`.
+**El `code` de la lista, en cambio, solo vale en la pasarela que lo dio.** Los bancos de prueba de los sandboxes solo existen así: `1`, `2` y `3` en Wompi, y `0001` en Kushki. Tenga en cuenta que Wompi no valida el código al crear el pago, así que en su sandbox un código de `PseBankCode` no falla al crear, sino después. El razonamiento está en el punto 68 del `architecture-log.md`. Contra el sandbox de Rapyd la lista trae solo los 9 bancos que esa cuenta cobra; con los otros 41, el pago falla con `400 ERROR_GET_GATEWAY` (punto 102).
 
 El ejemplo completo está en el [README, sección 3](../../sdk/README.md#3-crear-una-transacción-con-pse-redirección-bancaria). Lo que hay que tener presente:
 
@@ -153,6 +153,8 @@ if (resultado.outcome === "REDIRECT_REQUIRED") {
   return redirigirA(resultado.redirect.redirectUrl);
 }
 ```
+
+**Un PSE también puede volver como `TRANSACTION`.** Pasa cuando el desenlace ya existe al crear (un `402` de Mercado Pago llega `DECLINED`) y cuando la orden de Mercado Pago nace `processing` sin URL del banco: medido el 15 de octubre de 2026, esas órdenes terminaron rechazadas con `processing_error` unos 4 segundos después. Desde la 0.6.0-rc.2 llegan como `PENDING` con el identificador de la orden; se guarda igual y se consulta, sin redirigir a nadie.
 
 **Y la advertencia más importante de PSE:** que el pagador vuelva a la URL de retorno **no significa que pagó.** La URL de retorno es una señal de interfaz. El resultado se obtiene por webhook o consultando.
 
@@ -171,6 +173,8 @@ if (transaccion.isFinal()) {
 `isFinal()` es el método más útil para conciliar: devuelve verdadero para cualquier estado que no sea `PENDING`, y es lo que un trabajo periódico necesita para saber si tiene que volver a preguntar.
 
 Esta operación **sí** se reintenta automáticamente ante fallos transitorios: hasta tres veces, con retroceso exponencial y fluctuación. Crear un pago no, por el riesgo de doble cobro.
+
+**Antes de volver a cobrar, se consulta.** Si `createPayment()` falló sin una respuesta clara —un timeout, una conexión cortada—, el cobro puede haberse creado igual. Las pasarelas no lo evitan por usted: en Mercado Pago, dos cobros con la misma `orderReference` crearon dos órdenes y se cobraron los dos (medido el 15 de octubre de 2026). Antes de reintentar, confirme el desenlace del intento anterior con `getPaymentStatus()`, si tiene su identificador, o con el webhook.
 
 ---
 
@@ -340,7 +344,7 @@ Tenga en cuenta además que Mercado Pago **no firma el cuerpo**: la firma cubre 
 
 ## 10. El catálogo de errores
 
-Los doce códigos, con cuáles se reintentan solos, están en [1-recorrido-de-una-llamada.md](1-recorrido-de-una-llamada.md) §4, y con su descripción en el [README](../../sdk/README.md#catálogo-de-códigos-de-error-kitpagoserrorcode).
+Los trece códigos, con cuáles se reintentan solos, están en [1-recorrido-de-una-llamada.md](1-recorrido-de-una-llamada.md) §4, y con su descripción en el [README](../../sdk/README.md#catálogo-de-códigos-de-error-kitpagoserrorcode).
 
 Lo que conviene recordar al escribir el manejo de errores: cada `KitPagosError` trae `code` para programar, `gateway` para saber quién falló, y `originalPayload` para depurar. Programar contra `code` y no contra `message`: los mensajes pueden cambiar, el catálogo de códigos es estable.
 

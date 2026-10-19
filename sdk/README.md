@@ -18,7 +18,7 @@ Diseñado bajo los principios de **Arquitectura Hexagonal (Ports & Adapters)** y
 - **Verificación criptográfica de Webhooks:** Validación de firmas nativas (HMAC-SHA256, SHA-256) con comparación en tiempo constante (`crypto.timingSafeEqual`) y **protección contra ataques de repetición (*anti-replay attacks*)** con ventana de tolerancia temporal configurable.
 - **Gestión de fallos y resiliencia:** Política de reintentos automáticos con retroceso exponencial (*exponential backoff*) y fluctuación (*jitter*) ante fallos de red transitorios, aislando errores permanentes de negocio.
 - **Seguridad y privacidad por diseño (RF-08):** Sanitización automática de llaves privadas, tokens `Bearer` y secretos en mensajes de error y registros para evitar filtraciones en logs de producción.
-- **Tokenización segura en navegador (`kit-pagos-colombia/browser`):** Módulo frontend liviano (unos 14 KB sin minificar, 3,6 KB con gzip) sin dependencias de Node.js para tokenizar tarjetas directamente contra la pasarela respetando PCI DSS.
+- **Tokenización segura en navegador (`kit-pagos-colombia/browser`):** Módulo frontend liviano (unos 22 KB sin minificar, 5,3 KB con gzip) sin dependencias de Node.js para tokenizar tarjetas directamente contra Wompi, Mercado Pago y Kushki respetando PCI DSS.
 
 ---
 
@@ -164,11 +164,33 @@ async function cobrarConTarjeta() {
 > Con tarjeta también puede recibir `REDIRECT_REQUIRED`: Rapyd cobra en su página alojada, y
 > cualquiera de las cuatro puede pedir autenticación 3DS. Trate siempre las dos ramas.
 
+> **Mercado Pago cobra la tarjeta por la Orders API desde la versión 0.6.0.** Hasta la 0.5.0
+> usaba la Payments API (`POST /v1/payments`), que con las credenciales `APP_USR-` del vendedor
+> de prueba de una aplicación «Checkout API via Orders» responde `401 "Unauthorized use of live
+> credentials"` (medido el 15 de octubre de 2026). Ahora tarjeta y PSE usan la misma pareja de
+> credenciales y la misma API, sin cambios en su código: `PaymentMethod.card(token, {
+> installments })` sigue igual. Lo que sí cambia:
+>
+> - El SDK hace dos lecturas antes de cobrar (`GET /v1/card_tokens/{token}` y
+>   `GET /v1/payment_methods/search`) para deducir la marca y el tipo de la tarjeta, que la
+>   Orders API exige. Por eso necesita `publicKey` en las credenciales de Mercado Pago.
+> - El identificador de la transacción es el de la orden (`ORD…`, o `ORDTST…` con un vendedor
+>   de prueba) y no un número. `getPaymentStatus()` sigue consultando los ids numéricos de los
+>   pagos creados con versiones anteriores.
+> - Un rechazo llega como una transacción `DECLINED` con `rejectionReason` (por ejemplo
+>   `insufficient_amount`), igual que en PSE, y no como un error.
+> - El monto no admite centavos: `total_amount` solo acepta pesos enteros, así que un monto con
+>   decimales distintos de cero falla con `INVALID_REQUEST` antes de cobrar.
+> - La respuesta de la orden no trae el email del pagador, así que `transaction.payer.email`
+>   lleva un valor de relleno; conserve el email en su propio registro.
+> - El cobro con tarjeta de Mercado Pago no devuelve redirección: la orden llega con
+>   `transaction_security.validation: "never"` y el SDK no pide 3DS.
+
 #### 2.1 Tokenización en el Navegador (`kit-pagos-colombia/browser`)
 
 Para cumplir con **PCI DSS**, los datos sensibles de la tarjeta (número PAN, CVC, fecha de expiración) **nunca deben entrar al backend del comercio ni al SDK de servidor**.
 
-El paquete exporta un punto de entrada independiente y liviano para el frontend (`kit-pagos-colombia/browser`, unos 14 KB sin minificar y 3,6 KB con gzip, sin módulos de Node.js):
+El paquete exporta un punto de entrada independiente y liviano para el frontend (`kit-pagos-colombia/browser`, unos 22 KB sin minificar y 5,3 KB con gzip, sin módulos de Node.js). Tokeniza con Wompi, Mercado Pago y, desde la 0.6.0-rc.4, Kushki:
 
 ```typescript
 import { KitPagosBrowser, Gateway } from "kit-pagos-colombia/browser";
@@ -181,9 +203,11 @@ async function tokenizarTarjetaEnNavegador() {
     expMonth: "12",
     expYear: "2030",
     cardHolder: "Juan Pérez",
-    docType: "CC",            // El SDK lo exige en Mercado Pago; opcional en Wompi
-    docNumber: "19119119100",  // El SDK lo exige en Mercado Pago; opcional en Wompi
+    docType: "CC",            // El SDK lo exige en Mercado Pago; Wompi y Kushki no lo usan
+    docNumber: "19119119100",  // El SDK lo exige en Mercado Pago; Wompi y Kushki no lo usan
   };
+  // El monto del cobro, con el mismo formato del pago. Kushki ata el token a él; las otras lo ignoran.
+  const monto = "48000.00";
 
   // 1. Tokenización contra Wompi:
   const wompiResult = await KitPagosBrowser.tokenizeCard({
@@ -202,9 +226,19 @@ async function tokenizarTarjetaEnNavegador() {
     card: datosFormulario,
   });
 
+  // 3. Tokenización contra Kushki, con su merchant id público y el monto del cobro:
+  const kushkiResult = await KitPagosBrowser.tokenizeCard({
+    gateway: Gateway.KUSHKI,
+    publicKey: "kushki-public-merchant-id",
+    environment: "sandbox",
+    card: datosFormulario,
+    amount: monto,
+  });
+
   // El token resultante se envía a SU backend para llamar a PaymentMethod.card()
   console.log(`Token Wompi: ${wompiResult.token}`);
   console.log(`Token Mercado Pago: ${mpResult.token}`);
+  console.log(`Token Kushki: ${kushkiResult.token}`);
 }
 ```
 
@@ -215,7 +249,13 @@ async function tokenizarTarjetaEnNavegador() {
 > `INVALID_REQUEST` antes de enviar la tarjeta. Usa `AbortSignal.timeout`, que el navegador del
 > pagador tiene que soportar.
 
-> **PCI DSS:** Al usar `KitPagosBrowser`, el número de tarjeta viaja exclusivamente entre el navegador del pagador y los servidores de la pasarela. Su backend solo recibe y almacena el token opaco `tok_...`. El SDK rechaza activamente pasarelas que no soportan tokenización inline en frontend (como Kushki y Rapyd) con `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones.
+> **Kushki, desde la 0.6.0-rc.4.** Kushki pide el monto al tokenizar (`amount`, obligatorio solo
+> con ella) y ata el token a ese valor: cobrar el token por otro monto responde `400 K220` y el SDK
+> de servidor lo devuelve como `INVALID_REQUEST`. Cobre exactamente el monto con el que tokenizó.
+> La tokenización usa `POST /card/v1/tokens` con el merchant id público en la cabecera
+> `Public-Merchant-Id`; su CORS se midió el 17 de octubre de 2026 contra UAT.
+
+> **PCI DSS:** Al usar `KitPagosBrowser`, el número de tarjeta viaja exclusivamente entre el navegador del pagador y los servidores de la pasarela. Su backend solo recibe y almacena el token opaco. Rapyd no tokeniza en el navegador: cobra la tarjeta en su página alojada, así que `KitPagosBrowser` la rechaza con `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones; con Rapyd, cree el pago con tarjeta y sin token, y siga la redirección.
 
 > **Compatibilidad de `kit-pagos-colombia/browser` fuera del navegador.** TypeScript resuelve
 > sus tipos con `moduleResolution` `bundler`, `node16` y `node10`. El archivo es un módulo ES
@@ -278,12 +318,33 @@ async function pagarConPSE() {
 > cambiar de pasarela obliga a volver a pedir la lista. Es la consecuencia de que cada una
 > identifique los bancos a su manera; lo que el SDK garantiza es que usted no tenga que saber cómo.
 
+> Contra el sandbox de Rapyd, desde la 0.6.0-rc.3, `getPseBanks()` devuelve solo los bancos que
+> esa cuenta puede cobrar. El sandbox lista todos los métodos de la plataforma, y con los demás el
+> pago falla con `400 ERROR_GET_GATEWAY`: el 17 de octubre de 2026 cobraban 9 de 50 (Davivienda,
+> Bancolombia, Caja Social, AV Villas, Unión, Contactar, Acción Fiduciaria, Ding y PayCash). En
+> producción, donde Rapyd lista solo los métodos habilitados, y en el simulador, la lista llega
+> completa.
+
 > Un PSE también puede volver como `TRANSACTION`, y por eso conviene tratar las dos ramas. Pasa
 > cuando el pago ya tiene desenlace al crearlo: en el sandbox de Wompi la URL del banco llega en
 > la misma consulta que `APPROVED`, `DECLINED` o `ERROR`, y Mercado Pago responde `402` cuando la
 > orden se crea con el pago fallido. En los dos casos `createPayment()` devuelve la transacción
 > normalizada (en Mercado Pago, `DECLINED` con el identificador de la orden) en vez de una
 > redirección hacia un pago que ya terminó.
+>
+> En Mercado Pago, la orden también puede nacer `processing` sin URL del banco: el 15 de octubre
+> de 2026, entre las 21:33 y las 21:44, pasó con 12 de 12 órdenes, que unos 4 segundos después
+> estaban rechazadas con `processing_error`. Desde la 0.6.0-rc.2, `createPayment()` la devuelve
+> como una transacción `PENDING` con el identificador de la orden y `rawStatus` `processing`, en
+> vez de fallar con `MALFORMED_RESPONSE`. Consulte su estado con `getPaymentStatus()` para
+> conocer el desenlace: esas órdenes terminaron en `failed / processing_error`, que el SDK
+> entrega como `DECLINED` con `rejectionCode` `processing_error`.
+
+> Mercado Pago exige además `ipAddress`, la IP del pagador. Desde la versión 0.6.0 el SDK la
+> normaliza antes de enviarla: quita los espacios, convierte `::ffff:a.b.c.d` en `a.b.c.d` y
+> `::1` en `127.0.0.1`, que son las formas en que Node entrega `req.ip` en un servidor que
+> escucha en `::` y que Mercado Pago rechaza con `400` (medido el 15 de octubre de 2026). Las
+> demás direcciones pasan tal cual, y una IP en blanco cuenta como faltante.
 
 ---
 
@@ -306,7 +367,8 @@ async function verificarEstado(transactionId: string) {
 `rejectionReason` solo existe cuando el estado es `DECLINED`. `rejectionCode` es el código nativo tal como lo envía la pasarela: el `status_detail` en Mercado Pago, el `failure_code` en Rapyd y el `responseCode` en Kushki. Wompi no envía un código de rechazo, así que en Wompi `rejectionReason` queda vacío. `rejectionCategory` es una categoría normalizada solo cuando hay una fuente para la correspondencia; en los demás casos es `UNKNOWN`, y conviene decidir con el código nativo.
 
 `getPaymentStatus()` y `getPseBanks()` se reintentan solos ante fallos transitorios
-(`CONNECTION_FAILED`, `GATEWAY_TIMEOUT`, `GATEWAY_SERVER_ERROR`, `RATE_LIMIT_EXCEEDED`), hasta
+(`CONNECTION_FAILED`, `GATEWAY_TIMEOUT`, `GATEWAY_SERVER_ERROR`, `RATE_LIMIT_EXCEEDED`,
+`RESOURCE_LOCKED`), hasta
 `maxRetries` veces (3 por omisión) con retroceso exponencial. Si el fallo persiste en todos los
 intentos, la operación termina en `MAX_RETRIES_EXCEEDED`, con el último error en `cause`:
 
@@ -427,10 +489,22 @@ async function cobrarConDiagnostico(request: CreatePaymentRequest) {
 }
 ```
 
+> **El mensaje de un error HTTP trae el código y el motivo de la pasarela**, desde la
+> 0.6.0-rc.5: `Kushki gateway returned an HTTP error status 400 (K220: Monto de la transacción
+> es diferente al monto de la venta inicial)`. Para decidir, use `error.code`, que sigue siendo
+> el normalizado (`INVALID_REQUEST` en ese caso); el mensaje es para leerlo, y pasa por la misma
+> limpieza de credenciales que el resto del error. El cuerpo completo está en `originalPayload`.
+
 > **`createPayment()` no se reintenta**, ni siquiera ante `GATEWAY_TIMEOUT`. Que la respuesta
 > no haya llegado a tiempo no prueba que la pasarela no haya creado el cobro, y repetirlo podría
 > cobrar dos veces. Antes de volver a cobrar, confirme el estado con `getPaymentStatus()` o
 > espere el webhook.
+>
+> La pasarela tampoco lo evita por usted. Medido en Mercado Pago el 15 de octubre de 2026: dos
+> cobros con la misma `orderReference` crearon dos órdenes y se cobraron los dos, con tarjeta y
+> con PSE. El SDK manda una llave de idempotencia nueva en cada llamada, a propósito: con la
+> misma llave, Mercado Pago responde una copia del primer resultado, y reintentar un rechazo con
+> otra tarjeta daría `409` (`INVALID_REQUEST`).
 
 ---
 
@@ -442,6 +516,7 @@ async function cobrarConDiagnostico(request: CreatePaymentRequest) {
 - `RATE_LIMIT_EXCEEDED`: Límite de tasa de solicitudes superado (HTTP 429).
 - `INVALID_REQUEST`: Parámetros de cobro malformados o rechazados por validación (HTTP 400/409/422).
 - `RESOURCE_NOT_FOUND`: Transacción u orden no encontrada (HTTP 404).
+- `RESOURCE_LOCKED`: La pasarela está procesando otra petición con la misma llave (HTTP 423, medido en la Orders API de Mercado Pago). Es transitorio: se reintenta solo en `getPaymentStatus()` y `getPseBanks()`.
 - `GATEWAY_SERVER_ERROR`: Error interno en los servidores de la pasarela (HTTP 5xx).
 - `MALFORMED_RESPONSE`: Respuesta o webhook no interpretable como JSON válido.
 - `WEBHOOK_SIGNATURE_INVALID`: Firma digital de webhook inválida o timestamp caducado.
@@ -506,7 +581,7 @@ const sdkMultiPasarela = new KitPagos({
 Por regulaciones bancarias internacionales (PCI-DSS) y de la Superintendencia Financiera de Colombia (SFC), **un servidor backend nunca debe recibir datos sensibles de tarjetas (número de 16 dígitos, fecha de expiración o CVV) en texto plano**, a menos que cuente con certificación PCI-DSS Nivel 1.
 
 Por esta razón, el SDK opera como un backend seguro que consume **tokens**:
-1. **En el Navegador (Frontend):** El usuario ingresa su tarjeta en un formulario web que utiliza la librería de tokenización oficial de la pasarela activa (ej. Wompi Widget/JS, Mercado Pago CardForm/SDK, Kushki.js o Rapyd Collect).
+1. **En el Navegador (Frontend):** El usuario ingresa su tarjeta en un formulario web que la tokeniza con `KitPagosBrowser` (Wompi, Mercado Pago y Kushki) o con la librería oficial de la pasarela activa. Con Rapyd no hay token: el pago se crea sin él y el pagador escribe la tarjeta en la página alojada de Rapyd.
 2. **Generación del Token:** La pasarela valida la tarjeta directamente desde el navegador y devuelve un token temporal (ej. `tok_test_card_12345`).
 3. **Procesamiento en Backend:** Su frontend envía ese token a su servidor Node.js, donde `KitPagos` ejecuta el cobro de forma segura mediante `PaymentMethod.card(token, { installments })`.
 

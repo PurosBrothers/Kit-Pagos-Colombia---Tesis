@@ -11,8 +11,8 @@
       "script": {
         "type": "text/javascript",
         "exec": [
-          "// El trigger y la verificación de webhooks tienen sus propias aserciones:",
-          "if (pm.info.requestName === \"POST /v1/sim/webhooks/trigger\" || pm.info.requestName === \"POST /v1/api/webhooks/:gateway\") { return; }",
+          "// El trigger, la verificación de webhooks y la orden de tarjeta rechazada tienen sus propias aserciones:",
+          "if (pm.info.requestName === \"POST /v1/sim/webhooks/trigger\" || pm.info.requestName === \"POST /v1/api/webhooks/:gateway\" || pm.info.requestName === \"POST /v1/sim/mercadopago/orders (tarjeta, OTHE)\") { return; }",
           "pm.test(`${pm.info.requestName}: responde 2xx`, () => { pm.expect(pm.response.code).to.be.within(200, 299); });"
         ]
       }
@@ -67,7 +67,22 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"GET /v1/api/gateways: dice cómo recibe la tarjeta cada pasarela (punto 106)\", () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.cardCapture).to.eql({ wompi: \"BROWSER_TOKEN\", rapyd: \"HOSTED_PAGE\", mercadopago: \"BROWSER_TOKEN\", kushki: \"BROWSER_TOKEN\" });",
+                  "  pm.expect(Object.keys(body.cardCapture).sort()).to.eql([...body.gateways].sort());",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /v1/api/payments",
@@ -613,6 +628,261 @@
           "response": []
         },
         {
+          "name": "GET /v1/sim/mercadopago/card_tokens/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer APP_USR_TEST_TOKEN",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/mercadopago/card_tokens/{{mpCardToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "mercadopago",
+                "card_tokens",
+                "{{mpCardToken}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// El SDK 0.6.0 lee el BIN del token antes de cobrar por la Orders API.",
+                  "const token = pm.response.json();",
+                  "pm.test(\"GET /v1/sim/mercadopago/card_tokens/:id: devuelve el BIN de la tarjeta tokenizada\", () => {",
+                  "  pm.expect(token.first_six_digits).to.eql(\"424242\");",
+                  "});",
+                  "pm.environment.set(\"mpCardBin\", token.first_six_digits);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /v1/sim/mercadopago/payment_methods/search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/mercadopago/payment_methods/search?public_key=APP_USR_PUBLIC_KEY&bins={{mpCardBin}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "mercadopago",
+                "payment_methods",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "public_key",
+                  "value": "APP_USR_PUBLIC_KEY"
+                },
+                {
+                  "key": "bins",
+                  "value": "{{mpCardBin}}"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// La marca y el tipo que la Orders API exige en payment_method.id y payment_method.type.",
+                  "const method = pm.response.json().results[0];",
+                  "pm.test(\"GET /v1/sim/mercadopago/payment_methods/search: resuelve la marca y el tipo del BIN\", () => {",
+                  "  pm.expect(method.id).to.eql(\"visa\");",
+                  "  pm.expect(method.payment_type_id).to.eql(\"credit_card\");",
+                  "});",
+                  "pm.environment.set(\"mpCardBrand\", method.id);",
+                  "pm.environment.set(\"mpCardType\", method.payment_type_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/sim/mercadopago/orders (tarjeta, APRO)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer APP_USR_TEST_TOKEN",
+                "type": "text"
+              },
+              {
+                "key": "X-Idempotency-Key",
+                "value": "postman-mp-card-order-{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/mercadopago/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "mercadopago",
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"online\",\n  \"processing_mode\": \"automatic\",\n  \"total_amount\": \"50000\",\n  \"external_reference\": \"ORD-MP-CARD-APRO-{{$timestamp}}\",\n  \"payer\": {\n    \"email\": \"postman@example.com\"\n  },\n  \"transactions\": {\n    \"payments\": [\n      {\n        \"amount\": \"50000\",\n        \"payment_method\": {\n          \"id\": \"{{mpCardBrand}}\",\n          \"type\": \"{{mpCardType}}\",\n          \"token\": \"{{mpCardToken}}\",\n          \"installments\": 1\n        }\n      }\n    ]\n  }\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// La tarjeta del SDK 0.6.0: el titular APRO, recordado al tokenizar, aprueba la orden.",
+                  "const order = pm.response.json();",
+                  "pm.test(\"POST /v1/sim/mercadopago/orders (tarjeta, APRO): crea la orden aprobada\", () => {",
+                  "  pm.expect(pm.response.code).to.eql(201);",
+                  "  pm.expect(order.status).to.eql(\"processed\");",
+                  "  pm.expect(order.transactions.payments[0].status_detail).to.eql(\"accredited\");",
+                  "});",
+                  "pm.environment.set(\"mpCardOrderId\", order.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/sim/mercadopago/card_tokens (titular OTHE)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/mercadopago/card_tokens?public_key=APP_USR_PUBLIC_KEY",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "mercadopago",
+                "card_tokens"
+              ],
+              "query": [
+                {
+                  "key": "public_key",
+                  "value": "APP_USR_PUBLIC_KEY"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"card_number\": \"4242424242424242\",\n  \"security_code\": \"123\",\n  \"expiration_month\": 12,\n  \"expiration_year\": 2028,\n  \"cardholder\": {\n    \"name\": \"OTHE\"\n  }\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"mpCardTokenOthe\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /v1/sim/mercadopago/orders (tarjeta, OTHE)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer APP_USR_TEST_TOKEN",
+                "type": "text"
+              },
+              {
+                "key": "X-Idempotency-Key",
+                "value": "postman-mp-card-order-{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/mercadopago/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "mercadopago",
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"online\",\n  \"processing_mode\": \"automatic\",\n  \"total_amount\": \"50000\",\n  \"external_reference\": \"ORD-MP-CARD-OTHE-{{$timestamp}}\",\n  \"payer\": {\n    \"email\": \"postman@example.com\"\n  },\n  \"transactions\": {\n    \"payments\": [\n      {\n        \"amount\": \"50000\",\n        \"payment_method\": {\n          \"id\": \"{{mpCardBrand}}\",\n          \"type\": \"{{mpCardType}}\",\n          \"token\": \"{{mpCardTokenOthe}}\",\n          \"installments\": 1\n        }\n      }\n    ]\n  }\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// El rechazo llega como el 402 medido: la orden fallida en data y el motivo en el pago.",
+                  "const body = pm.response.json();",
+                  "pm.test(\"POST /v1/sim/mercadopago/orders (tarjeta, OTHE): responde 402 con la orden rechazada\", () => {",
+                  "  pm.expect(pm.response.code).to.eql(402);",
+                  "  pm.expect(body.data.status).to.eql(\"failed\");",
+                  "  pm.expect(body.data.transactions.payments[0].status_detail).to.eql(\"rejected_by_issuer\");",
+                  "  pm.expect(body.errors[0].details[0]).to.match(/: rejected_by_issuer$/);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "POST /v1/sim/mercadopago/orders",
           "request": {
             "method": "POST",
@@ -657,7 +927,11 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.environment.set(\"mpOrderId\", pm.response.json().id);"
+                  "pm.environment.set(\"mpOrderId\", pm.response.json().id);",
+                  "// La URL del banco lleva un id numérico de doce dígitos, que no es el PAY… del pago.",
+                  "const bankUrl = pm.response.json().transactions.payments[0].payment_method.redirect_url || \"\";",
+                  "const bankId = /\\/payments\\/(\\d+)\\/bank_transfer/.exec(bankUrl);",
+                  "pm.environment.set(\"mpBankPaymentId\", bankId ? bankId[1] : \"\");"
                 ]
               }
             }
@@ -689,6 +963,28 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "GET /v1/sim/mercadopago/payments/:paymentId/bank_transfer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/mercadopago/payments/{{mpBankPaymentId}}/bank_transfer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "mercadopago",
+                "payments",
+                "{{mpBankPaymentId}}",
+                "bank_transfer"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -701,8 +997,9 @@
             "type": "text/javascript",
             "exec": [
               "// Firma Rapyd: la misma fórmula de sdk/src/infrastructure/adapters/rapyd-signature.ts.",
-              "// La página GET /checkout/:id/pay es del simulador y no lleva firma.",
-              "if (pm.request.url.path[pm.request.url.path.length - 1] === \"pay\") { return; }",
+              "// Las páginas GET /checkout/:id/pay y GET /complete-bank-payment son del simulador y no llevan firma.",
+              "const lastSegment = pm.request.url.path[pm.request.url.path.length - 1];",
+              "if (lastSegment === \"pay\" || lastSegment === \"complete-bank-payment\") { return; }",
               "const secret = pm.environment.get(\"rapydSecretKey\") || \"rapyd_secret_kit_pagos_simulator\";",
               "const accessKey = pm.environment.get(\"rapydAccessKey\");",
               "if (pm.request.body && pm.request.body.raw) {",
@@ -875,6 +1172,32 @@
                 "rapyd",
                 "payments",
                 "{{rapydPaymentId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /v1/sim/rapyd/complete-bank-payment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/rapyd/complete-bank-payment?token={{rapydPaymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "rapyd",
+                "complete-bank-payment"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{rapydPaymentId}}"
+                }
               ]
             }
           },
@@ -1123,6 +1446,86 @@
           "response": []
         },
         {
+          "name": "GET /v1/sim/kushki/transfer/v1/agent",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/kushki/transfer/v1/agent?token={{kushkiTransferToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "kushki",
+                "transfer",
+                "v1",
+                "agent"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{kushkiTransferToken}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /v1/sim/kushki/card/v1/tokens",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Public-Merchant-Id",
+                "value": "{{kushkiPublicMerchantId}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sim/kushki/card/v1/tokens",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sim",
+                "kushki",
+                "card",
+                "v1",
+                "tokens"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"card\": {\n    \"name\": \"APRO Ruiz\",\n    \"number\": \"4242424242424242\",\n    \"cvv\": \"123\",\n    \"expiryMonth\": \"11\",\n    \"expiryYear\": \"30\"\n  },\n  \"totalAmount\": 50000,\n  \"currency\": \"COP\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"POST /v1/sim/kushki/card/v1/tokens: emite un token de 32 hexadecimales, como UAT\", () => {",
+                  "  pm.expect(pm.response.code).to.equal(201);",
+                  "  pm.expect(pm.response.json().token).to.match(/^[0-9a-f]{32}$/);",
+                  "});",
+                  "pm.environment.set(\"kushkiCardToken\", pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "POST /v1/sim/kushki/card/v1/charges",
           "request": {
             "method": "POST",
@@ -1154,7 +1557,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"token\": \"tok_kushki_card_token_test\",\n  \"amount\": {\n    \"subtotalIva\": 0,\n    \"subtotalIva0\": 50000,\n    \"iva\": 0,\n    \"currency\": \"COP\"\n  },\n  \"orderDetails\": {\n    \"trackingCode\": \"ORD-KUSHKI-{{$timestamp}}\"\n  }\n}"
+              "raw": "{\n  \"token\": \"{{kushkiCardToken}}\",\n  \"amount\": {\n    \"subtotalIva\": 0,\n    \"subtotalIva0\": 50000,\n    \"iva\": 0,\n    \"currency\": \"COP\"\n  },\n  \"orderDetails\": {\n    \"trackingCode\": \"ORD-KUSHKI-{{$timestamp}}\"\n  }\n}"
             }
           },
           "response": [],

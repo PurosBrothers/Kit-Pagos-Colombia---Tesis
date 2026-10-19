@@ -107,7 +107,7 @@ La política, con sus valores por defecto:
 | Espera máxima | 4000 ms | Tope, para que no crezca indefinidamente |
 | Fluctuación | hasta 200 ms | Aleatoria, se suma a la espera |
 
-**Solo se reintenta lo transitorio.** El `RetryHandler` le pregunta al `ErrorHandler` si el error es reintentable: una conexión caída, un timeout, un 5xx o un 429 sí; unas credenciales inválidas o una petición malformada no, porque el resultado va a ser idéntico y reintentar solo gasta tiempo y cupo de la pasarela.
+**Solo se reintenta lo transitorio.** El `RetryHandler` le pregunta al `ErrorHandler` si el error es reintentable: una conexión caída, un timeout, un 5xx, un 429 o un 423 sí; unas credenciales inválidas o una petición malformada no, porque el resultado va a ser idéntico y reintentar solo gasta tiempo y cupo de la pasarela.
 
 **La fluctuación existe por una razón concreta.** Sin ella, si la pasarela se cae un instante, todos los clientes reintentan sincronizados en el mismo milisegundo y le pegan otra vez al mismo tiempo, justo cuando está intentando recuperarse. Sumar un valor aleatorio los dispersa.
 
@@ -177,13 +177,14 @@ El de Mercado Pago solo trae `{"action": "payment.created", "data": {"id": "..."
 
 ## 4. Los errores, de punta a punta
 
-Todo fallo técnico llega como un `KitPagosError` con un código de un catálogo cerrado de doce valores:
+Todo fallo técnico llega como un `KitPagosError` con un código de un catálogo cerrado de trece valores:
 
 | Código | Cuándo aparece | ¿Se reintenta? |
 |---|---|---|
 | `INVALID_CREDENTIALS` | HTTP 401 o 403, o credenciales no configuradas | No |
 | `INVALID_REQUEST` | HTTP 400 o validación local fallida | No |
 | `RESOURCE_NOT_FOUND` | HTTP 404 | No |
+| `RESOURCE_LOCKED` | HTTP 423: la pasarela procesa otra petición con la misma llave de idempotencia | Sí |
 | `GATEWAY_TIMEOUT` | La petición venció | Sí |
 | `CONNECTION_FAILED` | No se pudo establecer la conexión | Sí |
 | `RATE_LIMIT_EXCEEDED` | HTTP 429 | Sí |

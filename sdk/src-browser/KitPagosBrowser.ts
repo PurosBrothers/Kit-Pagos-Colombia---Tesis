@@ -9,6 +9,7 @@ import {
 } from "./types";
 import { WompiTokenizer } from "./tokenizers/WompiTokenizer";
 import { MercadoPagoTokenizer } from "./tokenizers/MercadoPagoTokenizer";
+import { KushkiTokenizer } from "./tokenizers/KushkiTokenizer";
 
 /**
  * Fachada principal de Kit Pagos para el navegador.
@@ -39,7 +40,7 @@ export class KitPagosBrowser {
    */
   async tokenizeCard(params: TokenizeCardParams): Promise<CardTokenResult> {
     const environment = params.environment ?? this.defaultEnvironment;
-    // El tipo solo admite WOMPI y MERCADOPAGO, pero quien llama desde JavaScript
+    // El tipo solo admite WOMPI, MERCADOPAGO y KUSHKI, pero quien llama desde JavaScript
     // puede mandar cualquier cadena, así que se normaliza y se valida en ejecución.
     const rawGateway = String(params.gateway ?? "").toUpperCase();
 
@@ -54,13 +55,26 @@ export class KitPagosBrowser {
       });
     }
 
+    if (rawGateway === Gateway.KUSHKI) {
+      return KushkiTokenizer.tokenize({ ...params, environment });
+    }
+
+    if (rawGateway === Gateway.RAPYD) {
+      throw new KitPagosError(
+        KitPagosErrorCode.UNSUPPORTED_OPERATION,
+        Gateway.RAPYD,
+        null,
+        `${Gateway.RAPYD} no tokeniza en el navegador: cobra la tarjeta en su página alojada. Cree el pago con tarjeta y sin token, y siga la redirección.`,
+      );
+    }
+
     // Se atribuye el error a la pasarela que se pidió, aunque no sea del enum, para
     // que quien lee el error vea "STRIPE" y no una pasarela que nunca usó.
     throw new KitPagosError(
       KitPagosErrorCode.UNSUPPORTED_OPERATION,
       rawGateway as Gateway,
       null,
-      `La tokenización de tarjeta en el navegador solo está soportada para ${Gateway.WOMPI} y ${Gateway.MERCADOPAGO}. La pasarela '${String(params.gateway)}' no admite tokenización en frontend.`,
+      `La tokenización de tarjeta en el navegador solo está soportada para ${Gateway.WOMPI}, ${Gateway.MERCADOPAGO} y ${Gateway.KUSHKI}. La pasarela '${String(params.gateway)}' no admite tokenización en frontend.`,
     );
   }
 

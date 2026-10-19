@@ -86,6 +86,7 @@ Kit-Pagos-Colombia---Tesis/
 │       │   ├── wompi-pse.ts                    <-- Flujo PSE y firma de integridad de Wompi (punto 44)
 │       │   ├── MercadoPagoAdapter.ts           <-- Mercado Pago Adapter
 │       │   ├── mercadopago-pse.ts              <-- Flujo PSE por la Orders API (punto 45)
+│       │   ├── mercadopago-card.ts             <-- Tarjeta por la Orders API, desde la 0.6.0 (punto 96)
 │       │   ├── KushkiAdapter.ts                <-- Kushki Adapter
 │       │   ├── kushki-charge.ts                <-- Cobro síncrono con tarjeta
 │       │   ├── kushki-pse.ts                   <-- Flujo de transferencia y rutas de estado (puntos 50 y 53)
@@ -94,8 +95,11 @@ Kit-Pagos-Colombia---Tesis/
 │       │   ├── rapyd-signature.ts              <-- Firma HMAC de cada request saliente (punto 33)
 │       │   ├── rapyd-checkout.ts               <-- Checkout alojado para tarjeta (punto 50)
 │       │   ├── rapyd-pse.ts                    <-- Flujo PSE: customer + payment
+│       │   ├── rapyd-pse-banks.ts              <-- Banco de PSE → método de Rapyd, y los 9 que cobra el sandbox (punto 102)
 │       │   ├── rapyd-payload.ts                <-- Construcción de cuerpos y URLs de retorno
-│       │   └── payment-method-support.ts       <-- Guarda compartida de métodos soportados
+│       │   ├── payment-method-support.ts       <-- Guarda compartida de métodos soportados
+│       │   ├── http-failure.ts                 <-- Respuesta HTTP fallida → KitPagosError, sin credenciales
+│       │   └── redacting-gateway.ts            <-- Envoltorio que quita las credenciales de todo error
 │       └── facade/
 │           └── KitPagos.ts                     <-- KitPagos (Patrón GoF Facade — Punto de entrada público)
 │
@@ -104,12 +108,12 @@ Kit-Pagos-Colombia---Tesis/
 │   ├── app.ts                                  <-- buildApp(): instancia Fastify sin abrir puerto
 │   ├── routes/
 │   │   ├── health.ts                           <-- GET /health
-│   │   ├── wompi.ts                            <-- 5 rutas bajo /v1/sim/wompi/
-│   │   ├── mercadopago.ts                      <-- 6 rutas bajo /v1/sim/mercadopago/
-│   │   ├── rapyd.ts                            <-- 7 rutas bajo /v1/sim/rapyd/
-│   │   ├── kushki.ts                           <-- 6 rutas bajo /v1/sim/kushki/
+│   │   ├── wompi.ts                            <-- 7 rutas bajo /v1/sim/wompi/
+│   │   ├── mercadopago.ts                      <-- 9 rutas bajo /v1/sim/mercadopago/
+│   │   ├── rapyd.ts                            <-- 9 rutas bajo /v1/sim/rapyd/
+│   │   ├── kushki.ts                           <-- 7 rutas bajo /v1/sim/kushki/
 │   │   └── webhooks.ts                         <-- POST /v1/sim/webhooks/trigger (RF-12)
-│   ├── gateways/                               <-- Una GatewayMockFactory + types.ts por pasarela
+│   ├── gateways/                               <-- GatewayMockFactory.ts (una clase por recurso) + types.ts por pasarela
 │   │   ├── wompi/  mercadopago/  rapyd/  kushki/
 │   ├── scenarios/
 │   │   ├── ScenarioEngine.ts                   <-- Escenarios de creación de Wompi (APPROVED, PENDING, DECLINED, EXPIRED; el resto, 501)
@@ -212,7 +216,8 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   - Creación de pago y consulta de estado (endpoint, forma del payload, catálogo de `data.status`): investigado y documentado en `ubiquitous-language.md` (issue #23).
   - **Tarjeta: `POST /v1/checkout`, no `POST /v1/payments`.** Es la única de las cuatro que no cobra la tarjeta servidor-a-servidor: con token responde `CREATE_CARD_TYPE_REQUIRES_ONLY_ONE_OF_FIELDS_OR_TOKEN`, y la variante que cobra exige el número de la tarjeta en la petición, lo que metería al comercio en el alcance de PCI DSS. Así que el cobro devuelve `REDIRECT_REQUIRED`, la misma rama que PSE, y la tarjeta la escribe el pagador en la página de Rapyd. El payload y la traducción de la respuesta viven en `rapyd-checkout.ts`.
   - Consulta de estado por prefijo del identificador: `checkout_` va a `/checkout/{id}` y `payment_` a `/payments/{id}`. Un `checkout_` consultado como pago responde `400 ERROR_GET_PAYMENT`. Medido en el punto 50 del `architecture-log.md`.
-  - **PSE Colombia (esquema confirmado, `architecture-log.md` punto 19, cerrado):** el esquema de campos de identidad del pagador ya está resuelto. Rapyd no expone PSE como un único método; lo modela como una familia de **47 métodos** `co_pse_{banco}_bank` (uno por banco afiliado, ej. `co_pse_bancolombia_bank`), con dos campos obligatorios por método: `customer_identification_type` y `customer_identification_number`. El detalle campo por campo está en `ubiquitous-language.md` y en `testing-data/rapyd.md` (sección 5).
+  - **PSE Colombia (esquema confirmado, `architecture-log.md` punto 19, cerrado):** el esquema de campos de identidad del pagador ya está resuelto. Rapyd no expone PSE como un único método; lo modela como una familia de métodos `co_pse_{banco}_bank` (uno por banco afiliado, ej. `co_pse_bancolombia_bank`; 47 en el punto 19 y 50 el 17 de octubre de 2026), con dos campos obligatorios por método: `customer_identification_type` y `customer_identification_number`. El detalle campo por campo está en `ubiquitous-language.md` y en `testing-data/rapyd.md` (sección 5).
+  - **Bancos de PSE contra el sandbox:** el sandbox solo tiene procesador para 9 de esos 50 métodos; con los demás el pago responde `400 ERROR_GET_GATEWAY`, y el catálogo no dice cuáles son. Contra el host del sandbox, `getPseBanks()` devuelve solo esos 9 (`RAPYD_SANDBOX_PSE_TYPES` en `rapyd-pse-banks.ts`, filtrados por `chargeablePseBanks()` en `rapyd-pse.ts`); contra producción y contra el simulador, la lista completa. La prueba de contrato recorre el catálogo y avisa si cambia (punto 102).
 - **Prioridad:** Media. La investigación del contrato cerró y la implementación está completa: `RapydAdapter.ts` existe e integra `rapyd-signature.ts` (firma por petición), `rapyd-checkout.ts` (tarjeta por checkout alojado) y `rapyd-pse.ts` (PSE). Contrato medido contra el sandbox real (puntos 48 y 50 del `architecture-log.md`; `sdk/test/sandbox/rapyd.sandbox.test.ts`).
 - **Modo simulación:** Redirige solicitudes al simulador en modo pruebas.
 
@@ -225,11 +230,12 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 - **Patrón Arquitectónico:** GoF Adapter.
 - **Responsabilidad:** Implementa el `PaymentGatewayPort` y traduce su contrato hacia las convenciones de Mercado Pago.
 - **Detalles de implementación:**
-  - Autenticación: header `Authorization: Bearer {access_token}`.
-  - Cobro con tarjeta: `token` e `installments` en la raíz del cuerpo. **Las cuotas son obligatorias incluso cuando son una**: sin el campo responde `400 "Invalid installments"`, y es la única de las cuatro que las exige siempre. No hace falta mandar `payment_method_id`: lo deduce del token, y sin token responde `400 "payment_method_id attribute can't be null"`.
-  - Mapeo de estado: campo `status` y `status_detail`. Valores clave: `accredited` (aprobado), `cc_rejected_insufficient_amount` (fondos insuficientes), `cc_rejected_bad_filled_card_number` (número de tarjeta incorrecto).
+  - Autenticación: header `Authorization: Bearer {access_token}`, y una `X-Idempotency-Key` aleatoria en cada `POST`, que Mercado Pago exige (punto 48).
+  - **Tarjeta y PSE por la Orders API** (`POST /v1/orders`), desde la 0.6.0: con el par `APP_USR-` del vendedor de prueba, la Payments API responde `401 "Unauthorized use of live credentials"`, y así un solo par cobra los dos métodos (punto 96). La orden de tarjeta pide la marca y el tipo (`payment_method.id` y `type`), que el adaptador deduce del token con `GET /v1/card_tokens/{token}` y `GET /v1/payment_methods/search` (`mercadopago-card.ts`); `installments` es opcional, y débito solo admite 1. La orden de PSE (`mercadopago-pse.ts`) trae la URL del banco en `transactions.payments[0].payment_method.redirect_url`; si llega en `processing` sin URL, el pago queda `PENDING` (punto 100).
+  - Hasta la 0.5.0 la tarjeta iba por la Payments API (`POST /v1/payments`), que exigía las cuotas incluso cuando eran una (`400 "Invalid installments"`). Los pagos creados así se siguen consultando en `/v1/payments/{id}`; las órdenes, en `/v1/orders/{id}`, y el adaptador los distingue por el prefijo `ORD` del id.
+  - Mapeo de estado: el `status` de la orden y el `status_detail` de su pago. Aprobado: `201` con `processed / accredited`. Rechazado: `402` con la orden en `failed` dentro de `data` y el motivo en el pago (`rejected_by_issuer`, `processing_error`…), que el SDK devuelve como pago `DECLINED`, no como error.
   - Verificación de firma: HMAC-SHA256 sobre headers y body.
-- **Prioridad:** Media. Cobro con tarjeta medido contra el sandbox real (punto 50 del `architecture-log.md`; `sdk/test/sandbox/mercadopago.sandbox.test.ts`). PSE no es testeable en sandbox: la Orders API responde `401` con credenciales de prueba y exige token de producción (punto 45).
+- **Prioridad:** Media. Tarjeta y PSE medidos contra el sandbox real con el par `APP_USR-` de «Pruebas > Credenciales de prueba» de una aplicación de Checkout API vía Orders, cuya cuenta es un vendedor de prueba (puntos 95, 96 y 100; `sdk/test/sandbox/mercadopago.sandbox.test.ts`). Hasta el 14 de octubre de 2026 el PSE no se pudo probar: con un par `TEST-` la Orders API responde `401` (punto 45). El PSE del sandbox deja de entregar la URL del banco sin causa conocida (punto 100).
 - **Modo simulación:** Redirige solicitudes al simulador en modo pruebas.
 
 ---
@@ -324,7 +330,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
   Las funciones puras (`sanitize`, `formatGatewayName`, `mapHttpStatus`) viven a nivel de módulo, y los predicados `hasConnectionSignal` y `hasTimeoutSignal` quedaron compartidos con `classifyError`, que duplicaba esas mismas cadenas de condiciones. Antes del punto 34, `handle()` concentraba todo en complejidad ciclomática 35.
 - **Simetría entre `classifyError` y `handle()` (Resuelto):** Los errores de red (mensajes conteniendo `"network"` o códigos como `ENETUNREACH`, `ECONNREFUSED`, etc.) son reconocidos por el predicado común `hasConnectionSignal()`, traduciéndose en `KitPagosErrorCode.CONNECTION_FAILED` y clasificándose consistentemente como reintentables (`RETRIABLE`).
 - **Estructura de KitPagosError:** extiende la clase `Error` nativa de JavaScript y añade tres atributos (renombrado de `SdkError` según `architecture-log.md`, punto 23):
-  - `code`: código normalizado del enum `KitPagosErrorCode` (valores: `INVALID_CREDENTIALS`, `GATEWAY_TIMEOUT`, `CONNECTION_FAILED`, `RATE_LIMIT_EXCEEDED`, `INVALID_REQUEST`, `RESOURCE_NOT_FOUND`, `GATEWAY_SERVER_ERROR`, `MALFORMED_RESPONSE`, `WEBHOOK_SIGNATURE_INVALID`, `UNSUPPORTED_OPERATION`, `MAX_RETRIES_EXCEEDED`, `UNKNOWN_ERROR`).
+  - `code`: código normalizado del enum `KitPagosErrorCode` (valores: `INVALID_CREDENTIALS`, `GATEWAY_TIMEOUT`, `CONNECTION_FAILED`, `RATE_LIMIT_EXCEEDED`, `INVALID_REQUEST`, `RESOURCE_NOT_FOUND`, `RESOURCE_LOCKED`, `GATEWAY_SERVER_ERROR`, `MALFORMED_RESPONSE`, `WEBHOOK_SIGNATURE_INVALID`, `UNSUPPORTED_OPERATION`, `MAX_RETRIES_EXCEEDED`, `UNKNOWN_ERROR`).
   - `gateway`: la pasarela (`Gateway`) que originó el error.
   - `originalPayload`: tipado como `unknown` para forzar una verificación explícita antes de su uso, en lugar de `any`.
 - **Garantía:** El desarrollador nunca recibe excepciones no manejadas ni errores en formato nativo de ninguna pasarela.
@@ -340,7 +346,7 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 ### 3.1. HTTP Routers por pasarela (`simulator-api/src/routes/*.ts`)
 
 - **Responsabilidad:** Son la puerta de entrada del simulador, un plugin Fastify por pasarela registrado desde `app.ts`: `wompi.ts`, `rapyd.ts`, `mercadopago.ts`, `kushki.ts`, `webhooks.ts` y `health.ts`.
-- **Enrutamiento:** Cada router replica la forma de las rutas nativas de su pasarela bajo `/v1/sim/<pasarela>/*` — 26 endpoints en total (5 de Wompi, 7 de Rapyd, 6 de Mercado Pago, 6 de Kushki, el trigger de webhooks y `health`), enumerados en [3-api-de-simulacion.md](3-api-de-simulacion.md). **No existe `/v1/sim/payu/*`**: PayU no es pasarela del proyecto (ver sección 2.6 y `architecture-log.md`, punto 15).
+- **Enrutamiento:** Cada router replica la forma de las rutas nativas de su pasarela bajo `/v1/sim/<pasarela>/*` — 34 endpoints en total (7 de Wompi, 9 de Rapyd, 9 de Mercado Pago, 7 de Kushki, el trigger de webhooks y `health`), enumerados en [3-api-de-simulacion.md](3-api-de-simulacion.md). **No existe `/v1/sim/payu/*`**: PayU no es pasarela del proyecto (ver sección 2.6 y `architecture-log.md`, punto 15).
 - **Cómo se elige el escenario** (issue #122, punto 83 del `architecture-log.md`):
   - `x-simulator-scenario` y `x-simulate-scenario`: escenario a ejecutar. Son equivalentes y ambas se aceptan; por defecto el escenario es `APPROVED`. Las sigue usando quien llama a `/v1/sim` directamente; el SDK no las envía.
   - Sin cabecera, deciden en este orden una marca en la credencial (`invalid`, `inexistente`, `not_found`), el dato de prueba de la pasarela (la tarjeta `4111` de Wompi, el titular de Mercado Pago, el documento de PSE de Kushki, el banco de Wompi) y un monto reservado (10 100 a 10 604 COP). Las tablas completas están en la sección 4 de [3-api-de-simulacion.md](3-api-de-simulacion.md).
@@ -356,7 +362,7 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 
 - **Responsabilidad:** Es el componente de decisión del simulador, tipado contra el cuerpo y la respuesta de Wompi.
 - **Lógica de ejecución por escenario:**
-  - `APPROVED` (valor por defecto) y `PENDING`: delega la construcción del payload al `GatewayMockFactory` de Wompi y devuelve `201` con `data.status: "PENDING"`, como el sandbox real (punto 50); la consulta lo resuelve según el destino registrado.
+  - `APPROVED` (valor por defecto) y `PENDING`: delega la construcción del payload a `WompiTransactionMockFactory` y devuelve `201` con `data.status: "PENDING"`, como el sandbox real (punto 50); la consulta lo resuelve según el destino registrado.
   - `DECLINED` construye el rechazo nativo con tarjeta; con PSE, la transacción nace `PENDING` como en el camino feliz y la primera consulta la cierra (sección 4.1 de [3-api-de-simulacion.md](3-api-de-simulacion.md)). `EXPIRED` construye un `VOIDED`. Las fallas técnicas no llegan al motor: las resuelve antes `technicalFailure()`, compartida por las cuatro pasarelas.
   - Cualquier otro valor: lanza `UnsupportedScenarioError`, que el router traduce a HTTP `501`. Es una decisión deliberada: producir un `APPROVED` falso para un escenario no implementado invalidaría silenciosamente las pruebas de manejo de rechazos del SDK (RF-10, issue #65). Los routers de Rapyd, Mercado Pago y Kushki no pasan por este motor: resuelven el escenario en su propia ruta, porque el motor hoy está acoplado al tipo de Wompi (ver comentario en `routes/rapyd.ts`).
 - **Responsabilidad y límite:** Detectar el escenario pedido es del router; decidir qué payload construir, de la fábrica. El motor intermedia para Wompi. Los dos extremos lo documentan en el código (`scenarios/ScenarioEngine.ts` y `gateways/<pasarela>/GatewayMockFactory.ts`).
@@ -367,11 +373,11 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura 
 ### 3.3. Gateway Mock Factory (`simulator-api/src/gateways/<pasarela>/GatewayMockFactory.ts`)
 
 - **Responsabilidad:** Orquesta la construcción de payloads JSON que replican con exactitud la estructura de las respuestas nativas de cada pasarela.
-- **Fábricas internas (todas implementadas, una carpeta por pasarela):**
-  - `gateways/wompi/GatewayMockFactory.ts`: genera `data.status: "APPROVED"` o el cuerpo del PSE, con estructura completa de Wompi.
-  - `gateways/rapyd/GatewayMockFactory.ts`: genera el objeto `data` de Rapyd (`id`, `status`, `failure_code` cuando aplique) y la página de pago alojada del checkout. Reemplazó al antiguo `PayUMockFactory` (que generaba `transactionResponse.state` con estructura de PayU) — ver `architecture-log.md`, puntos 16 y 18.
-  - `gateways/mercadopago/GatewayMockFactory.ts`: genera `status` y `status_detail` en minúsculas. Para fondos insuficientes: `status_detail: "cc_rejected_insufficient_amount"`.
-  - `gateways/kushki/GatewayMockFactory.ts`: genera `transaction_status: "APPROVAL"` o `"DECLINED"` respetando el vocabulario propio de Kushki.
+- **Una clase por recurso de la API de cada pasarela** (issue #153, punto 107 del `architecture-log.md`). Cada `GatewayMockFactory.ts` es el módulo de la fábrica de su pasarela. Hasta el #153 tenía una sola clase `GatewayMockFactory`, con el mismo nombre en las cuatro. Ahora agrupa clases con nombre único, más una con los tres cuerpos de error nativos que `technicalFailure()` usa en todas las rutas (`…ErrorMockFactory`):
+  - `gateways/wompi/GatewayMockFactory.ts`: `WompiTransactionMockFactory` construye la transacción (tarjeta `PENDING`, rechazo, `VOIDED` y PSE sin URL) y la usa `ScenarioEngine`. `WompiTokenMockFactory` construye el token de aceptación y el de tarjeta.
+  - `gateways/rapyd/GatewayMockFactory.ts`: `RapydPaymentMockFactory` construye los pagos de `/v1/payments`, con tarjeta y PSE. `RapydCheckoutMockFactory` construye la página de pago alojada y el pago que nace en ella. `RapydPseSetupMockFactory` construye el cliente y el catálogo de métodos que preparan un PSE. Rapyd reemplazó al antiguo `PayUMockFactory` (que generaba `transactionResponse.state` con estructura de PayU); ver `architecture-log.md`, puntos 16 y 18.
+  - `gateways/mercadopago/GatewayMockFactory.ts`: `MercadoPagoPaymentMockFactory` construye los pagos de `/v1/payments`, con `status` y `status_detail` en minúsculas. `MercadoPagoOrderMockFactory` construye las órdenes de PSE y de tarjeta de `/v1/orders`. `MercadoPagoCardMockFactory` construye el token de tarjeta y el medio de pago de un BIN.
+  - `gateways/kushki/GatewayMockFactory.ts`: `KushkiChargeMockFactory` construye el cobro con tarjeta (`APPROVAL`, `DECLINED`, `INITIALIZED`) y el token de tarjeta del navegador. `KushkiTransferMockFactory` construye la lista de bancos, el token, el `init` y el registro de la transferencia de PSE.
 - **Criticidad:** La precisión de este componente es crítica para la validación del framework. Si el formato del Mock no coincide con el de la pasarela real, el `Response Normalizer` del SDK fallará en los escenarios de prueba (medido en los puntos 48 y 50 del `architecture-log.md`).
 
 ---

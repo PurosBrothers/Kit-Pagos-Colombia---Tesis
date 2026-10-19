@@ -102,6 +102,89 @@ function getHeaderValue(headers: RequestHeaders, headerName: string): string | u
   return undefined;
 }
 
+/** Una credencial opcional del perfil: el campo de `Credentials` y las variables de donde sale. */
+interface OptionalCredential {
+  readonly field: "integritySecret" | "webhookSecret" | "webhookUrl";
+  /** En orden: gana la primera con valor, así que una línea vacía no tapa a la siguiente. */
+  readonly vars: readonly string[];
+}
+
+/** De qué variables de entorno salen las credenciales del servidor para una pasarela. */
+interface ServerProfile {
+  readonly publicKey: string;
+  readonly privateKey: string;
+  readonly optional: readonly OptionalCredential[];
+  /** Rapyd firma sus webhooks con la misma `secret_key` de la API (punto 54). */
+  readonly privateKeyIsWebhookSecret?: boolean;
+}
+
+/**
+ * Las cuatro pasarelas leen la misma forma —dos claves obligatorias y algunas opcionales—, y
+ * escribirla como tabla es lo que baja el WMC: un `switch` con un `case` por pasarela repetía la
+ * lógica cuatro veces (punto 34, issue #153).
+ */
+const SERVER_PROFILES: Readonly<Record<Gateway, ServerProfile>> = {
+  [Gateway.WOMPI]: {
+    publicKey: "WOMPI_PUBLIC_KEY",
+    privateKey: "WOMPI_PRIVATE_KEY",
+    optional: [
+      { field: "integritySecret", vars: ["WOMPI_INTEGRITY_SECRET"] },
+      { field: "webhookSecret", vars: ["WOMPI_EVENTS_SECRET"] },
+    ],
+  },
+  [Gateway.MERCADOPAGO]: {
+    publicKey: "MERCADOPAGO_PUBLIC_KEY",
+    privateKey: "MERCADOPAGO_ACCESS_TOKEN",
+    optional: [{ field: "webhookSecret", vars: ["MERCADOPAGO_WEBHOOK_SECRET"] }],
+  },
+  [Gateway.KUSHKI]: {
+    publicKey: "KUSHKI_PUBLIC_MERCHANT_ID",
+    privateKey: "KUSHKI_PRIVATE_MERCHANT_ID",
+    // Una línea `KUSHKI_WEBHOOK_SECRET=` vacía, como la de `.env.example`, no tapa el alias.
+    optional: [{ field: "webhookSecret", vars: ["KUSHKI_WEBHOOK_SECRET", "KUSHKI_WEBHOOK_SIGNATURE_ID"] }],
+  },
+  [Gateway.RAPYD]: {
+    publicKey: "RAPYD_API_ACCESS_KEY",
+    privateKey: "RAPYD_API_SECRET_KEY",
+    privateKeyIsWebhookSecret: true,
+    // Rapyd firma además la URL registrada en su panel, que solo puede salir de la configuración (punto 67).
+    optional: [{ field: "webhookUrl", vars: ["RAPYD_WEBHOOK_URL"] }],
+  },
+};
+
+function firstValue(env: Record<string, string | undefined>, vars: readonly string[]): string | undefined {
+  for (const name of vars) {
+    const value = env[name]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function credentialsFromProfile(
+  env: Record<string, string | undefined>,
+  profile: ServerProfile,
+): Credentials | undefined {
+  const publicKey = env[profile.publicKey]?.trim();
+  const privateKey = env[profile.privateKey]?.trim();
+  if (!publicKey || !privateKey) {
+    return undefined;
+  }
+
+  const credentials: Credentials = { publicKey, privateKey };
+  if (profile.privateKeyIsWebhookSecret) {
+    credentials.webhookSecret = privateKey;
+  }
+  for (const { field, vars } of profile.optional) {
+    const value = firstValue(env, vars);
+    if (value) {
+      credentials[field] = value;
+    }
+  }
+  return credentials;
+}
+
 /**
  * Resuelve las credenciales de pasarela bajo un modelo híbrido:
  * 1. Cabeceras del cliente (x-gateway-public-key, x-gateway-private-key, x-gateway-integrity-secret).
@@ -192,64 +275,7 @@ export class CredentialResolver {
   }
 
   private resolveFromServerProfile(gateway: Gateway): Credentials | undefined {
-    switch (gateway) {
-      case Gateway.WOMPI: {
-        const publicKey = this.env.WOMPI_PUBLIC_KEY?.trim();
-        const privateKey = this.env.WOMPI_PRIVATE_KEY?.trim();
-        if (!publicKey || !privateKey) return undefined;
-
-        const creds: Credentials = { publicKey, privateKey };
-        const integrity = this.env.WOMPI_INTEGRITY_SECRET?.trim();
-        if (integrity) creds.integritySecret = integrity;
-
-        const events = this.env.WOMPI_EVENTS_SECRET?.trim();
-        if (events) creds.webhookSecret = events;
-
-        return creds;
-      }
-
-      case Gateway.MERCADOPAGO: {
-        const publicKey = this.env.MERCADOPAGO_PUBLIC_KEY?.trim();
-        const privateKey = this.env.MERCADOPAGO_ACCESS_TOKEN?.trim();
-        if (!publicKey || !privateKey) return undefined;
-
-        const creds: Credentials = { publicKey, privateKey };
-        const webhookSecret = this.env.MERCADOPAGO_WEBHOOK_SECRET?.trim();
-        if (webhookSecret) creds.webhookSecret = webhookSecret;
-
-        return creds;
-      }
-
-      case Gateway.KUSHKI: {
-        const publicKey = this.env.KUSHKI_PUBLIC_MERCHANT_ID?.trim();
-        const privateKey = this.env.KUSHKI_PRIVATE_MERCHANT_ID?.trim();
-        if (!publicKey || !privateKey) return undefined;
-
-        const creds: Credentials = { publicKey, privateKey };
-        const webhookSecret = (
-          this.env.KUSHKI_WEBHOOK_SECRET ?? this.env.KUSHKI_WEBHOOK_SIGNATURE_ID
-        )?.trim();
-        if (webhookSecret) creds.webhookSecret = webhookSecret;
-
-        return creds;
-      }
-
-      case Gateway.RAPYD: {
-        const publicKey = this.env.RAPYD_API_ACCESS_KEY?.trim();
-        const privateKey = this.env.RAPYD_API_SECRET_KEY?.trim();
-        if (!publicKey || !privateKey) return undefined;
-
-        // Rapyd reutiliza su secret_key para webhooks, y firma además la URL registrada
-        // en su panel, que solo puede salir de la configuración (punto 67).
-        const creds: Credentials = { publicKey, privateKey, webhookSecret: privateKey };
-        const webhookUrl = this.env.RAPYD_WEBHOOK_URL?.trim();
-        if (webhookUrl) creds.webhookUrl = webhookUrl;
-
-        return creds;
-      }
-
-      default:
-        return undefined;
-    }
+    const profile = SERVER_PROFILES[gateway];
+    return profile ? credentialsFromProfile(this.env, profile) : undefined;
   }
 }

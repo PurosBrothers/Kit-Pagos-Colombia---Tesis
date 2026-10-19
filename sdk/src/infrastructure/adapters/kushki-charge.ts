@@ -57,6 +57,9 @@ const INVALID_MERCHANT_CREDENTIAL_CODE = "K004";
  * 6 de octubre de 2026, docs/testing-data/kushki.md §1.2. Por status, `ErrorHandler` lo
  * deja en INVALID_REQUEST y el comercio buscaría el defecto en su payload; aquí se decide
  * por el código del cuerpo, que es lo único que distingue los dos casos.
+ *
+ * Desde el issue #153 el mensaje de `ErrorHandler` ya trae `K004` y su motivo, y entonces no
+ * se repite.
  */
 export function reclassifyKushkiCredentialError(error: KitPagosError): KitPagosError {
   const payload = error.originalPayload as { code?: unknown } | null;
@@ -66,11 +69,14 @@ export function reclassifyKushkiCredentialError(error: KitPagosError): KitPagosE
   ) {
     return error;
   }
+  const message = error.message.includes(INVALID_MERCHANT_CREDENTIAL_CODE)
+    ? error.message
+    : `${error.message} (${INVALID_MERCHANT_CREDENTIAL_CODE}: invalid merchant credential)`;
   return new KitPagosError(
     KitPagosErrorCode.INVALID_CREDENTIALS,
     error.gateway,
     error.originalPayload,
-    `${error.message} (${INVALID_MERCHANT_CREDENTIAL_CODE}: invalid merchant credential)`,
+    message,
   );
 }
 

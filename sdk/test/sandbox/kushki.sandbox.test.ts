@@ -10,6 +10,7 @@ import { KitPagosErrorCode } from "../../src/domain/value-objects/KitPagosErrorC
 import { expectTransaction } from "../../src/test-support/payment-result";
 import { describeSandbox, uniqueReference } from "./sandbox-env";
 import { tokenizeKushkiCard } from "./tokenize";
+import { KitPagosBrowser } from "../../src-browser/KitPagosBrowser";
 
 /** Contrato de Kushki, medido contra `api-uat.kushkipagos.com`. */
 describeSandbox(Gateway.KUSHKI, (credentials, baseUrl) => {
@@ -66,6 +67,65 @@ describeSandbox(Gateway.KUSHKI, (credentials, baseUrl) => {
     expect(["APPROVED", "PENDING", "DECLINED"]).toContain(
       result.transaction.getStatus(),
     );
+  });
+
+  /**
+   * La tarjeta del navegador: `KitPagosBrowser` tokeniza contra `/card/v1/tokens` con el
+   * merchant id público y `KitPagos` cobra ese token. Medido el 17 de octubre de 2026, el
+   * mismo camino que la página de un comercio (punto 106 del `architecture-log.md`).
+   */
+  it("allows tokenizing with KitPagosBrowser and charging with KitPagos", async () => {
+    const tokenResult = await KitPagosBrowser.tokenizeCard({
+      gateway: Gateway.KUSHKI,
+      publicKey: credentials.publicKey!,
+      environment: "sandbox",
+      amount: "20000.00",
+      card: { number: "4242424242424242", cvc: "123", expMonth: "11", expYear: "30", cardHolder: "Jaime Pavlich" },
+    });
+
+    expect(tokenResult.gateway).toBe(Gateway.KUSHKI);
+    expect(tokenResult.token).toMatch(/^[0-9a-f]{32}$/);
+
+    const result = await kitPagos.createPayment({
+      amount: new Amount("20000.00"),
+      currency: new Currency("COP"),
+      orderReference: new OrderReference(uniqueReference("SBX-KUSHKI-BROWSER-CARD")),
+      payer: new Payer({ email: "jaime.pavlich@example.com" }),
+      paymentMethod: PaymentMethod.card(tokenResult.token),
+    });
+
+    expect(expectTransaction(result).getStatus()).toBe("APPROVED");
+  });
+
+  /**
+   * El token queda atado al monto: tokenizar por un valor y cobrar otro no se acepta.
+   *
+   * Desde el issue #153 el mensaje trae el código y el motivo de Kushki: antes decía solo
+   * «Kushki gateway returned an HTTP error status 400».
+   */
+  it("rejects charging a browser token for another amount", async () => {
+    const { token } = await KitPagosBrowser.tokenizeCard({
+      gateway: Gateway.KUSHKI,
+      publicKey: credentials.publicKey!,
+      environment: "sandbox",
+      amount: "20000.00",
+      card: { number: "4242424242424242", cvc: "123", expMonth: "11", expYear: "30", cardHolder: "Jaime Pavlich" },
+    });
+
+    await expect(
+      kitPagos.createPayment({
+        amount: new Amount("21000.00"),
+        currency: new Currency("COP"),
+        orderReference: new OrderReference(uniqueReference("SBX-KUSHKI-BROWSER-AMOUNT")),
+        payer: new Payer({ email: "jaime.pavlich@example.com" }),
+        paymentMethod: PaymentMethod.card(token),
+      }),
+    ).rejects.toMatchObject({
+      code: KitPagosErrorCode.INVALID_REQUEST,
+      message: expect.stringContaining(
+        "(K220: Monto de la transacción es diferente al monto de la venta inicial)",
+      ),
+    });
   });
 
   /**

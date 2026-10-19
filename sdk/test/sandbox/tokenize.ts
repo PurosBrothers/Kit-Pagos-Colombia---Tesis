@@ -81,10 +81,12 @@ export async function tokenizeWompiCard(
  * Mercado Pago: `POST /v1/card_tokens`, con la llave pública **en la query**.
  *
  * El nombre del titular no es decorativo: `APRO` fuerza la aprobación y otros valores fuerzan
- * cada rechazo, así que es el campo con el que se elige el desenlace.
+ * cada rechazo, así que es el campo con el que se elige el desenlace. Basta con que empiece
+ * así: `APRO Ruiz` también aprobó en la Orders API (medido el 15 de octubre de 2026).
  */
 export async function tokenizeMercadoPagoCard(
   credentials: Credentials,
+  holder = "APRO",
 ): Promise<CardToken> {
   const { status, json } = await postJson(
     `${SANDBOX_BASE_URL[Gateway.MERCADOPAGO]}/card_tokens?public_key=${credentials.publicKey}`,
@@ -95,7 +97,7 @@ export async function tokenizeMercadoPagoCard(
       expiration_year: 2030,
       security_code: "123",
       cardholder: {
-        name: "APRO",
+        name: holder,
         identification: { type: "CC", number: "19119119100" },
       },
     },
@@ -114,11 +116,10 @@ export async function tokenizeMercadoPagoCard(
  * así que no sirve para cobrar otra cosa.
  *
  * **La tarjeta no es la que la documentación de Kushki lista como aprobada.** Esa,
- * `5451 9515 7492 5480`, no tokeniza en esta cuenta UAT: responde
- * `400 K006 "DFR029 - Bin de tarjeta inválido"`, o sea que el BIN no está habilitado para el
- * comercio. Las tarjetas de rechazo de la misma tabla sí tokenizan, así que la tabla no está
- * mal entera, solo esa fila para esta cuenta. Se usa una Visa de prueba genérica, que
- * tokeniza y aprueba.
+ * `5451 9515 7492 5480`, no tokenizaba en esta cuenta UAT: respondía
+ * `400 K006 "DFR029 - Bin de tarjeta inválido"`, o sea que el BIN no estaba habilitado para el
+ * comercio. El 17 de octubre de 2026 tokenizó (`201`), así que la cuenta cambió sin aviso. Se
+ * sigue usando una Visa de prueba genérica, que tokeniza y aprueba en las dos mediciones.
  */
 export async function tokenizeKushkiCard(
   credentials: Credentials,

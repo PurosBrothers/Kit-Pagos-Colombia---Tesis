@@ -5,11 +5,17 @@ import { Currency } from "../../src/domain/value-objects/Currency";
 import { OrderReference } from "../../src/domain/value-objects/OrderReference";
 import { Payer } from "../../src/domain/value-objects/Payer";
 import { PaymentMethod } from "../../src/domain/value-objects/PaymentMethod";
+import { ReturnUrlConfig } from "../../src/domain/value-objects/ReturnUrlConfig";
+import { KitPagosError } from "../../src/domain/errors/KitPagosError";
 import {
   buildRapydHeaders,
   serializeBody,
 } from "../../src/infrastructure/adapters/rapyd-signature";
-import { RAPYD_PSE_TYPES } from "../../src/infrastructure/adapters/rapyd-pse-banks";
+import {
+  RAPYD_PSE_TYPE_PREFIX,
+  RAPYD_PSE_TYPES,
+  RAPYD_SANDBOX_PSE_TYPES,
+} from "../../src/infrastructure/adapters/rapyd-pse-banks";
 import { describeSandbox, uniqueReference } from "./sandbox-env";
 
 /** Contrato de Rapyd, medido contra `sandboxapi.rapyd.net`. */
@@ -36,19 +42,64 @@ describeSandbox(Gateway.RAPYD, (credentials, baseUrl) => {
     }
   });
 
-  /**
-   * La tabla de traducción tiene que seguir cubriendo lo que Rapyd publica, en los dos
-   * sentidos. Si Rapyd suma un banco, sale aquí sin `achCode`; si renombra o retira uno,
-   * un código de `PseBankCode` quedaría traducido a un método que ya no existe (punto 68).
-   */
-  it("should list exactly the PSE methods of the translation table", async () => {
-    const banks = await kitPagos.getPseBanks();
+  /** El catálogo crudo: en el sandbox, `getPseBanks()` ya viene filtrada. */
+  async function pseCatalog(): Promise<string[]> {
+    const url = `${baseUrl}/payment_methods/country?country=CO`;
+    const response = await fetch(url, { headers: buildRapydHeaders("get", url, "", credentials) });
+    const body = (await response.json()) as { data?: { type?: string }[] };
+    return (body.data ?? [])
+      .map((method) => method.type ?? "")
+      .filter((type) => type.startsWith(RAPYD_PSE_TYPE_PREFIX));
+  }
 
-    expect(banks.map((bank) => bank.code).sort()).toEqual(
-      [...Object.values(RAPYD_PSE_TYPES)].sort(),
-    );
-    expect(banks.every((bank) => bank.achCode !== undefined)).toBe(true);
+  /**
+   * Si Rapyd renombra o retira un banco, un código de `PseBankCode` queda traducido a un
+   * método que ya no existe y su cobro falla. Pasó con Davibank (puntos 68 y 102).
+   */
+  it("should keep every bank of the translation table in Rapyd's catalog", async () => {
+    const catalog = new Set(await pseCatalog());
+
+    expect(Object.values(RAPYD_PSE_TYPES).filter((type) => !catalog.has(type))).toEqual([]);
   });
+
+  /**
+   * La lista del sandbox tiene que ser exactamente lo que el sandbox cobra, en los dos
+   * sentidos: si Rapyd habilita un banco, la lista lo estaría escondiendo, y si deshabilita
+   * uno, lo estaría ofreciendo. Cobra una vez con cada banco del catálogo, unos 25 s.
+   */
+  it("should list exactly the PSE banks the sandbox can charge", async () => {
+    const chargeable: string[] = [];
+    for (const type of await pseCatalog()) {
+      try {
+        const result = await kitPagos.createPayment({
+          amount: new Amount("50000"),
+          currency: new Currency("COP"),
+          orderReference: new OrderReference(uniqueReference("SBX-RAPYD-PSE")),
+          payer: new Payer({
+            email: "jaime.pavlich@example.com",
+            fullName: "Jaime Pavlich",
+            phone: "3001234567",
+            documentType: "CC",
+            documentNumber: "1098765432",
+          }),
+          paymentMethod: PaymentMethod.pse({ bankCode: type }),
+          returnUrlConfig: new ReturnUrlConfig("https://example.com/retorno"),
+        });
+        if (result.outcome === "REDIRECT_REQUIRED") {
+          chargeable.push(type);
+        }
+      } catch (error) {
+        const status = (error as KitPagosError).originalPayload as { status?: { error_code?: string } } | null;
+        if (status?.status?.error_code !== "ERROR_GET_GATEWAY") {
+          throw error;
+        }
+      }
+    }
+    const listed = (await kitPagos.getPseBanks()).map((bank) => bank.code);
+
+    expect(chargeable.sort()).toEqual([...RAPYD_SANDBOX_PSE_TYPES].sort());
+    expect(listed.sort()).toEqual([...RAPYD_SANDBOX_PSE_TYPES].sort());
+  }, 120_000);
 
   /**
    * La tarjeta de Rapyd devuelve una redirección, no una transacción.

@@ -16,6 +16,9 @@ import { KitPagosErrorCode } from "../../domain/value-objects/KitPagosErrorCode"
  */
 describe("KitPagos against a real HTTP server that fails", () => {
   const TIMEOUT_MS = 300;
+  // Las pruebas que no miden el plazo lo dejan holgado: la primera petición de la suite abre
+  // la conexión y, con los demás archivos corriendo en paralelo, puede pasar de 300 ms.
+  const UNHURRIED_TIMEOUT_MS = 10_000;
   const HTML_BODY = "<html><body><h1>502 Bad Gateway</h1></body></html>";
   const credentials = { publicKey: "pub_test_http", privateKey: "prv_test_http" };
   const gateways = [Gateway.WOMPI, Gateway.MERCADOPAGO, Gateway.RAPYD, Gateway.KUSHKI];
@@ -53,12 +56,12 @@ describe("KitPagos against a real HTTP server that fails", () => {
     await new Promise((resolve) => server.close(resolve));
   });
 
-  function sdkFor(gateway: Gateway, baseUrl: string): KitPagos {
+  function sdkFor(gateway: Gateway, baseUrl: string, timeoutMs = UNHURRIED_TIMEOUT_MS): KitPagos {
     return new KitPagos({
       gateway,
       credentials: { [gateway]: credentials },
       baseUrl,
-      timeoutMs: TIMEOUT_MS,
+      timeoutMs,
       maxRetries: 0,
     });
   }
@@ -84,7 +87,7 @@ describe("KitPagos against a real HTTP server that fails", () => {
     "%s: an error body that stalls past timeoutMs ends in GATEWAY_TIMEOUT",
     async (gateway) => {
       const started = Date.now();
-      const error = await failureOf(sdkFor(gateway, `${origin}/stall502`));
+      const error = await failureOf(sdkFor(gateway, `${origin}/stall502`, TIMEOUT_MS));
       const elapsed = Date.now() - started;
 
       expect(error.code).toBe(KitPagosErrorCode.GATEWAY_TIMEOUT);
