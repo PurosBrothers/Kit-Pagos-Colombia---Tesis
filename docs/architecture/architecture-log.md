@@ -3705,6 +3705,8 @@ El servidor, el contrato, los webhooks, la configuración y las dependencias se 
 
 **Estado:** Resuelto en el PR #161 para A. La vitrina de B queda pendiente de que Andrés decida si la adopta; mientras tanto, la excepción sigue en el script de paridad.
 
+**Revisado el 19 de octubre de 2026 (punto 116).** B también tiene vitrina, «La Bodega de Chapinero», con la misma estructura que la de A. La exclusión se queda, porque el contenido difiere, y ahora cubre las dos vitrinas.
+
 ### 111. Los prototipos A y B cobran por omisión en el sandbox oficial, como el C (issues #150 y #151, PR #161)
 
 **Responsable:** Orduz. Las líneas nuevas del módulo de pagos de A también son de Orduz, en un commit aparte, para que David las revise.
@@ -3742,6 +3744,8 @@ El servidor, el contrato, los webhooks, la configuración y las dependencias se 
 - **Pruebas:** 115 en A y 52 en B, con la paridad en verde.
 
 **Estado:** Resuelto para A en el PR #161. B tiene el mecanismo; su módulo lo adopta en el #151.
+
+**Revisado el 19 de octubre de 2026 (punto 116).** El módulo de Andrés fijaba el simulador. Ahora lee `paymentsEnvironment()`, y B cobra en el sandbox con `npm start`, como A y C.
 
 ### 112. La traza de los prototipos: lo que pasa por debajo de la tienda, sin llaves ni cuerpos (PR #161)
 
@@ -3939,6 +3943,59 @@ Ponerla no cambia lo que mide el experimento, que es el código del módulo de p
 - **Las notas de tarjeta, PSE y Mercado Pago** se corrigen: 3DS, `PseBankCode` y las ventanas del PSE en el sandbox (punto 113).
 
 **Estado:** Corregido en el PR #161. En GitHub se ve al integrar. En npm, el README cambia con la próxima versión que se publique, y la página de la 0.6.0 sigue mostrando el anterior.
+
+### 116. El prototipo B se presenta como «La Bodega de Chapinero» y cobra en el sandbox, como A (issues #150 y #151)
+
+**Responsable:** Orduz.
+
+**Contexto.** Andrés terminó el módulo de pagos de B en `feature/151-prototype-b-payments` (`718b17d`), sobre el `devops` actual, y solo tocó `src/payments/` y `test/payments/`. Joan pidió tres cosas:
+
+- unir la rama 150 a esa, para tener A y B en un solo PR;
+- darle a B una vitrina con la misma estructura de A y C, que fuera una tienda de vinos con el Casillero del Diablo;
+- que B cobre en el sandbox con `npm start`, como los otros dos.
+
+**Decisiones de Joan (19 de octubre de 2026).**
+
+- **La tienda:** «La Bodega de Chapinero», con tres tintos: Casillero del Diablo Cabernet Sauvignon (Chile), Trapiche Malbec (Argentina) y Marqués de Puntalarga Tinto (Boyacá). La descripción es normal, sin guiños.
+- **Las ramas:** la 150 se une a `feature/151-prototype-b-payments`, y el PR de A y B sale desde ahí. El #161 se cierra remitiendo al nuevo. Andrés ya no trabaja en esa rama.
+- **El módulo de Andrés:** lo cambia Orduz, declarado como el de David (punto 111), y Andrés lo revisa.
+
+**Lo que cambia.**
+
+- **La unión.** Es limpia: las dos ramas no se tocan.
+- **El módulo de B** (29 líneas agregadas y 9 quitadas en `src/payments/index.ts`):
+  - lee `paymentsEnvironment()`;
+  - con `sandbox`, le pide al SDK su catálogo, y se detiene al arrancar si faltan `WOMPI_PUBLIC_KEY`, `WOMPI_PRIVATE_KEY` o `WOMPI_INTEGRITY_SECRET`, con el mismo mensaje que A;
+  - con `simulator`, usa la URL del esqueleto con `/v1/sim/wompi`. Antes usaba siempre `localhost:3000`, que es lo que el SDK toma por omisión;
+  - `WOMPI_BASE_URL` gana sobre los dos, y cuenta como simulador, como lo tenía Andrés;
+  - `publicConfig()` le dice al navegador el mismo ambiente.
+
+  En sus pruebas, las que usaban el entorno vacío ahora dicen que van contra el simulador, y hay cuatro nuevas: el sandbox por omisión, las llaves que faltan, la URL de `start:local` y el ambiente del navegador.
+- **La vitrina de B** copia la de A: `src/views/`, `src/public/checkout.js`, `src/orders/`, `src/catalog.ts`, `src/routes/api.ts`, `src/routes/pages.ts` y sus tres archivos de prueba.
+  - **Lo que cambia:** el catálogo, la marca, los estilos (burdeos y serif), la traza del navegador, que firma `[tienda B]`, y la clave del carrito.
+  - **Lo propio de una tienda de licores:** la casilla obligatoria «Confirmo que soy mayor de edad» y, en el pie, «El exceso de alcohol es perjudicial para la salud (Ley 30 de 1986). Prohíbase el expendio de bebidas embriagantes a menores de edad (Ley 124 de 1994)».
+  - **«Este prototipo es»** explica que B es el grupo de tratamiento y que cobra con `kit-pagos-colombia`.
+- **La paridad** sigue excluyendo por nombre los mismos archivos, que ahora son las dos vitrinas. El script y sus mensajes lo dicen.
+
+**Lo medido** (19 de octubre de 2026; la evidencia está en `.cursor/evidencia/b-19-oct/`).
+
+- **Contra el sandbox de Wompi, con `npm start`:**
+  - **la 4242** nació `PENDING` y la consulta la aprobó (transacción `12066420-1792463876-13895`). En la consola, la tokenización fue directo a `sandbox.wompi.co/v1/tokens/cards`;
+  - **la 4111** nació `PENDING` y quedó `DECLINED` (`12066420-1792463981-32980`), y el carrito se conservó;
+  - **el PSE con el banco 1** salió `APPROVED` desde la creación (`12066420-1792463941-34447`);
+  - **sin la casilla de mayoría de edad,** el navegador no envió el pago.
+- **Contra el simulador de Render, con `--environment=simulator`:**
+  - el PSE con el banco 1 recibió la URL de la página de banco del simulador, y la consulta lo aprobó;
+  - **la tarjeta no tokenizó:** «Error de conexión al tokenizar tarjeta en Wompi». El SDK de navegador tokeniza en `simulator` siempre contra `localhost:3000`, por el catálogo cerrado del punto 77. En A no pasa, porque el módulo de David arma esa URL a mano. La tarjeta de B en el simulador se prueba con `npm run start:local`.
+- **Las pruebas:** B pasa 112, con 98,81 % de sentencias; A sigue en 122, y la paridad en verde.
+
+**Lo que queda abierto.**
+
+- **La revisión de Andrés** del cambio a su módulo.
+- **La aprobación del PR**, que por la DoD solo puede dar Joshua, porque el PR trae trabajo de David, de Andrés y de Joan.
+- **Lo que no tokeniza contra Render** es una diferencia real entre A y B en el ambiente del simulador. No toca las variables del experimento, que se cuentan sobre el código.
+
+**Estado:** Hecho en el PR de A y B.
 
 ---
 

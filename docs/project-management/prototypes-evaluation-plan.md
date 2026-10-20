@@ -36,7 +36,13 @@ Un mismo caso de uso, implementado dos veces. El caso de uso es un **checkout m�
 
 La forma práctica de garantizarlo: construir primero un esqueleto común, copiarlo a las dos carpetas, y a partir de ahí tocar **únicamente** el módulo de pagos en cada uno. Ese esqueleto compartido queda fuera del conteo de líneas.
 
-> **Excepción declarada (19 de octubre de 2026, punto 110 del `architecture-log.md`).** Por decisión de Joan, la vitrina del prototipo A es una tienda con catálogo y carrito, «La Candelaria Cómics», y el B conserva la página de un producto. Difieren las páginas, el catálogo y las órdenes; el servidor, el contrato `PaymentsPort`, los webhooks y las dependencias siguen idénticos, y la comprobación de paridad los sigue exigiendo. Las variables 1 y 2 se cuentan solo sobre el módulo de pagos, que la excepción no toca. Lo que sí cambia es que «misma interfaz» deja de cumplirse en lo que ve el comprador, y eso se declara como amenaza a la validez.
+> **Excepción declarada (19 de octubre de 2026, puntos 110 y 116 del `architecture-log.md`).** Por decisión de Joan, los prototipos A y B son tiendas con catálogo y carrito, «La Candelaria Cómics» (cómics) y «La Bodega de Chapinero» (vinos).
+>
+> - **Lo que es igual en los dos:** la vitrina de B copia la estructura de la de A, con los mismos archivos, rutas y flujo. El servidor, el contrato `PaymentsPort`, los webhooks y las dependencias siguen idénticos, y la comprobación de paridad los sigue exigiendo.
+> - **Lo que difiere:** el catálogo, la marca, los estilos, y en B la casilla de mayoría de edad y las leyendas de ley de una tienda de licores.
+> - **Cómo se mide:** las variables 1 y 2 se cuentan solo sobre el módulo de pagos, que la excepción no toca.
+>
+> «Misma interfaz» se cumple en el flujo y en la estructura, no en el contenido. Eso se declara como amenaza a la validez.
 
 ### Qué debe hacer cada prototipo, exactamente igual
 
@@ -109,7 +115,11 @@ Un informe comparativo que no discute sus propias debilidades es más fácil de 
 
 **El prototipo A puede estar mal hecho a propósito.** Sin querer, es fácil escribir la integración directa de forma más torpe de lo que la escribiría alguien experto. La defensa es seguir la documentación oficial de cada pasarela y sus ejemplos, y dejar el código de A revisado por alguien que no lo escribió, igual que exige el DoD.
 
-**Nada se probó contra pasarelas reales.** Los prototipos corren contra la API de Simulación. Eso es una limitación honesta del alcance y debe quedar escrita en el informe. Lo que sí puede afirmarse es que la forma de las respuestas se derivó de la documentación oficial y está registrada campo por campo en `ubiquitous-language.md`.
+**Las vitrinas no son idénticas** (puntos 110 y 116). A vende cómics y B vinos. Tienen la misma estructura, las mismas rutas y el mismo flujo, pero no el mismo contenido. Las variables 1 y 2 no las tocan, porque se cuentan sobre `src/payments/`. Una sesión con usuarios (variable 3, si se hace) tendría que tener en cuenta que el comprador no ve la misma tienda.
+
+**Los dos módulos de pagos tienen un cambio que no hizo su autor** (puntos 111 y 116). Ese cambio es leer el ambiente del esqueleto para cobrar en el sandbox: 23 líneas agregadas y 2 quitadas en el de David, y 29 y 9 en el de Andrés. Se declaran al medir, y cada autor las revisa.
+
+**Nada se probó contra producción.** Desde el punto 111, A y B cobran por omisión en el sandbox oficial de Wompi, y los dos se midieron ahí el 19 de octubre de 2026. Las pruebas automáticas y los escenarios de fallo corren contra la API de Simulación, cuyas respuestas se derivaron de la documentación oficial y están registradas campo por campo en `ubiquitous-language.md`. Que no se haya cobrado en producción es una limitación honesta del alcance, y debe quedar escrita en el informe.
 
 **Dos prototipos no son una muestra.** No hay significancia estadística ni pretensión de tenerla. Es un estudio de caso comparativo, que es lo que DSR admite para evaluar un artefacto, y así debe presentarse.
 

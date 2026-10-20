@@ -21,7 +21,10 @@ La forma práctica de garantizarlo: construir un **esqueleto común**, copiarlo 
 El esqueleto está en `prototypes/` desde el issue #130 (punto 90 del `architecture-log.md`, y [`prototypes/README.md`](../../prototypes/README.md)):
 
 - **El módulo de pagos de cada prototipo** es `src/payments/` y `test/payments/`. Incluye `src/payments/browser/client.js`, que tokeniza la tarjeta en el navegador.
-- **Lo demás es el esqueleto**, incluido el contrato `src/checkout/PaymentsPort.ts`. `prototypes/check-skeleton-parity.sh` comprueba en la CI que sea idéntico en los dos, salvo la vitrina de A, «La Candelaria Cómics» (páginas, catálogo, órdenes y sus pruebas), que es una excepción declarada desde el 19 de octubre de 2026 (punto 110 del `architecture-log.md`). La vitrina no está en `src/payments/`, así que no entra en el conteo.
+- **Lo demás es el esqueleto**, incluido el contrato `src/checkout/PaymentsPort.ts`. `prototypes/check-skeleton-parity.sh` comprueba en la CI que sea idéntico en los dos, salvo las vitrinas, «La Candelaria Cómics» en A y «La Bodega de Chapinero» en B (páginas, catálogo, órdenes y sus pruebas). Son una excepción declarada desde el 19 de octubre de 2026 (puntos 110 y 116 del `architecture-log.md`), y no están en `src/payments/`, así que no entran en el conteo.
+- **Dos cambios en los módulos de pagos que no hizo su autor, y que hay que declarar al medir.** Los dos se hicieron para que A y B cobren en el ambiente del esqueleto:
+  - en el de David (A): 23 líneas agregadas y 2 quitadas en `src/payments/index.ts` (punto 111);
+  - en el de Andrés (B): 29 agregadas y 9 quitadas, más sus pruebas (punto 116).
 - **Los dos `package.json` traen `kit-pagos-colombia`**, para que también las dependencias sean idénticas. El mismo script falla si el módulo de pagos de A menciona el SDK.
 - **La línea base del conteo** es el commit que agrega el esqueleto.
 
