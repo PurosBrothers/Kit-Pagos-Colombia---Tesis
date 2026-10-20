@@ -10,7 +10,7 @@ Kit Pagos Colombia son **tres componentes**, no uno:
 
 | Componente | Qué es | Dónde vive |
 |---|---|---|
-| **SDK** | Paquete de TypeScript con arquitectura hexagonal que unifica cuatro pasarelas colombianas en el backend y expone `kit-pagos-colombia/browser` para tokenización PCI DSS en el frontend | [`sdk/`](sdk/) · [README del SDK](sdk/README.md) |
+| **SDK** | Paquete de TypeScript con arquitectura hexagonal que unifica cuatro pasarelas colombianas en el backend y expone `kit-pagos-colombia/browser` para tokenizar la tarjeta en el navegador, sin que pase por el servidor | [`sdk/`](sdk/) · [README del SDK](sdk/README.md) |
 | **API de Simulación y Capa REST** | Servidor Fastify con dos caras: en `/v1/sim`, 33 rutas mock para probar flujos que los sandboxes bloquean; en `/v1/api`, el SDK expuesto como API REST. Documentado formalmente con OpenAPI 3.0 en [`/docs`](https://kit-pagos-colombia.onrender.com/docs) (Swagger UI) y desplegado en Render: [https://kit-pagos-colombia.onrender.com](https://kit-pagos-colombia.onrender.com) | [`simulator-api/`](simulator-api/) · [README de la API](simulator-api/README.md) |
 | **Documentación de datos** | Tarjetas, bancos PSE y credenciales de prueba de las cuatro pasarelas, con nivel de evidencia 1 | [`docs/testing-data/`](docs/testing-data/README.md) |
 
@@ -128,6 +128,10 @@ Límites de las pasarelas, no del proyecto, que aparecieron probando la tienda d
 - Los **códigos de banco de PSE** son distintos en cada pasarela (en Mercado Pago `1007`, en Rapyd `co_pse_bancolombia_bank`), pero `PseBankCode.BANCOLOMBIA` sirve en las cuatro: es el código de compensación de ACH Colombia, y el SDK lo traduce donde hace falta. Los bancos ficticios de los sandboxes solo existen con el código que devuelve `getPseBanks()`.
 - El **token de tarjeta tampoco** es portable entre pasarelas: lo emite el frontend (`kit-pagos-colombia/browser`) contra cada pasarela respectiva.
 - **Solo tarjeta y PSE.** No hay efectivo, ni Nequi, ni suscripciones, ni reembolsos.
+- **Ni el SDK ni los prototipos protegen la página donde se escribe la tarjeta.**
+  - La Content-Security-Policy la manda el servidor del comercio, y ninguno de los tres prototipos la manda.
+  - En el prototipo C, además, el monto lo decide el navegador.
+  - Los prototipos son demostraciones contra los sandboxes, no plantillas para producción. Lo que un comercio tiene que agregar está en la [guía de implementación](docs/03-sdk/4-guia-de-implementacion.md) §9.
 - **La redirección no desaparece.** Con PSE redirigen las cuatro.
 - Las **cifras comparativas todavía no existen.** Las produce el experimento de la Fase 5.
 

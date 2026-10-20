@@ -602,6 +602,22 @@ Es una sola comparación, pero coincide con la documentación: el comprobante es
 termina en el banco simulado**, aprobándolo o eligiendo «USUARIO ABANDONÓ TRANSACCION EN BANCO», en vez
 de dejarlo abierto.
 
+**El corte es por ventanas y la aplicación se recupera sola** (19 de octubre de 2026, punto 113 del
+`architecture-log.md`). Con la tercera aplicación (`integration_data.application_id` 7248347369100415,
+la misma en el `.env` y en Render), siete PSE nacieron `processing` sin URL y terminaron
+`failed / processing_error` entre las 14:09 y las 14:17: seis desde la tienda del prototipo C y uno por
+Render. Desde las 14:25, ocho PSE recibieron la URL: directo a la Orders API con la IP y la `callback_url`
+del 15 de octubre, con la `callback_url` del túnel, con la IP de la máquina (98.98.186.204), con el
+banco 1001, dos por Render con el cuerpo de la tienda que había fallado a las 14:16, y dos alrededor de
+una tarjeta. Una tarjeta `APRO Ruiz` aprobada a las 14:33:03, con el mismo pagador, fue seguida a las
+14:33:52 por un PSE con URL, así que **una tarjeta aprobada no corta el PSE**. En ese momento los 15 pagos
+PSE del vendedor estaban cerrados (`GET /v1/payments/search?payment_type_id=bank_transfer`), y la
+búsqueda de órdenes (`GET /v1/orders?begin_date=…&end_date=…`, que exige las dos fechas) mostró las
+órdenes fallidas, que no dejan pago. La tercera aplicación, que había fallado el 18 de octubre entre las
+22:08 y las 22:19, no estaba muerta. **Si el PSE falla, hay que esperar entre 10 y 15 minutos y reintentar**,
+sin crear otra aplicación. Sin medir: si una tarjeta rechazada influye. Hubo una con fondos insuficientes a
+las 13:55, antes de la ventana.
+
 Para el comercio, una orden sin URL no tiene adónde mandar al pagador, pero existe y tiene
 identificador. Desde la versión 0.6.0-rc.2, `createPayment()` la devuelve como una transacción
 `PENDING` con `rawStatus` `processing`, y la consulta posterior da `DECLINED` con `rejectionCode`

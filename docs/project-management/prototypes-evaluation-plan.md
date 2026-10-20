@@ -36,6 +36,8 @@ Un mismo caso de uso, implementado dos veces. El caso de uso es un **checkout m�
 
 La forma práctica de garantizarlo: construir primero un esqueleto común, copiarlo a las dos carpetas, y a partir de ahí tocar **únicamente** el módulo de pagos en cada uno. Ese esqueleto compartido queda fuera del conteo de líneas.
 
+> **Excepción declarada (19 de octubre de 2026, punto 110 del `architecture-log.md`).** Por decisión de Joan, la vitrina del prototipo A es una tienda con catálogo y carrito, «La Candelaria Cómics», y el B conserva la página de un producto. Difieren las páginas, el catálogo y las órdenes; el servidor, el contrato `PaymentsPort`, los webhooks y las dependencias siguen idénticos, y la comprobación de paridad los sigue exigiendo. Las variables 1 y 2 se cuentan solo sobre el módulo de pagos, que la excepción no toca. Lo que sí cambia es que «misma interfaz» deja de cumplirse en lo que ve el comprador, y eso se declara como amenaza a la validez.
+
 ### Qué debe hacer cada prototipo, exactamente igual
 
 Para que la comparación sea justa, los dos tienen que cubrir la misma funcionalidad. Si el prototipo A omite algo que el B trae gratis por el framework, hay que implementarlo en A también; de lo contrario el conteo premia al B por hacer menos.

@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
+import { OrderLine } from "../catalog";
 import { MerchantPaymentStatus, Payer, PaymentMethodRequest } from "../checkout/PaymentsPort";
+import { trace } from "../trace";
 
 /** `ERROR`: un fallo técnico que siguió después de reintentar; el pago no se decidió. */
 export type OrderStatus = MerchantPaymentStatus | "ERROR";
 
 export type StatusSource = "creation" | "query" | "webhook";
+
+const SOURCE_WORDS: Record<StatusSource, string> = { creation: "creación", query: "consulta", webhook: "webhook" };
 
 /** Una entrada del historial: guarda el estado nativo para auditoría (función 6). */
 export interface StatusRecord {
@@ -17,7 +21,7 @@ export interface StatusRecord {
 
 export interface Order {
   id: string;
-  productId: string;
+  lines: OrderLine[];
   amountInPesos: number;
   payer: Payer;
   method: PaymentMethodRequest["type"];
@@ -27,7 +31,7 @@ export interface Order {
 }
 
 export interface NewOrder {
-  productId: string;
+  lines: OrderLine[];
   amountInPesos: number;
   payer: Payer;
   method: PaymentMethodRequest["type"];
@@ -72,5 +76,11 @@ export class OrderStore {
       last.nativeStatus === entry.nativeStatus;
     order.status = entry.status;
     if (!repeated) order.history.push({ at: this.now().toISOString(), ...entry });
+    trace(
+      `  orden ${order.id} ← ${SOURCE_WORDS[entry.source]}: ${entry.status}` +
+        `${entry.nativeStatus ? ` (nativo ${entry.nativeStatus})` : ""}` +
+        `${transactionId ? `, transacción ${transactionId}` : ""}` +
+        `${entry.detail ? ` · ${entry.detail}` : ""}${repeated ? " (sin cambios)" : ""}`,
+    );
   }
 }

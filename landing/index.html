@@ -180,7 +180,7 @@
           <div class="spec-col">
             <span class="spec-index">04 / Seguridad</span>
             <strong class="spec-val">Navegador</strong>
-            <span class="spec-detail">Tokenización segura (PCI DSS)</span>
+            <span class="spec-detail">La tarjeta no pasa por tu servidor</span>
           </div>
         </div>
       </div>
@@ -460,9 +460,12 @@
 
             <!-- Tokenización Frontend en Navegador (KitPagosBrowser) -->
             <div>
-              <h3 class="comparison-title" style="margin-bottom: 8px;">Tokenización en el cliente: cumplimiento PCI DSS</h3>
+              <h3 class="comparison-title" style="margin-bottom: 8px;">Tokenización en el cliente: la tarjeta no pasa por tu servidor</h3>
               <p class="section-lead" style="margin-bottom: 24px; font-size: 0.9375rem;">
                 El número de la tarjeta no pasa por tu servidor: el navegador lo manda directo a la pasarela, y tu backend solo recibe el token. El módulo <code>kit-pagos-colombia/browser</code> (22 KB, cero dependencias) tokeniza directo desde el navegador contra Wompi, Mercado Pago o, desde la 0.6.0, Kushki, y te entrega un token opaco listo para cobrar desde el backend. Rapyd no tokeniza en el navegador: el pago se crea sin token y el pagador escribe la tarjeta en su página alojada.
+              </p>
+              <p class="section-lead" style="margin-bottom: 24px; font-size: 0.9375rem;">
+                Eso deja tu servidor fuera de los datos de la tarjeta, pero no protege la página donde se escribe: el formulario es tuyo, y tu servidor lo protege con una cabecera <code>Content-Security-Policy</code>. Ver el límite 05 en <a href="#limites">«Lo que el proyecto no hace»</a>.
               </p>
 
               <div class="terminal">
@@ -475,7 +478,7 @@
 
 <span class="tok-kw">const</span> browser = <span class="tok-kw">new</span> KitPagosBrowser();
 
-<span class="tok-cm">// Tokenización directa en navegador: el número de tarjeta jamás toca tu backend (PCI DSS)</span>
+<span class="tok-cm">// Tokenización directa en navegador: el número de tarjeta no pasa por tu backend</span>
 <span class="tok-kw">const</span> { token } = <span class="tok-kw">await</span> browser.tokenizeCard({
   gateway: Gateway.WOMPI,
   publicKey: "pub_test_demo",
@@ -1010,6 +1013,17 @@
             <h3 class="limit-name">La redirección de PSE sigue siendo obligatoria</h3>
             <p class="limit-text">
               En PSE el usuario tiene que ir sí o sí al portal de su banco. El SDK normaliza cómo solicitas el pago y cómo recibes la URL de retorno, pero la autorización bancaria sigue siendo un paso externo.
+            </p>
+          </div>
+
+          <div class="limit-entry limit-entry-wide">
+            <div class="limit-num">05</div>
+            <h3 class="limit-name">Ni el SDK ni los prototipos protegen la página donde se escribe la tarjeta</h3>
+            <p class="limit-text">
+              Con <code>kit-pagos-colombia/browser</code> el formulario de la tarjeta es tuyo, y un script malicioso en tu página podría leer el número antes de que se tokenice. Lo que lo limita es una cabecera <code>Content-Security-Policy</code>, y esa la manda tu servidor, no el SDK. El SDK tampoco decide el monto: cobra lo que le pides, así que el precio lo pone tu servidor con su catálogo.
+            </p>
+            <p class="limit-text">
+              Los tres prototipos del proyecto no mandan esa cabecera, y en el que corre solo en el navegador el monto lo decide la página. Son demostraciones contra los sandboxes, no plantillas para producción. La política medida con Wompi, Mercado Pago y Kushki, y lo demás que le toca al comercio, está en la <a href="https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/blob/devops/docs/03-sdk/4-guia-de-implementacion.md#9-lo-que-el-sdk-no-puede-hacer-por-el-comercio" target="_blank" rel="noopener noreferrer">guía de implementación, §9</a>.
             </p>
           </div>
         </div>
