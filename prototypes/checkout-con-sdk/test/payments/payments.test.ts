@@ -46,6 +46,16 @@ function webhookError(code: KitPagosErrorCode): KitPagosError {
 /** Un error que no viene del SDK: no es un fallo de la pasarela y no debe reetiquetarse. */
 const foreignError = new Error("error ajeno al SDK");
 
+/** El esqueleto en el ambiente del simulador, sin llaves: lo que prueba la traducción sin red. */
+const SIMULATOR = { CHECKOUT_ENVIRONMENT: "simulator" };
+
+/** Las tres llaves sin las que el sandbox oficial no cobra. */
+const SANDBOX_KEYS = {
+  WOMPI_PUBLIC_KEY: "pub_test_x",
+  WOMPI_PRIVATE_KEY: "prv_test_x",
+  WOMPI_INTEGRITY_SECRET: "integrity_x",
+};
+
 const payer = {
   fullName: "Pedro Pérez",
   email: "pedro@example.com",
@@ -75,7 +85,7 @@ beforeEach(() => {
 describe("payments module (kit-pagos-colombia)", () => {
   describe("publicConfig", () => {
     it("should expose the gateway, the public key and the simulator environment the browser needs", () => {
-      const payments = createPayments({ WOMPI_PUBLIC_KEY: "pub_test_desde_entorno" });
+      const payments = createPayments({ ...SIMULATOR, WOMPI_PUBLIC_KEY: "pub_test_desde_entorno" });
       expect(payments.publicConfig()).toEqual({
         gateway: "WOMPI",
         publicKey: "pub_test_desde_entorno",
@@ -83,8 +93,16 @@ describe("payments module (kit-pagos-colombia)", () => {
       });
     });
 
-    it("should fall back to the example credentials when the environment is empty", () => {
-      expect(createPayments({}).publicConfig().publicKey).toBe("pub_test_ejemplo_no_real");
+    it("should tell the browser to tokenize in the sandbox when the skeleton charges there", () => {
+      expect(createPayments(SANDBOX_KEYS).publicConfig()).toEqual({
+        gateway: "WOMPI",
+        publicKey: "pub_test_x",
+        environment: "sandbox",
+      });
+    });
+
+    it("should fall back to the example credentials in the simulator without Wompi keys", () => {
+      expect(createPayments(SIMULATOR).publicConfig().publicKey).toBe("pub_test_ejemplo_no_real");
     });
   });
 
@@ -95,7 +113,7 @@ describe("payments module (kit-pagos-colombia)", () => {
         transaction: fakeTransaction("tx-1", "APPROVED"),
       });
 
-      const snapshot = await createPayments({}).createPayment(cardRequest);
+      const snapshot = await createPayments(SIMULATOR).createPayment(cardRequest);
 
       expect(snapshot).toEqual({
         transactionId: "tx-1",
@@ -118,7 +136,7 @@ describe("payments module (kit-pagos-colombia)", () => {
         transaction: fakeTransaction("tx-pse", "PENDING"),
       });
 
-      await createPayments({}).createPayment(pseRequest);
+      await createPayments(SIMULATOR).createPayment(pseRequest);
 
       expect(mockCreatePayment.mock.calls[0][0].paymentMethod).toMatchObject({
         type: "PSE",
@@ -133,7 +151,7 @@ describe("payments module (kit-pagos-colombia)", () => {
         transaction: fakeTransaction("tx-dec", "DECLINED", "DECLINED"),
       });
 
-      await expect(createPayments({}).createPayment(cardRequest)).resolves.toEqual({
+      await expect(createPayments(SIMULATOR).createPayment(cardRequest)).resolves.toEqual({
         transactionId: "tx-dec",
         status: "DECLINED",
         nativeStatus: "DECLINED",
@@ -148,7 +166,7 @@ describe("payments module (kit-pagos-colombia)", () => {
           transaction: fakeTransaction("tx-terminal", native),
         });
 
-        const snapshot = await createPayments({}).createPayment(cardRequest);
+        const snapshot = await createPayments(SIMULATOR).createPayment(cardRequest);
 
         expect(snapshot.status).toBe("DECLINED");
         expect(snapshot.nativeStatus).toBe(native);
@@ -165,7 +183,7 @@ describe("payments module (kit-pagos-colombia)", () => {
         },
       });
 
-      const snapshot = await createPayments({}).createPayment(pseRequest);
+      const snapshot = await createPayments(SIMULATOR).createPayment(pseRequest);
 
       expect(snapshot).toEqual({
         transactionId: "tx-pse-2",
@@ -179,7 +197,7 @@ describe("payments module (kit-pagos-colombia)", () => {
       const failure = webhookError(KitPagosErrorCode.GATEWAY_TIMEOUT);
       mockCreatePayment.mockRejectedValue(failure);
 
-      const error = await createPayments({}).createPayment(cardRequest).catch((e) => e);
+      const error = await createPayments(SIMULATOR).createPayment(cardRequest).catch((e) => e);
 
       expect(error).toBeInstanceOf(PaymentTechnicalError);
       expect((error as PaymentTechnicalError).cause).toBe(failure);
@@ -189,7 +207,7 @@ describe("payments module (kit-pagos-colombia)", () => {
     it("should let a non-SDK error bubble untouched", async () => {
       mockCreatePayment.mockRejectedValue(foreignError);
 
-      await expect(createPayments({}).createPayment(cardRequest)).rejects.toBe(foreignError);
+      await expect(createPayments(SIMULATOR).createPayment(cardRequest)).rejects.toBe(foreignError);
     });
   });
 
@@ -200,7 +218,7 @@ describe("payments module (kit-pagos-colombia)", () => {
         { code: "2", name: "Banco que declina" },
       ]);
 
-      await expect(createPayments({}).listPseBanks()).resolves.toEqual([
+      await expect(createPayments(SIMULATOR).listPseBanks()).resolves.toEqual([
         { code: "1", name: "Banco que aprueba" },
         { code: "2", name: "Banco que declina" },
       ]);
@@ -209,7 +227,7 @@ describe("payments module (kit-pagos-colombia)", () => {
     it("should wrap a technical failure", async () => {
       mockGetPseBanks.mockRejectedValue(webhookError(KitPagosErrorCode.MAX_RETRIES_EXCEEDED));
 
-      await expect(createPayments({}).listPseBanks()).rejects.toBeInstanceOf(PaymentTechnicalError);
+      await expect(createPayments(SIMULATOR).listPseBanks()).rejects.toBeInstanceOf(PaymentTechnicalError);
     });
   });
 
@@ -217,7 +235,7 @@ describe("payments module (kit-pagos-colombia)", () => {
     it("should query the SDK and translate the result", async () => {
       mockGetPaymentStatus.mockResolvedValue(fakeTransaction("tx-q", "PENDING"));
 
-      await expect(createPayments({}).getPaymentStatus("tx-q")).resolves.toEqual({
+      await expect(createPayments(SIMULATOR).getPaymentStatus("tx-q")).resolves.toEqual({
         transactionId: "tx-q",
         status: "PENDING",
         nativeStatus: "PENDING",
@@ -228,7 +246,7 @@ describe("payments module (kit-pagos-colombia)", () => {
     it("should wrap a technical failure as a PaymentTechnicalError", async () => {
       mockGetPaymentStatus.mockRejectedValue(webhookError(KitPagosErrorCode.GATEWAY_SERVER_ERROR));
 
-      await expect(createPayments({}).getPaymentStatus("tx-q")).rejects.toBeInstanceOf(
+      await expect(createPayments(SIMULATOR).getPaymentStatus("tx-q")).rejects.toBeInstanceOf(
         PaymentTechnicalError,
       );
     });
@@ -243,7 +261,7 @@ describe("payments module (kit-pagos-colombia)", () => {
         gateway: Gateway.WOMPI,
       });
 
-      const notification = await createPayments({}).verifyWebhook({
+      const notification = await createPayments(SIMULATOR).verifyWebhook({
         rawBody: "{}",
         headers: {
           "x-event-checksum": ["abc", "ignored"],
@@ -272,7 +290,7 @@ describe("payments module (kit-pagos-colombia)", () => {
         gateway: Gateway.WOMPI,
       });
 
-      const notification = await createPayments({}).verifyWebhook({
+      const notification = await createPayments(SIMULATOR).verifyWebhook({
         rawBody: "{}",
         headers: {},
         query: {},
@@ -291,7 +309,7 @@ describe("payments module (kit-pagos-colombia)", () => {
       });
 
       await expect(
-        createPayments({}).verifyWebhook({ rawBody: "{}", headers: {}, query: {} }),
+        createPayments(SIMULATOR).verifyWebhook({ rawBody: "{}", headers: {}, query: {} }),
       ).resolves.toBeNull();
     });
 
@@ -301,7 +319,7 @@ describe("payments module (kit-pagos-colombia)", () => {
       });
 
       await expect(
-        createPayments({}).verifyWebhook({ rawBody: "{}", headers: {}, query: {} }),
+        createPayments(SIMULATOR).verifyWebhook({ rawBody: "{}", headers: {}, query: {} }),
       ).rejects.toBeInstanceOf(PaymentTechnicalError);
     });
 
@@ -311,7 +329,7 @@ describe("payments module (kit-pagos-colombia)", () => {
       });
 
       await expect(
-        createPayments({}).verifyWebhook({ rawBody: "{}", headers: {}, query: {} }),
+        createPayments(SIMULATOR).verifyWebhook({ rawBody: "{}", headers: {}, query: {} }),
       ).rejects.toBe(foreignError);
     });
   });
@@ -341,8 +359,8 @@ describe("payments module (kit-pagos-colombia)", () => {
       });
     });
 
-    it("should use the simulator integrity secret and omit the base URL when the environment is empty", () => {
-      createPayments({});
+    it("should use the simulator integrity secret and the skeleton's simulator in the simulator without keys", () => {
+      createPayments(SIMULATOR);
 
       expect(mockKitPagosConstructor).toHaveBeenCalledWith({
         gateway: Gateway.WOMPI,
@@ -354,7 +372,35 @@ describe("payments module (kit-pagos-colombia)", () => {
           },
         },
         environment: "simulator",
+        baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim/wompi",
       });
+    });
+
+    it("should follow the simulator URL of the skeleton, as npm run start:local sets it", () => {
+      createPayments({ ...SIMULATOR, CHECKOUT_SIMULATOR_URL: "http://localhost:3000/" });
+
+      expect(mockKitPagosConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({ environment: "simulator", baseUrl: "http://localhost:3000/v1/sim/wompi" }),
+      );
+    });
+
+    it("should charge in the official sandbox by default, with the SDK catalog and no base URL", () => {
+      createPayments(SANDBOX_KEYS);
+
+      expect(mockKitPagosConstructor).toHaveBeenCalledWith({
+        gateway: Gateway.WOMPI,
+        credentials: {
+          [Gateway.WOMPI]: { publicKey: "pub_test_x", privateKey: "prv_test_x", integritySecret: "integrity_x" },
+        },
+        environment: "sandbox",
+      });
+    });
+
+    it("should stop at start-up and name the sandbox keys that are missing", () => {
+      expect(() => createPayments({ WOMPI_PUBLIC_KEY: "pub_test_x" })).toThrow(
+        "Para cobrar en el sandbox de Wompi faltan WOMPI_PRIVATE_KEY, WOMPI_INTEGRITY_SECRET en el .env de la raíz.",
+      );
+      expect(mockKitPagosConstructor).not.toHaveBeenCalled();
     });
   });
 });

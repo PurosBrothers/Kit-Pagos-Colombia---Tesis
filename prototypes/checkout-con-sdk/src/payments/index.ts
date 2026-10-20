@@ -23,18 +23,19 @@ import {
   WebhookNotification,
 } from "../checkout/PaymentsPort";
 import type { Payer as PortPayer, PaymentMethodRequest } from "../checkout/PaymentsPort";
+import { paymentsEnvironment } from "../checkout/environment";
 import type { IncomingHttpHeaders } from "node:http";
 
 /**
  * El módulo de pagos del prototipo B: las seis funciones del puerto (plan de evaluación,
  * §2) delegadas en `kit-pagos-colombia`. Es lo único que cambia frente al prototipo A.
  *
- * La pasarela es Wompi contra el simulador. El módulo no conoce ninguna URL, ningún nombre
- * de campo ni ningún estado propio de Wompi: el SDK resuelve el endpoint desde
- * `environment: "simulator"` y traduce los nativos a `TransactionStatus`. Lo que sí lee del
- * entorno son las credenciales, porque el simulador firma los webhooks con las suyas
- * (`simulator-api/src/auth/merchantSecrets.ts`): si aquí no coincidieran, la firma no
- * verificaría.
+ * La pasarela es Wompi, en el ambiente que diga el esqueleto: el sandbox oficial por omisión
+ * o la API de Simulación (punto 111). El módulo no conoce ninguna URL de Wompi, ningún nombre
+ * de campo ni ningún estado propio: el SDK resuelve el endpoint desde `environment` y traduce
+ * los nativos a `TransactionStatus`. Lo que sí lee del entorno son las credenciales, porque el
+ * simulador firma los webhooks con las suyas (`simulator-api/src/auth/merchantSecrets.ts`): si
+ * aquí no coincidieran, la firma no verificaría.
  */
 
 /** La pasarela de este prototipo. El prototipo es de Wompi por la asignación A/B de #151. */
@@ -52,6 +53,9 @@ const DEFAULT_PRIVATE_KEY = "prv_test_ejemplo_no_real";
 /** El secreto de integridad de Wompi cuando el simulador no configura uno propio. */
 const DEFAULT_INTEGRITY_SECRET = "test_integrity_kit_pagos_simulator";
 
+/** Las llaves sin las que el sandbox oficial no cobra; el simulador tiene valores por omisión. */
+const SANDBOX_KEYS = ["WOMPI_PUBLIC_KEY", "WOMPI_PRIVATE_KEY", "WOMPI_INTEGRITY_SECRET"] as const;
+
 function readEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
   const value = env[name]?.trim();
   return value ? value : undefined;
@@ -62,6 +66,23 @@ function readEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
  * `loadCheckoutConfig`; en producción se usa `process.env`.
  */
 export function createPayments(env: NodeJS.ProcessEnv = process.env): PaymentsPort {
+  const { environment, simulatorUrl } = paymentsEnvironment(env);
+  // WOMPI_BASE_URL apunta el módulo a otro simulador a propósito; si no, manda el ambiente del esqueleto.
+  const baseUrlOverride = readEnv(env, "WOMPI_BASE_URL");
+  const sdkEnvironment =
+    baseUrlOverride !== undefined || environment === "simulator" ? Environment.SIMULATOR : Environment.SANDBOX;
+  if (sdkEnvironment === Environment.SANDBOX) {
+    const missing = SANDBOX_KEYS.filter((name) => readEnv(env, name) === undefined);
+    if (missing.length > 0) {
+      throw new Error(
+        `Para cobrar en el sandbox de Wompi faltan ${missing.join(", ")} en el .env de la raíz. ` +
+          "Sin ellas, usa el simulador: npm run start:local.",
+      );
+    }
+  }
+  const baseUrl =
+    baseUrlOverride ?? (sdkEnvironment === Environment.SIMULATOR ? `${simulatorUrl}/v1/sim/wompi` : undefined);
+
   const credentials: Credentials = {
     publicKey: readEnv(env, "WOMPI_PUBLIC_KEY") ?? DEFAULT_PUBLIC_KEY,
     privateKey: readEnv(env, "WOMPI_PRIVATE_KEY") ?? DEFAULT_PRIVATE_KEY,
@@ -74,11 +95,10 @@ export function createPayments(env: NodeJS.ProcessEnv = process.env): PaymentsPo
     credentials.webhookSecret = webhookSecret;
   }
 
-  const baseUrl = readEnv(env, "WOMPI_BASE_URL");
   const kit = new KitPagos({
     gateway: GATEWAY,
     credentials: { [GATEWAY]: credentials },
-    environment: Environment.SIMULATOR,
+    environment: sdkEnvironment,
     ...(baseUrl ? { baseUrl } : {}),
   });
 
@@ -111,7 +131,7 @@ export function createPayments(env: NodeJS.ProcessEnv = process.env): PaymentsPo
       return {
         gateway: GATEWAY,
         publicKey: credentials.publicKey,
-        environment: Environment.SIMULATOR,
+        environment: sdkEnvironment,
       };
     },
 
