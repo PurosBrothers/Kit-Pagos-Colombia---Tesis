@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Austral Mate | Hierbas de Mate & Accesorios — Kit Pagos Colombia</title>
+  <meta name="description" content="Tienda de Hierbas de Mate con Kit Pagos Colombia SDK en Backend y tokenización nativa en Frontend">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <!-- Header con Banner de Arquitectura de la Tesis -->
+  <header class="header">
+    <div class="header-inner container">
+      <div class="brand">
+        <span class="brand-icon">🧉</span>
+        <div>
+          <span class="brand-title">AUSTRAL MATE</span>
+          <span class="brand-subtitle">Almacén Botánico & Selección de Origen</span>
+        </div>
+      </div>
+      <div class="header-pills">
+        <div class="arch-badge">
+          <span class="dot pulse"></span>
+          <span class="arch-text"><strong>SDK Solo Backend:</strong> Frontend Tokeniza Nativo · Back con KitPagos</span>
+        </div>
+        <div class="env-pill" id="env-pill">
+          <span class="env-icon">⚡</span>
+          <span id="env-text">Ambiente: Cargando...</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Banner Hero -->
+  <section class="hero container">
+    <div class="hero-content">
+      <div class="hero-tag">COLECCIÓN TRADICIONAL & BARBACUÁ</div>
+      <h1 class="hero-title">El ritual del mate, unificado en tu checkout.</h1>
+      <p class="hero-desc">
+        Demostración del <strong>Prototipo con SDK en Backend</strong>: La página captura y tokeniza la tarjeta 
+        directamente contra cada pasarela sin librerías intermedias, y el servidor del comercio procesa 
+        el cobro integrando <code>kit-pagos-colombia</code> en Node.js.
+      </p>
+    </div>
+  </section>
+
+  <!-- Layout Principal: Catálogo + Checkout -->
+  <main class="main-layout container">
+    <!-- Columna Izquierda: Catálogo y Carrito -->
+    <section class="left-col">
+      <div class="section-header">
+        <h2 class="section-title">Nuestras Hierbas & Accesorios</h2>
+        <span class="section-badge" id="catalog-count">5 variedades</span>
+      </div>
+
+      <div class="products-grid" id="products-grid">
+        <!-- Renderizado dinámicamente desde catalog.ts -->
+      </div>
+    </section>
+
+    <!-- Columna Derecha: Resumen de Carrito y Formulario de Pago -->
+    <aside class="right-col">
+      <!-- Tarjeta del Carrito -->
+      <div class="card cart-card">
+        <div class="card-header">
+          <h3 class="card-title">Tu Carrito de Compra</h3>
+          <span class="cart-badge" id="cart-badge-count">0 items</span>
+        </div>
+
+        <div id="cart-empty" class="cart-empty">
+          <span class="empty-icon">🍃</span>
+          <p>Tu mate está vacío. Selecciona una yerba o accesorio para comenzar.</p>
+        </div>
+
+        <div id="cart-content" class="cart-content hidden">
+          <ul class="cart-items" id="cart-items">
+            <!-- Items del carrito -->
+          </ul>
+
+          <div class="cart-summary">
+            <div class="summary-row">
+              <span>Subtotal productos</span>
+              <strong id="cart-subtotal">$0 COP</strong>
+            </div>
+            <div class="summary-row">
+              <span>Envío nacional asegurado</span>
+              <span class="free-shipping">¡Gratis!</span>
+            </div>
+            <div class="summary-row total-row">
+              <span>Total a pagar</span>
+              <span class="total-amount" id="cart-total">$0 COP</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tarjeta del Checkout / Pasarelas -->
+      <div class="card checkout-card" id="checkout-section">
+        <div class="card-header">
+          <h3 class="card-title">Finalizar Pago</h3>
+          <span class="secure-badge">🛡️ PCI-DSS Scope Reducido</span>
+        </div>
+
+        <form id="checkout-form" class="checkout-form">
+          <!-- 1. Datos del Pagador -->
+          <div class="form-group-block">
+            <h4 class="block-title"><span class="step-num">1</span> Datos de Contacto y Facturación</h4>
+            <div class="fields-grid">
+              <div class="field full">
+                <label for="payer-name">Nombre y Apellido</label>
+                <input type="text" id="payer-name" required value="Mateo Gómez Silveira" placeholder="Ej: Carlos Álvarez">
+              </div>
+              <div class="field half">
+                <label for="payer-email">Correo Electrónico</label>
+                <input type="email" id="payer-email" required value="comprador@australmate.com" placeholder="correo@ejemplo.com">
+              </div>
+              <div class="field half">
+                <label for="payer-phone">Celular</label>
+                <input type="tel" id="payer-phone" required value="3104567890" placeholder="3001234567">
+              </div>
+              <div class="field third">
+                <label for="payer-doc-type">Documento</label>
+                <select id="payer-doc-type">
+                  <option value="CC" selected>C.C.</option>
+                  <option value="CE">C.E.</option>
+                  <option value="NIT">NIT</option>
+                  <option value="PP">Pasaporte</option>
+                </select>
+              </div>
+              <div class="field two-thirds">
+                <label for="payer-doc-num">Número de Documento</label>
+                <input type="text" id="payer-doc-num" required value="1020304050" placeholder="Número de identificación">
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Selección de Pasarela -->
+          <div class="form-group-block">
+            <h4 class="block-title"><span class="step-num">2</span> Selecciona la Pasarela (4 Disponibles)</h4>
+            <div class="gateways-grid" id="gateways-selector">
+              <label class="gateway-option active" data-gateway="WOMPI">
+                <input type="radio" name="gateway" value="WOMPI" checked>
+                <div class="gw-card">
+                  <span class="gw-logo">🟦</span>
+                  <div class="gw-info">
+                    <strong>Wompi</strong>
+                    <small>Bancolombia</small>
+                  </div>
+                  <span class="gw-tag">Tarjeta & PSE</span>
+                </div>
+              </label>
+
+              <label class="gateway-option" data-gateway="MERCADOPAGO">
+                <input type="radio" name="gateway" value="MERCADOPAGO">
+                <div class="gw-card">
+                  <span class="gw-logo">🩵</span>
+                  <div class="gw-info">
+                    <strong>Mercado Pago</strong>
+                    <small>Latam Leader</small>
+                  </div>
+                  <span class="gw-tag">Tarjeta & PSE</span>
+                </div>
+              </label>
+
+              <label class="gateway-option" data-gateway="KUSHKI">
+                <input type="radio" name="gateway" value="KUSHKI">
+                <div class="gw-card">
+                  <span class="gw-logo">🟧</span>
+                  <div class="gw-info">
+                    <strong>Kushki</strong>
+                    <small>Regional Core</small>
+                  </div>
+                  <span class="gw-tag">Tarjeta & Transfer</span>
+                </div>
+              </label>
+
+              <label class="gateway-option" data-gateway="RAPYD">
+                <input type="radio" name="gateway" value="RAPYD">
+                <div class="gw-card">
+                  <span class="gw-logo">🟪</span>
+                  <div class="gw-info">
+                    <strong>Rapyd</strong>
+                    <small>Global FinTech</small>
+                  </div>
+                  <span class="gw-tag">Hosted Page</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- 3. Método de Pago -->
+          <div class="form-group-block">
+            <h4 class="block-title"><span class="step-num">3</span> Medio de Pago</h4>
+            <div class="method-tabs" id="method-tabs">
+              <button type="button" class="tab-btn active" data-method="CARD">💳 Tarjeta de Crédito / Débito</button>
+              <button type="button" class="tab-btn" data-method="PSE" id="tab-pse">🏦 PSE / Transferencia</button>
+            </div>
+
+            <!-- Formulario de Tarjeta -->
+            <div id="card-panel" class="payment-panel">
+              <!-- Vista previa de Tarjeta interactiva -->
+              <div class="card-preview" id="card-preview">
+                <div class="card-chip"></div>
+                <div class="card-brand" id="card-brand-display">CARD</div>
+                <div class="card-number-display" id="card-number-display">•••• •••• •••• ••••</div>
+                <div class="card-preview-bottom">
+                  <div>
+                    <span class="card-label">TITULAR</span>
+                    <span class="card-holder-display" id="card-holder-display">MATEO GOMEZ</span>
+                  </div>
+                  <div>
+                    <span class="card-label">VENCE</span>
+                    <span class="card-exp-display" id="card-exp-display">MM/AA</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tokenization-alert" id="tokenization-alert">
+                <span class="alert-icon">⚡</span>
+                <div class="alert-content">
+                  <strong>Tokenización Nativa en Frontend:</strong>
+                  <span id="tokenization-desc">Los datos viajarán directamente desde este navegador a Wompi.</span>
+                </div>
+              </div>
+
+              <!-- Rapyd Hosted Message (cuando se elige Rapyd con tarjeta) -->
+              <div id="rapyd-hosted-notice" class="hosted-notice hidden">
+                <span class="notice-icon">🌐</span>
+                <p>
+                  <strong>Rapyd cobra mediante Checkout Alojado:</strong> No necesitas escribir tu tarjeta aquí. 
+                  Al presionar pagar, serás redirigido de forma segura al portal oficial de Rapyd.
+                </p>
+              </div>
+
+              <!-- Campos de Tarjeta -->
+              <div id="card-fields-inputs">
+                <div class="field full">
+                  <label for="card-holder">Nombre como aparece en la tarjeta</label>
+                  <input type="text" id="card-holder" value="Mateo Gómez Silveira" required placeholder="TITULAR DE LA TARJETA">
+                </div>
+
+                <div class="field full">
+                  <label for="card-number">Número de Tarjeta</label>
+                  <input type="text" id="card-number" maxlength="19" value="4242 4242 4242 4242" required placeholder="4242 •••• •••• ••••">
+                </div>
+
+                <div class="fields-grid" style="margin-top:0.75rem;">
+                  <div class="field third">
+                    <label for="card-month">Mes (MM)</label>
+                    <select id="card-month">
+                      <option value="01">01</option><option value="02">02</option>
+                      <option value="03">03</option><option value="04">04</option>
+                      <option value="05">05</option><option value="06">06</option>
+                      <option value="07">07</option><option value="08">08</option>
+                      <option value="09">09</option><option value="10">10</option>
+                      <option value="11">11</option><option value="12" selected>12</option>
+                    </select>
+                  </div>
+                  <div class="field third">
+                    <label for="card-year">Año (AA)</label>
+                    <select id="card-year">
+                      <option value="26">2026</option><option value="27">2027</option>
+                      <option value="28">2028</option><option value="29">2029</option>
+                      <option value="30" selected>2030</option><option value="31">2031</option>
+                    </select>
+                  </div>
+                  <div class="field third">
+                    <label for="card-cvc">CVC / CVV</label>
+                    <input type="password" id="card-cvc" maxlength="4" value="123" required placeholder="123">
+                  </div>
+                </div>
+
+                <div class="field full" style="margin-top:0.75rem;">
+                  <label for="card-installments">Número de Cuotas</label>
+                  <select id="card-installments">
+                    <option value="1" selected>1 cuota (Sin intereses)</option>
+                    <option value="3">3 cuotas</option>
+                    <option value="6">6 cuotas</option>
+                    <option value="12">12 cuotas</option>
+                    <option value="24">24 cuotas</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Formulario de PSE -->
+            <div id="pse-panel" class="payment-panel hidden">
+              <div class="pse-banner">
+                <span class="pse-logo">🏦</span>
+                <div>
+                  <strong>Pago en Línea con Débito Bancario (PSE)</strong>
+                  <p>La lista de bancos se carga en tiempo real desde el Backend usando KitPagos.</p>
+                </div>
+              </div>
+
+              <div class="field full" style="margin-top:1rem;">
+                <label for="pse-bank">Selecciona tu Banco o Entidad Financiera</label>
+                <select id="pse-bank">
+                  <option value="">Cargando lista de bancos...</option>
+                </select>
+              </div>
+
+              <div class="field full" style="margin-top:0.75rem;">
+                <label for="pse-person-type">Tipo de Pagador</label>
+                <select id="pse-person-type">
+                  <option value="NATURAL" selected>Persona Natural</option>
+                  <option value="LEGAL">Persona Jurídica (Empresa)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Botón de Pago -->
+          <div class="submit-block">
+            <button type="submit" id="pay-submit-btn" class="pay-btn" disabled>
+              <span class="btn-text">Pagar <span id="btn-total-amount">$0 COP</span></span>
+              <span class="btn-spinner hidden" id="btn-spinner"></span>
+            </button>
+            <p class="terms-note">
+              Al confirmar, tu pago se procesará a través de <strong>Kit Pagos Colombia</strong>. 
+              El servidor nunca almacena datos sensibles de tarjeta.
+            </p>
+          </div>
+        </form>
+      </div>
+
+      <!-- Pantalla de Resultado / Polling -->
+      <div class="card result-card hidden" id="result-card">
+        <div class="result-header" id="result-header">
+          <div class="result-icon-large" id="result-icon">⏳</div>
+          <h3 class="result-title" id="result-title">Procesando Pago...</h3>
+          <p class="result-subtitle" id="result-subtitle">Comunicando con la pasarela</p>
+        </div>
+
+        <div class="polling-progress" id="polling-progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+
+        <div class="result-details" id="result-details">
+          <div class="detail-row">
+            <span>Referencia Orden:</span>
+            <strong id="res-order-id">-</strong>
+          </div>
+          <div class="detail-row">
+            <span>ID Transacción:</span>
+            <code id="res-tx-id">-</code>
+          </div>
+          <div class="detail-row">
+            <span>Pasarela:</span>
+            <strong id="res-gateway">-</strong>
+          </div>
+          <div class="detail-row">
+            <span>Estado Comercial:</span>
+            <span class="status-badge" id="res-status-badge">PENDIENTE</span>
+          </div>
+          <div class="detail-row">
+            <span>Estado Nativo Pasarela:</span>
+            <code id="res-native-status">-</code>
+          </div>
+          <div class="detail-row" id="res-rejection-row" style="display:none;">
+            <span>Motivo de Rechazo:</span>
+            <span class="rejection-text" id="res-rejection-text">-</span>
+          </div>
+        </div>
+
+        <div class="result-actions" id="result-actions">
+          <a href="#" class="btn-secondary" id="btn-redirect-bank" style="display:none;">Ir al Portal Bancario ↗</a>
+          <button type="button" class="btn-secondary" id="btn-recheck">Consultar Nuevamente</button>
+          <button type="button" class="btn-primary" id="btn-new-order">Hacer Otra Compra</button>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Gaveta de Inspección Técnica (Demostración de Arquitectura) -->
+  <aside class="trace-drawer" id="trace-drawer">
+    <div class="drawer-header" id="drawer-toggle">
+      <div class="drawer-title">
+        <span class="pulse-icon">🔍</span>
+        <strong>Consola de Inspección Técnica: Arquitectura Hexagonal</strong>
+      </div>
+      <span class="drawer-arrow" id="drawer-arrow">▲</span>
+    </div>
+    <div class="drawer-body hidden" id="drawer-body">
+      <div class="drawer-grid">
+        <div class="drawer-col">
+          <h4>1. Frontend (Navegador)</h4>
+          <p>Tokeniza directamente contra la pasarela nativa (Wompi, Mercado Pago, Kushki) sin usar <code>KitPagosBrowser</code>.</p>
+          <pre><code id="trace-front-log">// Esperando acción en frontend...</code></pre>
+        </div>
+        <div class="drawer-col">
+          <h4>2. Backend (Merchant API)</h4>
+          <p>Recibe el token y orquesta el cobro invocando <code>KitPagos</code> del SDK.</p>
+          <pre><code id="trace-back-log">// Esperando petición al backend...</code></pre>
+        </div>
+        <div class="drawer-col">
+          <h4>3. SDK Kit Pagos Colombia</h4>
+          <p>Normaliza montos, monedas, firma webhooks y traduce estados nativos.</p>
+          <pre><code id="trace-sdk-log">// Estado del SDK en backend...</code></pre>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <script src="/checkout.js"></script>
+</body>
+</html>
