@@ -68,9 +68,19 @@ export class OrderStore {
     );
   }
 
+  /** La referencia que el checkout manda a la pasarela es el id de la orden, y la pasarela tiene que ser la suya. */
+  findByReference(gateway: string, reference: string): Order | undefined {
+    const order = this.orders.get(reference);
+    return order?.gateway === gateway ? order : undefined;
+  }
+
   /**
    * Cambia el estado y deja la entrada en el historial. Una consulta que repite el estado y el
    * estado nativo anteriores no agrega nada, para que el historial muestre solo cambios.
+   *
+   * Un `PENDING` que llega cuando la orden ya está aprobada o rechazada queda en el historial sin
+   * cambiar el estado: las pasarelas no garantizan el orden de sus avisos, y hay una que manda dos
+   * en el mismo segundo, uno todavía pendiente y otro con el desenlace.
    */
   record(order: Order, entry: Omit<StatusRecord, "at">, transactionId?: string): void {
     if (transactionId) order.transactionId = transactionId;
@@ -80,13 +90,15 @@ export class OrderStore {
       last !== undefined &&
       last.status === entry.status &&
       last.nativeStatus === entry.nativeStatus;
-    order.status = entry.status;
+    const late = entry.status === "PENDING" && (order.status === "APPROVED" || order.status === "DECLINED");
+    if (!late) order.status = entry.status;
     if (!repeated) order.history.push({ at: this.now().toISOString(), ...entry });
     trace(
       `  orden ${order.id} ← ${SOURCE_WORDS[entry.source]}: ${entry.status}` +
         `${entry.nativeStatus ? ` (nativo ${entry.nativeStatus})` : ""}` +
         `${transactionId ? `, transacción ${transactionId}` : ""}` +
-        `${entry.detail ? ` · ${entry.detail}` : ""}${repeated ? " (sin cambios)" : ""}`,
+        `${entry.detail ? ` · ${entry.detail}` : ""}${repeated ? " (sin cambios)" : ""}` +
+        `${late ? ` (llegó después del desenlace; la orden sigue ${order.status})` : ""}`,
     );
   }
 }

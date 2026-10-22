@@ -526,6 +526,41 @@ describe("checkout skeleton", () => {
       expect(res.json()).toEqual({ received: true, matched: false });
       expect(orders.get(order.id)?.status).toBe("PENDING");
     });
+
+    it("should find the order by its reference when the webhook reports another transaction id", async () => {
+      payments.createPayment.mockResolvedValueOnce({ transactionId: "checkout-1", status: "PENDING", nativeStatus: "NEW" });
+      const { order } = (await createOrder(card)).json();
+      payments.verifyWebhook.mockResolvedValueOnce({
+        transactionId: "payment-1",
+        status: "APPROVED",
+        nativeStatus: "CLO",
+        orderReference: order.id,
+      });
+
+      const res = await app.inject({ method: "POST", url: "/webhooks/token-pay", payload: rawBody, headers: { "content-type": "application/json" } });
+
+      expect(res.json()).toEqual({ received: true, matched: true });
+      const updated = orders.get(order.id);
+      expect(updated?.status).toBe("APPROVED");
+      expect(updated?.history.slice(-1)[0]).toMatchObject({ source: "webhook", nativeStatus: "CLO" });
+      expect(updated?.transactionId).toBe("checkout-1");
+    });
+
+    it("should not take the order of another gateway by its reference", async () => {
+      payments.createPayment.mockResolvedValueOnce({ transactionId: "checkout-1", status: "PENDING", nativeStatus: "NEW" });
+      const { order } = (await createOrder(card)).json();
+      payments.verifyWebhook.mockResolvedValueOnce({
+        transactionId: "payment-1",
+        status: "APPROVED",
+        nativeStatus: "CLO",
+        orderReference: order.id,
+      });
+
+      const res = await app.inject({ method: "POST", url: "/webhooks/hosted-pay", payload: rawBody });
+
+      expect(res.json()).toEqual({ received: true, matched: false });
+      expect(orders.get(order.id)?.status).toBe("PENDING");
+    });
   });
 
   describe("browser scripts", () => {

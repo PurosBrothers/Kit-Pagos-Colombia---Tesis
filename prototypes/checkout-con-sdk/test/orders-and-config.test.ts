@@ -39,6 +39,29 @@ describe("OrderStore", () => {
     expect(order.history[0].at).toBe("2026-10-13T12:00:00.000Z");
   });
 
+  it.each(["APPROVED", "DECLINED"] as const)(
+    "should keep a %s order when a pending notice arrives after it, and still record the notice",
+    (outcome) => {
+      const store = new OrderStore(fixedNow);
+      const order = store.create({ gateway: "hosted-pay", lines: [], amountInPesos: 1000, payer, method: "CARD" });
+      store.record(order, { source: "webhook", status: outcome, nativeStatus: "FINAL" });
+
+      store.record(order, { source: "webhook", status: "PENDING", nativeStatus: "ACT" });
+
+      expect(order.status).toBe(outcome);
+      expect(order.history.map((entry) => entry.nativeStatus)).toEqual(["FINAL", "ACT"]);
+    },
+  );
+
+  it("should find an order by its reference only for its own gateway", () => {
+    const store = new OrderStore(fixedNow);
+    const order = store.create({ gateway: "hosted-pay", lines: [], amountInPesos: 1000, payer, method: "CARD" });
+
+    expect(store.findByReference("hosted-pay", order.id)).toBe(order);
+    expect(store.findByReference("token-pay", order.id)).toBeUndefined();
+    expect(store.findByReference("hosted-pay", "ORD-OTRA")).toBeUndefined();
+  });
+
   it("should record a webhook that repeats the last status, but not a query that does", () => {
     const store = new OrderStore(fixedNow);
     const order = store.create({ gateway: "token-pay", lines: [], amountInPesos: 1000, payer, method: "CARD" });

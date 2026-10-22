@@ -112,6 +112,11 @@ export interface WebhookNotification {
   transactionId: string;
   status: MerchantPaymentStatus;
   nativeStatus: string;
+  /**
+   * La orden, cuando la pasarela la devuelve firmada. El checkout la busca así si no la encuentra
+   * por `transactionId`: la tarjeta de Rapyd se crea como checkout y su webhook trae el id del pago.
+   */
+  orderReference?: string;
 }
 
 /** Un webhook tal como llegó al checkout. */

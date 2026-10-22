@@ -36,7 +36,11 @@ export async function webhookRoutes(app: FastifyInstance, context: RouteContext)
       }
       if (!notification) return reply.code(401).send({ error: "Firma del webhook inválida" });
 
-      const order = context.orders.findByTransactionId(gateway, notification.transactionId);
+      const order =
+        context.orders.findByTransactionId(gateway, notification.transactionId) ??
+        (notification.orderReference
+          ? context.orders.findByReference(gateway, notification.orderReference)
+          : undefined);
       if (!order) return reply.code(200).send({ received: true, matched: false });
       context.orders.record(order, {
         source: "webhook",
