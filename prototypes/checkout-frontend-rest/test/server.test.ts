@@ -324,7 +324,7 @@ describe("prepareServer", () => {
     const summary = startupSummary(prepared);
 
     expect(prepared.sources).toEqual({ alfa: "archivo", beta: "argumento", gamma: "variable" });
-    expect(summary).toContain("Prototipo C en http://localhost:4111");
+    expect(summary).toContain("Prototipo C en http://localtest.me:4111");
     expect(summary).toContain("Llaves públicas para tarjeta: alfa (archivo), beta (argumento), gamma (variable)");
     expect(summary).toContain(`Archivo .env: ${envFile}`);
     expect(summary).not.toContain("no se leyó");
@@ -341,14 +341,15 @@ describe("prepareServer", () => {
     expect(startupSummary(prepared)).toContain(`Archivo .env: ${noEnvFile} (no existe; no se leyó)`);
   });
 
-  it("points to the tunnel only when it charges in the sandbox", () => {
+  it("asks to open the page on localtest.me only when it charges in the sandbox, and never for a tunnel", () => {
     writeFileSync(join(root, "index.html"), "<!doctype html>");
     const sandbox = prepareServer([], {}, root, noEnvFile);
     const simulator = prepareServer(["--environment=simulator"], {}, root, noEnvFile);
     if ("help" in sandbox || "help" in simulator) throw new Error("no se esperaba la ayuda");
 
-    expect(startupSummary(sandbox)).toContain("sirva la página por un túnel");
-    expect(startupSummary(simulator)).not.toContain("túnel");
+    expect(startupSummary(sandbox)).toContain("Ábrala en localtest.me y no en localhost");
+    expect(startupSummary(simulator)).not.toContain("no en localhost");
+    expect(startupSummary(sandbox)).not.toContain("túnel");
   });
 
   it("serves in /config.json only the public keys of a .env that also holds private secrets", async () => {

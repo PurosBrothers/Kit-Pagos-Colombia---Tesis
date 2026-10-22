@@ -376,13 +376,13 @@ export function prepareServer(argv, env, root, defaultEnvFile = DEFAULT_ENV_FILE
 export function startupSummary({ config, port, sources, envFile }) {
   const withKey = Object.entries(sources).map(([gateway, source]) => `${gateway} (${source})`);
   return [
-    `Prototipo C en http://localhost:${port}`,
+    `Prototipo C en http://localtest.me:${port}`,
     `  API:      ${config.apiBaseUrl}`,
     `  Ambiente: ${config.environment}`,
     `  Llaves públicas para tarjeta: ${withKey.length ? withKey.join(", ") : "ninguna; la tarjeta queda deshabilitada (pase el .env con --dotenv=<ruta>)"}`,
     `  Archivo .env: ${envFile.path}${envFile.found ? "" : " (no existe; no se leyó)"}`,
     ...(config.environment === "sandbox"
-      ? ["  En sandbox, alguna pasarela no deja volver a localhost: sirva la página por un túnel (guía de prueba)."]
+      ? ["  Ábrala en localtest.me y no en localhost: alguna pasarela no deja volver a localhost (guía de prueba)."]
       : []),
     "  Traza: cada archivo que sirve sale aquí con [tienda C]. Los pagos van del navegador a la API:",
     "         su traza está en la consola del navegador (F12), también con [tienda C].",
