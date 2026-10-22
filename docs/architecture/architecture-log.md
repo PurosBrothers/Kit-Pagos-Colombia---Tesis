@@ -4047,6 +4047,82 @@ La hipótesis quedó escrita en el §3 del plan antes del primer commit de pasar
 
 **Estado:** Diseño y documentación listos. La implementación y lo medido contra los sandboxes quedan en los puntos siguientes.
 
+### 118. El webhook trae el estado nativo y la referencia de la orden: la 0.7.0-rc.1 (PR #162)
+
+**Responsable:** Orduz.
+
+**Contexto.** El 21 de octubre de 2026 se probaron los webhooks de A y B contra copias del simulador, porque el sandbox no notifica a `localhost`. Los cuatro llegaban firmados y con `200`, pero aparecieron dos defectos.
+
+1. **El webhook de la tarjeta de Rapyd no encontraba su orden, ni en A ni en B.**
+   - La tarjeta de Rapyd se cobra en su página, así que `createPayment()` devuelve el id del checkout (`rapyd-checkout.ts`, punto 50). El webhook `PAYMENT_COMPLETED` trae el del pago.
+   - La ruta respondía `200 {matched: false}` y la orden seguía `PENDING`. Solo la aprobaba la página de la orden al consultar, así que un comprador que no volviera a la tienda la dejaba pendiente.
+2. **B guardaba como estado nativo la traducción del SDK.** El historial de la orden existe para guardar el estado que dijo la pasarela, sin traducir. El `WebhookEvent` de la 0.6.0 traía solo `newStatus`, que ya viene normalizado, y B guardó `APPROVED` donde A guardó `APPROVAL` (tarjeta de Kushki), `approvedTransaction` (PSE de Kushki) y `CLO` (Rapyd).
+
+**Lo medido.** El 21 de octubre de 2026 se leyó, contra el sandbox de Rapyd, el pago `payment_26dad5c17da6deeec54ae4bfd426d49c`, nacido del checkout `checkout_e80da4bb1522ea81b352c913107b628e`. Se imprimieron solo los nombres de los campos.
+
+- **Ninguno de sus 64 campos apunta al checkout.**
+- Lo único que los une es `merchant_reference_id: ORD-0F12DA1A`, la orden que mandó la tienda.
+- Y `validateWebhook()` es síncrono, así que el SDK no puede consultar a Rapyd para traducir un id en el otro.
+
+**Por qué es del SDK, y no solo de los prototipos.** El SDK promete, en `KushkiWebhookHandler`, que el `gatewayTransactionId` del webhook es el mismo con que `createPayment()` reportó el cobro, para que el comercio los relacione. Con la tarjeta de Rapyd eso no se cumple. Además, `Transaction` y `PendingRedirect` exponen `rawStatus` y `WebhookEvent` no, así que un comercio con el SDK no tenía cómo guardar lo que dijo la pasarela. A tenía el mismo defecto de emparejamiento en su propio código, y ese sí es de los prototipos.
+
+**Decisiones de Joan (21 de octubre de 2026).**
+
+1. **Se arregla aquí:** en el SDK lo que es del SDK, y en los dos esqueletos lo que es de los prototipos.
+2. **`WebhookEvent` gana dos campos opcionales,** `rawStatus` y `orderReference`. Solo vienen cuando la firma cubre el campo del que salen.
+3. **La versión sale como `0.7.0-rc.1`.** La publica Joan a mano con `--tag next`, como las candidatas de la 0.6.0. La `0.7.0` la publica el workflow cuando `devops` llegue a `main` (punto 108).
+4. **B instala la candidata con `--min-release-age=0` en ese único comando,** sin tocar la configuración de npm. Es la excepción del punto 62: el paquete propio, recién publicado.
+
+**Qué trae cada pasarela.**
+
+| Pasarela | `rawStatus` | `orderReference` | Por qué |
+|---|---|---|---|
+| Wompi | `transaction.status` | — | La firma tiene que cubrir `transaction.status` (punto 67). `transaction.reference` no tiene esa exigencia, y el id ya es el de `createPayment()` |
+| Mercado Pago | — | — | El cuerpo no está firmado. El evento sigue siendo `PENDING` y la consulta trae las dos cosas (punto 70) |
+| Kushki | `transaction_status` (tarjeta) o `status` (transferencia) | — | La firma cubre el cuerpo entero. El ticket y el token ya son los de `createPayment()` |
+| Rapyd | `data.status` | `data.merchant_reference_id` | La firma cubre el cuerpo entero |
+
+**En los prototipos.**
+
+- **El esqueleto, igual en A y B.** `WebhookNotification` gana `orderReference` opcional y `OrderStore` gana `findByReference(gateway, reference)`, porque la referencia que el checkout manda es el id de la orden. La ruta de webhooks busca primero por `transactionId` y después por la referencia, y en los dos casos exige que la pasarela sea la de la orden. La orden conserva el id del checkout, que sigue sirviendo para consultar.
+- **A.** `rapyd.ts` devuelve `merchant_reference_id`.
+- **B.** Guarda `rawStatus` (o el normalizado, si no viene) y pasa `orderReference`, también cuando confirma un evento pendiente consultando.
+
+**Dónde entra en los commits.** La disciplina del punto 117 sigue en pie: el commit de cada pasarela trae solo esa pasarela. Por eso los arreglos van en dos commits propios.
+
+- **El del esqueleto** va justo antes del de Rapyd en A, y es igual en los dos prototipos. Lo que la tarjeta de Rapyd le costó al contrato queda a la vista, y pesa lo mismo en A que en B.
+- **El del SDK** va antes de las pasarelas de B.
+
+B pide la candidata en el commit de Kushki, el primero que la necesita (por el estado nativo), y usa la referencia en el de Rapyd.
+
+**Lo medido después**, el 21 de octubre de 2026 entre las 18:40 y las 18:48 UTC, con el SDK armado en local (`npm pack`):
+
+- **La tarjeta de Rapyd** quedó aprobada por el webhook antes de cualquier consulta, en A (`ORD-ACEF3677`) y en B (`ORD-DCF58F57`). El historial dice `NEW` y luego `CLO`.
+- **El PSE de las cuatro** deja el mismo historial en A y en B, con el estado nativo de cada pasarela: `APPROVED`, `processed`, `approvedTransaction` y `CLO`.
+
+**Contra los sandboxes oficiales**, el mismo día entre las 19:25 y las 20:17 UTC. Fueron los primeros webhooks reales que recibe el proyecto; el punto 70 los había dejado pendientes.
+
+- **Cómo.** Joan registró en cada panel una URL de un túnel. Detrás, un repetidor local entrega cada notificación, byte a byte, a A y a B. Así cada aviso prueba la firma en los dos, y el emparejamiento en el que creó la orden.
+- **Rapyd (tarjeta con 3DS).** Manda `PAYMENT_SUCCEEDED` en `ACT` y, en el mismo segundo, `PAYMENT_UPDATED` en `ACT` y `PAYMENT_COMPLETED` en `CLO`. El aviso trae `merchant_reference_id`, y A y B encontraron sus órdenes por la referencia.
+- **Wompi (tarjeta).** Firma válida en los dos, y la orden de B aprobada por el webhook.
+- **Mercado Pago (tarjeta).** Las notificaciones reales del modo de pruebas (`live_mode: false`) no verifican con ninguna de las tres claves que dio el panel, tampoco con el validador oficial (`mercadopago` 3.6.1, `SignatureMismatch`). Son de la misma aplicación y del mismo usuario que el token. La notificación simulada desde el panel (`live_mode: true`) sí verifica con la misma clave, en A, en B y en el validador oficial. La firma de los dos es correcta, y lo que no se puede verificar es la notificación real del modo de pruebas. Las órdenes se resuelven igual: la tarjeta nace aprobada y el PSE se consulta.
+- **Kushki.** Sin medir: el usuario de la consola de UAT no entra, y el correo para restablecerlo no llega. Joan decidió el 22 de octubre de 2026 declararlo como límite del experimento, sin plan de medirlo. La firma de Kushki se prueba con el simulador, que firma como lo documenta Kushki.
+- **Mercado Pago, lo que sigue.** Se redactó una consulta para el soporte de Mercado Pago con lo medido, y queda declarado en el #162.
+
+**Dos defectos más, que solo el webhook real mostró.**
+
+1. **`PAYMENT_UPDATED` no es un desenlace.** Avisa que el pago cambió, sin decir hacia dónde. A lo traducía a DECLINED, y el SDK a ERROR, que B también guarda como rechazo: la orden de A pasó por DECLINED antes de aprobarse. Como llega en el mismo segundo que `PAYMENT_COMPLETED`, con otro orden de entrega un pago aprobado habría quedado rechazado. Ahora vale el estado del pago, con la misma traducción que la consulta. En el SDK esa traducción pasó del normalizador a `native-status.ts`, porque el manejador de webhooks vive en el dominio y no puede importar de la capa de aplicación (punto 46).
+2. **Un aviso pendiente que llega tarde deshacía el desenlace.** En los dos esqueletos, `OrderStore.record()` ahora deja en el historial un `PENDING` que llega cuando la orden ya está aprobada o rechazada, pero no cambia el estado. Va en el mismo commit del esqueleto que la búsqueda por referencia.
+
+**Una diferencia menor entre A y B.** Ante una notificación con un id que no existe, B consulta, recibe `RESOURCE_NOT_FOUND` y responde 502, que pide reintento. A no consulta los ids que no son de una orden y responde 200. Solo pasa con la notificación simulada, que lleva un id inventado.
+
+**Lo que queda.**
+
+- **La 0.7.0.** Antes de que `devops` llegue a `main` hay que subir `sdk/package.json` a `0.7.0`. Después, B pasa de la candidata a `^0.7.0` en un PR corto, como en el punto 108.
+- **La 0.7.0 en el simulador.** El simulador sigue en la 0.6.0, que lee `PAYMENT_UPDATED` como `ERROR` en `/v1/api/webhooks`. Pasa a `^0.7.0` en el mismo PR corto que B.
+
+**Estado:** Resuelto en `sdk/` (`0.7.0-rc.1`) y en los dos prototipos, con pruebas en los tres.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd

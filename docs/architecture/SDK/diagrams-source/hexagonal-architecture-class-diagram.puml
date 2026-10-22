@@ -86,6 +86,8 @@ package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
     gatewayTransactionId : string
     newStatus : TransactionStatus
     gateway : Gateway
+    rawStatus : string | undefined
+    orderReference : string | undefined
   }
 
   class WebhookVerifier <<Servicio de Dominio>> #BBDEFB {

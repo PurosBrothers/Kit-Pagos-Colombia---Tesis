@@ -439,6 +439,8 @@ app.post("/webhook", (req, res) => {
     console.log(`Evento: ${event.eventType}`);
     console.log(`Transacción: ${event.gatewayTransactionId}`);
     console.log(`Nuevo Estado: ${event.newStatus}`);
+    console.log(`Estado nativo: ${event.rawStatus ?? "sin estado firmado"}`);
+    console.log(`Orden: ${event.orderReference ?? "sin referencia firmada"}`);
 
     res.status(200).send("OK");
   } catch (error) {
@@ -458,6 +460,18 @@ app.post("/webhook", (req, res) => {
 `newStatus: "PENDING"`: la firma no cubre el cuerpo de la notificación, así que el SDK no confía en
 ningún estado que venga en él. Consulte el estado real con
 `getPaymentStatus(event.gatewayTransactionId)`.
+
+> **El estado nativo y la referencia de la orden, desde la 0.7.0-rc.1.** El evento trae dos
+> campos opcionales, y solo cuando la firma cubre el dato del que salen:
+>
+> - **`rawStatus`** es el estado tal como lo mandó la pasarela, para guardarlo sin traducir:
+>   `APPROVED` en Wompi, `APPROVAL` en el cargo de Kushki, `CLO` en el pago de Rapyd. Mercado Pago
+>   no lo trae.
+> - **`orderReference`** es la referencia de la orden que usted mandó al cobrar. Hoy solo la trae
+>   Rapyd, y es la que resuelve su cobro con tarjeta. Ese cobro se crea como checkout, así que
+>   `createPayment()` devuelve el id del checkout, y el webhook trae el del pago. El pago no
+>   trae ningún campo que apunte al checkout (medido el 21 de octubre de 2026). Busque la orden
+>   por `gatewayTransactionId` y, si no aparece, por `orderReference`.
 
 **Webhooks de una pasarela que no es la activa.** Durante una migración usted cobra por la pasarela
 nueva y sigue recibiendo webhooks de la vieja por semanas: pagos ya iniciados, conciliaciones,

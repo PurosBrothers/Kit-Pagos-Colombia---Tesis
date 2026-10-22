@@ -237,11 +237,11 @@ app.post("/webhooks/:pasarela", async (request, reply) => {
 });
 ```
 
-### Tres reglas más del manejador
+### Cuatro reglas más del manejador
 
 **Responder rápido.** Las pasarelas reintentan si no reciben un `200` pronto. El trabajo pesado va a una cola, no dentro del manejador.
 
-**Tolerar duplicados.** El mismo webhook puede llegar varias veces. El manejador tiene que ser idempotente: si la orden ya está aprobada, aprobarla otra vez no debe hacer nada.
+**Tolerar duplicados y desorden.** El mismo webhook puede llegar varias veces. El manejador tiene que ser idempotente: si la orden ya está aprobada, aprobarla otra vez no debe hacer nada. Tampoco el orden está garantizado. Con 3DS, Rapyd manda en el mismo segundo un `PAYMENT_UPDATED` todavía pendiente y el `PAYMENT_COMPLETED` (medido el 21 de octubre de 2026), así que un `PENDING` que llega cuando la orden ya está aprobada o rechazada se guarda en el historial, pero no cambia el estado.
 
 **Manejar el webhook que no trae el estado.** El de Mercado Pago solo trae un identificador firmado. El SDK devuelve siempre `PENDING`, aunque el cuerpo traiga un estado, y el comercio completa con `getPaymentStatus()`:
 
@@ -255,6 +255,15 @@ if (evento.newStatus === "PENDING") {
 } else {
   await actualizarOrdenDesdeEvento(evento);
 }
+```
+
+**Buscar la orden también por su referencia.** Con tarjeta, Rapyd cobra en su página: `createPayment()` devuelve el id del checkout y el webhook trae el del pago, que no apunta al checkout (medido el 21 de octubre de 2026). Lo único que los une es la referencia de la orden que el comercio mandó al cobrar, y desde la 0.7.0-rc.1 el evento la trae en `orderReference` cuando la firma la cubre. Para guardar el estado sin traducir está `rawStatus`, que Mercado Pago no trae:
+
+```ts
+const orden =
+  (await buscarOrdenPorTransaccion(evento.gatewayTransactionId)) ??
+  (evento.orderReference ? await buscarOrden(evento.orderReference) : undefined);
+await guardarEstado(orden, evento.newStatus, evento.rawStatus ?? evento.newStatus);
 ```
 
 ### Si el reloj está desfasado
