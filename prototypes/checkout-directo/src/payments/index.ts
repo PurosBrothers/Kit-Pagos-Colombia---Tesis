@@ -1,6 +1,7 @@
 import { CreatePaymentRequest, GatewayOption, PaymentsPort } from "../checkout/PaymentsPort";
 import { paymentsEnvironment } from "../checkout/environment";
 import { GatewayModule, GatewayPayments } from "./gateway";
+import { mercadoPagoModule } from "./mercadopago";
 import { wompiModule } from "./wompi";
 
 /**
@@ -8,7 +9,7 @@ import { wompiModule } from "./wompi";
  * archivo que integra su API nativa a mano, con `fetch` y siguiendo su documentación oficial
  * (punto 117 del `architecture-log.md`).
  */
-const GATEWAY_MODULES: readonly GatewayModule[] = [wompiModule];
+const GATEWAY_MODULES: readonly GatewayModule[] = [wompiModule, mercadoPagoModule];
 
 /**
  * El módulo de pagos del prototipo A: reúne las pasarelas en el `PaymentsPort` del esqueleto.

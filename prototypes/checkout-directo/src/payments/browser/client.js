@@ -70,7 +70,55 @@ async function tokenizeWompiCard(card, config) {
   return body.data.id;
 }
 
-const TOKENIZERS = { wompi: tokenizeWompiCard };
+/**
+ * Tokeniza la tarjeta directamente contra Mercado Pago en el navegador y devuelve el id del token.
+ *
+ * La documentación oficial tokeniza con MercadoPago.js (`createCardToken`, en los métodos core);
+ * aquí se llama directo a `POST /v1/card_tokens` con la llave pública, como en Wompi, porque
+ * Mercado Pago responde ese endpoint con `access-control-allow-origin: *`.
+ * https://www.mercadopago.com.co/developers/en/docs/checkout-api-payments/integration-configuration/card/integrate-via-core-methods
+ * https://www.mercadopago.com.co/developers/es/docs/checkout-api-orders/integration-test/cards
+ *
+ * @param {{ number: string, cvc: string, expMonth: string, expYear: string, cardHolder: string, docType?: string, docNumber?: string }} card
+ * @param {Record<string, string>} config lo que devuelve `publicConfig()` del módulo de pagos
+ * @returns {Promise<string>}
+ */
+async function tokenizeMercadoPagoCard(card, config) {
+  if (!config || !config.publicKey || !config.baseUrl) {
+    throw new Error("Configuración pública incompleta: falta publicKey o baseUrl");
+  }
+
+  const expYear = String(card?.expYear || "").trim();
+  const url = `${config.baseUrl.replace(/\/+$/, "")}/card_tokens?public_key=${encodeURIComponent(config.publicKey.trim())}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      card_number: String(card?.number || "").replace(/\s+/g, ""),
+      expiration_month: Number(String(card?.expMonth || "").trim()),
+      // Mercado Pago pide el año con cuatro cifras.
+      expiration_year: Number(expYear.length === 2 ? `20${expYear}` : expYear),
+      security_code: String(card?.cvc || "").trim(),
+      cardholder: {
+        name: String(card?.cardHolder || "").trim(),
+        identification: { type: String(card?.docType || "").trim(), number: String(card?.docNumber || "").trim() },
+      },
+    }),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(
+      body.cause?.[0]?.description || body.message || `Mercado Pago rechazó la tokenización con estado HTTP ${response.status}`,
+    );
+  }
+  if (!body.id) {
+    throw new Error("Respuesta inválida de Mercado Pago al tokenizar la tarjeta: falta id");
+  }
+  return body.id;
+}
+
+const TOKENIZERS = { wompi: tokenizeWompiCard, mercadopago: tokenizeMercadoPagoCard };
 
 /**
  * Tokeniza la tarjeta contra la pasarela de `config.gateway` y devuelve el token.
