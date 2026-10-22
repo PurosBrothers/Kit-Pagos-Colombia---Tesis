@@ -4,8 +4,8 @@ Dos implementaciones del mismo checkout mínimo de comercio electrónico: mostra
 
 | Carpeta | Prototipo | Cómo cobra |
 |---|---|---|
-| `checkout-sin-solucion/` | A, control | `fetch` contra la API nativa de la pasarela, siguiendo su documentación oficial. Se presenta como «La Candelaria Cómics», una tienda de cómics con catálogo y carrito |
-| `checkout-con-sdk-front-back/` | B, tratamiento | `kit-pagos-colombia` en el servidor y `kit-pagos-colombia/browser` en la página. Se presenta como «La Bodega de Chapinero», una tienda de vinos con catálogo y carrito |
+| `checkout-sin-solucion/` | A, control | `fetch` contra la API nativa de cada una de las cuatro pasarelas (Wompi, Mercado Pago, Kushki y Rapyd), siguiendo su documentación oficial. Se presenta como «La Candelaria Cómics», una tienda de cómics con catálogo y carrito |
+| `checkout-con-sdk-front-back/` | B, tratamiento | Las mismas cuatro con `kit-pagos-colombia` (0.7.0-rc.1) en el servidor y `kit-pagos-colombia/browser` en la página. Se presenta como «La Bodega de Chapinero», una tienda de vinos con catálogo y carrito |
 | `checkout-frontend-rest/` | C, fuera del experimento A/B | Desde el navegador contra `/v1/api`, sin servidor de pagos propio. Se documenta en [`docs/05-ejemplos/checkout-frontend-rest.md`](../docs/05-ejemplos/checkout-frontend-rest.md) |
 
 C no comparte el esqueleto de A y B, y `check-skeleton-parity.sh` no lo compara: es una página estática con Vite, servida por `server.mjs`, que demuestra el patrón de integración 2 (punto 91 del `architecture-log.md`).
@@ -21,9 +21,13 @@ C no comparte el esqueleto de A y B, y `check-skeleton-parity.sh` no lo compara:
 
 Todo lo que no es integración de pagos es idéntico en los dos prototipos, y queda fuera del conteo de líneas. El módulo de pagos es lo único que cada prototipo escribe:
 
-- `src/payments/index.ts`: `createPayments()`, que devuelve la implementación de `PaymentsPort`.
-- `src/payments/browser/client.js`: `tokenizeCard()`, que corre en el navegador. El número de la tarjeta va del navegador a la pasarela y nunca pasa por el servidor del comercio.
+- `src/payments/index.ts`: `createPayments()`, que devuelve la implementación de `PaymentsPort` con las pasarelas registradas.
+  - En A, cada pasarela es un archivo (`wompi.ts`, `mercadopago.ts`, `kushki.ts`, `rapyd.ts`) con lo que comparten en `gateway.ts`.
+  - En B, cada pasarela es una entrada de `gateways.ts` con sus credenciales, y el módulo crea un `KitPagos` por pasarela, porque el SDK cobra con una pasarela activa por instancia.
+- `src/payments/browser/client.js`: `tokenizeCard()`, que corre en el navegador. El número de la tarjeta va del navegador a la pasarela y nunca pasa por el servidor del comercio. Rapyd no tokeniza: la tarjeta se escribe en su página.
 - `test/payments/`: sus pruebas, con el mismo esfuerzo en los dos (variable 6).
+
+La pasarela la elige el comprador con un selector de la tienda, como en C. Los nombres los da el módulo de pagos en tiempo de ejecución, así que la vitrina no nombra pasarelas en su código, y una prueba lo comprueba.
 
 Lo demás es el esqueleto común: el servidor Fastify, las páginas, las órdenes en memoria, las rutas y el contrato `src/checkout/PaymentsPort.ts`. No se modifica desde ningún prototipo. `check-skeleton-parity.sh` lo comprueba en la CI: compara las dos carpetas sin `payments/` y falla si el módulo de pagos de A usa el SDK.
 
@@ -52,11 +56,19 @@ Los dos `package.json` traen `kit-pagos-colombia`, para que el esqueleto sea id�
 | 5. Consultar el estado por el identificador | `getPaymentStatus()` |
 | 6. Registrar el estado nativo para auditoría | El `nativeStatus` de cada respuesta; el esqueleto lo guarda en el historial de la orden |
 
-El monto llega en pesos enteros: convertirlo a la unidad de la pasarela es trabajo del módulo. `verifyWebhook()` recibe el cuerpo tal como llegó por la red, las cabeceras y la query, porque Mercado Pago firma con el `data.id` de la URL. El contrato tiene que servir sin cambios para la migración a Mercado Pago (issue #133).
+El contrato sirve a las cuatro pasarelas a la vez (punto 117 del `architecture-log.md`):
+
+- **La pasarela es un parámetro** de cada operación.
+- **`listGateways()`** dice cuáles están disponibles, con su nombre para el comprador y cómo recibe la tarjeta: `BROWSER_TOKEN` (Wompi, Mercado Pago y Kushki) o `HOSTED_PAGE` (Rapyd).
+- **El esqueleto** guarda la pasarela en la orden, sirve `GET /api/gateways` y recibe los webhooks en `/webhooks/<pasarela>`.
+
+El monto llega en pesos enteros: convertirlo a la unidad de la pasarela es trabajo del módulo. `verifyWebhook()` recibe el cuerpo tal como llegó por la red, las cabeceras y la query, porque Mercado Pago firma con el `data.id` de la URL.
+
+La notificación puede traer la referencia de la orden. El esqueleto la busca así cuando no la encuentra por el id de la transacción, porque la tarjeta de Rapyd se crea como checkout y su webhook trae el id del pago (punto 118). Un `PENDING` que llega cuando la orden ya está aprobada o rechazada queda en el historial sin cambiar el estado, porque las pasarelas no garantizan el orden de sus avisos.
 
 ## Cómo correrlos
 
-Por omisión, `npm start` cobra en el sandbox oficial de la pasarela, como el prototipo C (punto 104), sin encender nada en la máquina:
+Por omisión, `npm start` cobra en el sandbox oficial de cada pasarela, como el prototipo C (punto 104), sin encender nada en la máquina:
 
 ```bash
 cd prototypes/checkout-sin-solucion   # o checkout-con-sdk-front-back
@@ -66,18 +78,24 @@ npm start                             # http://localhost:4000
 
 | Comando | Dónde cobra | Para qué sirve |
 |---|---|---|
-| `npm start` | El sandbox oficial de la pasarela | Probar contra lo real. Las llaves salen del `.env` de la raíz; sin ellas, A y B se detienen al arrancar y dicen cuáles faltan |
+| `npm start` | El sandbox oficial de cada pasarela | Probar contra lo real. Las llaves salen del `.env` de la raíz. Una pasarela sin sus llaves queda fuera del selector; si no queda ninguna, A y B se detienen al arrancar y dicen cuáles faltan |
 | `npm start -- --environment=simulator` | La API de Simulación de Render | Los escenarios del simulador sin encender nada. La primera consulta puede tardar mientras Render despierta. En B, solo PSE: la tarjeta no tokeniza (ver abajo) |
 | `npm run start:local` | Una API de Simulación en `localhost:3000` (`simulator-api`, `npm run dev`) | Trabajar con el simulador de la máquina |
 | `npm run dev` | Lo mismo que `start:local`, recompilando al guardar | Desarrollo |
 
-El esqueleto lee el `.env` de la raíz, el mismo de la API de Simulación (una variable del entorno gana sobre el archivo), y el ambiente: `--environment=sandbox|simulator`, `--simulator-url=…` y `--port=…`, o sus variables. No nombra ninguna pasarela: cada módulo de pagos traduce el ambiente a sus URLs (punto 111 del `architecture-log.md`). En A, el sandbox es `https://sandbox.wompi.co/v1` y el simulador, sus rutas `/v1/sim/wompi`; `WOMPI_BASE_URL` gana sobre los dos. En B, el módulo le pasa el ambiente al SDK (punto 116):
+El esqueleto lee el `.env` de la raíz, el mismo de la API de Simulación (una variable del entorno gana sobre el archivo), y el ambiente: `--environment=sandbox|simulator`, `--simulator-url=…` y `--port=…`, o sus variables. No nombra ninguna pasarela: cada módulo de pagos traduce el ambiente a sus URLs (punto 111 del `architecture-log.md`).
 
-- con `sandbox`, el SDK toma la URL de su catálogo;
-- con `simulator`, el módulo usa la URL del esqueleto con `/v1/sim/wompi`;
-- `WOMPI_BASE_URL` gana sobre los dos, y cuenta como simulador.
+- **En A**, cada pasarela tiene su URL de sandbox y sus rutas del simulador (`/v1/sim/wompi`, `/v1/sim/mercadopago`, `/v1/sim/kushki` y `/v1/sim/rapyd`). `<PASARELA>_BASE_URL` gana sobre las dos.
+- **En B**, el módulo le pasa el ambiente al SDK (punto 116). Con `sandbox`, el SDK toma la URL de su catálogo; con `simulator`, el módulo usa la URL del esqueleto con las mismas rutas. `<PASARELA>_BASE_URL` gana sobre los dos, y cuenta como simulador.
 
-**La tarjeta de B contra el simulador de Render no tokeniza.** El SDK de navegador tokeniza en `simulator` siempre contra `localhost:3000`, porque su catálogo de hosts es cerrado para que la tarjeta no pueda ir a otro lado (punto 77). Con Render, la página responde «Error de conexión al tokenizar tarjeta», y el PSE sí funciona. La tarjeta en el simulador se prueba con `npm run start:local`. En A no pasa, porque el módulo de David arma la URL de la tokenización a mano.
+| Pasarela | Llaves para el sandbox | Para los webhooks |
+|---|---|---|
+| Wompi | `WOMPI_PUBLIC_KEY`, `WOMPI_PRIVATE_KEY`, `WOMPI_INTEGRITY_SECRET` | `WOMPI_EVENTS_SECRET` |
+| Mercado Pago | `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_PUBLIC_KEY` | `MERCADOPAGO_WEBHOOK_SECRET` |
+| Kushki | `KUSHKI_PUBLIC_MERCHANT_ID`, `KUSHKI_PRIVATE_MERCHANT_ID` | `KUSHKI_WEBHOOK_SECRET` |
+| Rapyd | `RAPYD_API_ACCESS_KEY`, `RAPYD_API_SECRET_KEY` | `RAPYD_WEBHOOK_URL`, la URL exacta registrada en el panel, porque Rapyd la firma |
+
+**La tarjeta de B contra el simulador de Render no tokeniza.** El SDK de navegador tokeniza en `simulator` siempre contra `localhost:3000`, porque su catálogo de hosts es cerrado para que la tarjeta no pueda ir a otro lado (punto 77). Con Render, la página responde «Error de conexión al tokenizar tarjeta». El PSE sí funciona, y la tarjeta de Rapyd también, porque no tokeniza. La tarjeta en el simulador se prueba con `npm run start:local`. En A no pasa, porque cada módulo arma a mano la URL de su tokenización.
 
 | Variable | Por omisión | Qué es |
 |---|---|---|
@@ -86,19 +104,37 @@ El esqueleto lee el `.env` de la raíz, el mismo de la API de Simulación (una v
 | `CHECKOUT_ENVIRONMENT` | `sandbox` | `sandbox` o `simulator` |
 | `CHECKOUT_SIMULATOR_URL` | `https://kit-pagos-colombia.onrender.com` | El origen de la API de Simulación, con `simulator` |
 
-**Los webhooks (función 4).** En el sandbox, Wompi manda los eventos a la URL configurada en su panel, que no puede ser `localhost`, y lo mismo pasa con el simulador de Render: la orden se resuelve con la consulta. Con el simulador local el webhook sí llega. Basta con arrancar `simulator-api` con `SIMULATOR_WEBHOOK_TARGET_URL=http://localhost:4000/webhooks` y `SIMULATOR_WEBHOOK_AUTO=true` (sección 4.2 de [`3-api-de-simulacion.md`](../docs/02-arquitectura/3-api-de-simulacion.md)), porque el simulador, A y B leen del mismo `.env` el secreto de eventos (`WOMPI_EVENTS_SECRET`). Si corren los dos prototipos a la vez, el segundo necesita otro `PORT`, y el destino de los webhooks es uno solo.
+**Los webhooks (función 4)** llegan a `/webhooks/<pasarela>`.
 
-**Los datos de prueba**, medidos el 19 de octubre de 2026:
+- **En el sandbox**, cada pasarela notifica a la URL registrada en su panel, que no puede ser `localhost`: hace falta un túnel. Sin él, la orden se resuelve con la consulta de su página.
+- **Con el simulador local**, el webhook llega solo. Basta con arrancar `simulator-api` con `SIMULATOR_WEBHOOK_TARGET_URL=http://localhost:4000/webhooks/{gateway}` y `SIMULATOR_WEBHOOK_AUTO=true` (sección 4.2 de [`3-api-de-simulacion.md`](../docs/02-arquitectura/3-api-de-simulacion.md)). El simulador, A y B tienen que leer los mismos secretos de webhook. El simulador emite solo cuando un pago cambia de estado; uno que nace resuelto se notifica con `POST /v1/sim/webhooks/trigger`. La tarjeta de Rapyd pagada en su página llega con la misma secuencia del sandbox: dos avisos en `ACT` y después `PAYMENT_COMPLETED`.
+- **Si corren los dos prototipos a la vez**, el segundo necesita otro `PORT`, y el destino de los webhooks del simulador es uno solo.
 
-- **A**, en el sandbox de Wompi y en el simulador local (en el de Render, la tarjeta aprobada):
-  - la tarjeta 4242 4242 4242 4242 se aprueba y la 4111 1111 1111 1111 se rechaza;
-  - en PSE, el banco 1 aprueba, el 2 rechaza y el 3 da `ERROR`, que A traduce a rechazo;
-  - en el sandbox, el PSE se resuelve en la primera consulta, sin página de banco.
-- **B**, en el sandbox de Wompi:
-  - la 4242 se aprueba y la 4111 se rechaza;
-  - el PSE con el banco 1 sale aprobado desde la creación.
+**Para probar en el día a día no hace falta túnel.**
 
-  En el simulador de Render, el PSE con el banco 1 pasa por la página de banco del simulador y la consulta lo aprueba.
+- El simulador local firma cada aviso como la pasarela real, con lo que se midió en los sandboxes, incluida la secuencia de Rapyd.
+- Las pruebas de los módulos verifican firmas con cuerpos de la documentación de cada pasarela y de lo medido, sin red ni llaves.
+- Contra el sandbox, la orden se resuelve con la consulta aunque no llegue el webhook.
+
+Un webhook real solo hace falta para volver a medir, si una pasarela cambia su forma de notificar o se agrega una. Ese día se registra en su panel la URL de un túnel, que en Rapyd tiene que ser también `RAPYD_WEBHOOK_URL`, porque Rapyd la firma.
+
+Lo medido contra los sandboxes el 21 de octubre de 2026 está en el punto 118. Rapyd y Wompi verifican y actualizan la orden. Las notificaciones reales del modo de pruebas de Mercado Pago no verifican con la clave del panel, y la simulada desde el panel sí. Kushki quedó sin medir, porque no hubo acceso a su consola de UAT, y se declara como límite del experimento; su firma se prueba con el simulador.
+
+**Los datos de prueba**, medidos entre el 19 y el 21 de octubre de 2026 en los dos prototipos:
+
+| Pasarela | Tarjeta | PSE |
+|---|---|---|
+| Wompi | 4242 4242 4242 4242 se aprueba y 4111 1111 1111 1111 se rechaza | El banco 1 aprueba, el 2 rechaza y el 3 da `ERROR`, que cuenta como rechazo. En el sandbox se resuelve en la primera consulta, sin página de banco |
+| Mercado Pago | 4013 5406 8274 6260, 11/30, titular `APRO Ruiz` | «Banco Prueba PSE», con cualquier usuario y «APROBAR PAGO». Exige una `callback_url` que no sea `localhost` (`PUBLIC_BASE_URL` de un túnel), y el sandbox tiene ventanas en que la orden nace sin URL del banco y termina en `processing_error` (punto 113) |
+| Kushki | 4242 4242 4242 4242. El token queda atado al monto (`K220` si se cobra otro) | Llega a la página real «Kushki Bank» y vuelve a la tienda, pero queda pendiente (`initializedTransaction`): UAT no cierra las transferencias |
+| Rapyd | En su página: 4111 1111 1111 1111, 12/30, CVV 123, y el código `123456` en su simulador de 3DS | Solo cobra con 9 de sus bancos, que son los que lista la tienda; «Rapyd Bank Payment Simulation» con Success |
+
+En el simulador, la tarjeta aprobada y el PSE con el banco 1 siguen los escenarios de `simulator-api`.
+
+**Límites medidos**, que la tienda muestra tal cual:
+
+- **La tarjeta de Kushki no tiene consulta de estado** en Colombia: «Consultar el estado» responde 502 y la orden conserva el estado con que nació. El SDK responde igual (`UNSUPPORTED_OPERATION`).
+- **UAT de Kushki es lento:** la lista de bancos tardó 10,9 s y el inicio de la transferencia, entre 12 y 18 s.
 
 Los precios del catálogo esquivan los montos que el simulador reserva para escenarios de fallo.
 
@@ -135,7 +171,7 @@ Lo que costaría ponérsela a cada uno. El detalle está en el punto 114.
 
 | Prototipo | Dónde iría | Qué hay que resolver |
 |---|---|---|
-| A | En el esqueleto (`server.ts` o `app.ts`), igual en A y B por la paridad | Pasar a un archivo el `<style>` en línea de `src/views/pages.ts`, o permitirlo con su hash. El host de Wompi sale de `publicConfig().baseUrl` del módulo de David, sin nombrarlo |
+| A | En el esqueleto (`server.ts` o `app.ts`), igual en A y B por la paridad | Pasar a un archivo el `<style>` en línea de `src/views/pages.ts`, o permitirlo con su hash. Los hosts de tokenización de Wompi, Mercado Pago y Kushki salen del `publicConfig().baseUrl` de cada módulo, sin nombrarlos |
 | B | La misma cabecera del esqueleto | Su propio `<style>` en línea. El host de tokenización lo decide el SDK y no está en `publicConfig()`: habría que exponerlo desde el módulo de Andrés, y eso cuenta en las variables del experimento |
 | C | En `server.mjs`, al servir el HTML | El hash del import map, calculado al arrancar desde `dist/index.html`. Los hosts de tokenización no se pueden escribir en `server.mjs`, porque `no-gateway-names.test.ts` lo prohíbe: tendría que darlos la API o un argumento |
 

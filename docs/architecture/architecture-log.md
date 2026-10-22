@@ -4126,6 +4126,71 @@ B pide la candidata en el commit de Kushki, el primero que la necesita (por el e
 
 **Estado:** Resuelto en `sdk/` (`0.7.0-rc.1`) y en los dos prototipos, con pruebas en los tres.
 
+### 119. A y B cobran las cuatro pasarelas en sus sandboxes: lo medido (issues #150 y #151, PR #162)
+
+**Responsable:** Orduz.
+
+**Cómo se midió.** El 21 de octubre de 2026, desde el navegador, con A y B detrás de túneles (el PSE de Mercado Pago no acepta volver a `localhost`) y las llaves del `.env` de la raíz. Lo que se escribió fue lo de la tienda; en las páginas de las pasarelas y de los bancos, sus datos de prueba.
+
+| Pasarela | Tarjeta en A | Tarjeta en B | PSE en A | PSE en B |
+|---|---|---|---|---|
+| Wompi | Aprobada (`12066420-1792553082-97959`) | Aprobada (`12066420-1792553130-44486`) | Aprobado (`12066420-1792603498-72242`) | Aprobado (`12066420-1792603562-80931`) |
+| Mercado Pago | Aprobada, `processed` (`ORDTST01M5E8CY16XC1K753GB9C3AEWF`) | Aprobada, `processed` (`ORDTST01M5EA0SPFFYN0BGXFDQYWKFAC`) | Aprobado, `processed` (`ORDTST01M5FQN3YVPSMA085TPKWS4AJW`) | Aprobado, `processed` (`ORDTST01M5FQS2SMWV20XQPN8P43E58D`) |
+| Kushki | Aprobada, `APPROVAL` (ticket `935975252385356738`) | Aprobada, `APPROVAL` (ticket `054339898468745699`) | Pendiente, `initializedTransaction` | Pendiente, `initializedTransaction` |
+| Rapyd | Aprobada en su página con 3DS (`checkout_e80da4bb1522ea81b352c913107b628e`) | Aprobada en su página con 3DS (`checkout_cbe727f6f66045677dac3d3dc57bf381`) | Aprobado, `CLO` (`payment_834c8f870b982b95a17cb255e4c79570`) | Aprobado, `CLO` (`payment_f2e3cd2c5c9659e68922c7b85e528008`) |
+
+Las cuatro cobran con tarjeta y con PSE en los dos prototipos. El único PSE sin desenlace es el de Kushki, porque UAT no cierra las transferencias (`docs/testing-data/kushki.md`, §5.2.2).
+
+**Lo que se encontró, por pasarela.**
+
+- **Mercado Pago.**
+  - El PSE falló a las 03:36 y a las 03:54 UTC con `processing_error`. Un control con el SDK publicado, a las 03:59, falló igual: era la ventana del sandbox del punto 113, no el código. A las 17:17 ya entregaba la URL del banco.
+  - El PSE exige una `callback_url` que no sea `localhost` y la IP del pagador. Detrás de un túnel, la IP llega como `::1`, y A la manda como `127.0.0.1`, como hace el SDK.
+  - Un `402` con la orden fallida en `data` es un rechazo, no un fallo técnico; A lo trata igual que el SDK.
+- **Kushki.**
+  - **La tarjeta no tiene consulta de estado en Colombia.** `GET /transfer/v1/status/{ticket}` responde 400, así que «Consultar el estado» da 502 y la orden conserva el estado con que nació. El SDK responde igual, con `UNSUPPORTED_OPERATION`.
+  - El token queda atado al monto (`K220` si se cobra otro), y la tienda tokeniza y cobra el mismo total.
+  - La referencia de la API pide tokenizar en el servidor y `fullResponse: "v2"`. A y el SDK tokenizan en el navegador con el id público, que es lo que se midió que funciona (punto 106), y mandan `fullResponse: true`, con el que se cobró.
+  - UAT es lento: la lista de bancos tardó 10,9 s; el token de la transferencia, 8,4 s; y su inicio, entre 12,5 y 18 s.
+- **Rapyd.** La tarjeta se escribe en su página y pasa por su simulador de 3DS, y Rapyd devuelve al comprador a la tienda. El PSE lista los 9 bancos que cobra el sandbox (punto 102). Sus webhooks, con lo que mostraron, están en el punto 118.
+- **Una diferencia de A y B ante un error de configuración.** Si falta `RAPYD_WEBHOOK_URL`, B responde 502 al webhook, porque el SDK lanza `INVALID_CREDENTIALS` y el módulo lo trata como fallo técnico. A responde 401, porque sin la URL no puede verificar la firma. Ninguno de los dos procesa el aviso.
+
+**Lo que se declara, como pedía el punto 117.**
+
+- **El módulo de David (A)** pasó de `index.ts` a `wompi.ts` y se adaptó a las interfaces del registro (`GatewayPayments` y `GatewayModule`, en `gateway.ts`). `index.ts` quedó como el registro de las cuatro. El cobro con Wompi no cambió.
+- **El módulo de Andrés (B, `index.ts`)** pasó a crear un `KitPagos` por pasarela, con la tabla `gateways.ts`. Además, solo le da la llave pública al navegador cuando la pasarela tokeniza, y guarda el estado nativo y la referencia de la orden que trae la 0.7.0-rc.1.
+- **Cada uno revisa el suyo** antes de que el PR entre; la aprobación es de Joshua.
+
+**Las carpetas cambiaron de nombre a mitad del PR.** El 21 de octubre de 2026, Joshua renombró en `devops` las carpetas de los dos prototipos sin tocar su contenido, en el commit `d3ada47`, que también trae su #163. `checkout-directo` pasó a ser `checkout-sin-solucion`, y `checkout-con-sdk`, `checkout-con-sdk-front-back`. El commit no actualizó las referencias, y la CI de `devops` quedó en rojo en los tres jobs de los prototipos.
+
+Joan decidió adoptar los nombres aquí el 22 de octubre. El PR trae `devops` con un merge que sigue los renombres de carpeta, y un commit aparte corrige la matriz de la CI, `check-skeleton-parity.sh` y las docs vigentes. Los puntos anteriores de este log conservan los nombres viejos, porque describen el estado de su momento.
+
+**Para la variable 2.** Hay un commit por pasarela en cada prototipo, en el mismo orden. Hay además tres commits compartidos: el del esqueleto, igual en los dos, el del SDK y el del simulador (punto 118). La medición del costo de cada pasarela la hace el #134 sobre esos commits, con la guía de medición.
+
+- **El merge de `devops` y el commit de las referencias no cuentan**, porque no cambian código de pagos.
+- **Los commits de A y los compartidos son anteriores al merge**, así que tocan `prototypes/checkout-directo/` y `prototypes/checkout-con-sdk/`. Los de B tocan `prototypes/checkout-con-sdk-front-back/`. El filtro por carpeta de la guía tiene que usar el nombre que la carpeta tenía en ese commit.
+- **Los dos commits de dependencias tampoco cuentan**, por la misma razón.
+
+**Las dependencias.** Al instalar la candidata, `npm audit` mostró avisos anteriores a este PR. La 0.7.0-rc.1 publicada no tiene ninguno en producción. Joan decidió el 22 de octubre arreglar aquí los de producción, en dos commits:
+
+- **A y B** tenían `fastify` 5.12.5, con [GHSA-389g-gv7q-r4x8](https://github.com/advisories/GHSA-389g-gv7q-r4x8) (bajo). Pasan a `^5.12.7`, y en el lock solo cambia `fastify`.
+- **El simulador**, que es el que está desplegado en Render, tenía tres:
+  - `fastify` 5.12.3, con [GHSA-4mh8-r7rc-xpvc](https://github.com/advisories/GHSA-4mh8-r7rc-xpvc) (moderado, denegación de servicio) y el anterior;
+  - `fast-uri` 3.1.7 y 4.1.4, con [GHSA-hrr3-gc8f-f4qj](https://github.com/advisories/GHSA-hrr3-gc8f-f4qj) y [GHSA-jvvf-x445-j334](https://github.com/advisories/GHSA-jvvf-x445-j334) (moderados);
+  - `brace-expansion` 5.0.9, con [GHSA-qhr7-859c-m2p7](https://github.com/advisories/GHSA-qhr7-859c-m2p7) y [GHSA-6j4f-fj2g-mc7p](https://github.com/advisories/GHSA-6j4f-fj2g-mc7p) (altos).
+
+  Pasa a `fastify` 5.12.7, `fast-uri` 3.1.8 y 4.2.2, y `brace-expansion` 5.0.12. Como `brace-expansion` se actualiza por nombre, sus copias que usa jest suben de parche.
+
+Después de los dos commits, `npm audit --omit=dev` no encuentra avisos en ninguno de los tres. Todo se instaló sin `--min-release-age=0`: las versiones nuevas tienen más de los tres días que exige `~/.npmrc`.
+
+Los avisos de desarrollo quedan como están, por decisión de Joan, porque no bloquean: ningún workflow corre `npm audit` y Dependabot no tiene alertas abiertas.
+
+- **En el SDK y el simulador:** `handlebars` (crítico, por los reportes de cobertura de jest) y `js-yaml` (alto). En el SDK, además, `brace-expansion` (alto).
+- **En la landing y el prototipo C:** `vite` y `vitest`, que solo se arreglan con un cambio de versión mayor.
+- **Por `ts-node-dev`:** `braces` y `chokidar`, sin arreglo.
+
+**Estado:** Medido. Los webhooks reales de Kushki quedan como límite del experimento, y las notificaciones reales del modo de pruebas de Mercado Pago, en consulta con su soporte (punto 118).
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
