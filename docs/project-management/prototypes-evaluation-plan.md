@@ -28,7 +28,7 @@ Desde el 20 de octubre de 2026 (punto 117 del `architecture-log.md`), **los dos 
 
 | | Prototipo A — control | Prototipo B — tratamiento |
 |---|---|---|
-| **Carpeta** | `prototypes/checkout-directo/` | `prototypes/checkout-con-sdk/` |
+| **Carpeta** | `prototypes/checkout-sin-solucion/` | `prototypes/checkout-con-sdk-front-back/` |
 | **Cómo cobra** | Integración directa contra la API nativa de cada una de las cuatro pasarelas, con `fetch` y los formatos de cada una | Las cuatro a través de `kit-pagos-colombia` |
 | **Qué representa** | Lo que hace hoy un desarrollador colombiano | Lo que propone la tesis |
 

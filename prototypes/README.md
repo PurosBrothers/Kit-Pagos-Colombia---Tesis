@@ -4,8 +4,8 @@ Dos implementaciones del mismo checkout mínimo de comercio electrónico: mostra
 
 | Carpeta | Prototipo | Cómo cobra |
 |---|---|---|
-| `checkout-directo/` | A, control | `fetch` contra la API nativa de la pasarela, siguiendo su documentación oficial. Se presenta como «La Candelaria Cómics», una tienda de cómics con catálogo y carrito |
-| `checkout-con-sdk/` | B, tratamiento | `kit-pagos-colombia` en el servidor y `kit-pagos-colombia/browser` en la página. Se presenta como «La Bodega de Chapinero», una tienda de vinos con catálogo y carrito |
+| `checkout-sin-solucion/` | A, control | `fetch` contra la API nativa de la pasarela, siguiendo su documentación oficial. Se presenta como «La Candelaria Cómics», una tienda de cómics con catálogo y carrito |
+| `checkout-con-sdk-front-back/` | B, tratamiento | `kit-pagos-colombia` en el servidor y `kit-pagos-colombia/browser` en la página. Se presenta como «La Bodega de Chapinero», una tienda de vinos con catálogo y carrito |
 | `checkout-frontend-rest/` | C, fuera del experimento A/B | Desde el navegador contra `/v1/api`, sin servidor de pagos propio. Se documenta en [`docs/05-ejemplos/checkout-frontend-rest.md`](../docs/05-ejemplos/checkout-frontend-rest.md) |
 
 C no comparte el esqueleto de A y B, y `check-skeleton-parity.sh` no lo compara: es una página estática con Vite, servida por `server.mjs`, que demuestra el patrón de integración 2 (punto 91 del `architecture-log.md`).
@@ -59,9 +59,9 @@ El monto llega en pesos enteros: convertirlo a la unidad de la pasarela es traba
 Por omisión, `npm start` cobra en el sandbox oficial de la pasarela, como el prototipo C (punto 104), sin encender nada en la máquina:
 
 ```bash
-cd prototypes/checkout-directo   # o checkout-con-sdk
+cd prototypes/checkout-sin-solucion   # o checkout-con-sdk-front-back
 npm ci
-npm start                        # http://localhost:4000
+npm start                             # http://localhost:4000
 ```
 
 | Comando | Dónde cobra | Para qué sirve |

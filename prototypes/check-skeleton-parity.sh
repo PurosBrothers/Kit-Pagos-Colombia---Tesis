@@ -18,14 +18,14 @@ if ! diff -r \
   --exclude=views --exclude=public --exclude=orders \
   --exclude=catalog.ts --exclude=api.ts --exclude=pages.ts \
   --exclude=checkout.test.ts --exclude=orders-and-config.test.ts --exclude=catalog.test.ts \
-  checkout-directo checkout-con-sdk; then
+  checkout-sin-solucion checkout-con-sdk-front-back; then
   echo "El esqueleto de los dos prototipos no es idéntico: solo pueden diferir src/payments/, test/payments/ y las vitrinas (puntos 110 y 116)." >&2
   exit 1
 fi
 
 # Los dos package.json traen kit-pagos-colombia para que el esqueleto sea idéntico, pero el
 # prototipo A integra a mano: su módulo de pagos no puede usar el SDK.
-if grep -rnE "kit-pagos-colombia|/vendor/kit-pagos" checkout-directo/src/payments checkout-directo/test/payments; then
+if grep -rnE "kit-pagos-colombia|/vendor/kit-pagos" checkout-sin-solucion/src/payments checkout-sin-solucion/test/payments; then
   echo "El módulo de pagos del prototipo A usa el SDK: A integra la pasarela directamente." >&2
   exit 1
 fi

@@ -10,7 +10,7 @@ El experimento de la Fase 5 compara dos prototipos funcionalmente idénticos: un
 
 | | Prototipo A — control | Prototipo B — tratamiento |
 |---|---|---|
-| Carpeta | `prototypes/checkout-directo/` | `prototypes/checkout-con-sdk/` |
+| Carpeta | `prototypes/checkout-sin-solucion/` | `prototypes/checkout-con-sdk-front-back/` |
 | Cómo cobra | Integración directa contra la API nativa de cada una de las cuatro pasarelas | Las cuatro a través de `kit-pagos-colombia` |
 | Qué representa | Lo que hace hoy un desarrollador colombiano | Lo que propone la tesis |
 
@@ -56,8 +56,10 @@ Si una pasarela se mezcla con otros cambios en el mismo commit, la medición se 
 
 ```bash
 # Por cada commit de pasarela, en cada prototipo
-git show --stat <commit> -- prototypes/checkout-directo/src/payments prototypes/checkout-directo/test/payments
+git show --stat <commit> -- prototypes/checkout-sin-solucion/src/payments prototypes/checkout-sin-solucion/test/payments
 ```
+
+Hasta el commit `d3ada47`, las carpetas de A y B se llamaban `checkout-directo` y `checkout-con-sdk` (punto 119). En un commit anterior, el filtro usa el nombre de entonces; si no, `git show --stat` sale vacío.
 
 Si un commit de pasarela toca algo fuera de `src/payments/` y `test/payments/` (el esqueleto o la vitrina), eso también se registra: es un costo de la pasarela que la hipótesis dice que B no debería pagar.
 
@@ -70,7 +72,7 @@ Es un conteo de identificadores nativos en el código del prototipo:
 ```bash
 # Sobre el módulo de pagos de cada prototipo
 grep -rcoE "amount_in_cents|transaction_amount|total_amount|acceptance_token|integrity|APPROVAL|CLO|x-signature|x-event-checksum|x-kushki-signature|Private-Merchant-Id|Public-Merchant-Id|access_key|salt" \
-  prototypes/checkout-directo/src/payments/
+  prototypes/checkout-sin-solucion/src/payments/
 ```
 
 La lista cubre las cuatro pasarelas y se fija antes de medir (#134). Wompi aporta `amount_in_cents`, `acceptance_token`, `integrity` y `x-event-checksum`; Mercado Pago, `transaction_amount`, `total_amount` y `x-signature`; Kushki, `x-kushki-signature`, `Private-Merchant-Id` y `Public-Merchant-Id`; Rapyd, `access_key`, `salt` y `CLO`.
@@ -81,13 +83,13 @@ La lista cubre las cuatro pasarelas y se fija antes de medir (#134). Wompi aport
 
 ## 3. Cómo se corre `ck-metrics.ts` sobre un prototipo
 
-La variable 3 es la que el Hito H5 exige literalmente. Hasta el issue #130 no se podía recolectar: el script resolvía de forma fija contra `sdk/` la raíz de las fuentes, el `tsconfig.json` y los patrones de exclusión, y correrlo sobre `prototypes/checkout-directo/` analizaba el SDK otra vez. El plan de evaluación lo lista como prerrequisito 3 de la Fase 5 y dice, textualmente, que es **"el más fácil de pasar por alto y el que puede costar más caro, porque es el que sostiene el Hito H5"**. El cambio está registrado en el punto 87 del `architecture-log.md`.
+La variable 3 es la que el Hito H5 exige literalmente. Hasta el issue #130 no se podía recolectar: el script resolvía de forma fija contra `sdk/` la raíz de las fuentes, el `tsconfig.json` y los patrones de exclusión, y correrlo sobre la carpeta de un prototipo analizaba el SDK otra vez. El plan de evaluación lo lista como prerrequisito 3 de la Fase 5 y dice, textualmente, que es **"el más fácil de pasar por alto y el que puede costar más caro, porque es el que sostiene el Hito H5"**. El cambio está registrado en el punto 87 del `architecture-log.md`.
 
 Desde `sdk/`, para cada prototipo:
 
 ```bash
-npm run metrics -- --root ../prototypes/checkout-directo/src --tsconfig ../prototypes/checkout-directo/tsconfig.json --json ../docs/evaluation/ck-checkout-directo.json
-npm run metrics -- --root ../prototypes/checkout-con-sdk/src --tsconfig ../prototypes/checkout-con-sdk/tsconfig.json --json ../docs/evaluation/ck-checkout-con-sdk.json
+npm run metrics -- --root ../prototypes/checkout-sin-solucion/src --tsconfig ../prototypes/checkout-sin-solucion/tsconfig.json --json ../docs/evaluation/ck-checkout-sin-solucion.json
+npm run metrics -- --root ../prototypes/checkout-con-sdk-front-back/src --tsconfig ../prototypes/checkout-con-sdk-front-back/tsconfig.json --json ../docs/evaluation/ck-checkout-con-sdk-front-back.json
 ```
 
 Las rutas de los prototipos son las de la sección 1; ajústelas si la estructura final es otra. Qué resuelve cada opción:
