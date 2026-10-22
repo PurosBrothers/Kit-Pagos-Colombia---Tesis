@@ -459,7 +459,12 @@ describe("payments module (kit-pagos-colombia)", () => {
     it("should list the gateways the checkout charges with and how each one takes the card", () => {
       expect(createPayments(SIMULATOR).listGateways()).toEqual([
         { id: "wompi", name: "Wompi", cardCapture: "BROWSER_TOKEN" },
+        { id: "mercadopago", name: "Mercado Pago", cardCapture: "BROWSER_TOKEN" },
       ]);
+    });
+
+    it("should offer, in the sandbox, only the gateways whose keys are in the environment", () => {
+      expect(createPayments(SANDBOX_KEYS).listGateways().map((option) => option.id)).toEqual(["wompi"]);
     });
 
     it("should refuse a gateway it does not charge with", async () => {
@@ -473,4 +478,50 @@ describe("payments module (kit-pagos-colombia)", () => {
       expect(() => createPayments({})).toThrow("Sin ellas, usa el simulador: npm run start:local.");
     });
   });
+
+  describe("Mercado Pago", () => {
+    const MERCADOPAGO_KEYS = {
+      MERCADOPAGO_ACCESS_TOKEN: "APP_USR-access",
+      MERCADOPAGO_PUBLIC_KEY: "APP_USR-public",
+      MERCADOPAGO_WEBHOOK_SECRET: "mp_webhook_x",
+    };
+
+    it("should hand the SDK the access token, the public key and the webhook secret, in the official sandbox", () => {
+      const payments = createPayments(MERCADOPAGO_KEYS);
+
+      expect(payments.listGateways().map((option) => option.id)).toEqual(["mercadopago"]);
+      expect(mockKitPagosConstructor).toHaveBeenCalledWith({
+        gateway: Gateway.MERCADOPAGO,
+        credentials: {
+          [Gateway.MERCADOPAGO]: { publicKey: "APP_USR-public", privateKey: "APP_USR-access", webhookSecret: "mp_webhook_x" },
+        },
+        environment: "sandbox",
+      });
+    });
+
+    it("should tell the browser to tokenize with Mercado Pago's public key", () => {
+      expect(createPayments(MERCADOPAGO_KEYS).publicConfig("mercadopago")).toEqual({
+        gateway: "MERCADOPAGO",
+        publicKey: "APP_USR-public",
+        environment: "sandbox",
+      });
+    });
+
+    it("should charge in the skeleton's simulator without keys", () => {
+      createPayments(SIMULATOR);
+
+      expect(mockKitPagosConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          gateway: Gateway.MERCADOPAGO,
+          environment: "simulator",
+          baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago",
+        }),
+      );
+    });
+
+    it("should name its missing keys when no gateway can charge in the sandbox", () => {
+      expect(() => createPayments({})).toThrow("Mercado Pago: MERCADOPAGO_ACCESS_TOKEN, MERCADOPAGO_PUBLIC_KEY");
+    });
+  });
+
 });

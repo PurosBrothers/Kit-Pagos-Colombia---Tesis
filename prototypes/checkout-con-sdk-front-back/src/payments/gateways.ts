@@ -55,4 +55,21 @@ const WOMPI: GatewaySetup = {
   },
 };
 
-export const GATEWAYS: readonly GatewaySetup[] = [WOMPI];
+/** Mercado Pago: el access token cobra y la llave pública tokeniza en el navegador. */
+const MERCADOPAGO: GatewaySetup = {
+  option: { id: "mercadopago", name: "Mercado Pago", cardCapture: "BROWSER_TOKEN" },
+  gateway: Gateway.MERCADOPAGO,
+  sandboxKeys: ["MERCADOPAGO_ACCESS_TOKEN", "MERCADOPAGO_PUBLIC_KEY"],
+  baseUrlVariable: "MERCADOPAGO_BASE_URL",
+  credentials: (env) => {
+    const credentials: Credentials = {
+      publicKey: readEnv(env, "MERCADOPAGO_PUBLIC_KEY") ?? "TEST-simulador-kit-pagos-publica",
+      privateKey: readEnv(env, "MERCADOPAGO_ACCESS_TOKEN") ?? "TEST-simulador-kit-pagos",
+    };
+    const webhookSecret = readEnv(env, "MERCADOPAGO_WEBHOOK_SECRET");
+    if (webhookSecret) credentials.webhookSecret = webhookSecret;
+    return credentials;
+  },
+};
+
+export const GATEWAYS: readonly GatewaySetup[] = [WOMPI, MERCADOPAGO];
