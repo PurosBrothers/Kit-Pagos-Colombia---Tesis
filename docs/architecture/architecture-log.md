@@ -4092,6 +4092,7 @@ La hipótesis quedó escrita en el §3 del plan antes del primer commit de pasar
 
 - **El del esqueleto** va justo antes del de Rapyd en A, y es igual en los dos prototipos. Lo que la tarjeta de Rapyd le costó al contrato queda a la vista, y pesa lo mismo en A que en B.
 - **El del SDK** va antes de las pasarelas de B.
+- **El del simulador**, con la secuencia de Rapyd, va justo después del del SDK.
 
 B pide la candidata en el commit de Kushki, el primero que la necesita (por el estado nativo), y usa la referencia en el de Rapyd.
 
@@ -4120,6 +4121,8 @@ B pide la candidata en el commit de Kushki, el primero que la necesita (por el e
 
 - **La 0.7.0.** Antes de que `devops` llegue a `main` hay que subir `sdk/package.json` a `0.7.0`. Después, B pasa de la candidata a `^0.7.0` en un PR corto, como en el punto 108.
 - **La 0.7.0 en el simulador.** El simulador sigue en la 0.6.0, que lee `PAYMENT_UPDATED` como `ERROR` en `/v1/api/webhooks`. Pasa a `^0.7.0` en el mismo PR corto que B.
+
+**El simulador emite ahora la secuencia de Rapyd** (decisión de Joan del 22 de octubre de 2026). Antes, la tarjeta pagada en su página emitía solo `PAYMENT_COMPLETED`. Ahora la emisión automática manda, en orden, `PAYMENT_SUCCEEDED` y `PAYMENT_UPDATED` en `ACT` y después `PAYMENT_COMPLETED`, como el sandbox (`rapydWebhookSequence`, en `rapydWebhook.ts`). `SignatureGenerator.generateSequence()` la expone sin un `switch` por pasarela, y el trigger manual sigue mandando el webhook del estado actual.
 
 **Estado:** Resuelto en `sdk/` (`0.7.0-rc.1`) y en los dos prototipos, con pruebas en los tres.
 
