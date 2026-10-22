@@ -123,6 +123,8 @@ Mientras el SDK actúe como coordinador de las librerías de las pasarelas (y no
 
 La excepción es Rapyd: si el comercio necesita tokenización inline en Rapyd, necesita certificación PCI Level 1 independientemente del SDK, porque ese camino exige enviar el PAN directamente a la API de Rapyd.
 
+**Las dos condiciones cuidan al SDK, no a la página.** Con `KitPagosBrowser`, el formulario es del comercio. Un script malicioso que corra en su página puede leer la tarjeta antes de que se tokenice, y por eso el alcance es SAQ A-EP y no SAQ A. La cabecera Content-Security-Policy que lo limita se midió con las tres pasarelas que tokenizan, y está en la [guía de implementación](4-guia-de-implementacion.md) §9 (punto 114 del `architecture-log.md`). Los prototipos no la mandan: es un límite declarado, porque son demostraciones y no plantillas para producción.
+
 ---
 
 ## 5. Cómo encajaría en la arquitectura hexagonal

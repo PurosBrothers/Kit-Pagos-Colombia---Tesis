@@ -113,7 +113,7 @@ Este es el mapa del estado de los cuatro entregables del ciclo de construcción:
 | **API de Simulación completa** | [`simulator-api/`](../simulator-api/) | [02-arquitectura/3-api-de-simulacion.md](02-arquitectura/3-api-de-simulacion.md) y [`simulator-api/README.md`](../simulator-api/README.md) | Completa, documentada con OpenAPI 3.0 en `/docs` y desplegada en Render |
 | **Documentación de datos completa** | — | [testing-data/README.md](testing-data/README.md) y los cuatro documentos por pasarela | Completa como tercer componente |
 | **Landing page** | [`landing/`](../landing/) | [06-landing/1-alcance-y-contenido.md](06-landing/1-alcance-y-contenido.md) | Construida, interactiva y desplegada |
-| **Proyectos prototípicos completos** | `prototypes/checkout-directo/` y `prototypes/checkout-con-sdk/` | [project-management/prototypes-evaluation-plan.md](project-management/prototypes-evaluation-plan.md) y [04-metricas-y-pruebas/4-medir-los-prototipos.md](04-metricas-y-pruebas/4-medir-los-prototipos.md) | Base lista para la medición de la Fase 5 |
+| **Proyectos prototípicos completos** | `prototypes/checkout-sin-solucion/` y `prototypes/checkout-con-sdk-front-back/` | [project-management/prototypes-evaluation-plan.md](project-management/prototypes-evaluation-plan.md) y [04-metricas-y-pruebas/4-medir-los-prototipos.md](04-metricas-y-pruebas/4-medir-los-prototipos.md) | Base lista para la medición de la Fase 5 |
 
 ---
 

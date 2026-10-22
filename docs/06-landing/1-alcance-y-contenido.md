@@ -93,6 +93,12 @@ Una sección explícita de límites, redactada a partir de [01-producto/4-por-qu
 - Los **códigos de banco de PSE no son portables** entre pasarelas. El Kit Pagos unifica la forma de pedirlos, no los códigos.
 - El **token de tarjeta tampoco** es portable: lo emite el frontend de cada pasarela.
 - **Solo tarjeta y PSE.** No hay efectivo, ni Nequi, ni suscripciones, ni reembolsos.
+- **Ni el SDK ni los prototipos protegen la página de la tarjeta.**
+  - La Content-Security-Policy la manda el servidor del comercio, y los prototipos no la mandan.
+  - En el prototipo C, el monto lo decide el navegador.
+  - Los prototipos son demostraciones, no plantillas para producción.
+
+  Por lo mismo, la página no promete «cumplimiento PCI DSS»: el SDK mantiene la tarjeta fuera del servidor, pero la página del comercio sigue en su alcance (SAQ A-EP). El detalle está en el punto 114 del `architecture-log.md`.
 - **La redirección no desaparece.** PSE redirige al portal del banco en las cuatro; el SDK unifica cómo se pide, no elimina el paso.
 - Las **cifras comparativas todavía no existen**: las produce el experimento de la Fase 5.
 

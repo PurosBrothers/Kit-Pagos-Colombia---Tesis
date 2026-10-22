@@ -67,14 +67,21 @@ export class WompiWebhookHandler implements GatewayWebhookHandler {
     return safeCompare(receivedChecksum?.toLowerCase(), sha256Hex(concatenated));
   }
 
+  /**
+   * `rawStatus` es `transaction.status`, que la firma cubre siempre (`verify()` lo exige). La
+   * referencia de la orden no se reporta: `transaction.reference` no está en esa exigencia, y
+   * el id de la transacción ya es el mismo con que `createPayment()` la reportó.
+   */
   parse(webhook: IncomingWebhook): WebhookEvent {
     const body = JSON.parse(webhook.payload);
+    const rawStatus: string = body.data?.transaction?.status ?? "";
 
     return new WebhookEvent({
       eventType: body.event ?? DEFAULT_EVENT_TYPE,
       gatewayTransactionId: body.data?.transaction?.id ?? "",
-      newStatus: mapStatus(body.data?.transaction?.status ?? ""),
+      newStatus: mapStatus(rawStatus),
       gateway: Gateway.WOMPI,
+      rawStatus: rawStatus || undefined,
     });
   }
 }

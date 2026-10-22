@@ -112,7 +112,7 @@ export const SNIPPET_BROWSER_TOKENIZE = `import { KitPagosBrowser, Gateway } fro
 
 const browser = new KitPagosBrowser();
 
-// Tokenización directa en navegador: el número de tarjeta jamás toca tu backend (PCI DSS)
+// Tokenización directa en navegador: el número de tarjeta no pasa por tu backend
 const { token } = await browser.tokenizeCard({
   gateway: Gateway.WOMPI,
   publicKey: "pub_test_demo",

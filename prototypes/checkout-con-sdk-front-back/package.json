@@ -4,15 +4,17 @@
   "private": true,
   "description": "Checkout mínimo de comercio electrónico para el experimento de la Fase 5 (docs/project-management/prototypes-evaluation-plan.md)",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts --environment=simulator --simulator-url=http://localhost:3000",
     "build": "tsc",
+    "prestart": "npm run build",
     "start": "node dist/server.js",
+    "start:local": "npm start -- --environment=simulator --simulator-url=http://localhost:3000",
     "typecheck": "tsc --noEmit",
     "test": "jest"
   },
   "dependencies": {
-    "fastify": "^5.11.0",
-    "kit-pagos-colombia": "^0.6.0"
+    "fastify": "^5.12.7",
+    "kit-pagos-colombia": "0.7.0-rc.1"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

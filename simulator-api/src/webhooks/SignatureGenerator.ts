@@ -1,8 +1,14 @@
 import { Credentials, Gateway } from "kit-pagos-colombia";
 import { kushkiWebhook } from "./kushkiWebhook";
 import { mercadoPagoWebhook } from "./mercadoPagoWebhook";
-import { rapydWebhook } from "./rapydWebhook";
-import { OutgoingWebhook, WebhookBuilder, WebhookSubject, WebhookUnavailableError } from "./webhookTypes";
+import { rapydWebhook, rapydWebhookSequence } from "./rapydWebhook";
+import {
+  OutgoingWebhook,
+  WebhookBuilder,
+  WebhookSequenceBuilder,
+  WebhookSubject,
+  WebhookUnavailableError,
+} from "./webhookTypes";
 import { wompiWebhook } from "./wompiWebhook";
 
 export type { OutgoingWebhook, WebhookSubject, WebhookUnavailableReason } from "./webhookTypes";
@@ -18,6 +24,14 @@ const WEBHOOK_BUILDERS: { readonly [G in Gateway]: WebhookBuilder<G> } = {
   [Gateway.MERCADOPAGO]: mercadoPagoWebhook,
   [Gateway.KUSHKI]: kushkiWebhook,
   [Gateway.RAPYD]: rapydWebhook,
+};
+
+/**
+ * Las pasarelas que mandan más de un aviso por un cambio de estado. Hoy solo Rapyd, con la
+ * tarjeta pagada en su página (punto 118); las demás mandan uno.
+ */
+const SEQUENCE_BUILDERS: { readonly [G in Gateway]?: WebhookSequenceBuilder<G> } = {
+  [Gateway.RAPYD]: rapydWebhookSequence,
 };
 
 /**
@@ -41,7 +55,17 @@ export class SignatureGenerator {
 
   generate(subject: WebhookSubject): OutgoingWebhook {
     const build = WEBHOOK_BUILDERS[subject.gateway] as WebhookBuilder<Gateway>;
-    return build(subject, { secret: (gateway) => this.secret(gateway), now: () => this.clock() });
+    return build(subject, this.context());
+  }
+
+  /** Lo que la pasarela manda por el cambio de estado, en orden. Es lo que emite la emisión automática. */
+  generateSequence(subject: WebhookSubject): OutgoingWebhook[] {
+    const build = SEQUENCE_BUILDERS[subject.gateway] as WebhookSequenceBuilder<Gateway> | undefined;
+    return build ? build(subject, this.context()) : [this.generate(subject)];
+  }
+
+  private context() {
+    return { secret: (gateway: Gateway) => this.secret(gateway), now: () => this.clock() };
   }
 
   private secret(gateway: Gateway): Credentials & { webhookSecret: string } {
