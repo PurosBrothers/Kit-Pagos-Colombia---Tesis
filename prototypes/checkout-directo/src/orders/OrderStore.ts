@@ -21,6 +21,8 @@ export interface StatusRecord {
 
 export interface Order {
   id: string;
+  /** El `id` de la pasarela que eligió el comprador, tal como lo dio `listGateways()`. */
+  gateway: string;
   lines: OrderLine[];
   amountInPesos: number;
   payer: Payer;
@@ -31,6 +33,7 @@ export interface Order {
 }
 
 export interface NewOrder {
+  gateway: string;
   lines: OrderLine[];
   amountInPesos: number;
   payer: Payer;
@@ -58,8 +61,11 @@ export class OrderStore {
     return this.orders.get(id);
   }
 
-  findByTransactionId(transactionId: string): Order | undefined {
-    return [...this.orders.values()].find((order) => order.transactionId === transactionId);
+  /** El identificador de la transacción es de la pasarela: dos pasarelas podrían repetirlo. */
+  findByTransactionId(gateway: string, transactionId: string): Order | undefined {
+    return [...this.orders.values()].find(
+      (order) => order.gateway === gateway && order.transactionId === transactionId,
+    );
   }
 
   /**

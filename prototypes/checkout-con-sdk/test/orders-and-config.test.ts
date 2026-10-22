@@ -8,6 +8,7 @@ const payer = {
   documentType: "CC" as const,
   documentNumber: "52000000",
   phone: "3100000000",
+  address: { streetName: "Calle 10", streetNumber: "5-20", neighborhood: "La Candelaria", city: "Bogotá", zipCode: "111711" },
 };
 
 describe("OrderStore", () => {
@@ -16,8 +17,8 @@ describe("OrderStore", () => {
   it("should create a pending order with a unique id and an empty history", () => {
     const store = new OrderStore(fixedNow);
 
-    const first = store.create({ lines: [], amountInPesos: 1000, payer, method: "CARD" });
-    const second = store.create({ lines: [], amountInPesos: 1000, payer, method: "PSE" });
+    const first = store.create({ gateway: "token-pay", lines: [], amountInPesos: 1000, payer, method: "CARD" });
+    const second = store.create({ gateway: "token-pay", lines: [], amountInPesos: 1000, payer, method: "PSE" });
 
     expect(first.id).toMatch(/^ORD-[0-9A-F]{8}$/);
     expect(first.id).not.toBe(second.id);
@@ -27,18 +28,20 @@ describe("OrderStore", () => {
 
   it("should find an order by the transaction id recorded on it", () => {
     const store = new OrderStore(fixedNow);
-    const order = store.create({ lines: [], amountInPesos: 1000, payer, method: "CARD" });
+    const order = store.create({ gateway: "token-pay", lines: [], amountInPesos: 1000, payer, method: "CARD" });
 
     store.record(order, { source: "creation", status: "PENDING", nativeStatus: "PENDING" }, "tx-9");
 
-    expect(store.findByTransactionId("tx-9")).toBe(order);
-    expect(store.findByTransactionId("tx-other")).toBeUndefined();
+    expect(store.findByTransactionId("token-pay", "tx-9")).toBe(order);
+    expect(store.findByTransactionId("token-pay", "tx-other")).toBeUndefined();
+    // El identificador es de la pasarela: el mismo en otra pasarela es otra transacción.
+    expect(store.findByTransactionId("hosted-pay", "tx-9")).toBeUndefined();
     expect(order.history[0].at).toBe("2026-10-13T12:00:00.000Z");
   });
 
   it("should record a webhook that repeats the last status, but not a query that does", () => {
     const store = new OrderStore(fixedNow);
-    const order = store.create({ lines: [], amountInPesos: 1000, payer, method: "CARD" });
+    const order = store.create({ gateway: "token-pay", lines: [], amountInPesos: 1000, payer, method: "CARD" });
 
     store.record(order, { source: "creation", status: "APPROVED", nativeStatus: "APPROVED" });
     store.record(order, { source: "query", status: "APPROVED", nativeStatus: "APPROVED" });
@@ -49,7 +52,7 @@ describe("OrderStore", () => {
 
   it("should record a query whose native status changed even if the merchant status did not", () => {
     const store = new OrderStore(fixedNow);
-    const order = store.create({ lines: [], amountInPesos: 1000, payer, method: "PSE" });
+    const order = store.create({ gateway: "token-pay", lines: [], amountInPesos: 1000, payer, method: "PSE" });
 
     store.record(order, { source: "creation", status: "PENDING", nativeStatus: "PENDING" });
     store.record(order, { source: "query", status: "PENDING", nativeStatus: "IN_PROCESS" });

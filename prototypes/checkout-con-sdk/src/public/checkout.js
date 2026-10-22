@@ -182,43 +182,70 @@ function setUpStore(form) {
   }
 
   const cardFields = document.getElementById("card-fields");
+  const hostedCard = document.getElementById("hosted-card");
   const pseFields = document.getElementById("pse-fields");
-  let banksLoaded = false;
+  const gatewaySelect = document.getElementById("gateway");
+  // Los bancos de PSE son de cada pasarela: se piden una vez por pasarela.
+  const banksByGateway = new Map();
 
-  async function loadPseBanks() {
+  function selectedGateway() {
+    const option = gatewaySelect.selectedOptions[0];
+    return { id: gatewaySelect.value, name: option?.textContent ?? "", cardCapture: option?.dataset.cardCapture };
+  }
+
+  function selectedMethod() {
+    return form.querySelector("input[name=method]:checked").value;
+  }
+
+  async function loadPseBanks(gatewayId) {
     const select = document.getElementById("bankCode");
     select.replaceChildren(new Option("Cargando bancos…", ""));
     payButton.disabled = true;
     try {
-      const { banks } = await readJson(await fetch("/api/pse-banks"));
-      select.replaceChildren(...banks.map((bank) => new Option(bank.name, bank.code)));
+      if (!banksByGateway.has(gatewayId)) {
+        const { banks } = await readJson(await fetch(`/api/pse-banks?gateway=${encodeURIComponent(gatewayId)}`));
+        banksByGateway.set(gatewayId, banks);
+      }
+      if (gatewaySelect.value !== gatewayId) return;
+      select.replaceChildren(...banksByGateway.get(gatewayId).map((bank) => new Option(bank.name, bank.code)));
       payButton.disabled = false;
     } catch (error) {
-      banksLoaded = false;
       show(`No se pudo cargar la lista de bancos: ${error.message}`);
     }
   }
 
-  form.addEventListener("change", (event) => {
-    if (event.target.name !== "method") return;
-    const isPse = event.target.value === "PSE";
-    cardFields.hidden = isPse;
+  /** Lo que se ve depende del medio y de la pasarela: hay pasarelas que reciben la tarjeta en su página. */
+  function showMethod() {
+    show("");
+    const isPse = selectedMethod() === "PSE";
+    const hosted = selectedGateway().cardCapture === "HOSTED_PAGE";
+    cardFields.hidden = isPse || hosted;
+    hostedCard.hidden = isPse || !hosted;
     pseFields.hidden = !isPse;
-    if (isPse && !banksLoaded) {
-      banksLoaded = true;
-      loadPseBanks();
-    } else {
-      payButton.disabled = isPse && !document.getElementById("bankCode").value;
-    }
+    if (isPse) loadPseBanks(gatewaySelect.value);
+    else payButton.disabled = false;
+  }
+
+  form.addEventListener("change", (event) => {
+    if (event.target.name === "method" || event.target.name === "gateway") showMethod();
   });
 
   form.addEventListener("input", () => {
     document.getElementById("buyer-summary").textContent = `${value("fullName")} · ${value("email")}`;
   });
 
-  async function cardMethod() {
+  function cartTotal() {
+    return catalog.reduce((sum, product) => sum + product.priceInPesos * (cart[product.id] ?? 0), 0);
+  }
+
+  async function cardMethod(gateway) {
+    const installments = Number(value("installments")) || 1;
+    if (gateway.cardCapture === "HOSTED_PAGE") {
+      traceLine(`tarjeta: ${gateway.name} la recibe en su propia página; la tienda no la ve`);
+      return { type: "CARD", installments };
+    }
     traceLine("tarjeta: el módulo de pagos la tokeniza en el navegador; al servidor de la tienda solo llega el token");
-    const config = await readJson(await fetch("/api/payments/config"));
+    const config = await readJson(await fetch(`/api/payments/config?gateway=${encodeURIComponent(gateway.id)}`));
     const { tokenizeCard } = await import("/payments/client.js");
     const cardToken = await tokenizeCard(
       {
@@ -227,10 +254,13 @@ function setUpStore(form) {
         expMonth: value("expMonth"),
         expYear: value("expYear"),
         cardHolder: value("cardHolder"),
+        docType: value("documentType"),
+        docNumber: value("documentNumber"),
       },
-      config,
+      // Hay pasarelas que atan el token al monto del cobro.
+      { ...config, amountInPesos: String(cartTotal()) },
     );
-    return { type: "CARD", cardToken, installments: Number(value("installments")) || 1 };
+    return { type: "CARD", cardToken, installments };
   }
 
   function pseMethod() {
@@ -243,27 +273,35 @@ function setUpStore(form) {
     payButton.disabled = true;
     payButton.textContent = "Procesando el pago…";
     try {
-      const selected = form.querySelector("input[name=method]:checked").value;
+      const selected = selectedMethod();
+      const gateway = selectedGateway();
       const bottles = cartCount(cart);
-      traceLine(`pagar ${bottles} ${bottles === 1 ? "botella" : "botellas"} con ${selected === "PSE" ? "PSE" : "tarjeta"}`);
-      const method = selected === "PSE" ? pseMethod() : await cardMethod();
+      traceLine(`pagar ${bottles} ${bottles === 1 ? "botella" : "botellas"} con ${selected === "PSE" ? "PSE" : "tarjeta"} por ${gateway.name}`);
+      const method = selected === "PSE" ? pseMethod() : await cardMethod(gateway);
       const payer = {
         fullName: value("fullName"),
         email: value("email"),
         documentType: value("documentType"),
         documentNumber: value("documentNumber"),
         phone: value("phone"),
+        address: {
+          streetName: value("streetName"),
+          streetNumber: value("streetNumber"),
+          neighborhood: value("neighborhood"),
+          city: value("city"),
+          zipCode: value("zipCode"),
+        },
       };
       const items = Object.entries(cart).map(([productId, quantity]) => ({ productId, quantity }));
       const response = await fetch("/api/orders", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ payer, method, items }),
+        body: JSON.stringify({ gateway: gateway.id, payer, method, items }),
       });
       const body = await response.json().catch(() => ({}));
       if (!body.order) throw new Error(body.error || `La tienda respondió ${response.status}`);
       // El carrito se queda hasta que la orden se apruebe: si el pago se rechaza, se reintenta sin armarlo otra vez.
-      traceLine(body.redirectUrl ? `redirigiendo a la página del banco: ${new URL(body.redirectUrl).host}` : `abriendo la orden ${body.order.id}`);
+      traceLine(body.redirectUrl ? `redirigiendo a otra página para pagar: ${new URL(body.redirectUrl).host}` : `abriendo la orden ${body.order.id}`);
       window.location.assign(body.redirectUrl || `/orders/${body.order.id}`);
     } catch (error) {
       show(`No se pudo completar el pago: ${error.message}`);
@@ -273,6 +311,7 @@ function setUpStore(form) {
   });
 
   render();
+  showMethod();
 }
 
 async function refreshOrder(orderId) {

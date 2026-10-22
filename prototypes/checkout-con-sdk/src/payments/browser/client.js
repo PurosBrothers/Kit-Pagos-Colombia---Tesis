@@ -11,8 +11,9 @@ import { KitPagosBrowser } from "/vendor/kit-pagos-colombia/browser.js";
 /**
  * Tokeniza la tarjeta contra la pasarela y devuelve el token.
  *
- * @param {{ number: string, cvc: string, expMonth: string, expYear: string, cardHolder: string }} card
- * @param {Record<string, string>} config lo que devuelve `publicConfig()` del módulo de pagos
+ * @param {{ number: string, cvc: string, expMonth: string, expYear: string, cardHolder: string, docType?: string, docNumber?: string }} card
+ * @param {Record<string, string>} config lo que devuelve `publicConfig()` del módulo de pagos, más
+ *   `amountInPesos`: hay pasarelas que atan el token al monto del cobro
  * @returns {Promise<string>}
  */
 export async function tokenizeCard(card, config) {
@@ -21,6 +22,8 @@ export async function tokenizeCard(card, config) {
     publicKey: config.publicKey,
     card,
     environment: config.environment,
+    amount: config.amountInPesos,
+    currency: "COP",
   });
   return result.token;
 }

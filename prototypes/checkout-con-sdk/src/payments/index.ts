@@ -2,7 +2,6 @@ import {
   Amount,
   Currency,
   Environment,
-  Gateway,
   KitPagos,
   KitPagosError,
   KitPagosErrorCode,
@@ -11,7 +10,7 @@ import {
   PaymentMethod,
   ReturnUrlConfig,
 } from "kit-pagos-colombia";
-import type { Credentials, TransactionStatus, WebhookEvent } from "kit-pagos-colombia";
+import type { TransactionStatus, WebhookEvent } from "kit-pagos-colombia";
 import {
   CreatePaymentRequest,
   IncomingWebhook,
@@ -24,83 +23,80 @@ import {
 } from "../checkout/PaymentsPort";
 import type { Payer as PortPayer, PaymentMethodRequest } from "../checkout/PaymentsPort";
 import { paymentsEnvironment } from "../checkout/environment";
+import { GATEWAYS, GatewaySetup, readEnv } from "./gateways";
 import type { IncomingHttpHeaders } from "node:http";
 
 /**
  * El módulo de pagos del prototipo B: las seis funciones del puerto (plan de evaluación,
  * §2) delegadas en `kit-pagos-colombia`. Es lo único que cambia frente al prototipo A.
  *
- * La pasarela es Wompi, en el ambiente que diga el esqueleto: el sandbox oficial por omisión
- * o la API de Simulación (punto 111). El módulo no conoce ninguna URL de Wompi, ningún nombre
- * de campo ni ningún estado propio: el SDK resuelve el endpoint desde `environment` y traduce
- * los nativos a `TransactionStatus`. Lo que sí lee del entorno son las credenciales, porque el
- * simulador firma los webhooks con las suyas (`simulator-api/src/auth/merchantSecrets.ts`): si
- * aquí no coincidieran, la firma no verificaría.
+ * Las pasarelas son las de `gateways.ts`, en el ambiente que diga el esqueleto: el sandbox
+ * oficial por omisión o la API de Simulación (puntos 111 y 117). El módulo no conoce ninguna
+ * URL de las pasarelas, ningún nombre de campo ni ningún estado propio: el SDK resuelve el
+ * endpoint desde `environment` y traduce los nativos a `TransactionStatus`. El SDK cobra con
+ * una pasarela activa por instancia, así que hay un `KitPagos` por pasarela. Lo que sí lee del
+ * entorno son las credenciales, porque el simulador firma los webhooks con las suyas
+ * (`simulator-api/src/auth/merchantSecrets.ts`): si aquí no coincidieran, la firma no
+ * verificaría.
  */
 
-/** La pasarela de este prototipo. El prototipo es de Wompi por la asignación A/B de #151. */
-const GATEWAY = Gateway.WOMPI;
+/** El código de país de un celular colombiano, que hay pasarelas que piden aparte. */
+const COLOMBIA_PHONE_CODE = "57";
 
-/**
- * Credenciales de prueba para cuando el entorno no trae las de Wompi. No son secretos ni
- * apuntan a producción; siguen la convención de `examples/` y no llevan las marcas
- * (`invalid`, `inexistente`, `not_found`) con las que el simulador fuerza la respuesta de
- * credencial inválida.
- */
-const DEFAULT_PUBLIC_KEY = "pub_test_ejemplo_no_real";
-const DEFAULT_PRIVATE_KEY = "prv_test_ejemplo_no_real";
-
-/** El secreto de integridad de Wompi cuando el simulador no configura uno propio. */
-const DEFAULT_INTEGRITY_SECRET = "test_integrity_kit_pagos_simulator";
-
-/** Las llaves sin las que el sandbox oficial no cobra; el simulador tiene valores por omisión. */
-const SANDBOX_KEYS = ["WOMPI_PUBLIC_KEY", "WOMPI_PRIVATE_KEY", "WOMPI_INTEGRITY_SECRET"] as const;
-
-function readEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
-  const value = env[name]?.trim();
-  return value ? value : undefined;
+interface ActiveGateway {
+  setup: GatewaySetup;
+  kit: KitPagos;
+  sdkEnvironment: Environment;
+  publicKey: string;
 }
 
 /**
  * Construye el puerto de pagos. `env` es inyectable para las pruebas, igual que en
  * `loadCheckoutConfig`; en producción se usa `process.env`.
+ *
+ * En el sandbox, una pasarela queda activa solo si están sus llaves; si no queda ninguna, el
+ * checkout no arranca y dice qué falta.
  */
 export function createPayments(env: NodeJS.ProcessEnv = process.env): PaymentsPort {
   const { environment, simulatorUrl } = paymentsEnvironment(env);
-  // WOMPI_BASE_URL apunta el módulo a otro simulador a propósito; si no, manda el ambiente del esqueleto.
-  const baseUrlOverride = readEnv(env, "WOMPI_BASE_URL");
-  const sdkEnvironment =
-    baseUrlOverride !== undefined || environment === "simulator" ? Environment.SIMULATOR : Environment.SANDBOX;
-  if (sdkEnvironment === Environment.SANDBOX) {
-    const missing = SANDBOX_KEYS.filter((name) => readEnv(env, name) === undefined);
-    if (missing.length > 0) {
-      throw new Error(
-        `Para cobrar en el sandbox de Wompi faltan ${missing.join(", ")} en el .env de la raíz. ` +
-          "Sin ellas, usa el simulador: npm run start:local.",
-      );
+  const missing: string[] = [];
+  const active = new Map<string, ActiveGateway>();
+  for (const setup of GATEWAYS) {
+    // La variable de URL apunta la pasarela a otro simulador a propósito; si no, manda el ambiente del esqueleto.
+    const baseUrlOverride = readEnv(env, setup.baseUrlVariable);
+    const sdkEnvironment =
+      baseUrlOverride !== undefined || environment === "simulator" ? Environment.SIMULATOR : Environment.SANDBOX;
+    if (sdkEnvironment === Environment.SANDBOX) {
+      const absent = setup.sandboxKeys.filter((name) => readEnv(env, name) === undefined);
+      if (absent.length > 0) {
+        missing.push(`${setup.option.name}: ${absent.join(", ")}`);
+        continue;
+      }
     }
+    const baseUrl =
+      baseUrlOverride ??
+      (sdkEnvironment === Environment.SIMULATOR ? `${simulatorUrl}/v1/sim/${setup.option.id}` : undefined);
+    const credentials = setup.credentials(env);
+    const kit = new KitPagos({
+      gateway: setup.gateway,
+      credentials: { [setup.gateway]: credentials },
+      environment: sdkEnvironment,
+      ...(baseUrl ? { baseUrl } : {}),
+    });
+    active.set(setup.option.id, { setup, kit, sdkEnvironment, publicKey: credentials.publicKey });
   }
-  const baseUrl =
-    baseUrlOverride ?? (sdkEnvironment === Environment.SIMULATOR ? `${simulatorUrl}/v1/sim/wompi` : undefined);
-
-  const credentials: Credentials = {
-    publicKey: readEnv(env, "WOMPI_PUBLIC_KEY") ?? DEFAULT_PUBLIC_KEY,
-    privateKey: readEnv(env, "WOMPI_PRIVATE_KEY") ?? DEFAULT_PRIVATE_KEY,
-    // El cobro con Wompi exige firma de integridad aunque sea el simulador: sin el secreto,
-    // el adaptador lanza INVALID_CREDENTIALS antes de la llamada.
-    integritySecret: readEnv(env, "WOMPI_INTEGRITY_SECRET") ?? DEFAULT_INTEGRITY_SECRET,
-  };
-  const webhookSecret = readEnv(env, "WOMPI_EVENTS_SECRET");
-  if (webhookSecret) {
-    credentials.webhookSecret = webhookSecret;
+  if (active.size === 0) {
+    throw new Error(
+      `Para cobrar en el sandbox faltan las llaves de todas las pasarelas en el .env de la raíz (${missing.join("; ")}). ` +
+        "Sin ellas, usa el simulador: npm run start:local.",
+    );
   }
 
-  const kit = new KitPagos({
-    gateway: GATEWAY,
-    credentials: { [GATEWAY]: credentials },
-    environment: sdkEnvironment,
-    ...(baseUrl ? { baseUrl } : {}),
-  });
+  function gateway(id: string): ActiveGateway {
+    const found = active.get(id);
+    if (!found) throw new Error(`El checkout no cobra con la pasarela «${id}»`);
+    return found;
+  }
 
   /**
    * Ejecuta una operación del SDK y convierte su fallo en el del puerto.
@@ -127,20 +123,27 @@ export function createPayments(env: NodeJS.ProcessEnv = process.env): PaymentsPo
   }
 
   return {
-    publicConfig() {
+    listGateways() {
+      return [...active.values()].map(({ setup }) => setup.option);
+    },
+
+    publicConfig(id: string) {
+      const { setup, publicKey, sdkEnvironment } = gateway(id);
       return {
-        gateway: GATEWAY,
-        publicKey: credentials.publicKey,
+        gateway: setup.gateway,
+        publicKey,
         environment: sdkEnvironment,
       };
     },
 
-    async listPseBanks(): Promise<PseBankOption[]> {
+    async listPseBanks(id: string): Promise<PseBankOption[]> {
+      const { kit } = gateway(id);
       const banks = await call(() => kit.getPseBanks());
       return banks.map((bank) => ({ code: bank.code, name: bank.name }));
     },
 
     async createPayment(request: CreatePaymentRequest): Promise<PaymentSnapshot> {
+      const { kit } = gateway(request.gateway);
       const result = await call(() =>
         kit.createPayment({
           amount: new Amount(String(request.amountInPesos)),
@@ -149,31 +152,35 @@ export function createPayments(env: NodeJS.ProcessEnv = process.env): PaymentsPo
           payer: toSdkPayer(request.payer),
           paymentMethod: toSdkMethod(request.method),
           returnUrlConfig: new ReturnUrlConfig(request.returnUrl),
+          ipAddress: request.payerIp,
         }),
       );
 
       if (result.outcome === "REDIRECT_REQUIRED") {
-        // La redirección al banco solo aparece en un pago que aún no se resolvió: nace PENDING.
+        // La redirección (el banco, o la página de la pasarela) solo aparece en un pago que aún
+        // no se resolvió: nace PENDING.
         return {
           transactionId: result.redirect.gatewayTransactionId.value,
           status: "PENDING",
-          nativeStatus: result.redirect.rawStatus,
+          nativeStatus: result.redirect.rawStatus ?? "PENDING",
           redirectUrl: result.redirect.redirectUrl,
         };
       }
       return toSnapshot(result.transaction);
     },
 
-    async getPaymentStatus(transactionId: string): Promise<PaymentSnapshot> {
+    async getPaymentStatus(id: string, transactionId: string): Promise<PaymentSnapshot> {
+      const { kit } = gateway(id);
       const transaction = await call(() => kit.getPaymentStatus(transactionId));
       return toSnapshot(transaction);
     },
 
-    async verifyWebhook(webhook: IncomingWebhook): Promise<WebhookNotification | null> {
+    async verifyWebhook(id: string, webhook: IncomingWebhook): Promise<WebhookNotification | null> {
+      const { setup, kit } = gateway(id);
       let event: WebhookEvent;
       try {
         event = kit.validateWebhook(webhook.rawBody, toStringHeaders(webhook.headers), {
-          gateway: GATEWAY,
+          gateway: setup.gateway,
           query: definedQuery(webhook.query),
         });
       } catch (error) {
@@ -189,6 +196,12 @@ export function createPayments(env: NodeJS.ProcessEnv = process.env): PaymentsPo
           );
         }
         throw error;
+      }
+      if (event.newStatus === "PENDING") {
+        // Hay pasarelas cuyo webhook firmado no trae el estado (el SDK reporta PENDING): se
+        // confirma consultando, como pide la guía del SDK.
+        const transaction = await call(() => kit.getPaymentStatus(event.gatewayTransactionId));
+        return toSnapshot(transaction);
       }
       return {
         transactionId: event.gatewayTransactionId,
@@ -223,18 +236,25 @@ function toSnapshot(transaction: {
   };
 }
 
+/** El pagador del puerto en el `Payer` del SDK, con lo que algunas pasarelas piden por separado. */
 function toSdkPayer(payer: PortPayer): Payer {
+  const [firstName, ...rest] = payer.fullName.trim().split(/\s+/);
   return new Payer({
     email: payer.email,
     fullName: payer.fullName,
+    firstName,
+    lastName: rest.join(" ") || firstName,
     documentType: payer.documentType,
     documentNumber: payer.documentNumber,
     phone: payer.phone,
+    phoneAreaCode: COLOMBIA_PHONE_CODE,
+    address: payer.address,
   });
 }
 
 function toSdkMethod(method: PaymentMethodRequest): PaymentMethod {
   if (method.type === "CARD") {
+    // Sin token, la pasarela recibe la tarjeta en su página (HOSTED_PAGE).
     return PaymentMethod.card(method.cardToken, { installments: method.installments });
   }
   return PaymentMethod.pse({ bankCode: method.bankCode, payerKind: method.personType });

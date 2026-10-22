@@ -2,7 +2,7 @@
  * El ambiente contra el que cobra el checkout. Es del esqueleto común y no nombra ninguna
  * pasarela: cada módulo de pagos lo traduce a sus URLs (punto 111 del `architecture-log.md`).
  *
- * - `sandbox`, por omisión: el sandbox oficial de la pasarela, como `npm start` en el
+ * - `sandbox`, por omisión: el sandbox oficial de cada pasarela, como `npm start` en el
  *   prototipo C (punto 104).
  * - `simulator`: la API de Simulación en `CHECKOUT_SIMULATOR_URL`, que por omisión es la de
  *   Render. `npm run start:local` la apunta a `http://localhost:3000`.

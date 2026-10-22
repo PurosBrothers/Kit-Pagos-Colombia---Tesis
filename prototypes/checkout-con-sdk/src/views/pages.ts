@@ -1,5 +1,6 @@
 import { Product } from "../catalog";
 import { CheckoutEnvironment } from "../checkout/environment";
+import { GatewayOption } from "../checkout/PaymentsPort";
 import { Order, OrderStatus, StatusSource } from "../orders/OrderStore";
 import { BOTTLE_SPRITE } from "./art";
 import { STORE_CSS } from "./styles";
@@ -55,11 +56,11 @@ export function formatPesos(amount: number): string {
 }
 
 /**
- * La franja de arriba dice dónde se cobra. La tienda no nombra la pasarela: así la migración del
- * #133 cambia solo el módulo de pagos, y no estas páginas (punto 111).
+ * La franja de arriba dice dónde se cobra. La tienda no nombra pasarelas: sus nombres llegan del
+ * módulo de pagos, así que agregar una cambia solo el módulo, y no estas páginas (puntos 111 y 117).
  */
 const RIBBONS: Record<CheckoutEnvironment, string> = {
-  sandbox: "Tienda de demostración · cobra en el sandbox oficial de la pasarela, sin dinero real",
+  sandbox: "Tienda de demostración · cobra en el sandbox oficial de cada pasarela, sin dinero real",
   simulator: "Tienda de demostración · cobra en la API de Simulación de Kit Pagos, sin dinero real",
 };
 
@@ -120,8 +121,22 @@ function productCard(product: Product): string {
     </li>`;
 }
 
+/** Las pasarelas del módulo de pagos, con el nombre que dio él: la tienda no nombra ninguna. */
+function gatewayOptions(gateways: readonly GatewayOption[]): string {
+  return gateways
+    .map(
+      (gateway) =>
+        `<option value="${escapeHtml(gateway.id)}" data-card-capture="${escapeHtml(gateway.cardCapture)}">${escapeHtml(gateway.name)}</option>`,
+    )
+    .join("");
+}
+
 /** La vitrina, el carrito y el checkout. El carrito lo arma el script con los datos de `catalog-data`. */
-export function storePage(products: readonly Product[], environment: CheckoutEnvironment): string {
+export function storePage(
+  products: readonly Product[],
+  environment: CheckoutEnvironment,
+  gateways: readonly GatewayOption[],
+): string {
   const catalog = products.map(({ id, title, priceInPesos }) => ({ id, title, priceInPesos }));
   return layout(
     "La Bodega de Chapinero · Vinos de Chile, Argentina y Colombia",
@@ -132,13 +147,13 @@ export function storePage(products: readonly Product[], environment: CheckoutEnv
       <p class="about__title">Este prototipo es</p>
       <p>
         El <strong>prototipo B de Kit Pagos Colombia</strong>, el grupo de tratamiento del experimento: una tienda
-        con el mismo esqueleto que el prototipo A, cuyo módulo de pagos cobra con <code>kit-pagos-colombia</code>,
-        el SDK del framework, en vez de integrar la pasarela a mano.
+        con el mismo esqueleto que el prototipo A, cuyo módulo de pagos cobra las cuatro pasarelas con
+        <code>kit-pagos-colombia</code>, el SDK del framework, en vez de integrarlas a mano.
       </p>
       <p>
-        El prototipo A integra la pasarela con <code>fetch</code>, siguiendo su documentación oficial. El experimento
-        compara el código de pagos de los dos y lo que cuesta cambiar cada uno de pasarela. Los pagos van al sandbox
-        oficial o al simulador, sin dinero real.
+        El prototipo A integra cada pasarela con <code>fetch</code>, siguiendo su documentación oficial. El
+        experimento compara el código de pagos de los dos y lo que cuesta agregarle a cada uno una pasarela más. Los
+        pagos van al sandbox oficial o al simulador, sin dinero real.
       </p>
     </aside>
     <p class="catalog__intro">Un chileno, un argentino y uno de Boyacá. Despachamos a todo el país y el envío es gratis.</p>
@@ -158,6 +173,11 @@ export function storePage(products: readonly Product[], environment: CheckoutEnv
     </dl>
 
     <form id="checkout-form" class="checkout" hidden>
+      <label>Pasarela
+        <select id="gateway" name="gateway">${gatewayOptions(gateways)}</select>
+      </label>
+      <p class="hint">En una tienda real la pasarela la define el comercio. Aquí la eliges para probar las cuatro.</p>
+
       <details class="buyer">
         <summary>
           <span class="buyer__title">Tus datos</span>
@@ -176,6 +196,11 @@ export function storePage(products: readonly Product[], environment: CheckoutEnv
           </label>
           <label>Número <input id="documentNumber" name="documentNumber" value="1020304050" required></label>
           <label class="grid__wide">Celular <input id="phone" name="phone" value="3001234567" required></label>
+          <label>Calle <input id="streetName" name="streetName" value="Carrera 13" required></label>
+          <label>Número <input id="streetNumber" name="streetNumber" value="63-39" required></label>
+          <label>Barrio <input id="neighborhood" name="neighborhood" value="Chapinero" required></label>
+          <label>Ciudad <input id="city" name="city" value="Bogotá" required></label>
+          <label class="grid__wide">Código postal <input id="zipCode" name="zipCode" value="110231" required></label>
         </div>
       </details>
 
@@ -194,6 +219,7 @@ export function storePage(products: readonly Product[], environment: CheckoutEnv
         <label class="grid__wide">Nombre en la tarjeta <input id="cardHolder" value="PEDRO PEREZ" autocomplete="cc-name"></label>
         <p class="hint grid__wide">Datos de prueba precargados. La tarjeta va del navegador a la pasarela; la tienda solo recibe un token.</p>
       </div>
+      <p id="hosted-card" class="hint" hidden>Con esta pasarela, la tarjeta se escribe en su propia página: al pagar te llevamos allá.</p>
 
       <div id="pse-fields" class="grid" hidden>
         <label class="grid__wide">Tu banco <select id="bankCode"></select></label>
@@ -244,7 +270,7 @@ function summaryLines(order: Order): string {
 }
 
 /** La orden: el resultado para el comprador y, plegado, el historial con el estado nativo (función 6). */
-export function orderPage(order: Order, environment: CheckoutEnvironment): string {
+export function orderPage(order: Order, environment: CheckoutEnvironment, gatewayName: string): string {
   const result = RESULTS[order.status];
   return layout(
     `Orden ${order.id} · La Bodega de Chapinero`,
@@ -253,7 +279,7 @@ export function orderPage(order: Order, environment: CheckoutEnvironment): strin
     <div class="result__icon" aria-hidden="true">${result.icon}</div>
     <h1>${result.title}</h1>
     <p>${result.detail}</p>
-    <p class="result__ref">Orden ${escapeHtml(order.id)} · ${order.method === "CARD" ? "Tarjeta" : "PSE"} · Estado: <strong id="order-status">${STATUS_LABELS[order.status]}</strong></p>
+    <p class="result__ref">Orden ${escapeHtml(order.id)} · ${order.method === "CARD" ? "Tarjeta" : "PSE"} con ${escapeHtml(gatewayName)} · Estado: <strong id="order-status">${STATUS_LABELS[order.status]}</strong></p>
     <ul class="lines lines--summary">
       ${summaryLines(order)}
     </ul>

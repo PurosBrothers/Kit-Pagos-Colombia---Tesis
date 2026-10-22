@@ -2,18 +2,22 @@
 // en /payments/client.js y la llama al pagar con tarjeta: el número de la tarjeta va del
 // navegador a la pasarela y nunca pasa por el servidor del comercio.
 //
-// Documentación oficial de Wompi:
-// https://docs.wompi.co/docs/colombia/tokens/
-// https://docs.wompi.co/docs/colombia/transacciones/#tokenizacion-de-tarjeta
+// Hay un tokenizador por pasarela, cada uno escrito a mano contra su API (punto 117 del
+// architecture-log.md). `tokenizeCard()` elige el de la pasarela que dice `config.gateway`, y va
+// al final del archivo: las pruebas lo cargan como cuerpo de una función.
 
 /**
  * Tokeniza la tarjeta directamente contra Wompi en el navegador y devuelve el id del token.
+ *
+ * Documentación oficial de Wompi:
+ * https://docs.wompi.co/docs/colombia/tokens/
+ * https://docs.wompi.co/docs/colombia/transacciones/#tokenizacion-de-tarjeta
  *
  * @param {{ number: string, cvc: string, expMonth: string, expYear: string, cardHolder: string }} card
  * @param {Record<string, string>} config lo que devuelve `publicConfig()` del módulo de pagos
  * @returns {Promise<string>}
  */
-export async function tokenizeCard(card, config) {
+async function tokenizeWompiCard(card, config) {
   if (!config || !config.publicKey) {
     throw new Error("Configuración pública incompleta: falta publicKey");
   }
@@ -64,4 +68,22 @@ export async function tokenizeCard(card, config) {
   }
 
   return body.data.id;
+}
+
+const TOKENIZERS = { wompi: tokenizeWompiCard };
+
+/**
+ * Tokeniza la tarjeta contra la pasarela de `config.gateway` y devuelve el token.
+ *
+ * @param {{ number: string, cvc: string, expMonth: string, expYear: string, cardHolder: string, docType?: string, docNumber?: string }} card
+ * @param {Record<string, string>} config lo que devuelve `publicConfig()`, más `amountInPesos`
+ * @returns {Promise<string>}
+ */
+export async function tokenizeCard(card, config) {
+  const gateway = config?.gateway || "wompi";
+  const tokenize = TOKENIZERS[gateway];
+  if (!tokenize) {
+    throw new Error(`Esta tienda no tokeniza en el navegador las tarjetas de «${gateway}»`);
+  }
+  return tokenize(card, config);
 }

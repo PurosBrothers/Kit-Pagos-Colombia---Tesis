@@ -4,7 +4,7 @@ import {
   IncomingWebhook,
   PaymentTechnicalError,
 } from "../../src/checkout/PaymentsPort";
-import { createPayments, WompiPaymentsConfig } from "../../src/payments";
+import { createWompiPayments as createPayments, WompiPaymentsConfig } from "../../src/payments/wompi";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -45,7 +45,10 @@ describe("Wompi payments module (Prototype A - Direct Integration)", () => {
     sleep: async () => undefined,
   };
 
+  const address = { streetName: "Calle 10", streetNumber: "5-20", neighborhood: "La Candelaria", city: "Bogotá", zipCode: "111711" };
+
   const sampleCardRequest: CreatePaymentRequest = {
+    gateway: "wompi",
     orderReference: "ORD-001",
     amountInPesos: 50000,
     description: "Camiseta",
@@ -55,7 +58,9 @@ describe("Wompi payments module (Prototype A - Direct Integration)", () => {
       documentType: "CC",
       documentNumber: "1020304050",
       phone: "3001234567",
+      address,
     },
+    payerIp: "190.24.1.10",
     method: {
       type: "CARD",
       cardToken: "tok_test_123",
@@ -65,6 +70,7 @@ describe("Wompi payments module (Prototype A - Direct Integration)", () => {
   };
 
   const samplePseRequest: CreatePaymentRequest = {
+    gateway: "wompi",
     orderReference: "ORD-002",
     amountInPesos: 75000,
     description: "Suscripción",
@@ -74,7 +80,9 @@ describe("Wompi payments module (Prototype A - Direct Integration)", () => {
       documentType: "CC",
       documentNumber: "987654321",
       phone: "3109876543",
+      address,
     },
+    payerIp: "190.24.1.10",
     method: {
       type: "PSE",
       bankCode: "1007",

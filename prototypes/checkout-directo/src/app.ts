@@ -15,7 +15,9 @@ export interface AppOptions {
 
 /** El servidor del checkout. Es del esqueleto común: idéntico en los dos prototipos. */
 export function buildApp(options: AppOptions): FastifyInstance {
-  const app = Fastify({ logger: false });
+  // Detrás de un túnel o un proxy, la IP del pagador llega en X-Forwarded-For, y hay
+  // pasarelas que la exigen para PSE.
+  const app = Fastify({ logger: false, trustProxy: true });
   const context = { ...options, orders: options.orders ?? new OrderStore() };
 
   app.setErrorHandler((error: FastifyError, _request, reply) => {

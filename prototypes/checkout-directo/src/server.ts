@@ -11,19 +11,22 @@ async function main(): Promise<void> {
   const { environment, simulatorUrl } = paymentsEnvironment();
   enableTrace();
   traceOutgoingCalls();
-  const app = buildApp({ payments: createPayments(), publicBaseUrl: config.publicBaseUrl });
+  const payments = createPayments();
+  const app = buildApp({ payments, publicBaseUrl: config.publicBaseUrl });
   traceIncomingRequests(app);
   await app.listen({ port: config.port, host: "0.0.0.0" });
-  console.log(`Checkout en ${config.publicBaseUrl}. Webhooks en ${config.publicBaseUrl}/webhooks`);
+  const gateways = payments.listGateways();
+  console.log(`Checkout en ${config.publicBaseUrl}. Webhooks en ${config.publicBaseUrl}/webhooks/<pasarela>`);
+  console.log(`Pasarelas: ${gateways.map((gateway) => `${gateway.name} (/webhooks/${gateway.id})`).join(", ")}.`);
   console.log(
     environment === "sandbox"
-      ? "Cobra en el sandbox oficial de la pasarela. Para el simulador: npm run start:local (local) o npm start -- --environment=simulator (Render)."
+      ? "Cobra en el sandbox oficial de cada pasarela; la que no tenga sus llaves en el .env de la raíz queda fuera del selector. Para el simulador: npm run start:local (local) o npm start -- --environment=simulator (Render)."
       : `Cobra en la API de Simulación de ${simulatorUrl}.`,
   );
   if (!foundEnvFile) {
     console.log(`No encontré ${ROOT_ENV_FILE}: el módulo de pagos usa solo las variables del entorno.`);
   }
-  console.log("Traza: cada petición que llega y cada llamada a la pasarela salen aquí con [checkout], sin llaves ni cuerpos.");
+  console.log("Traza: cada petición que llega y cada llamada a una pasarela salen aquí con [checkout], sin llaves ni cuerpos.");
 }
 
 main().catch((error) => {

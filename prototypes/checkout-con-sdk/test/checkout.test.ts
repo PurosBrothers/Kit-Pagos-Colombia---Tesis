@@ -6,7 +6,7 @@ import { PRODUCTS } from "../src/catalog";
 import { PaymentTechnicalError, PaymentsPort } from "../src/checkout/PaymentsPort";
 import { OrderStore } from "../src/orders/OrderStore";
 import { disableTrace, enableTrace } from "../src/trace";
-import { fakePayments } from "./helpers/fakePayments";
+import { FAKE_GATEWAYS, fakePayments } from "./helpers/fakePayments";
 
 const BASE_URL = "http://checkout.test";
 
@@ -16,6 +16,7 @@ const payer = {
   documentType: "CC",
   documentNumber: "1020304050",
   phone: "3001234567",
+  address: { streetName: "Calle 10", streetNumber: "5-20", neighborhood: "La Candelaria", city: "Bogotá", zipCode: "111711" },
 };
 
 const card = { type: "CARD", cardToken: "tok_fake", installments: 1 };
@@ -39,8 +40,8 @@ describe("checkout skeleton", () => {
     await app.close();
   });
 
-  const createOrder = (method: object, items: object[] = oneBottle) =>
-    app.inject({ method: "POST", url: "/api/orders", payload: { payer, method, items } });
+  const createOrder = (method: object, items: object[] = oneBottle, gateway = "token-pay") =>
+    app.inject({ method: "POST", url: "/api/orders", payload: { gateway, payer, method, items } });
 
   describe("pages", () => {
     it("should show the three wines, the cart and the card and PSE forms", async () => {
@@ -59,13 +60,24 @@ describe("checkout skeleton", () => {
       expect(res.body).toContain('src="/assets/checkout.js"');
     });
 
+    it("should offer the gateways of the payments module, with their names and how they take the card", async () => {
+      const res = await app.inject({ method: "GET", url: "/" });
+
+      expect(res.body).toContain('<option value="token-pay" data-card-capture="BROWSER_TOKEN">Token Pay</option>');
+      expect(res.body).toContain('<option value="hosted-pay" data-card-capture="HOSTED_PAGE">Hosted Pay</option>');
+      expect(res.body).toContain('id="hosted-card"');
+      for (const field of ["streetName", "streetNumber", "neighborhood", "city", "zipCode"]) {
+        expect(res.body).toContain(`id="${field}"`);
+      }
+    });
+
     it("should explain under the title that this is prototype B, which charges with the SDK", async () => {
       const res = await app.inject({ method: "GET", url: "/" });
 
       const afterTitle = res.body.slice(res.body.indexOf('id="catalog-title"'));
       expect(afterTitle.indexOf("Este prototipo es")).toBeLessThan(afterTitle.indexOf('class="products"'));
       expect(res.body).toContain("prototipo B de Kit Pagos Colombia");
-      expect(res.body).toContain("cobra con <code>kit-pagos-colombia</code>");
+      expect(res.body).toContain("<code>kit-pagos-colombia</code>");
     });
 
     it("should carry the legal notices of a liquor store and ask the buyer to confirm they are of age", async () => {
@@ -79,7 +91,7 @@ describe("checkout skeleton", () => {
     it("should say in the ribbon that it charges in the gateway's official sandbox by default", async () => {
       const res = await app.inject({ method: "GET", url: "/" });
 
-      expect(res.body).toContain("cobra en el sandbox oficial de la pasarela");
+      expect(res.body).toContain("cobra en el sandbox oficial de cada pasarela");
     });
 
     it("should say in the ribbon that it charges in the simulator when the environment says so", async () => {
@@ -176,7 +188,7 @@ describe("checkout skeleton", () => {
       await app.inject({ method: "GET", url: `/api/orders/${order.id}` });
 
       expect(lines).toEqual([
-        `[checkout]   orden ${order.id}: La Bodega de Chapinero · 1 botella por $58.000 COP, con tarjeta (llega solo el token) → módulo de pagos`,
+        `[checkout]   orden ${order.id}: La Bodega de Chapinero · 1 botella por $58.000 COP, con tarjeta (llega solo el token), con Token Pay → módulo de pagos`,
         `[checkout]   orden ${order.id} ← creación: APPROVED (nativo APPROVED), transacción tx-card-1`,
         `[checkout]   orden ${order.id} ← consulta: APPROVED (nativo APPROVED) (sin cambios)`,
       ]);
@@ -203,17 +215,49 @@ describe("checkout skeleton", () => {
       expect(res.statusCode).toBe(201);
       const { order } = res.json();
       expect(payments.createPayment).toHaveBeenCalledWith({
+        gateway: "token-pay",
         orderReference: order.id,
         amountInPesos: 2 * casillero.priceInPesos + malbec.priceInPesos,
         description: "La Bodega de Chapinero · 3 botellas",
         payer,
         method: card,
         returnUrl: `${BASE_URL}/orders/${order.id}`,
+        payerIp: "127.0.0.1",
       });
+      expect(order.gateway).toBe("token-pay");
       expect(order.lines).toEqual([
         { productId: casillero.id, title: casillero.title, quantity: 2, unitPriceInPesos: casillero.priceInPesos },
         { productId: malbec.id, title: malbec.title, quantity: 1, unitPriceInPesos: malbec.priceInPesos },
       ]);
+    });
+
+    it("should take the payer's IP from X-Forwarded-For, as it arrives through a tunnel", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/orders",
+        headers: { "x-forwarded-for": "190.24.1.10" },
+        payload: { gateway: "token-pay", payer, method: pse, items: oneBottle },
+      });
+
+      expect(payments.createPayment).toHaveBeenCalledWith(expect.objectContaining({ payerIp: "190.24.1.10" }));
+    });
+
+    it("should create a card payment without a token on a gateway that takes the card in its own page", async () => {
+      const res = await createOrder({ type: "CARD", installments: 1 }, oneBottle, "hosted-pay");
+
+      expect(res.statusCode).toBe(201);
+      expect(res.json().redirectUrl).toBe("https://pay.example/checkout");
+      expect(payments.createPayment).toHaveBeenCalledWith(
+        expect.objectContaining({ gateway: "hosted-pay", method: { type: "CARD", installments: 1 } }),
+      );
+    });
+
+    it("should refuse a card without a token on a gateway that tokenizes in the browser", async () => {
+      const res = await createOrder({ type: "CARD", installments: 1 });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toContain("Token Pay cobra la tarjeta con un token del navegador");
+      expect(payments.createPayment).not.toHaveBeenCalled();
     });
 
     it("should ignore any price the browser sends and join repeated lines", async () => {
@@ -277,16 +321,21 @@ describe("checkout skeleton", () => {
       expect(res.json().error).toBe("defecto del módulo");
     });
 
+    const gateway = "token-pay";
+    const { address: _address, ...payerWithoutAddress } = payer;
     it.each([
-      ["a payer without email", { payer: { ...payer, email: "" }, method: card, items: oneBottle }],
-      ["an unknown method", { payer, method: { type: "CASH" }, items: oneBottle }],
-      ["a card without token", { payer, method: { type: "CARD", installments: 1 }, items: oneBottle }],
-      ["a PSE payment without bank", { payer, method: { type: "PSE", personType: "NATURAL" }, items: oneBottle }],
-      ["an order without wines", { payer, method: card }],
-      ["an empty cart", { payer, method: card, items: [] }],
-      ["a wine that is not in the catalog", { payer, method: card, items: [{ productId: "vino-de-la-casa", quantity: 1 }] }],
-      ["more bottles than allowed", { payer, method: card, items: [{ productId: casillero.id, quantity: 10 }] }],
-      ["zero bottles", { payer, method: card, items: [{ productId: casillero.id, quantity: 0 }] }],
+      ["an order without gateway", { payer, method: card, items: oneBottle }],
+      ["a gateway the payments module does not offer", { gateway: "stripe", payer, method: card, items: oneBottle }],
+      ["a payer without email", { gateway, payer: { ...payer, email: "" }, method: card, items: oneBottle }],
+      ["a payer without address", { gateway, payer: payerWithoutAddress, method: card, items: oneBottle }],
+      ["an unknown method", { gateway, payer, method: { type: "CASH" }, items: oneBottle }],
+      ["a card without token", { gateway, payer, method: { type: "CARD", installments: 1 }, items: oneBottle }],
+      ["a PSE payment without bank", { gateway, payer, method: { type: "PSE", personType: "NATURAL" }, items: oneBottle }],
+      ["an order without wines", { gateway, payer, method: card }],
+      ["an empty cart", { gateway, payer, method: card, items: [] }],
+      ["a wine that is not in the catalog", { gateway, payer, method: card, items: [{ productId: "vino-de-la-casa", quantity: 1 }] }],
+      ["more bottles than allowed", { gateway, payer, method: card, items: [{ productId: casillero.id, quantity: 10 }] }],
+      ["zero bottles", { gateway, payer, method: card, items: [{ productId: casillero.id, quantity: 0 }] }],
     ])("should reject %s with 400 without calling the gateway", async (_case, payload) => {
       const res = await app.inject({ method: "POST", url: "/api/orders", payload });
 
@@ -303,7 +352,7 @@ describe("checkout skeleton", () => {
       const res = await app.inject({ method: "GET", url: `/api/orders/${order.id}` });
 
       expect(res.statusCode).toBe(200);
-      expect(payments.getPaymentStatus).toHaveBeenCalledWith("tx-pse-1");
+      expect(payments.getPaymentStatus).toHaveBeenCalledWith("token-pay", "tx-pse-1");
       expect(res.json().order.status).toBe("APPROVED");
       expect(res.json().order.history.map((entry: { source: string }) => entry.source)).toEqual(["creation", "query"]);
     });
@@ -346,7 +395,7 @@ describe("checkout skeleton", () => {
 
   describe("GET /api/pse-banks and /api/payments/config", () => {
     it("should list the banks of the payments module", async () => {
-      const res = await app.inject({ method: "GET", url: "/api/pse-banks" });
+      const res = await app.inject({ method: "GET", url: "/api/pse-banks?gateway=token-pay" });
 
       expect(res.statusCode).toBe(200);
       expect(res.json()).toEqual({ banks: [{ code: "1007", name: "Bancolombia" }] });
@@ -355,7 +404,7 @@ describe("checkout skeleton", () => {
     it("should answer 502 when the bank list fails technically", async () => {
       payments.listPseBanks.mockRejectedValueOnce(new PaymentTechnicalError("caída"));
 
-      const res = await app.inject({ method: "GET", url: "/api/pse-banks" });
+      const res = await app.inject({ method: "GET", url: "/api/pse-banks?gateway=token-pay" });
 
       expect(res.statusCode).toBe(502);
     });
@@ -363,30 +412,54 @@ describe("checkout skeleton", () => {
     it("should answer 500 when the bank list fails for another reason", async () => {
       payments.listPseBanks.mockRejectedValueOnce(new Error("defecto"));
 
-      const res = await app.inject({ method: "GET", url: "/api/pse-banks" });
+      const res = await app.inject({ method: "GET", url: "/api/pse-banks?gateway=token-pay" });
 
       expect(res.statusCode).toBe(500);
     });
 
-    it("should give the browser the public configuration of the payments module", async () => {
-      const res = await app.inject({ method: "GET", url: "/api/payments/config" });
+    it("should ask the payments module for the banks of the chosen gateway", async () => {
+      await app.inject({ method: "GET", url: "/api/pse-banks?gateway=hosted-pay" });
 
-      expect(res.json()).toEqual({ publicKey: "pub_fake" });
+      expect(payments.listPseBanks).toHaveBeenCalledWith("hosted-pay");
+    });
+
+    it("should give the browser the public configuration of the chosen gateway", async () => {
+      const res = await app.inject({ method: "GET", url: "/api/payments/config?gateway=token-pay" });
+
+      expect(res.json()).toEqual({ gateway: "token-pay", publicKey: "pub_fake" });
+    });
+
+    it.each(["/api/pse-banks", "/api/payments/config", "/api/pse-banks?gateway=stripe", "/api/payments/config?gateway=stripe"])(
+      "should answer 400 to %s without a gateway the module offers",
+      async (url) => {
+        const res = await app.inject({ method: "GET", url });
+
+        expect(res.statusCode).toBe(400);
+        expect(payments.listPseBanks).not.toHaveBeenCalled();
+        expect(payments.publicConfig).not.toHaveBeenCalled();
+      },
+    );
+
+    it("should list the gateways of the payments module for the page", async () => {
+      const res = await app.inject({ method: "GET", url: "/api/gateways" });
+
+      expect(res.json()).toEqual({ gateways: FAKE_GATEWAYS });
     });
   });
 
-  describe("POST /webhooks", () => {
+  describe("POST /webhooks/:gateway", () => {
     const rawBody = '{"event":"transaction.updated",  "data": {"id":"tx-card-1"}}';
 
-    it("should hand the module the body byte for byte, the headers and the query", async () => {
+    it("should hand the module the gateway of the route, the body byte for byte, the headers and the query", async () => {
       await app.inject({
         method: "POST",
-        url: "/webhooks?data.id=tx-card-1&type=payment",
+        url: "/webhooks/token-pay?data.id=tx-card-1&type=payment",
         headers: { "content-type": "application/json", "x-signature": "ts=1,v1=abc" },
         payload: rawBody,
       });
 
-      const [webhook] = payments.verifyWebhook.mock.calls[0];
+      const [gateway, webhook] = payments.verifyWebhook.mock.calls[0];
+      expect(gateway).toBe("token-pay");
       expect(webhook.rawBody).toBe(rawBody);
       expect(webhook.headers["x-signature"]).toBe("ts=1,v1=abc");
       expect(webhook.query).toEqual({ "data.id": "tx-card-1", type: "payment" });
@@ -396,7 +469,7 @@ describe("checkout skeleton", () => {
       payments.createPayment.mockResolvedValueOnce({ transactionId: "tx-card-1", status: "PENDING", nativeStatus: "PENDING" });
       const { order } = (await createOrder(card)).json();
 
-      const res = await app.inject({ method: "POST", url: "/webhooks", payload: rawBody, headers: { "content-type": "application/json" } });
+      const res = await app.inject({ method: "POST", url: "/webhooks/token-pay", payload: rawBody, headers: { "content-type": "application/json" } });
 
       expect(res.statusCode).toBe(200);
       expect(res.json()).toEqual({ received: true, matched: true });
@@ -410,14 +483,14 @@ describe("checkout skeleton", () => {
       const { order } = (await createOrder(card)).json();
       payments.verifyWebhook.mockResolvedValueOnce(null);
 
-      const res = await app.inject({ method: "POST", url: "/webhooks", payload: rawBody, headers: { "content-type": "application/json" } });
+      const res = await app.inject({ method: "POST", url: "/webhooks/token-pay", payload: rawBody, headers: { "content-type": "application/json" } });
 
       expect(res.statusCode).toBe(401);
       expect(orders.get(order.id)?.status).toBe("PENDING");
     });
 
     it("should acknowledge a verified webhook of an unknown transaction", async () => {
-      const res = await app.inject({ method: "POST", url: "/webhooks", payload: rawBody, headers: { "content-type": "text/plain" } });
+      const res = await app.inject({ method: "POST", url: "/webhooks/token-pay", payload: rawBody, headers: { "content-type": "text/plain" } });
 
       expect(res.statusCode).toBe(200);
       expect(res.json()).toEqual({ received: true, matched: false });
@@ -426,7 +499,7 @@ describe("checkout skeleton", () => {
     it("should answer 502 so the gateway retries when the module fails technically", async () => {
       payments.verifyWebhook.mockRejectedValueOnce(new PaymentTechnicalError("segunda petición caída"));
 
-      const res = await app.inject({ method: "POST", url: "/webhooks", payload: rawBody, headers: { "content-type": "application/json" } });
+      const res = await app.inject({ method: "POST", url: "/webhooks/token-pay", payload: rawBody, headers: { "content-type": "application/json" } });
 
       expect(res.statusCode).toBe(502);
     });
@@ -434,15 +507,32 @@ describe("checkout skeleton", () => {
     it("should answer 500 when the module fails for another reason", async () => {
       payments.verifyWebhook.mockRejectedValueOnce(new Error("defecto"));
 
-      const res = await app.inject({ method: "POST", url: "/webhooks", payload: rawBody, headers: { "content-type": "application/json" } });
+      const res = await app.inject({ method: "POST", url: "/webhooks/token-pay", payload: rawBody, headers: { "content-type": "application/json" } });
 
       expect(res.statusCode).toBe(500);
     });
 
     it("should pass an empty body when the webhook has none", async () => {
-      await app.inject({ method: "POST", url: "/webhooks" });
+      await app.inject({ method: "POST", url: "/webhooks/token-pay" });
 
-      expect(payments.verifyWebhook.mock.calls[0][0].rawBody).toBe("");
+      expect(payments.verifyWebhook.mock.calls[0][1].rawBody).toBe("");
+    });
+
+    it("should answer 404 to a gateway the payments module does not offer, without verifying", async () => {
+      const res = await app.inject({ method: "POST", url: "/webhooks/stripe", payload: rawBody });
+
+      expect(res.statusCode).toBe(404);
+      expect(payments.verifyWebhook).not.toHaveBeenCalled();
+    });
+
+    it("should only update an order of the same gateway as the webhook", async () => {
+      payments.createPayment.mockResolvedValueOnce({ transactionId: "tx-card-1", status: "PENDING", nativeStatus: "PENDING" });
+      const { order } = (await createOrder(card)).json();
+
+      const res = await app.inject({ method: "POST", url: "/webhooks/hosted-pay", payload: rawBody });
+
+      expect(res.json()).toEqual({ received: true, matched: false });
+      expect(orders.get(order.id)?.status).toBe("PENDING");
     });
   });
 
