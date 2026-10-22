@@ -96,9 +96,15 @@ El esqueleto lee el `.env` de la raíz, el mismo de la API de Simulación (una v
 | Pasarela | Llaves para el sandbox | Para los webhooks |
 |---|---|---|
 | Wompi | `WOMPI_PUBLIC_KEY`, `WOMPI_PRIVATE_KEY`, `WOMPI_INTEGRITY_SECRET` | `WOMPI_EVENTS_SECRET` |
-| Mercado Pago | `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_PUBLIC_KEY` | `MERCADOPAGO_WEBHOOK_SECRET` |
+| Mercado Pago | `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_PUBLIC_KEY` | `MERCADOPAGO_WEBHOOK_SECRET`, la clave de la aplicación del vendedor de prueba, no la de la cuenta del proyecto (ver abajo) |
 | Kushki | `KUSHKI_PUBLIC_MERCHANT_ID`, `KUSHKI_PRIVATE_MERCHANT_ID` | `KUSHKI_WEBHOOK_SECRET` |
 | Rapyd | `RAPYD_API_ACCESS_KEY`, `RAPYD_API_SECRET_KEY` | `RAPYD_WEBHOOK_URL`, la URL exacta registrada en el panel, porque Rapyd la firma |
+
+**La clave de los webhooks de Mercado Pago es la de la aplicación del vendedor de prueba** (punto 121). La Orders API solo acepta en sandbox las credenciales `APP_USR-` de un vendedor de prueba. Esas credenciales son de una aplicación que vive en la cuenta de ese vendedor, no en la del proyecto, y esa aplicación firma sus notificaciones con su propia clave.
+
+- **Dónde está la clave.** El panel de la aplicación del proyecto muestra otra clave, que solo valida «Simular notificación». La buena se revela iniciando sesión con el vendedor de prueba: sus datos y su código de verificación de 6 dígitos están en «Pruebas > Cuentas de prueba». Allí se abre la aplicación cuyo id trae el token (`APP_USR-<id>-…`) y se va a Webhooks > Configurar notificaciones.
+- **Dónde va la URL.** La URL de los webhooks se registra en esa misma aplicación.
+- **Cómo comprobarla.** Cada notificación trae el `application_id` que la firmó, y tiene que coincidir con el id del token.
 
 **La tarjeta de B contra el simulador de Render no tokeniza.** El SDK de navegador tokeniza en `simulator` siempre contra `localhost:3000`, porque su catálogo de hosts es cerrado para que la tarjeta no pueda ir a otro lado (punto 77). Con Render, la página responde «Error de conexión al tokenizar tarjeta». El PSE sí funciona, y la tarjeta de Rapyd también, porque no tokeniza. La tarjeta en el simulador se prueba con `npm run start:local`. En A no pasa, porque cada módulo arma a mano la URL de su tokenización.
 
@@ -132,7 +138,7 @@ Para mostrar, por ejemplo en la sustentación, que cada pasarela notifica y que 
 1. **Preparar ngrok.** Crear la cuenta gratuita en ngrok, instalarlo (`brew install ngrok`) y conectarlo con `ngrok config add-authtoken <token>`; el token está en el panel de ngrok. El mismo panel muestra el dominio de la cuenta, de la forma `<nombre>.ngrok-free.app`.
 2. **Registrar en el modo de pruebas de cada panel** la URL `https://<dominio>/webhooks/<pasarela>`:
    - **Wompi:** la URL de eventos del ambiente de pruebas.
-   - **Mercado Pago:** los webhooks de la aplicación, con los eventos de órdenes. Al guardar, Mercado Pago genera otra clave secreta. Esa clave se copia a `MERCADOPAGO_WEBHOOK_SECRET` del `.env`, y la configuración no se vuelve a guardar.
+   - **Mercado Pago:** los webhooks de la aplicación del vendedor de prueba, en su sesión, con los eventos de órdenes. La clave secreta que muestra se copia a `MERCADOPAGO_WEBHOOK_SECRET` del `.env` (ver arriba). Después de guardar hay que volver a revelarla, por si cambió.
    - **Rapyd:** la URL de webhooks. La misma URL, exacta, va en `RAPYD_WEBHOOK_URL` del `.env`, porque Rapyd la firma.
 3. **Ensayar el día completo**, con los pasos de abajo.
 
@@ -141,12 +147,15 @@ Para mostrar, por ejemplo en la sustentación, que cada pasarela notifica y que 
 1. **Arrancar.** Se levanta un prototipo en el puerto 4000 (`npm start` en su carpeta) y, en otra terminal, se corre `ngrok http 4000`.
 2. **Pagar.** Se abre `http://localtest.me:4000` y se paga. Cada `webhook:` que llega aparece, con su estado nativo, en la traza de la terminal y en el «Detalle técnico de la orden».
    - **Wompi:** la tarjeta aprobada llega como `APPROVED`.
-   - **Rapyd:** la tarjeta pagada en su página llega como dos `PENDING (ACT)` y un `APPROVED (CLO)`; el PSE llega como `APPROVED (CLO)`.
-   - **Mercado Pago:** las notificaciones reales del modo de pruebas no verifican con la clave del panel (punto 118, en consulta con su soporte). Se muestra con «Simular notificación» del panel, que sí verifica. Como su id es inventado, no actualiza ninguna orden: A responde 200 y B 502.
+   - **Mercado Pago:** la tarjeta aprobada llega como `APPROVED (processed)`, con la clave del vendedor de prueba.
+   - **Rapyd:** la tarjeta pagada en su página manda tres avisos. En A quedan como dos `PENDING (ACT)` y un `APPROVED (CLO)`. En B el segundo ya sale `APPROVED (CLO)`: ante un aviso pendiente, B consulta el pago, y para entonces Rapyd ya lo cerró. El PSE llega como `APPROVED (CLO)`.
    - **Kushki:** no hubo acceso a su consola de UAT, y eso queda como límite del experimento. Su webhook se muestra con el simulador local, firmado igual que la pasarela, como en «Con el simulador local».
 3. **Cambiar de prototipo.** Se detiene el primero y se arranca el otro en el mismo puerto; el túnel y los paneles no cambian.
 
-Lo medido contra los sandboxes el 21 de octubre de 2026 está en el punto 118. Rapyd y Wompi verifican y actualizan la orden. Las notificaciones reales del modo de pruebas de Mercado Pago no verifican con la clave del panel, y la simulada desde el panel sí. Kushki quedó sin medir, porque no hubo acceso a su consola de UAT, y se declara como límite del experimento; su firma se prueba con el simulador.
+Lo medido contra los sandboxes está en los puntos 118 y 121.
+
+- **Wompi, Mercado Pago y Rapyd:** sus webhooks reales verifican la firma y actualizan la orden en A y en B, medido el 22 de octubre de 2026 por un túnel. En Mercado Pago, con la clave de la aplicación del vendedor de prueba.
+- **Kushki:** queda sin medir, porque no hubo acceso a su consola de UAT, y se declara como límite del experimento. Su firma se prueba con el simulador.
 
 **Los datos de prueba**, medidos entre el 19 y el 21 de octubre de 2026 en los dos prototipos:
 

@@ -4243,6 +4243,54 @@ El plan está en `prototypes/README.md`, «Los webhooks reales, en vivo». Kushk
 
 **Estado:** El origen nuevo quedó medido en las cuatro pasarelas, con A, B y C. Falta ensayar el plan de los webhooks en vivo: Joan crea la cuenta de ngrok y registra su dominio en los paneles de Wompi, Mercado Pago y Rapyd.
 
+### 121. Las notificaciones de Mercado Pago en sandbox las firma la aplicación del vendedor de prueba (PR #162)
+
+**Responsable:** Orduz.
+
+**Contexto.** El punto 118 dejó sin resolver las notificaciones reales de órdenes del modo de pruebas. Ninguna de 25 validó la firma con la clave del panel, ni con el validador oficial del SDK `mercadopago` 3.6.1, y en cambio la de «Simular notificación» sí validó. Quedó redactada una consulta para el soporte de Mercado Pago. El 22 de octubre respondió su agente de IA con tres posibles causas: que el `data.id` se leyera mal, que el manifiesto tuviera algo de más, o que la clave fuera de otra configuración.
+
+**Lo que se descartó.** Con las 25 capturas crudas, sin recibir ninguna nueva:
+
+- **El `data.id`:** se lee del query crudo y se probó tal cual y en minúsculas.
+- **El manifiesto:** es el de la documentación, `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`.
+- **La pestaña «Modo de prueba»:** su clave, en la aplicación de la cuenta del proyecto, también dio 0 de 25.
+
+**La causa.** Cada notificación trae el `application_id` que la firmó.
+
+- **Las 25 reales** traen la aplicación terminada en 0415 y el usuario del vendedor de prueba, los mismos del token `APP_USR-` del `.env`.
+- **La simulada** trae la aplicación terminada en 8689, que es la de la cuenta del proyecto, y el usuario de esa cuenta.
+
+La Orders API responde `401` a las credenciales `TEST-` (punto 45), así que en sandbox se usan las `APP_USR-` de un vendedor de prueba. Esas credenciales son de una aplicación de la cuenta del vendedor, y esa aplicación firma con su propia clave, que el panel de la cuenta del proyecto no muestra.
+
+Lo confirmó el MCP de Mercado Pago, conectado por OAuth con la cuenta del proyecto:
+
+- `application_list` lista cinco aplicaciones, ninguna terminada en 0415;
+- `notifications_history` de la terminada en 8689 no tiene notificaciones;
+- el de la terminada en 0415 responde «The target application does not belong to the same owner as the OAuth app».
+
+Joan entró con el vendedor de prueba, reveló la clave de su aplicación, y validaron las 25. Al registrar ahí la URL de un túnel y guardar, la clave no cambió.
+
+**Lo medido el 22 de octubre de 2026 por un túnel**, con A en 4301 y B en 4302 detrás de un repetidor que entrega cada aviso a los dos. La tienda dueña de la orden la actualiza, y la otra verifica el aviso y lo ignora (`matched:false`):
+
+| Pasarela | En A | En B |
+|---|---|---|
+| Wompi, tarjeta | `webhook: APPROVED (APPROVED)`, `12066420-1792704196-71533` | `webhook: APPROVED (APPROVED)` |
+| Mercado Pago, tarjeta | `webhook: APPROVED (processed)`, `ORDTST01M5JQZDJDGPXDB8NP04TKZXJ2` | `webhook: APPROVED (processed)`, `ORDTST01M5JR3CC3S86ZPABJ97A6H8AS` |
+| Rapyd, tarjeta en su página | `PENDING (ACT)`, `PENDING (ACT)`, `APPROVED (CLO)`, por la referencia de la orden | `PENDING (ACT)`, `APPROVED (CLO)`, `APPROVED (CLO)` |
+
+- **La diferencia de Rapyd en B es del diseño.** Ante un aviso pendiente, B consulta el pago. El segundo aviso llegó en el mismo segundo que el `PAYMENT_COMPLETED`, y para entonces el pago ya estaba cerrado.
+- **Llegaron reintentos de Mercado Pago** por órdenes anteriores, que ninguna tienda tenía. Mercado Pago reintenta cada 15 minutos lo que no recibió un 200.
+- **Kushki, con el simulador local:** su PSE dejó `webhook: APPROVED (approvedTransaction)` en A y en B. B guarda el estado nativo del aviso firmado, no la traducción del SDK (punto 118).
+
+**Lo que se documentó**, para que quien pruebe contra el sandbox tenga las variables correctas:
+
+- `.env.example`;
+- la guía de implementación del SDK (`docs/03-sdk/4-guia-de-implementacion.md`);
+- `docs/testing-data/mercado-pago.md`, sección 5;
+- `prototypes/README.md`.
+
+**Estado:** Resuelto. La consulta al soporte de Mercado Pago ya no hace falta. Los webhooks reales de Wompi, Mercado Pago y Rapyd verifican en A y en B; Kushki sigue como límite del experimento (punto 118). Si la API de Render tiene que validar notificaciones reales de Mercado Pago, su `MERCADOPAGO_WEBHOOK_SECRET` tiene que ser esta misma clave.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd

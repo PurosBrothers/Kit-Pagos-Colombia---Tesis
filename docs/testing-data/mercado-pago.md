@@ -777,3 +777,51 @@ llave derivada de la referencia, un rechazo no se podría reintentar con otra ta
 `423` llega como `RESOURCE_LOCKED`, un error transitorio, desde la 0.6.0-rc.2. La API de Simulación
 imita la idempotencia medida en `POST /v1/sim/mercadopago/orders` y, con el monto 10 409, crea las dos
 órdenes (`docs/02-arquitectura/3-api-de-simulacion.md`).
+
+---
+
+## 5. La clave de los webhooks en el modo de pruebas (21 y 22 de octubre de 2026)
+
+> **La notificación de una orden la firma la aplicación del vendedor de prueba, no la de la cuenta del
+> comercio.** Para validarla en sandbox, `MERCADOPAGO_WEBHOOK_SECRET` tiene que ser la clave de esa
+> aplicación.
+
+**Lo que se vio.** El 21 de octubre llegaron 25 notificaciones reales de órdenes (`type: "order"`,
+`live_mode: false`, `data.id` del tipo `ORDTST…`), y ninguna validó con la clave del panel. Tampoco
+validaron con `WebhookSignatureValidator` del SDK oficial `mercadopago` 3.6.1. La notificación de
+«Simular notificación» (`live_mode: true`, `data.id` numérico) sí validó.
+
+Se descartaron la lectura del `data.id` y el manifiesto: el `data.id` se toma del query crudo, tal
+cual y en minúsculas, con `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`. También se descartó la
+clave de la pestaña «Modo de prueba» de la misma aplicación: dio 0 de 25.
+
+**La causa, medida el 22 de octubre.**
+
+| | `application_id` | `user_id` |
+| --- | --- | --- |
+| Las 25 notificaciones reales | terminada en 0415 | el vendedor de prueba |
+| El token `APP_USR-` del `.env` | terminada en 0415 | el vendedor de prueba |
+| La notificación simulada | terminada en 8689, la aplicación de la cuenta del proyecto | la cuenta del proyecto |
+
+Las credenciales `APP_USR-` que acepta la Orders API en sandbox son de una aplicación de la cuenta
+del vendedor de prueba, y esa aplicación firma sus notificaciones con su propia clave.
+
+El MCP de Mercado Pago, conectado por OAuth con la cuenta del proyecto, lo confirma:
+`application_list` no lista esa aplicación, `notifications_history` de la terminada en 8689 no tiene
+notificaciones, y el de la terminada en 0415 responde «The target application does not belong to the
+same owner as the OAuth app».
+
+Con la clave revelada en la sesión del vendedor de prueba validaron las 25. Ese mismo día, por un
+túnel, las notificaciones reales de tarjetas aprobadas verificaron y actualizaron la orden en los dos
+prototipos, A y B.
+
+**Cómo dejarlo bien:**
+
+1. En la aplicación de la cuenta, «Pruebas > Cuentas de prueba» muestra el usuario, la contraseña y
+   el código de verificación de 6 dígitos del vendedor de prueba. El código se usa si Mercado Pago pide
+   validar por correo al iniciar sesión.
+2. Iniciar sesión con ese vendedor, en una ventana privada, y abrir en «Tus integraciones» la
+   aplicación cuyo id va en el token (`APP_USR-<id>-…`).
+3. En Webhooks > Configurar notificaciones, registrar la URL de pruebas con los eventos de órdenes y
+   revelar la clave secreta. Esa es la de `MERCADOPAGO_WEBHOOK_SECRET`. «Restablecer» la cambia.
+4. Para comprobarlo, el `application_id` de cada notificación tiene que coincidir con ese id.

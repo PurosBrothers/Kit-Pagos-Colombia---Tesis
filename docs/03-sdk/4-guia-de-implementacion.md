@@ -48,6 +48,13 @@ MERCADOPAGO_WEBHOOK_SECRET=xxxxxxxx
 
 El *access token* va como `privateKey` en el SDK y la llave pública como `publicKey`. Desde la versión 0.6.0 la llave pública no es decorativa en el servidor: el SDK la usa para deducir la marca de la tarjeta antes de cobrar (`GET /v1/payment_methods/search` no responde sin ella), y sin ella el cobro con tarjeta falla con `INVALID_REQUEST`. La clave secreta de webhooks se genera en la configuración de notificaciones del panel, y es un valor distinto del token.
 
+**En sandbox, la clave de webhooks es la de la aplicación del vendedor de prueba.** Las credenciales `APP_USR-` de prueba son de una aplicación que vive en la cuenta del vendedor de prueba, y esa aplicación firma las notificaciones de las órdenes que crea. El panel de la aplicación de la cuenta del comercio muestra otra clave, con la que solo valida «Simular notificación».
+
+- **Dónde está la clave.** Se revela iniciando sesión con el vendedor de prueba (sus datos están en «Pruebas > Cuentas de prueba»), en Webhooks > Configurar notificaciones de la aplicación cuyo id trae el token (`APP_USR-<id>-…`). La URL de los webhooks se registra ahí.
+- **Cómo comprobarlo.** El `application_id` de cada notificación tiene que coincidir con ese id.
+
+Medido el 22 de octubre de 2026 (punto 121 del `architecture-log.md`). Con la clave de la cuenta del comercio, 0 de 25 notificaciones reales validaron; con la del vendedor de prueba, 25 de 25.
+
 **Advertencia de alcance:** desde la versión 0.6.0 tarjeta y PSE van por la Orders API, que **responde `401` con credenciales `TEST-`** (punto 45). Para probar en sandbox hacen falta las credenciales `APP_USR-` de un vendedor de prueba de una aplicación «Checkout API via Orders», con las que se cobró tarjeta el 15 de octubre de 2026, o el simulador del proyecto. Con esas credenciales la Payments API, por donde cobraba la 0.5.0, responde `401 "Unauthorized use of live credentials"`.
 
 ### Kushki
