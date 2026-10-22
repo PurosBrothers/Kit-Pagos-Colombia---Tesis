@@ -4191,6 +4191,58 @@ Los avisos de desarrollo quedan como están, por decisión de Joan, porque no bl
 
 **Estado:** Medido. Los webhooks reales de Kushki quedan como límite del experimento, y las notificaciones reales del modo de pruebas de Mercado Pago, en consulta con su soporte (punto 118).
 
+### 120. Las tiendas corren en `localtest.me`, y los webhooks en vivo usan un dominio fijo de ngrok (PR #162)
+
+**Responsable:** Orduz.
+
+**Contexto.** Mercado Pago rechaza un PSE cuya `callback_url` apunta a `localhost` (punto 113). Por eso, el 21 de octubre el PSE de Mercado Pago se midió con un túnel en `PUBLIC_BASE_URL` (punto 119). En su #163, Joshua resolvió lo mismo cambiando el host por `localtest.me`, un dominio público cuyo DNS responde `127.0.0.1`. El 22 de octubre, Joan pidió dos cosas: que A y B funcionaran así, sin túnel, y un plan sencillo para mostrar los webhooks reales en la sustentación.
+
+**Decisión.** El esqueleto usa `http://localtest.me:<PORT>` como `PUBLIC_BASE_URL` por omisión, igual en A y en B. Los módulos de pagos no cambian, y una `PUBLIC_BASE_URL` del entorno sigue ganando.
+
+Joan pidió lo mismo para C, en este PR. C arma su URL de retorno con el origen del navegador (`main.ts`), así que el cliente no cambia. Lo que cambia es dónde se abre la tienda: `server.mjs` la anuncia en `localtest.me`, y la guía de prueba ya no pide túneles.
+
+**Lo medido el 22 de octubre de 2026**, desde el navegador y contra los sandboxes, sin túnel. A corrió en `localtest.me:4301` y B en `localtest.me:4302`.
+
+| Pasarela | Tarjeta en A | PSE en A | Tarjeta en B | PSE en B |
+|---|---|---|---|---|
+| Wompi | Aprobada (`12066420-1792698761-45735`) | Aprobado (`12066420-1792699420-82005`) | Aprobada (`12066420-1792699478-43077`) | Aprobado (`12066420-1792699521-88985`) |
+| Mercado Pago | Aprobada, `processed` (`ORDTST01M5JKARCFRC71T3H34FGAGAJP`) | Aprobado, `processed` (`ORDTST01M5JJTYSECYGBJJ2GAGTJ329N`) | Aprobada, `processed` (`ORDTST01M5JKGA7Q1JR1PJTNAEMJ809S`) | Aprobado, `processed` (`ORDTST01M5JJYAPD74JMX525CVFCPX6W`) |
+| Kushki | Aprobada, `APPROVAL` (ticket `169607708835281034`) | Pendiente, `initializedTransaction` | Aprobada, `APPROVAL` (ticket `193524300384999562`) | Pendiente, `initializedTransaction` |
+| Rapyd | Aprobada en su página con 3DS (`checkout_28ef91d4bf0491420f55af86f9a551de`) | Aprobado, `CLO` (`payment_0e22b327ccacc8e50f93035361c224e5`) | Aprobada en su página con 3DS (`checkout_e5a177e8e6324e749d23729369fd9684`) | Aprobado, `CLO` (`payment_445f7ae11467f8792bf7b54e99a26269`) |
+
+- **Mercado Pago aceptó la `callback_url`.** Guardó `http://localtest.me:<puerto>/orders/…` en `config.online.callback_url`, según lo que devuelve su API, y su banco de prueba devolvió al comprador a la tienda. En B, la consulta automática de la página terminó antes de que el sandbox procesara el pago; «Consultar el estado» lo encontró `processed`.
+- **Rapyd y Kushki** devolvieron al comprador a `localtest.me` desde su página y su banco. El PSE de Kushki sigue pendiente porque UAT no cierra las transferencias, como en el punto 119.
+- **La tarjeta se tokeniza en el navegador desde ese origen** en Wompi, Mercado Pago y Kushki. Ninguna página usa APIs que exijan un origen seguro.
+- **El carrito vive en `localStorage`, que depende del origen**, así que la tienda se abre en `localtest.me`.
+- **`localtest.me` depende del DNS público.** Una red que filtre respuestas con `127.0.0.1` no lo resuelve; en ese caso basta una línea en `/etc/hosts`.
+
+**C, el mismo día, en `localtest.me:4110`.** Con `npm start`, que cobra por la API de Render, pasaron los ocho casos:
+
+- **Wompi:** la tarjeta (pedido `CEIBA-1792700319444`) y el PSE (`CEIBA-1792700582091`), aprobados.
+- **Mercado Pago:** la tarjeta (`CEIBA-1792700357955`) y el PSE (`CEIBA-1792700236128`, pago `185589062928`), aprobados. Antes, ese PSE necesitaba un túnel.
+- **Kushki:** la tarjeta, aprobada (`CEIBA-1792700567268`). El PSE (`CEIBA-1792700596454`) volvió con `token=` y quedó pendiente, como siempre en UAT.
+- **Rapyd:** la tarjeta en su página (`CEIBA-1792700677675`) y el PSE (`CEIBA-1792700771073`), aprobados.
+
+Lo que se comprobó además:
+
+- **La API de Render** responde el preflight de CORS con `access-control-allow-origin: *` también para ese origen.
+- **Con la API en la máquina** (`--api-url=http://localhost:3100/v1/api`, en sandbox), el PSE de Mercado Pago salió aprobado (`CEIBA-1792700996066`, pago `185591235552`). Antes ese caso pedía dos túneles, uno para la página y otro para la API. Ahora no hace falta ninguno, porque la página en `localtest.me` y la API en `localhost` están en la misma máquina.
+
+**Los webhooks no se resuelven con `localtest.me`**, porque en el servidor de la pasarela también resuelve a `127.0.0.1`. Una notificación real necesita una URL pública. Joan pidió la opción más estable y sencilla para la sustentación, y se eligió el dominio gratuito de ngrok. Según su documentación (consultada el 22 de octubre, «Free Plan Limits» y «Domains»):
+
+- el dominio está asignado a la cuenta y no cambia;
+- trae HTTPS y 20.000 peticiones al mes;
+- su página de advertencia solo aparece en el tráfico HTML de un navegador, no en las llamadas de una API.
+
+Así, los paneles se configuran una sola vez. Se descartaron dos opciones:
+
+- **El túnel rápido de `cloudflared`:** su URL cambia cada vez, y obligaría a registrar la URL en tres paneles ese día y a recopiar la clave de Mercado Pago, que se regenera al guardar.
+- **Un túnel con nombre de Cloudflare:** exige un dominio propio.
+
+El plan está en `prototypes/README.md`, «Los webhooks reales, en vivo». Kushki se muestra con el simulador local, por decisión de Joan del mismo día.
+
+**Estado:** El origen nuevo quedó medido en las cuatro pasarelas, con A, B y C. Falta ensayar el plan de los webhooks en vivo: Joan crea la cuenta de ngrok y registra su dominio en los paneles de Wompi, Mercado Pago y Rapyd.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd

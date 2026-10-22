@@ -73,8 +73,13 @@ Por omisión, `npm start` cobra en el sandbox oficial de cada pasarela, como el 
 ```bash
 cd prototypes/checkout-sin-solucion   # o checkout-con-sdk-front-back
 npm ci
-npm start                             # http://localhost:4000
+npm start                             # http://localtest.me:4000
 ```
+
+**La tienda se abre en `http://localtest.me:4000`, no en `localhost`.** `localtest.me` es un dominio público que resuelve a `127.0.0.1`. Mercado Pago no acepta volver a `localhost` al final de un PSE; con este origen, el banco devuelve al comprador a la máquina sin túnel (punto 120).
+
+- **El carrito se guarda por origen**, así que la tienda se usa entera en `localtest.me`.
+- **Si una red no lo resuelve**, basta una línea en `/etc/hosts`: `127.0.0.1 localtest.me`. Se comprueba con `dscacheutil -q host -a name localtest.me`, que tiene que responder `127.0.0.1`.
 
 | Comando | Dónde cobra | Para qué sirve |
 |---|---|---|
@@ -100,14 +105,14 @@ El esqueleto lee el `.env` de la raíz, el mismo de la API de Simulación (una v
 | Variable | Por omisión | Qué es |
 |---|---|---|
 | `PORT` | `4000` | El puerto del checkout |
-| `PUBLIC_BASE_URL` | `http://localhost:<PORT>` | El origen público, para la URL de retorno del banco |
+| `PUBLIC_BASE_URL` | `http://localtest.me:<PORT>` | El origen público, para la URL de retorno del banco. `localtest.me` resuelve a esta máquina |
 | `CHECKOUT_ENVIRONMENT` | `sandbox` | `sandbox` o `simulator` |
 | `CHECKOUT_SIMULATOR_URL` | `https://kit-pagos-colombia.onrender.com` | El origen de la API de Simulación, con `simulator` |
 
 **Los webhooks (función 4)** llegan a `/webhooks/<pasarela>`.
 
-- **En el sandbox**, cada pasarela notifica a la URL registrada en su panel, que no puede ser `localhost`: hace falta un túnel. Sin él, la orden se resuelve con la consulta de su página.
-- **Con el simulador local**, el webhook llega solo. Basta con arrancar `simulator-api` con `SIMULATOR_WEBHOOK_TARGET_URL=http://localhost:4000/webhooks/{gateway}` y `SIMULATOR_WEBHOOK_AUTO=true` (sección 4.2 de [`3-api-de-simulacion.md`](../docs/02-arquitectura/3-api-de-simulacion.md)). El simulador, A y B tienen que leer los mismos secretos de webhook. El simulador emite solo cuando un pago cambia de estado; uno que nace resuelto se notifica con `POST /v1/sim/webhooks/trigger`. La tarjeta de Rapyd pagada en su página llega con la misma secuencia del sandbox: dos avisos en `ACT` y después `PAYMENT_COMPLETED`.
+- **En el sandbox**, cada pasarela notifica a la URL registrada en su panel, que tiene que ser pública. `localtest.me` no sirve: en el servidor de la pasarela también resuelve a `127.0.0.1`. Hace falta un túnel, como en [«Los webhooks reales, en vivo»](#los-webhooks-reales-en-vivo). Sin él, la orden se resuelve con la consulta de su página.
+- **Con el simulador local**, el webhook llega solo. Basta con arrancar `simulator-api` con `SIMULATOR_WEBHOOK_TARGET_URL=http://localhost:4000/webhooks/{gateway}` y `SIMULATOR_WEBHOOK_AUTO=true` (sección 4.2 de [`3-api-de-simulacion.md`](../docs/02-arquitectura/3-api-de-simulacion.md)). El simulador, A y B tienen que leer los mismos secretos de webhook y la misma `RAPYD_WEBHOOK_URL`. El simulador emite solo cuando un pago cambia de estado; uno que nace resuelto se notifica con `POST /v1/sim/webhooks/trigger`. La tarjeta de Rapyd pagada en su página llega con la misma secuencia del sandbox: dos avisos en `ACT` y después `PAYMENT_COMPLETED`.
 - **Si corren los dos prototipos a la vez**, el segundo necesita otro `PORT`, y el destino de los webhooks del simulador es uno solo.
 
 **Para probar en el día a día no hace falta túnel.**
@@ -116,7 +121,30 @@ El esqueleto lee el `.env` de la raíz, el mismo de la API de Simulación (una v
 - Las pruebas de los módulos verifican firmas con cuerpos de la documentación de cada pasarela y de lo medido, sin red ni llaves.
 - Contra el sandbox, la orden se resuelve con la consulta aunque no llegue el webhook.
 
-Un webhook real solo hace falta para volver a medir, si una pasarela cambia su forma de notificar o se agrega una. Ese día se registra en su panel la URL de un túnel, que en Rapyd tiene que ser también `RAPYD_WEBHOOK_URL`, porque Rapyd la firma.
+Un webhook real solo hace falta para mostrarlo en vivo o para volver a medir, si una pasarela cambia su forma de notificar o se agrega una.
+
+### Los webhooks reales, en vivo
+
+Para mostrar, por ejemplo en la sustentación, que cada pasarela notifica y que la tienda verifica la firma, hace falta una URL pública que llegue a la máquina. Se usa el dominio gratuito de ngrok, que es fijo para cada cuenta, así que los paneles se configuran una sola vez (punto 120).
+
+**Una vez, días antes:**
+
+1. **Preparar ngrok.** Crear la cuenta gratuita en ngrok, instalarlo (`brew install ngrok`) y conectarlo con `ngrok config add-authtoken <token>`; el token está en el panel de ngrok. El mismo panel muestra el dominio de la cuenta, de la forma `<nombre>.ngrok-free.app`.
+2. **Registrar en el modo de pruebas de cada panel** la URL `https://<dominio>/webhooks/<pasarela>`:
+   - **Wompi:** la URL de eventos del ambiente de pruebas.
+   - **Mercado Pago:** los webhooks de la aplicación, con los eventos de órdenes. Al guardar, Mercado Pago genera otra clave secreta. Esa clave se copia a `MERCADOPAGO_WEBHOOK_SECRET` del `.env`, y la configuración no se vuelve a guardar.
+   - **Rapyd:** la URL de webhooks. La misma URL, exacta, va en `RAPYD_WEBHOOK_URL` del `.env`, porque Rapyd la firma.
+3. **Ensayar el día completo**, con los pasos de abajo.
+
+**El día:**
+
+1. **Arrancar.** Se levanta un prototipo en el puerto 4000 (`npm start` en su carpeta) y, en otra terminal, se corre `ngrok http 4000`.
+2. **Pagar.** Se abre `http://localtest.me:4000` y se paga. Cada `webhook:` que llega aparece, con su estado nativo, en la traza de la terminal y en el «Detalle técnico de la orden».
+   - **Wompi:** la tarjeta aprobada llega como `APPROVED`.
+   - **Rapyd:** la tarjeta pagada en su página llega como dos `PENDING (ACT)` y un `APPROVED (CLO)`; el PSE llega como `APPROVED (CLO)`.
+   - **Mercado Pago:** las notificaciones reales del modo de pruebas no verifican con la clave del panel (punto 118, en consulta con su soporte). Se muestra con «Simular notificación» del panel, que sí verifica. Como su id es inventado, no actualiza ninguna orden: A responde 200 y B 502.
+   - **Kushki:** no hubo acceso a su consola de UAT, y eso queda como límite del experimento. Su webhook se muestra con el simulador local, firmado igual que la pasarela, como en «Con el simulador local».
+3. **Cambiar de prototipo.** Se detiene el primero y se arranca el otro en el mismo puerto; el túnel y los paneles no cambian.
 
 Lo medido contra los sandboxes el 21 de octubre de 2026 está en el punto 118. Rapyd y Wompi verifican y actualizan la orden. Las notificaciones reales del modo de pruebas de Mercado Pago no verifican con la clave del panel, y la simulada desde el panel sí. Kushki quedó sin medir, porque no hubo acceso a su consola de UAT, y se declara como límite del experimento; su firma se prueba con el simulador.
 
@@ -125,7 +153,7 @@ Lo medido contra los sandboxes el 21 de octubre de 2026 está en el punto 118. R
 | Pasarela | Tarjeta | PSE |
 |---|---|---|
 | Wompi | 4242 4242 4242 4242 se aprueba y 4111 1111 1111 1111 se rechaza | El banco 1 aprueba, el 2 rechaza y el 3 da `ERROR`, que cuenta como rechazo. En el sandbox se resuelve en la primera consulta, sin página de banco |
-| Mercado Pago | 4013 5406 8274 6260, 11/30, titular `APRO Ruiz` | «Banco Prueba PSE», con cualquier usuario y «APROBAR PAGO». Exige una `callback_url` que no sea `localhost` (`PUBLIC_BASE_URL` de un túnel), y el sandbox tiene ventanas en que la orden nace sin URL del banco y termina en `processing_error` (punto 113) |
+| Mercado Pago | 4013 5406 8274 6260, 11/30, titular `APRO Ruiz` | «Banco Prueba PSE», con cualquier usuario y «APROBAR PAGO». Exige una `callback_url` que no sea `localhost`, y acepta la de `localtest.me` (punto 120). El sandbox tiene ventanas en que la orden nace sin URL del banco y termina en `processing_error` (punto 113) |
 | Kushki | 4242 4242 4242 4242. El token queda atado al monto (`K220` si se cobra otro) | Llega a la página real «Kushki Bank» y vuelve a la tienda, pero queda pendiente (`initializedTransaction`): UAT no cierra las transferencias |
 | Rapyd | En su página: 4111 1111 1111 1111, 12/30, CVV 123, y el código `123456` en su simulador de 3DS | Solo cobra con 9 de sus bancos, que son los que lista la tienda; «Rapyd Bank Payment Simulation» con Success |
 

@@ -15,7 +15,7 @@ El recorrido completo del cliente está en [checkout-frontend-rest.md](checkout-
    npm ci
    npm run build
    ```
-5. Para el PSE de Mercado Pago, `cloudflared` (`brew install cloudflared` en macOS, `winget install --id Cloudflare.cloudflared` en Windows). Mercado Pago no acepta volver a `localhost`.
+5. Para el PSE de Mercado Pago no hace falta nada más. Mercado Pago no acepta volver a `localhost`, y por eso la tienda se abre en `localtest.me` (sección 3).
 
 ## 2. Los modos
 
@@ -26,23 +26,26 @@ El recorrido completo del cliente está en [checkout-frontend-rest.md](checkout-
 
 El simulador de Render queda como opción: `npm start -- --environment=simulator` prueba el PSE de las cuatro pasarelas con las páginas de banco del simulador, con la tarjeta deshabilitada, porque en `simulator` el SDK solo tokeniza contra `localhost:3000`.
 
-Se abre `http://localhost:4100`: la tienda «Tostadero Ceiba». La franja de arriba dice si los pagos son simulados o del sandbox. La API, el ambiente y, en `sandbox`, el aviso de que la API usa sus propias credenciales van a la consola del navegador (F12), con el prefijo `[tienda C]`. Las opciones (`--api-url`, `--environment`, `--dotenv`, `--public-key`, `--port`) se pasan después de `--`, y funcionan igual en bash, PowerShell y cmd. En PowerShell, `set VARIABLE=valor` no define una variable de entorno: use los argumentos.
+Se abre `http://localtest.me:4100` (sección 3): la tienda «Tostadero Ceiba». La franja de arriba dice si los pagos son simulados o del sandbox. La API, el ambiente y, en `sandbox`, el aviso de que la API usa sus propias credenciales van a la consola del navegador (F12), con el prefijo `[tienda C]`. Las opciones (`--api-url`, `--environment`, `--dotenv`, `--public-key`, `--port`) se pasan después de `--`, y funcionan igual en bash, PowerShell y cmd. En PowerShell, `set VARIABLE=valor` no define una variable de entorno: use los argumentos.
 
 **Si la API es la de Render**, tiene que correr el código del #109. Mientras el PR no esté integrado, el cuerpo del PR dice cómo desplegar temporalmente su commit en Render y cómo volver a `devops`.
 
-## 3. Con un túnel, para el PSE de Mercado Pago
+## 3. En `localtest.me`, sin túnel, para el PSE de Mercado Pago
 
-Mercado Pago rechaza una `callback_url` que apunta a la máquina local, y el cliente manda su propio origen. Hay que servirlo por una URL pública:
+Mercado Pago rechaza una `callback_url` que apunta a `localhost`, y el cliente manda su propio origen. Por eso la tienda se abre en `http://localtest.me:4100`, no en `localhost:4100`. `localtest.me` es un dominio público que resuelve a `127.0.0.1`: Mercado Pago lo acepta, y el banco devuelve al comprador a la máquina.
 
-```bash
-cloudflared tunnel --url http://localhost:4100
-```
+- **El carrito se guarda por origen**, así que la tienda se usa entera en `localtest.me`.
+- **Si una red no lo resuelve**, basta una línea en `/etc/hosts`: `127.0.0.1 localtest.me`.
+- **Con la API en la máquina** (`--api-url=http://localhost:3100/v1/api`) tampoco hace falta túnel. La página en `localtest.me` llama a la API en `localhost` sin problema, porque las dos están en la máquina, y la API toma la IP del pagador de la conexión.
 
-Y abrir la URL `https://….trycloudflare.com` que imprime, no `localhost:4100`. La URL cambia cada vez que se abre el túnel, y no pide cuenta.
+Medido el 22 de octubre de 2026 (punto 120):
 
-Si además la API corre en la máquina, una página pública no puede llamar a `http://localhost`: los navegadores lo bloquean. Hace falta un segundo túnel para la API (`cloudflared tunnel --url http://localhost:3100`), y el cliente con `--api-url=https://<segundo túnel>/v1/api`. La API detrás de un túnel tiene que arrancar con `SIMULATOR_TRUST_FORWARDED_FOR=true`, para tomar la IP del pagador de `X-Forwarded-For`, como en Render.
+- **Con `npm start`**, que usa la API de Render: la tarjeta y el PSE de las cuatro pasarelas.
+- **Con la API en la máquina:** el PSE de Mercado Pago.
 
-Un `502` de la API detrás de un túnel llega como `API_UNREACHABLE`: Cloudflare cambia el `502` por su propia página, sin CORS, y el navegador no la deja leer. El mensaje lo dice, y el registro de la API muestra si la petición llegó.
+Los resultados están en la sección 4.
+
+Hasta ese día esto se hacía con un túnel de `cloudflared` para la página y otro para la API, que tenía que arrancar con `SIMULATOR_TRUST_FORWARDED_FOR=true`. Si se sigue usando un túnel, hay que tener en cuenta que un `502` de la API detrás de él llega como `API_UNREACHABLE`. Cloudflare cambia el `502` por su propia página, sin CORS, y el navegador no la deja leer. El mensaje lo dice, y el registro de la API muestra si la petición llegó.
 
 ## 4. Qué tiene que salir contra los sandboxes reales
 
@@ -62,7 +65,7 @@ Medido el 15 de octubre de 2026 entre las 21:47 y las 22:12 (UTC−5) con la API
 | Kushki | Tarjeta `4242 4242 4242 4242`, la que trae el formulario | Se tokeniza en el navegador contra UAT y se cobra por el mismo monto: `APPROVED` (`APPROVAL`) en la primera respuesta. Necesita `KUSHKI_PUBLIC_KEY` en el `.env` |
 | Mercado Pago | Tarjeta `4013 5406 8274 6260`, 11/2030, CVC 123, titular `APRO Ruiz` | `APPROVED` (`processed`), con un id `ORDTST…`. Medido con la tercera aplicación el 17 de octubre a las 20:27 |
 | Mercado Pago | La misma tarjeta con el titular `OTHE Ruiz` | `DECLINED` con el motivo `rejected_by_issuer` |
-| Mercado Pago | PSE, por el túnel | La tienda lleva directo a `www.mercadopago.com.co/sandbox/payments/<id>/bank_transfer`, que abre «Banco Prueba PSE». Ahí: usuario y contraseña cualesquiera, «APROBAR PAGO», «Enviar», «Estado de la Transacción: OK» y «Volver al comercio», que pasa por el comprobante de Mercado Pago y vuelve a la tienda con `payment_id=`: «¡Gracias! Tu pago fue aprobado» (`APPROVED`, `processed` en la consola). Medido por la tienda el 17 de octubre a las 15:23, a las 15:46 y a las 16:35 con la API local, y a las 16:55 con `npm start`, por Render, siempre con la tercera aplicación. Sin «Volver al comercio», la orden se quedó en `action_required` (sección 5). Si en vez del enlace sale un pago pendiente que termina `DECLINED` con `processing_error`, es el límite del sandbox de la sección 5: así salió por el cliente C a las 19:07, y con la tercera aplicación el 18 de octubre desde las 22:07 y el 19 entre las 14:09 y las 14:17. Pasados unos minutos vuelve a funcionar (punto 113) |
+| Mercado Pago | PSE, en `localtest.me` (sección 3) | El 22 de octubre, sin túnel, salió aprobado con `npm start` (pedido `CEIBA-1792700236128`) y con la API en la máquina (`CEIBA-1792700996066`) (punto 120). Hasta entonces se medía por un túnel. La tienda lleva directo a `www.mercadopago.com.co/sandbox/payments/<id>/bank_transfer`, que abre «Banco Prueba PSE». Ahí: usuario y contraseña cualesquiera, «APROBAR PAGO», «Enviar», «Estado de la Transacción: OK» y «Volver al comercio», que pasa por el comprobante de Mercado Pago y vuelve a la tienda con `payment_id=`: «¡Gracias! Tu pago fue aprobado» (`APPROVED`, `processed` en la consola). Medido por la tienda el 17 de octubre a las 15:23, a las 15:46 y a las 16:35 con la API local, y a las 16:55 con `npm start`, por Render, siempre con la tercera aplicación. Sin «Volver al comercio», la orden se quedó en `action_required` (sección 5). Si en vez del enlace sale un pago pendiente que termina `DECLINED` con `processing_error`, es el límite del sandbox de la sección 5: así salió por el cliente C a las 19:07, y con la tercera aplicación el 18 de octubre desde las 22:07 y el 19 entre las 14:09 y las 14:17. Pasados unos minutos vuelve a funcionar (punto 113) |
 
 ## 5. Lo que depende de cada sandbox, no de este código
 
