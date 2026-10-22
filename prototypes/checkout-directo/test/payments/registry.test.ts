@@ -14,6 +14,14 @@ describe("the gateway registry of prototype A", () => {
     expect(() => createPayments({})).toThrow(/Wompi: WOMPI_PUBLIC_KEY, WOMPI_PRIVATE_KEY, WOMPI_INTEGRITY_SECRET/);
     expect(() => createPayments({})).toThrow(/Mercado Pago: MERCADOPAGO_ACCESS_TOKEN, MERCADOPAGO_PUBLIC_KEY/);
     expect(() => createPayments({})).toThrow(/Kushki: KUSHKI_PUBLIC_MERCHANT_ID, KUSHKI_PRIVATE_MERCHANT_ID/);
+    expect(() => createPayments({})).toThrow(/Rapyd: RAPYD_API_ACCESS_KEY, RAPYD_API_SECRET_KEY/);
+  });
+
+  it("should offer Rapyd in the sandbox as a gateway that takes the card in its own page", () => {
+    const payments = createPayments({ RAPYD_API_ACCESS_KEY: "access", RAPYD_API_SECRET_KEY: "secret" });
+
+    expect(payments.listGateways()).toEqual([{ id: "rapyd", name: "Rapyd", cardCapture: "HOSTED_PAGE" }]);
+    expect(payments.publicConfig("rapyd")).toEqual({ gateway: "rapyd" });
   });
 
   it("should offer Kushki in the sandbox with its two merchant ids", () => {
@@ -43,7 +51,7 @@ describe("the gateway registry of prototype A", () => {
   it("should offer every gateway in the simulator", () => {
     const payments = createPayments({ CHECKOUT_ENVIRONMENT: "simulator" });
 
-    expect(payments.listGateways().map((gateway) => gateway.id)).toEqual(["wompi", "mercadopago", "kushki"]);
+    expect(payments.listGateways().map((gateway) => gateway.id)).toEqual(["wompi", "mercadopago", "kushki", "rapyd"]);
   });
 
   it("should tell the browser which gateway its public configuration is for", () => {
