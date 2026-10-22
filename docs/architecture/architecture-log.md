@@ -3997,6 +3997,56 @@ Ponerla no cambia lo que mide el experimento, que es el código del módulo de p
 
 **Estado:** Hecho en el PR de A y B.
 
+### 117. Los prototipos A y B cubren las cuatro pasarelas, y el experimento mide lo que cuesta agregar cada una (issues #150, #151, #133 y #134, PR #162)
+
+**Responsable:** Orduz.
+
+**Contexto.** Hasta aquí, A y B integraban solo Wompi, y el experimento central era migrarlos a Mercado Pago (#133). El prototipo C ya cubría las cuatro pasarelas desde el navegador (punto 106). Joan pidió que los tres prototipos contemplen las cuatro, y un prototipo más que use solo la parte de servidor del SDK.
+
+**Decisiones de Joan (20 de octubre de 2026).**
+
+1. **A integra las cuatro pasarelas a mano, y B las cuatro a través de `kit-pagos-colombia`.** Las tres nuevas (Mercado Pago, Kushki y Rapyd) las escribe Orduz en el PR #162, que ya trae el estado Wompi de los dos.
+2. **El comprador elige la pasarela con un selector en la tienda**, como en C. Los nombres los da el módulo de pagos en tiempo de ejecución, así que la vitrina sigue sin nombrar pasarelas en su código.
+3. **El experimento de migración (#133) se cierra.** La variable 2 pasa a ser lo que cuesta agregar cada pasarela, y la 5, cuántas de las cuatro cobran de punta a punta. El #134 y el #135 se adaptan (plan de evaluación, §3 y §4).
+4. **Un prototipo D, para Joshua:** el SDK solo en el servidor, y la tarjeta con las librerías oficiales de cada pasarela, sin `KitPagosBrowser`.
+
+**El diseño del contrato.** `PaymentsPort`, del esqueleto e igual en A y B:
+
+- gana `listGateways()`, con las pasarelas registradas, su nombre para el comprador y cómo recibe la tarjeta (`BROWSER_TOKEN` o `HOSTED_PAGE`, como el `cardCapture` de `/v1/api`, punto 106);
+- recibe la pasarela en cada operación.
+
+El esqueleto, a su vez:
+
+- guarda la pasarela en la orden;
+- sirve `GET /api/gateways`;
+- recibe los webhooks en `/webhooks/:pasarela`, porque cada pasarela firma distinto y la ruta dice cuál verificar.
+
+**Cómo cambia cada módulo de pagos:**
+
+- **A:** un archivo por pasarela, con `fetch` contra su API y citando su documentación oficial. El de Wompi es el código de David.
+- **B:** un `KitPagos` por pasarela, porque el SDK cobra con una pasarela activa por instancia, y `validateWebhook` con `{ gateway, query }`.
+- **La tarjeta:** las tres que tokenizan en el navegador lo hacen en `client.js`, a mano en A y con `KitPagosBrowser` en B. Rapyd cobra en su página alojada.
+
+**La disciplina de commits**, que es lo que hace medible la variable 2:
+
+1. **un commit base**, con el contrato, el esqueleto y Wompi adaptado, igual en A y B;
+2. **un commit por pasarela, en el mismo orden en los dos** (Mercado Pago, Kushki y Rapyd), que contiene solo esa pasarela.
+
+La hipótesis quedó escrita en el §3 del plan antes del primer commit de pasarela.
+
+**Lo que se declara:**
+
+- **La mitigación de asignación** del plan (§4) no se cumple: un solo autor escribe las pasarelas nuevas en A y en B, y es autor de buena parte de los adaptadores del SDK.
+- **Los módulos de David y Andrés** se adaptan al contrato nuevo, y cada uno revisa el suyo.
+
+**Los issues.** Un script que corre Joan:
+
+- reescribe el alcance del #150, el #151, el #134, el #135 y el #140;
+- cierra el #133 como no planeado;
+- abre el issue del prototipo D (`.cursor/borradores/issues-4-pasarelas/`).
+
+**Estado:** Diseño y documentación listos. La implementación y lo medido contra los sandboxes quedan en los puntos siguientes.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
