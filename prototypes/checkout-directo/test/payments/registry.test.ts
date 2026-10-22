@@ -13,6 +13,14 @@ describe("the gateway registry of prototype A", () => {
   it("should stop at start-up and name the missing keys when no gateway can charge in the sandbox", () => {
     expect(() => createPayments({})).toThrow(/Wompi: WOMPI_PUBLIC_KEY, WOMPI_PRIVATE_KEY, WOMPI_INTEGRITY_SECRET/);
     expect(() => createPayments({})).toThrow(/Mercado Pago: MERCADOPAGO_ACCESS_TOKEN, MERCADOPAGO_PUBLIC_KEY/);
+    expect(() => createPayments({})).toThrow(/Kushki: KUSHKI_PUBLIC_MERCHANT_ID, KUSHKI_PRIVATE_MERCHANT_ID/);
+  });
+
+  it("should offer Kushki in the sandbox with its two merchant ids", () => {
+    const payments = createPayments({ KUSHKI_PUBLIC_MERCHANT_ID: "pub", KUSHKI_PRIVATE_MERCHANT_ID: "priv" });
+
+    expect(payments.listGateways()).toEqual([{ id: "kushki", name: "Kushki", cardCapture: "BROWSER_TOKEN" }]);
+    expect(payments.publicConfig("kushki")).toEqual({ gateway: "kushki", publicKey: "pub", baseUrl: "https://api-uat.kushkipagos.com" });
   });
 
   it("should offer Mercado Pago in the sandbox with its access token and public key", () => {
@@ -35,7 +43,7 @@ describe("the gateway registry of prototype A", () => {
   it("should offer every gateway in the simulator", () => {
     const payments = createPayments({ CHECKOUT_ENVIRONMENT: "simulator" });
 
-    expect(payments.listGateways().map((gateway) => gateway.id)).toEqual(["wompi", "mercadopago"]);
+    expect(payments.listGateways().map((gateway) => gateway.id)).toEqual(["wompi", "mercadopago", "kushki"]);
   });
 
   it("should tell the browser which gateway its public configuration is for", () => {

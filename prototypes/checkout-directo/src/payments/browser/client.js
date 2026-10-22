@@ -118,7 +118,57 @@ async function tokenizeMercadoPagoCard(card, config) {
   return body.id;
 }
 
-const TOKENIZERS = { wompi: tokenizeWompiCard, mercadopago: tokenizeMercadoPagoCard };
+/**
+ * Tokeniza la tarjeta directamente contra Kushki en el navegador y devuelve el token.
+ *
+ * Kushki ata el token al monto: tokenizar por un valor y cobrar otro responde `400 K220`, así que
+ * se tokeniza por el total del carrito (`config.amountInPesos`). La referencia de Colombia
+ * tokeniza desde el servidor con la llave privada; aquí se usa el `Public-Merchant-Id`, como
+ * Kushki.js, para que la tarjeta no pase por el servidor de la tienda (punto 106 del
+ * architecture-log.md: `POST /card/v1/tokens` responde CORS abierto con la llave pública).
+ * https://api-docs.kushkipagos.com/colombia/online-payments/card-payments
+ *
+ * @param {{ number: string, cvc: string, expMonth: string, expYear: string, cardHolder: string }} card
+ * @param {Record<string, string>} config lo que devuelve `publicConfig()`, más `amountInPesos`
+ * @returns {Promise<string>}
+ */
+async function tokenizeKushkiCard(card, config) {
+  if (!config || !config.publicKey || !config.baseUrl) {
+    throw new Error("Configuración pública incompleta: falta publicKey o baseUrl");
+  }
+  const totalAmount = Number(config.amountInPesos);
+  if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+    throw new Error("Kushki tokeniza por el monto del cobro, y no llegó el total del pedido");
+  }
+
+  const expYear = String(card?.expYear || "").trim();
+  const response = await fetch(`${config.baseUrl.replace(/\/+$/, "")}/card/v1/tokens`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Public-Merchant-Id": config.publicKey.trim() },
+    body: JSON.stringify({
+      card: {
+        name: String(card?.cardHolder || "").trim(),
+        number: String(card?.number || "").replace(/\s+/g, ""),
+        cvv: String(card?.cvc || "").trim(),
+        expiryMonth: String(card?.expMonth || "").trim().padStart(2, "0"),
+        expiryYear: expYear.length === 4 ? expYear.slice(-2) : expYear,
+      },
+      totalAmount,
+      currency: "COP",
+    }),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.message ? `Kushki rechazó la tarjeta: ${body.message}` : `Kushki rechazó la tokenización con estado HTTP ${response.status}`);
+  }
+  if (!body.token) {
+    throw new Error("Respuesta inválida de Kushki al tokenizar la tarjeta: falta token");
+  }
+  return body.token;
+}
+
+const TOKENIZERS = { wompi: tokenizeWompiCard, mercadopago: tokenizeMercadoPagoCard, kushki: tokenizeKushkiCard };
 
 /**
  * Tokeniza la tarjeta contra la pasarela de `config.gateway` y devuelve el token.
