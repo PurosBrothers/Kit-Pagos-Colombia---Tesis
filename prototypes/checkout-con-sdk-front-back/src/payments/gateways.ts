@@ -72,4 +72,21 @@ const MERCADOPAGO: GatewaySetup = {
   },
 };
 
-export const GATEWAYS: readonly GatewaySetup[] = [WOMPI, MERCADOPAGO];
+/** Kushki: el id público tokeniza y pide los bancos; el privado cobra y consulta. */
+const KUSHKI: GatewaySetup = {
+  option: { id: "kushki", name: "Kushki", cardCapture: "BROWSER_TOKEN" },
+  gateway: Gateway.KUSHKI,
+  sandboxKeys: ["KUSHKI_PUBLIC_MERCHANT_ID", "KUSHKI_PRIVATE_MERCHANT_ID"],
+  baseUrlVariable: "KUSHKI_BASE_URL",
+  credentials: (env) => {
+    const credentials: Credentials = {
+      publicKey: readEnv(env, "KUSHKI_PUBLIC_MERCHANT_ID") ?? "simulador-kit-pagos-publico",
+      privateKey: readEnv(env, "KUSHKI_PRIVATE_MERCHANT_ID") ?? "simulador-kit-pagos-privado",
+    };
+    const webhookSecret = readEnv(env, "KUSHKI_WEBHOOK_SECRET");
+    if (webhookSecret) credentials.webhookSecret = webhookSecret;
+    return credentials;
+  },
+};
+
+export const GATEWAYS: readonly GatewaySetup[] = [WOMPI, MERCADOPAGO, KUSHKI];

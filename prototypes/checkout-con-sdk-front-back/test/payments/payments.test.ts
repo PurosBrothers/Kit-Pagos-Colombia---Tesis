@@ -460,6 +460,7 @@ describe("payments module (kit-pagos-colombia)", () => {
       expect(createPayments(SIMULATOR).listGateways()).toEqual([
         { id: "wompi", name: "Wompi", cardCapture: "BROWSER_TOKEN" },
         { id: "mercadopago", name: "Mercado Pago", cardCapture: "BROWSER_TOKEN" },
+        { id: "kushki", name: "Kushki", cardCapture: "BROWSER_TOKEN" },
       ]);
     });
 
@@ -521,6 +522,70 @@ describe("payments module (kit-pagos-colombia)", () => {
 
     it("should name its missing keys when no gateway can charge in the sandbox", () => {
       expect(() => createPayments({})).toThrow("Mercado Pago: MERCADOPAGO_ACCESS_TOKEN, MERCADOPAGO_PUBLIC_KEY");
+    });
+  });
+
+  describe("Kushki", () => {
+    const KUSHKI_KEYS = {
+      KUSHKI_PUBLIC_MERCHANT_ID: "public-merchant",
+      KUSHKI_PRIVATE_MERCHANT_ID: "private-merchant",
+      KUSHKI_WEBHOOK_SECRET: "kushki_webhook_x",
+    };
+
+    it("should hand the SDK the two merchant ids and the webhook secret, in the official sandbox", () => {
+      const payments = createPayments(KUSHKI_KEYS);
+
+      expect(payments.listGateways().map((option) => option.id)).toEqual(["kushki"]);
+      expect(mockKitPagosConstructor).toHaveBeenCalledWith({
+        gateway: Gateway.KUSHKI,
+        credentials: {
+          [Gateway.KUSHKI]: { publicKey: "public-merchant", privateKey: "private-merchant", webhookSecret: "kushki_webhook_x" },
+        },
+        environment: "sandbox",
+      });
+    });
+
+    it("should tell the browser to tokenize with the public merchant id", () => {
+      expect(createPayments(KUSHKI_KEYS).publicConfig("kushki")).toEqual({
+        gateway: "KUSHKI",
+        publicKey: "public-merchant",
+        environment: "sandbox",
+      });
+    });
+
+    it("should charge in the skeleton's simulator without keys", () => {
+      createPayments(SIMULATOR);
+
+      expect(mockKitPagosConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          gateway: Gateway.KUSHKI,
+          environment: "simulator",
+          baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim/kushki",
+        }),
+      );
+    });
+
+    it("should keep Kushki's native status from the signed webhook, not the SDK's translation", async () => {
+      mockValidateWebhook.mockReturnValue({
+        eventType: "transaction.updated",
+        gatewayTransactionId: "ticket-1",
+        newStatus: "APPROVED",
+        gateway: Gateway.KUSHKI,
+        rawStatus: "APPROVAL",
+      });
+
+      const notification = await createPayments(KUSHKI_KEYS).verifyWebhook("kushki", {
+        rawBody: "{}",
+        headers: {},
+        query: {},
+      });
+
+      expect(notification).toEqual({ transactionId: "ticket-1", status: "APPROVED", nativeStatus: "APPROVAL" });
+      expect(mockGetPaymentStatus).not.toHaveBeenCalled();
+    });
+
+    it("should name its missing keys when no gateway can charge in the sandbox", () => {
+      expect(() => createPayments({})).toThrow("Kushki: KUSHKI_PUBLIC_MERCHANT_ID, KUSHKI_PRIVATE_MERCHANT_ID");
     });
   });
 

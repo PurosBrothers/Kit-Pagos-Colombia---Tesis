@@ -206,10 +206,8 @@ export function createPayments(env: NodeJS.ProcessEnv = process.env): PaymentsPo
       return {
         transactionId: event.gatewayTransactionId,
         status: toMerchantStatus(event.newStatus),
-        // El evento del SDK ya viene normalizado y no expone el valor crudo; en Wompi los
-        // nativos coinciden con los normalizados (`PENDING`, `APPROVED`, `DECLINED`), así que
-        // el auditor ve lo mismo que mandó la pasarela.
-        nativeStatus: event.newStatus,
+        // Sin un estado firmado en el cuerpo, el SDK solo da el normalizado.
+        nativeStatus: event.rawStatus ?? event.newStatus,
       };
     },
   };
