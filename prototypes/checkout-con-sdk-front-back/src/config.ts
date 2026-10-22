@@ -9,11 +9,16 @@ export interface CheckoutConfig {
 
 const DEFAULT_PORT = 4000;
 
-/** Lee `PORT` y `PUBLIC_BASE_URL` del entorno. La configuración de la pasarela es del módulo de pagos. */
+/**
+ * Lee `PORT` y `PUBLIC_BASE_URL` del entorno. La configuración de la pasarela es del módulo de pagos.
+ * Por omisión el origen es `localtest.me`, un dominio público que resuelve a `127.0.0.1`: hay
+ * pasarelas que rechazan una URL de retorno con `localhost`, y así el banco devuelve al comprador
+ * a esta máquina sin un túnel.
+ */
 export function loadCheckoutConfig(env: NodeJS.ProcessEnv = process.env): CheckoutConfig {
   const parsedPort = Number(env.PORT);
   const port = Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : DEFAULT_PORT;
-  const publicBaseUrl = (env.PUBLIC_BASE_URL?.trim() || `http://localhost:${port}`).replace(/\/+$/, "");
+  const publicBaseUrl = (env.PUBLIC_BASE_URL?.trim() || `http://localtest.me:${port}`).replace(/\/+$/, "");
   return { port, publicBaseUrl };
 }
 

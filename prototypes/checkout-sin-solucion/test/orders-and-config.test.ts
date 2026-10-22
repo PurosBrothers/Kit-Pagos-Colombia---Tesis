@@ -85,8 +85,12 @@ describe("OrderStore", () => {
 });
 
 describe("loadCheckoutConfig", () => {
-  it("should default to port 4000 and a localhost public URL", () => {
-    expect(loadCheckoutConfig({})).toEqual({ port: 4000, publicBaseUrl: "http://localhost:4000" });
+  it("should default to port 4000 and a localtest.me public URL, which resolves to this machine", () => {
+    expect(loadCheckoutConfig({})).toEqual({ port: 4000, publicBaseUrl: "http://localtest.me:4000" });
+  });
+
+  it("should keep the default public URL on the configured port", () => {
+    expect(loadCheckoutConfig({ PORT: "4100" }).publicBaseUrl).toBe("http://localtest.me:4100");
   });
 
   it("should take PORT and PUBLIC_BASE_URL, without a trailing slash", () => {
