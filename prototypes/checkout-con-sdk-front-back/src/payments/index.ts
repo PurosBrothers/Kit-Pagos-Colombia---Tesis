@@ -127,13 +127,12 @@ export function createPayments(env: NodeJS.ProcessEnv = process.env): PaymentsPo
       return [...active.values()].map(({ setup }) => setup.option);
     },
 
-    publicConfig(id: string) {
+    publicConfig(id: string): Record<string, string> {
       const { setup, publicKey, sdkEnvironment } = gateway(id);
-      return {
-        gateway: setup.gateway,
-        publicKey,
-        environment: sdkEnvironment,
-      };
+      const config: Record<string, string> = { gateway: setup.gateway, environment: sdkEnvironment };
+      // Una pasarela con página propia no tokeniza en el navegador: no hay llave que darle.
+      if (setup.option.cardCapture === "BROWSER_TOKEN") config.publicKey = publicKey;
+      return config;
     },
 
     async listPseBanks(id: string): Promise<PseBankOption[]> {
@@ -201,13 +200,14 @@ export function createPayments(env: NodeJS.ProcessEnv = process.env): PaymentsPo
         // Hay pasarelas cuyo webhook firmado no trae el estado (el SDK reporta PENDING): se
         // confirma consultando, como pide la guía del SDK.
         const transaction = await call(() => kit.getPaymentStatus(event.gatewayTransactionId));
-        return toSnapshot(transaction);
+        return { ...toSnapshot(transaction), orderReference: event.orderReference };
       }
       return {
         transactionId: event.gatewayTransactionId,
         status: toMerchantStatus(event.newStatus),
         // Sin un estado firmado en el cuerpo, el SDK solo da el normalizado.
         nativeStatus: event.rawStatus ?? event.newStatus,
+        orderReference: event.orderReference,
       };
     },
   };

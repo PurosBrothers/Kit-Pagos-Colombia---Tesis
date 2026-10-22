@@ -89,4 +89,25 @@ const KUSHKI: GatewaySetup = {
   },
 };
 
-export const GATEWAYS: readonly GatewaySetup[] = [WOMPI, MERCADOPAGO, KUSHKI];
+/**
+ * Rapyd: la tarjeta se escribe en su página, así que no hay nada que tokenizar en el navegador.
+ * La `secret_key` firma las peticiones y los webhooks, y la firma de estos incluye la URL
+ * registrada en el panel.
+ */
+const RAPYD: GatewaySetup = {
+  option: { id: "rapyd", name: "Rapyd", cardCapture: "HOSTED_PAGE" },
+  gateway: Gateway.RAPYD,
+  sandboxKeys: ["RAPYD_API_ACCESS_KEY", "RAPYD_API_SECRET_KEY"],
+  baseUrlVariable: "RAPYD_BASE_URL",
+  credentials: (env) => {
+    const credentials: Credentials = {
+      publicKey: readEnv(env, "RAPYD_API_ACCESS_KEY") ?? "rapyd_access_key_ejemplo_no_real",
+      privateKey: readEnv(env, "RAPYD_API_SECRET_KEY") ?? "rapyd_secret_kit_pagos_simulator",
+    };
+    const webhookUrl = readEnv(env, "RAPYD_WEBHOOK_URL");
+    if (webhookUrl) credentials.webhookUrl = webhookUrl;
+    return credentials;
+  },
+};
+
+export const GATEWAYS: readonly GatewaySetup[] = [WOMPI, MERCADOPAGO, KUSHKI, RAPYD];

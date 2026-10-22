@@ -461,6 +461,7 @@ describe("payments module (kit-pagos-colombia)", () => {
         { id: "wompi", name: "Wompi", cardCapture: "BROWSER_TOKEN" },
         { id: "mercadopago", name: "Mercado Pago", cardCapture: "BROWSER_TOKEN" },
         { id: "kushki", name: "Kushki", cardCapture: "BROWSER_TOKEN" },
+        { id: "rapyd", name: "Rapyd", cardCapture: "HOSTED_PAGE" },
       ]);
     });
 
@@ -589,4 +590,124 @@ describe("payments module (kit-pagos-colombia)", () => {
     });
   });
 
+  describe("Rapyd", () => {
+    const RAPYD_KEYS = {
+      RAPYD_API_ACCESS_KEY: "access-key",
+      RAPYD_API_SECRET_KEY: "secret-key",
+      RAPYD_WEBHOOK_URL: "https://tienda.example/webhooks/rapyd",
+    };
+
+    it("should hand the SDK both keys and the registered webhook URL, in the official sandbox", () => {
+      const payments = createPayments(RAPYD_KEYS);
+
+      expect(payments.listGateways()).toEqual([{ id: "rapyd", name: "Rapyd", cardCapture: "HOSTED_PAGE" }]);
+      expect(mockKitPagosConstructor).toHaveBeenCalledWith({
+        gateway: Gateway.RAPYD,
+        credentials: {
+          [Gateway.RAPYD]: {
+            publicKey: "access-key",
+            privateKey: "secret-key",
+            webhookUrl: "https://tienda.example/webhooks/rapyd",
+          },
+        },
+        environment: "sandbox",
+      });
+    });
+
+    it("should not give the browser the access key, since the card is typed in Rapyd's page", () => {
+      expect(createPayments(RAPYD_KEYS).publicConfig("rapyd")).toEqual({ gateway: "RAPYD", environment: "sandbox" });
+    });
+
+    it("should create the card payment without a token, for the SDK to send it to Rapyd's checkout", async () => {
+      mockCreatePayment.mockResolvedValue({
+        outcome: "REDIRECT_REQUIRED",
+        redirect: {
+          redirectUrl: "https://sandboxcheckout.rapyd.net/?token=checkout_1",
+          gatewayTransactionId: { value: "checkout_1" },
+          rawStatus: "NEW",
+        },
+      });
+
+      const snapshot = await createPayments(RAPYD_KEYS).createPayment({
+        ...cardRequest,
+        gateway: "rapyd",
+        method: { type: "CARD", installments: 1 },
+      });
+
+      expect(snapshot).toEqual({
+        transactionId: "checkout_1",
+        status: "PENDING",
+        nativeStatus: "NEW",
+        redirectUrl: "https://sandboxcheckout.rapyd.net/?token=checkout_1",
+      });
+      expect(mockCreatePayment.mock.calls[0][0].paymentMethod.cardToken).toBeUndefined();
+    });
+
+    it("should charge in the skeleton's simulator without keys", () => {
+      createPayments(SIMULATOR);
+
+      expect(mockKitPagosConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          gateway: Gateway.RAPYD,
+          environment: "simulator",
+          baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim/rapyd",
+        }),
+      );
+    });
+
+    it("should hand the checkout the order a card payment carries, and Rapyd's native status", async () => {
+      mockValidateWebhook.mockReturnValue({
+        eventType: "PAYMENT_COMPLETED",
+        gatewayTransactionId: "payment_1",
+        newStatus: "APPROVED",
+        gateway: Gateway.RAPYD,
+        rawStatus: "CLO",
+        orderReference: "ORD-1",
+      });
+
+      const notification = await createPayments(RAPYD_KEYS).verifyWebhook("rapyd", {
+        rawBody: "{}",
+        headers: {},
+        query: {},
+      });
+
+      expect(notification).toStrictEqual({
+        transactionId: "payment_1",
+        status: "APPROVED",
+        nativeStatus: "CLO",
+        orderReference: "ORD-1",
+      });
+      expect(mockGetPaymentStatus).not.toHaveBeenCalled();
+    });
+
+    it("should keep the order of a pending card payment after querying it", async () => {
+      mockValidateWebhook.mockReturnValue({
+        eventType: "PAYMENT_SUCCEEDED",
+        gatewayTransactionId: "payment_1",
+        newStatus: "PENDING",
+        gateway: Gateway.RAPYD,
+        rawStatus: "ACT",
+        orderReference: "ORD-1",
+      });
+      mockGetPaymentStatus.mockResolvedValue(fakeTransaction("payment_1", "PENDING", "ACT"));
+
+      const notification = await createPayments(RAPYD_KEYS).verifyWebhook("rapyd", {
+        rawBody: "{}",
+        headers: {},
+        query: {},
+      });
+
+      expect(mockGetPaymentStatus).toHaveBeenCalledWith("payment_1");
+      expect(notification).toStrictEqual({
+        transactionId: "payment_1",
+        status: "PENDING",
+        nativeStatus: "ACT",
+        orderReference: "ORD-1",
+      });
+    });
+
+    it("should name its missing keys when no gateway can charge in the sandbox", () => {
+      expect(() => createPayments({})).toThrow("Rapyd: RAPYD_API_ACCESS_KEY, RAPYD_API_SECRET_KEY");
+    });
+  });
 });
