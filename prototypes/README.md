@@ -5,7 +5,7 @@ Dos implementaciones del mismo checkout mínimo de comercio electrónico: mostra
 | Carpeta | Prototipo | Cómo cobra |
 |---|---|---|
 | `checkout-sin-solucion/` | A, control | `fetch` contra la API nativa de cada una de las cuatro pasarelas (Wompi, Mercado Pago, Kushki y Rapyd), siguiendo su documentación oficial. Se presenta como «La Candelaria Cómics», una tienda de cómics con catálogo y carrito |
-| `checkout-con-sdk-front-back/` | B, tratamiento | Las mismas cuatro con `kit-pagos-colombia` (0.7.0-rc.1) en el servidor y `kit-pagos-colombia/browser` en la página. Se presenta como «La Bodega de Chapinero», una tienda de vinos con catálogo y carrito |
+| `checkout-con-sdk-front-back/` | B, tratamiento | Las mismas cuatro con `kit-pagos-colombia` (0.7.0-rc.2) en el servidor y `kit-pagos-colombia/browser` en la página. Se presenta como «La Bodega de Chapinero», una tienda de vinos con catálogo y carrito |
 | `checkout-frontend-rest/` | C, fuera del experimento A/B | Desde el navegador contra `/v1/api`, sin servidor de pagos propio. Se documenta en [`docs/05-ejemplos/checkout-frontend-rest.md`](../docs/05-ejemplos/checkout-frontend-rest.md) |
 
 C no comparte el esqueleto de A y B, y `check-skeleton-parity.sh` no lo compara: es una página estática con Vite, servida por `server.mjs`, que demuestra el patrón de integración 2 (punto 91 del `architecture-log.md`).
@@ -51,7 +51,7 @@ Los dos `package.json` traen `kit-pagos-colombia`, para que el esqueleto sea id�
 |---|---|
 | 1. Crear el pago por un monto en pesos, con la referencia de la orden y los datos del pagador | `createPayment()` |
 | 2. Traducir el resultado a un estado del comercio | El `status` de cada respuesta: `APPROVED`, `DECLINED` o `PENDING` |
-| 3. Distinguir un rechazo de un fallo técnico, y reintentar solo el segundo | Un rechazo vuelve como `DECLINED`. Un fallo técnico se reintenta dentro del módulo y, si persiste, sale como `PaymentTechnicalError` |
+| 3. Distinguir un rechazo de un fallo técnico, y reintentar solo el segundo | Un rechazo vuelve como `DECLINED`, con su `declineReason` si la pasarela da el código. Un fallo técnico se reintenta dentro del módulo y, si persiste, sale como `PaymentTechnicalError` |
 | 4. Verificar la firma de un webhook y actualizar la orden | `verifyWebhook()` verifica; el esqueleto actualiza la orden |
 | 5. Consultar el estado por el identificador | `getPaymentStatus()` |
 | 6. Registrar el estado nativo para auditoría | El `nativeStatus` de cada respuesta; el esqueleto lo guarda en el historial de la orden |
@@ -65,6 +65,12 @@ El contrato sirve a las cuatro pasarelas a la vez (punto 117 del `architecture-l
 El monto llega en pesos enteros: convertirlo a la unidad de la pasarela es trabajo del módulo. `verifyWebhook()` recibe el cuerpo tal como llegó por la red, las cabeceras y la query, porque Mercado Pago firma con el `data.id` de la URL.
 
 La notificación puede traer la referencia de la orden. El esqueleto la busca así cuando no la encuentra por el id de la transacción, porque la tarjeta de Rapyd se crea como checkout y su webhook trae el id del pago (punto 118). Un `PENDING` que llega cuando la orden ya está aprobada o rechazada queda en el historial sin cambiar el estado, porque las pasarelas no garantizan el orden de sus avisos.
+
+**El motivo de un rechazo llega al comprador** (punto 122). El `declineReason` trae el código de la pasarela y una categoría, las mismas del `RejectionCategory` del SDK. La página muestra un texto por categoría sin nombrar la pasarela, como «La tarjeta no tiene fondos suficientes», y el detalle técnico muestra el código, como `Rechazo 021 (INSUFFICIENT_FUNDS)`. Un rechazo sin código, o con `UNKNOWN`, conserva el texto general.
+
+- **B** pasa el `rejectionReason` del SDK.
+- **A** mapea a mano los mismos códigos: el `400` de Kushki y el `00011` de su PSE, el `status_detail` de una orden `failed` de Mercado Pago, y el `failure_code` de procesador de un pago `ERR` de Rapyd. Wompi no manda un código.
+- **Un webhook no trae el motivo**, porque el evento del SDK no lo tiene, y A tampoco lo lee. Un rechazo sin motivo no borra el que trajo la creación o la consulta.
 
 ## Cómo correrlos
 
@@ -163,7 +169,7 @@ Lo medido contra los sandboxes está en los puntos 118 y 121.
 |---|---|---|
 | Wompi | 4242 4242 4242 4242 se aprueba y 4111 1111 1111 1111 se rechaza | El banco 1 aprueba, el 2 rechaza y el 3 da `ERROR`, que cuenta como rechazo. En el sandbox se resuelve en la primera consulta, sin página de banco |
 | Mercado Pago | 4013 5406 8274 6260, 11/30, titular `APRO Ruiz` | «Banco Prueba PSE», con cualquier usuario y «APROBAR PAGO». Exige una `callback_url` que no sea `localhost`, y acepta la de `localtest.me` (punto 120). El sandbox tiene ventanas en que la orden nace sin URL del banco y termina en `processing_error` (punto 113) |
-| Kushki | 4242 4242 4242 4242. El token queda atado al monto (`K220` si se cobra otro) | Llega a la página real «Kushki Bank» y vuelve a la tienda, pero queda pendiente (`initializedTransaction`): UAT no cierra las transferencias |
+| Kushki | 4242 4242 4242 4242. El token queda atado al monto (`K220` si se cobra otro). Las tarjetas de rechazo de `docs/testing-data/kushki.md` §1 rechazan con su código, medido el 24 de octubre de 2026: 4349 0012 1084 6432 sin fondos (`021`), 4349 0013 8678 1322 bloqueada (`023`), y las demás de la tabla (punto 122) | Llega a la página real «Kushki Bank» y vuelve a la tienda, pero queda pendiente (`initializedTransaction`): UAT no cierra las transferencias |
 | Rapyd | En su página: 4111 1111 1111 1111, 12/30, CVV 123, y el código `123456` en su simulador de 3DS | Solo cobra con 9 de sus bancos, que son los que lista la tienda; «Rapyd Bank Payment Simulation» con Success |
 
 En el simulador, la tarjeta aprobada y el PSE con el banco 1 siguen los escenarios de `simulator-api`.
@@ -172,6 +178,8 @@ En el simulador, la tarjeta aprobada y el PSE con el banco 1 siguen los escenari
 
 - **La tarjeta de Kushki no tiene consulta de estado** en Colombia: «Consultar el estado» responde 502 y la orden conserva el estado con que nació. El SDK responde igual (`UNSUPPORTED_OPERATION`).
 - **UAT de Kushki es lento:** la lista de bancos tardó 10,9 s y el inicio de la transferencia, entre 12 y 18 s.
+- **El rechazo de Rapyd con tarjeta no llega a la tienda con su motivo.** Su página alojada muestra el error ahí mismo («Error processing card…»), deja reintentar y no devuelve al comprador; el checkout sigue en `NEW` (medido el 24 de octubre de 2026 con la tarjeta 4111 1111 1111 1151, punto 122).
+- **El rechazo de Kushki al tokenizar** (la tarjeta «Declinada en Token») se queda en el formulario, porque todavía no hay orden.
 
 Los precios del catálogo esquivan los montos que el simulador reserva para escenarios de fallo.
 

@@ -62,7 +62,8 @@ segunda (punto 50 del `architecture-log.md`):
   `ivaValue`, `currencyCode`), no como el objeto `amount` que se envió.
 - **Las cuotas se llaman `months`** y son opcionales.
 - **La cuenta UAT aprueba todo.** Las tarjetas de rechazo de la tabla de arriba se cobraron y
-  respondieron `APPROVAL`, así que los desenlaces de rechazo no se pudieron observar.
+  respondieron `APPROVAL`, así que los desenlaces de rechazo no se pudieron observar. *(El 24 de
+  octubre de 2026 ya no: cada tarjeta de rechazo rechaza con su código. Ver la sección 1.4.)*
 - **La tarjeta que la tabla de arriba lista como aprobada no tokeniza en esta cuenta.**
   `5451 9515 7492 5480` responde `400 K006 "DFR029 - Bin de tarjeta inválido"` en
   `POST /card/v1/tokens`: el BIN no está habilitado para el comercio. Las tarjetas de rechazo
@@ -190,7 +191,43 @@ iframes de su librería:
 `POST /card/v1/charges` (a través de `/v1/api` en Render) salió `APPROVED`. Cobrado por 50 000,
 responde `400 { code: "K220", message: "Monto de la transacción es diferente al monto de la venta
 inicial" }`. Quien tokeniza tiene que saber el monto del cobro, y cobrarlo exacto; el SDK de
-servidor devuelve ese `400` como `INVALID_REQUEST`, sin el mensaje de Kushki.
+servidor devuelve ese `400` como `INVALID_REQUEST`, y desde la 0.6.0-rc.5 con el código y el motivo
+de Kushki en el mensaje (punto 107).
+
+### 1.4. Los rechazos de las tarjetas de prueba (24 de octubre de 2026)
+
+> **Medido contra `api-uat.kushkipagos.com` a las 20:37 y a las 20:50 (UTC)**, para el punto 122 del
+> `architecture-log.md`, con el mismo cuerpo que arma el SDK. Se imprimieron solo los estados HTTP,
+> los nombres de los campos, los códigos y los motivos.
+
+| Tarjeta (tabla de arriba) | Token | Cobro | `code` / `message` | `details.responseCode` / `details.responseText` |
+|---|---|---|---|---|
+| Aprobada (`…5480`) | `201` | `201`, `details.transactionStatus: APPROVAL` | — | `000` / «Transacción aprobada» |
+| Declinada en Token (`…0335`) | **`400`** | no se cobra | `017` / «Transacción declinada.» | — (el cuerpo es `code`, `message` y `processorError`) |
+| Rechazada en Cobro (`…7015`) | `201` | **`400`** | `017` / «Transacción declinada.» | `017` / «Tarjeta no válida» |
+| Tarjeta no Compatible (`…6431`) | `201` | **`400`** | `019` / «Transacción declinada.» | `019` / «Tarjeta no compatible» |
+| Sin Fondos (`…6432`) | `201` | **`400`** | `021` / «Transacción declinada.» | `021` / «Tarjeta sin fondos» |
+| CVV Inválido (`…1321`) | `201` | **`400`** | `022` / «Transacción declinada.» | `022` / «Imposible verificar cvv» |
+| Tarjeta Bloqueada (`…1322`) | `201` | **`400`** | `023` / «Transacción declinada.» | `023` / «Tarjeta bloqueada por el banco» |
+| Visa genérica (`4242…`, control) | `201` | `201`, `APPROVAL` | — | `000` / «Transacción aprobada» |
+
+- **El rechazo no viaja con el `201` de un aprobado.** Es un `400`, con `code` y un `message`
+  genérico igual para los cinco. El motivo concreto está en `details.responseText`.
+- **El cuerpo del rechazo** trae en la raíz `code`, `message`, `details`, `transactionReference` y
+  `processorError`. En `details` vienen `processorName`, `metadata`, `approvedTransactionAmount`,
+  `ticketNumber`, `binCard`, `transactionId`, `paymentBrand`, `responseCode`, `responseText`,
+  `merchantName`, `cardHolderName`, `lastFourDigitsOfCard`, `approvalCode`, `acquirerBank`,
+  `processorError` y `processorMessage`. **No trae `details.transactionStatus`**, y
+  `details.ticketNumber` llega vacío: el identificador es `details.transactionId`.
+- **Los errores de la petición también pueden traer `details`.** El `400 K220` de un token por
+  20 000 cobrado por 21 000 trajo `details` con `responseCode: "K220"` y un `transactionId`; el
+  `400 K001` de un token mal formado, `details` con `field` y `errors`. Lo que separa un rechazo de
+  un error es el código: numérico el del procesador, con `K` el de Kushki.
+- **El SDK desde la 0.7.0-rc.2** devuelve el rechazo como una transacción `DECLINED` con
+  `rejectionReason` (`021` es `INSUFFICIENT_FUNDS`; `017` y `022`, `INVALID_CARD_DATA`; `023`,
+  `CARD_RESTRICTED`; `019`, `UNKNOWN`), y sigue tratando los `K` como errores. La prueba de sandbox
+  `returns the 400 of a card without funds as a DECLINED transaction with its code`
+  (`sdk/test/sandbox/kushki.sandbox.test.ts`) lo vuelve a medir.
 
 ---
 

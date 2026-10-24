@@ -4291,6 +4291,64 @@ Joan entró con el vendedor de prueba, reveló la clave de su aplicación, y val
 
 **Estado:** Resuelto. La consulta al soporte de Mercado Pago ya no hace falta. Los webhooks reales de Wompi, Mercado Pago y Rapyd verifican en A y en B; Kushki sigue como límite del experimento (punto 118). Si la API de Render tiene que validar notificaciones reales de Mercado Pago, su `MERCADOPAGO_WEBHOOK_SECRET` tiene que ser esta misma clave.
 
+### 122. Kushki rechaza la tarjeta con un `400`, y el SDK lo entregaba como un fallo técnico (PR #162)
+
+**Responsable:** Orduz.
+
+**Contexto.** El 24 de octubre de 2026, probando B contra el UAT de Kushki, las tarjetas «Sin Fondos» y «Rechazada en Cobro» de `docs/testing-data/kushki.md` §1 dejaron la orden en `ERROR`. La página decía «La pasarela no respondió después de varios intentos», y el código solo aparecía en el detalle técnico: `INVALID_REQUEST: Kushki gateway returned an HTTP error status 400 (021: Transacción declinada.)`. Eran tres cosas a la vez:
+
+- **El SDK.** Traduce por el status HTTP, y todo `400` es `INVALID_REQUEST`, un fallo técnico. Su tabla de categorías de Kushki solo tenía `00011`, del PSE, y su comentario decía que los códigos de tarjeta no tenían tabla y que la cuenta UAT aprobaba todo (punto 50).
+- **El simulador.** Respondía el rechazo con `201` y `DECLINED` en el cuerpo, porque el issue #65 afirmaba que Kushki nunca usa el status HTTP para un rechazo de negocio. Nadie lo había podido comprobar.
+- **La página del esqueleto.** Muestra un texto fijo por estado, y el de `ERROR` era falso para este caso: Kushki sí respondió, y `createPayment` no se reintenta (punto 35).
+
+A, que integra a mano, tampoco lo trataba como rechazo: su `kushki.ts` lanzaba el error, la tienda respondía `500` y la orden se quedaba sin desenlace.
+
+**Lo medido** (24 de octubre de 2026, `docs/testing-data/kushki.md` §1.4, con el cuerpo que arma el SDK):
+
+| Tarjeta | Cobro | `code` / `message` | `details.responseCode` / `details.responseText` |
+|---|---|---|---|
+| Rechazada en Cobro | `400` | `017` / «Transacción declinada.» | `017` / «Tarjeta no válida» |
+| Tarjeta no Compatible | `400` | `019` / «Transacción declinada.» | `019` / «Tarjeta no compatible» |
+| Sin Fondos | `400` | `021` / «Transacción declinada.» | `021` / «Tarjeta sin fondos» |
+| CVV Inválido | `400` | `022` / «Transacción declinada.» | `022` / «Imposible verificar cvv» |
+| Tarjeta Bloqueada | `400` | `023` / «Transacción declinada.» | `023` / «Tarjeta bloqueada por el banco» |
+
+- **La «Declinada en Token»** responde `400 017` al tokenizar, y no llega a cobrarse.
+- **El rechazo no trae `details.transactionStatus`**, y `details.ticketNumber` llega vacío; sí trae `details.transactionId`.
+- **El motivo concreto está en `details.responseText`.** El `message` que leía el SDK es el mismo para los cinco.
+
+**El primer discriminador estaba mal, y lo dijo la prueba de sandbox.** Se distinguió el rechazo por la presencia de `details.responseCode`. La prueba `rejects charging a browser token for another amount` falló: el `400 K220` de un token cobrado por otro monto **también** trae `details` con `responseCode: "K220"` y un `transactionId`, y el SDK lo devolvió como `DECLINED`. Medido a las 20:50: el `K001` de un token mal formado trae `details` con `field` y `errors`. Lo que separa un rechazo del banco de un error de la petición es el código: **numérico el del procesador, con `K` el de Kushki.**
+
+**Decisión.**
+
+1. **El SDK 0.7.0-rc.2 devuelve el rechazo como una transacción `DECLINED`.** `acceptDeclinedCharge()` (`kushki-charge.ts`) recibe el error del cobro y, si es un `400` con un código numérico en `details.responseCode`, lo entrega al normalizador como un cobro rechazado; si no, lo lanza. El monto, la referencia y el pagador salen de la petición, porque el cuerpo no los trae. El identificador es `details.transactionId`, con `transactionReference` de respaldo. El estado nativo es `DECLINED`, el valor del vocabulario de tarjeta de Kushki para un rechazo, porque el `400` no trae ninguno; el código del banco va en el `rejectionReason`.
+   - **Lo que se descartó:** tratar todo `400` con `details` como rechazo (es lo que falló con el `K220`), y agregar un código a `KitPagosErrorCode`. Un rechazo no es un error, y el `402` de Mercado Pago ya se resolvió así (punto 84), con el motivo desde el punto 87.
+   - **Las categorías** salen del motivo de cada código, con el criterio de Mercado Pago: se categoriza lo que el motivo dice sin interpretarlo. `021` es `INSUFFICIENT_FUNDS`; `017` y `022`, `INVALID_CARD_DATA`; `023`, `CARD_RESTRICTED`. `019`, «Tarjeta no compatible», no dice por qué, y queda en `UNKNOWN`.
+   - **La prueba de sandbox nueva** (`returns the 400 of a card without funds as a DECLINED transaction with its code`) vuelve a medir el rechazo; si la cuenta vuelve a aprobar todo, falla.
+2. **El simulador responde el `400` medido**, y las tarjetas de la tabla deciden el rechazo como en el UAT (`gateways/kushki/testCards.ts`). Desde el punto 106 la tarjeta pasa por su tokenización, así que el número llega; se guarda el código con el token, nunca el número (`CardTokenOutcomes`). La cabecera y el monto reservado siguen funcionando, con el `017` de «Rechazada en Cobro» como rechazo genérico. El registro del cobro se guarda con `DECLINED`, para la consulta y el disparo de su webhook, que son facilidades del simulador.
+   - **El simulador pasa a `0.7.0-rc.2`.** Su `/v1/api` cobra con el SDK instalado, y con la `0.6.0` el `400` del simulador salía como `INVALID_REQUEST`. Por la misma razón, C contra el sandbox real recibía estos rechazos como errores; C ya tenía un texto por categoría (`CATEGORY_HINT`), y no cambia.
+3. **El esqueleto de A y B lleva el motivo hasta el comprador.** El puerto agrega `declineReason` (código y categoría, con las categorías del SDK) al `PaymentSnapshot`. La orden lo guarda, la página muestra un texto por categoría sin nombrar la pasarela, y el detalle técnico muestra `Rechazo 021 (INSUFFICIENT_FUNDS)`. Un rechazo sin motivo o `UNKNOWN` conserva el texto general. El texto de `ERROR` dejó de decir que la pasarela no respondió.
+   - **B** pasa el `rejectionReason` del SDK tal cual.
+   - **A** mapea a mano los mismos códigos que el SDK, en las cuatro pasarelas: el `400` numérico de Kushki y el `00011` de su PSE; el `status_detail` del pago de una orden `failed` de Mercado Pago; el `failure_code` de procesador de un pago `ERR` de Rapyd. Wompi no manda un código.
+   - **Un webhook no trae el motivo**, porque el `WebhookEvent` del SDK no lo tiene, y A tampoco lo lee, para que muestren lo mismo. Un rechazo sin motivo no borra el que trajo la creación o la consulta.
+
+**Lo medido después, en el navegador contra los sandboxes** (`.cursor/evidencia/kushki-rechazos-24-oct/`):
+
+| Caso | A | B |
+|---|---|---|
+| Kushki, «Sin Fondos» | `DECLINED`, rechazo `021 (INSUFFICIENT_FUNDS)`, «La tarjeta no tiene fondos suficientes» | igual |
+| Kushki, «Rechazada en Cobro» y «CVV Inválido» | `017` y `022 (INVALID_CARD_DATA)` | igual |
+| Kushki, «Tarjeta Bloqueada» | `023 (CARD_RESTRICTED)`, «El banco tiene restringida esta tarjeta» | igual |
+| Kushki, «Tarjeta no Compatible» | `019 (UNKNOWN)`, con el texto general | igual |
+| Kushki, «Declinada en Token» | En el formulario: «Kushki rechazó la tarjeta: Transacción declinada.» | En el formulario: «Kushki rechazó la tokenización: Transacción declinada. (017).» |
+| Kushki, «Aprobada» | `APPROVED (APPROVAL)` | igual |
+| Mercado Pago, titular `FUND` | `DECLINED (failed)`, rechazo `insufficient_amount (INSUFFICIENT_FUNDS)` | igual |
+
+- **El rechazo al tokenizar se quedó en el formulario**, por decisión de Joan: no hay orden todavía, y Kushki no manda el motivo en ese `400`.
+- **Rapyd no llega a la tienda con el motivo.** La tarjeta «Insufficient Funds» (`4111 1111 1111 1151`) en su página alojada muestra el error ahí mismo («Error processing card. Please add funds…»), deja reintentar y no devuelve al comprador. El checkout sigue en `NEW`, y la consulta no trae ningún pago. El `[51]` solo aplica cuando se consulta un pago `ERR`.
+
+**Estado:** Resuelto en código y medido en A y en B. Queda la publicación de `kit-pagos-colombia@0.7.0-rc.2` con la etiqueta `next`, de la que dependen los lockfiles de A, B y el simulador. El despliegue de Render toma la `0.7.0-rc.2` cuando este PR llegue a la rama que despliega; esa rama falta confirmarla en el panel.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
