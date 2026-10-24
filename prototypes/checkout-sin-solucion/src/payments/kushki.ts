@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import {
   CreatePaymentRequest,
+  DeclineCategory,
   IncomingWebhook,
   MerchantPaymentStatus,
   PaymentSnapshot,
@@ -13,6 +14,7 @@ import {
   COLOMBIA_PHONE_CODE,
   GatewayModule,
   GatewayPayments,
+  declineReasonOf,
   defaultSleep,
   fetchWithRetry,
   readEnv,
@@ -57,6 +59,38 @@ const PLACEHOLDER_BANK_CODE = "0";
 
 /** El estado de una transferencia recién iniciada: la respuesta de `init` no trae estado. */
 const INITIALIZED_TRANSFER = "initializedTransaction";
+
+/**
+ * Las categorías de los códigos de rechazo de Kushki que tienen fuente. Los de tarjeta se
+ * midieron el 24 de octubre de 2026 con las tarjetas de `docs/testing-data/kushki.md` §1 (punto
+ * 122): el motivo de cada uno dice la categoría sin interpretarlo, salvo `019`, «Tarjeta no
+ * compatible», que queda fuera. `00011` es «Fondos insuficientes» de la red PSE (§5.5).
+ */
+const KUSHKI_DECLINE_CATEGORIES: Readonly<Record<string, DeclineCategory>> = {
+  "017": "INVALID_CARD_DATA",
+  "021": "INSUFFICIENT_FUNDS",
+  "022": "INVALID_CARD_DATA",
+  "023": "CARD_RESTRICTED",
+  "00011": "INSUFFICIENT_FUNDS",
+};
+
+/**
+ * Kushki rechaza la tarjeta con un `400`, y el código del banco va en `details.responseCode`:
+ * numérico, a diferencia de sus propios errores, que llevan `K` (`K001`, `K004`, `K220`, que
+ * también puede traer `details`). Medido el 24 de octubre de 2026 (punto 122).
+ */
+const BANK_RESPONSE_CODE = /^\d+$/;
+
+/**
+ * El 400 no trae un estado; se registra el de su vocabulario de tarjeta para un rechazo, y el
+ * código va en el motivo.
+ */
+const DECLINED_CHARGE = "DECLINED";
+
+/** Si el estado nativo es un rechazo: los vencidos también son `DECLINED` para el comercio, pero sin motivo. */
+function isDeclinedStatus(rawStatus: string): boolean {
+  return ["declined", "declinedtransaction"].includes(rawStatus.trim().toLowerCase());
+}
 
 /**
  * Kushki tiene dos vocabularios: el de tarjeta (`APPROVAL`) y el de transferencia, con nombres
@@ -171,7 +205,7 @@ class KushkiPayments implements GatewayPayments {
     const { method, payer } = request;
     if (method.type !== "CARD" || !method.cardToken) throw new Error("Kushki cobra la tarjeta con un token del navegador");
     const { firstName, lastName } = splitName(payer.fullName);
-    const charge = await this.callOk("/card/v1/charges", "private", {
+    const { response, body } = await this.call("/card/v1/charges", "private", {
       token: method.cardToken,
       amount: kushkiAmount(request.amountInPesos),
       contactDetails: {
@@ -186,10 +220,29 @@ class KushkiPayments implements GatewayPayments {
       ...(method.installments > 1 ? { months: method.installments } : {}),
       fullResponse: true,
     });
+    const charge = body as Record<string, any>;
+    if (response.status === 400 && BANK_RESPONSE_CODE.test(String(charge.details?.responseCode ?? ""))) {
+      return this.declinedCharge(charge);
+    }
+    if (!response.ok) throw new Error(errorMessage(charge, response.status));
     const ticketNumber = String(charge.ticketNumber ?? "");
     if (!ticketNumber) throw new PaymentTechnicalError("Kushki respondió el cobro sin ticketNumber");
     const nativeStatus = String(charge.details?.transactionStatus ?? "");
-    return { transactionId: ticketNumber, status: mapKushkiStatus(nativeStatus), nativeStatus };
+    const declineReason = isDeclinedStatus(nativeStatus)
+      ? declineReasonOf(charge.details?.responseCode, KUSHKI_DECLINE_CATEGORIES)
+      : undefined;
+    return { transactionId: ticketNumber, status: mapKushkiStatus(nativeStatus), nativeStatus, ...(declineReason ? { declineReason } : {}) };
+  }
+
+  /**
+   * El cobro que el banco rechazó: el `400` no trae `ticketNumber` (llega vacío en `details`), así
+   * que la transacción es `details.transactionId`, o `transactionReference` si no viene.
+   */
+  private declinedCharge(charge: Record<string, any>): PaymentSnapshot {
+    const transactionId = String(charge.details?.transactionId || charge.transactionReference || "");
+    if (!transactionId) throw new PaymentTechnicalError("Kushki rechazó el cobro sin identificarlo");
+    const declineReason = declineReasonOf(String(charge.details.responseCode), KUSHKI_DECLINE_CATEGORIES);
+    return { transactionId, status: "DECLINED", nativeStatus: DECLINED_CHARGE, ...(declineReason ? { declineReason } : {}) };
   }
 
   /**
@@ -235,7 +288,10 @@ class KushkiPayments implements GatewayPayments {
     }
     if (!response.ok) throw new Error(errorMessage(payload, response.status));
     const nativeStatus = String(payload.status ?? "");
-    return { transactionId, status: mapKushkiStatus(nativeStatus), nativeStatus };
+    const declineReason = isDeclinedStatus(nativeStatus)
+      ? declineReasonOf(payload.responseCode, KUSHKI_DECLINE_CATEGORIES)
+      : undefined;
+    return { transactionId, status: mapKushkiStatus(nativeStatus), nativeStatus, ...(declineReason ? { declineReason } : {}) };
   }
 
   /**

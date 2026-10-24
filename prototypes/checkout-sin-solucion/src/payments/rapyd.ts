@@ -1,6 +1,8 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   CreatePaymentRequest,
+  DeclineCategory,
+  DeclineReason,
   IncomingWebhook,
   MerchantPaymentStatus,
   PaymentSnapshot,
@@ -9,7 +11,7 @@ import {
   WebhookNotification,
 } from "../checkout/PaymentsPort";
 import { paymentsEnvironment } from "../checkout/environment";
-import { GatewayModule, GatewayPayments, defaultSleep, fetchWithRetry, readEnv } from "./gateway";
+import { GatewayModule, GatewayPayments, declineReasonOf, defaultSleep, fetchWithRetry, readEnv } from "./gateway";
 
 /**
  * Integración directa con Rapyd (prototipo A): `fetch` contra su API, siguiendo la documentación
@@ -67,6 +69,30 @@ const SANDBOX_PSE_TYPES = new Set([
 ]);
 
 const CHECKOUT_ID_PREFIX = "checkout_";
+
+/**
+ * Solo un `failure_code` del procesador de tarjetas es un rechazo del banco; los demás fallos de
+ * un pago `ERR` son técnicos y no traen un motivo para el comprador.
+ */
+const CARD_DECLINE_PREFIX = "ERROR_PROCESSING_CARD";
+
+/**
+ * Las categorías de los `failure_code` con fuente: solo `[51]`, «Insufficient Funds» en las
+ * tarjetas de error del sandbox (`docs/testing-data/rapyd.md` §2). `[05]` «Do Not Honor» y `[43]`
+ * «Stolen Card» no dicen la causa sin interpretarla y quedan fuera.
+ */
+const RAPYD_DECLINE_CATEGORIES: Readonly<Record<string, DeclineCategory>> = {
+  "ERROR_PROCESSING_CARD - [51]": "INSUFFICIENT_FUNDS",
+};
+
+/** El motivo de un pago rechazado por el procesador, del checkout o del pago. */
+function rapydDeclineReason(resource: Record<string, any>): DeclineReason | undefined {
+  const failureCode = String(resource.failure_code ?? "");
+  if (String(resource.status ?? "").toUpperCase() !== "ERR" || !failureCode.startsWith(CARD_DECLINE_PREFIX)) {
+    return undefined;
+  }
+  return declineReasonOf(failureCode, RAPYD_DECLINE_CATEGORIES);
+}
 
 /**
  * El estado de un pago o de un checkout. `CLO` es «cerrado», no «pagado»: solo con `paid` el
@@ -250,12 +276,21 @@ class RapydPayments implements GatewayPayments {
       const checkout = await this.send("get", `/checkout/${encodeURIComponent(transactionId)}`);
       const payment = checkout.payment;
       const source = payment?.id ? payment : checkout;
-      const nativeStatus = String(source.status ?? "");
-      return { transactionId, status: mapRapydStatus(nativeStatus, source.paid), nativeStatus };
+      return this.snapshotOf(transactionId, source);
     }
     const payment = await this.send("get", `/payments/${encodeURIComponent(transactionId)}`);
-    const nativeStatus = String(payment.status ?? "");
-    return { transactionId, status: mapRapydStatus(nativeStatus, payment.paid), nativeStatus };
+    return this.snapshotOf(transactionId, payment);
+  }
+
+  private snapshotOf(transactionId: string, resource: Record<string, any>): PaymentSnapshot {
+    const nativeStatus = String(resource.status ?? "");
+    const declineReason = rapydDeclineReason(resource);
+    return {
+      transactionId,
+      status: mapRapydStatus(nativeStatus, resource.paid),
+      nativeStatus,
+      ...(declineReason ? { declineReason } : {}),
+    };
   }
 
   /**

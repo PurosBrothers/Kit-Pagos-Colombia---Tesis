@@ -1,5 +1,7 @@
 import {
   CreatePaymentRequest,
+  DeclineCategory,
+  DeclineReason,
   GatewayOption,
   IncomingWebhook,
   PaymentSnapshot,
@@ -90,3 +92,15 @@ export function splitName(fullName: string): { firstName: string; lastName: stri
 
 /** El código de país de un celular colombiano, para las pasarelas que lo piden aparte. */
 export const COLOMBIA_PHONE_CODE = "57";
+
+/**
+ * El motivo de un rechazo con la categoría que le da la tabla de su pasarela. Un código que no
+ * está en la tabla queda en `UNKNOWN`; sin código no hay motivo.
+ */
+export function declineReasonOf(
+  code: unknown,
+  categories: Readonly<Record<string, DeclineCategory>>,
+): DeclineReason | undefined {
+  if (typeof code !== "string" || code === "") return undefined;
+  return { code, category: categories[code] ?? "UNKNOWN" };
+}

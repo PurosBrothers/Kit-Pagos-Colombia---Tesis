@@ -146,6 +146,36 @@ describe("Mercado Pago payments module (prototype A, direct integration)", () =>
       });
     });
 
+    // Los `status_detail` medidos el 15 de octubre de 2026 con los titulares de prueba (punto 122).
+    it.each([
+      ["insufficient_amount", "INSUFFICIENT_FUNDS"],
+      ["bad_filled_card_data", "INVALID_CARD_DATA"],
+      ["rejected_by_issuer", "UNKNOWN"],
+    ])("should take the payment's status_detail %s as the reason, with the %s category", async (detail, category) => {
+      fakeFetch({
+        ...CARD_LOOKUPS,
+        "POST /orders": () =>
+          json(402, {
+            errors: [{ code: "failed" }],
+            data: order("failed", { transactions: { payments: [{ status: "failed", status_detail: detail }] } }),
+          }),
+      });
+
+      await expect(createMercadoPagoPayments(config).createPayment(cardRequest)).resolves.toMatchObject({
+        status: "DECLINED",
+        declineReason: { code: detail, category },
+      });
+    });
+
+    it("should not give a reason to an order that expired, which the bank did not decline", async () => {
+      fakeFetch({ "GET /orders/ORDTST01ABC": () => json(200, order("expired", { transactions: { payments: [{ status_detail: "expired" }] } })) });
+
+      const snapshot = await createMercadoPagoPayments(config).getPaymentStatus("ORDTST01ABC");
+
+      expect(snapshot.status).toBe("DECLINED");
+      expect(snapshot).not.toHaveProperty("declineReason");
+    });
+
     it("should refuse a card without a browser token", async () => {
       await expect(
         createMercadoPagoPayments(config).createPayment({ ...cardRequest, method: { type: "CARD", installments: 1 } }),

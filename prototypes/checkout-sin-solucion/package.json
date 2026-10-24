@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "fastify": "^5.12.7",
-    "kit-pagos-colombia": "0.7.0-rc.1"
+    "kit-pagos-colombia": "0.7.0-rc.2"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

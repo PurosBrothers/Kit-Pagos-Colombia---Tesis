@@ -229,6 +229,32 @@ describe("Rapyd payments module (prototype A, direct integration)", () => {
         nativeStatus: native,
       });
     });
+
+    // Las tarjetas de error del sandbox, `docs/testing-data/rapyd.md` §2 (punto 122).
+    it.each([
+      ["ERROR_PROCESSING_CARD - [51]", "INSUFFICIENT_FUNDS"],
+      ["ERROR_PROCESSING_CARD - [05]", "UNKNOWN"],
+    ])("should take the processor's failure_code %s as the reason, with the %s category", async (failureCode, category) => {
+      fakeFetch(SIMULATOR_URL, {
+        "GET /checkout/checkout_abc": () =>
+          ok({ id: "checkout_abc", status: "DON", payment: { id: "payment_9", status: "ERR", paid: false, failure_code: failureCode } }),
+      });
+
+      await expect(createRapydPayments(config).getPaymentStatus("checkout_abc")).resolves.toEqual({
+        transactionId: "checkout_abc",
+        status: "DECLINED",
+        nativeStatus: "ERR",
+        declineReason: { code: failureCode, category },
+      });
+    });
+
+    it("should not give a reason to a payment that failed outside the card processor", async () => {
+      fakeFetch(SIMULATOR_URL, {
+        "GET /payments/payment_1": () => ok({ id: "payment_1", status: "ERR", paid: false, failure_code: "ERROR_GET_GATEWAY" }),
+      });
+
+      await expect(createRapydPayments(config).getPaymentStatus("payment_1")).resolves.not.toHaveProperty("declineReason");
+    });
   });
 
   describe("verifyWebhook", () => {

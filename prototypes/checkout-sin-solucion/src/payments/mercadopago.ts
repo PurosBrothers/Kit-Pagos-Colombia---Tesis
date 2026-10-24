@@ -1,6 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   CreatePaymentRequest,
+  DeclineCategory,
   IncomingWebhook,
   MerchantPaymentStatus,
   PaymentSnapshot,
@@ -13,6 +14,7 @@ import {
   COLOMBIA_PHONE_CODE,
   GatewayModule,
   GatewayPayments,
+  declineReasonOf,
   defaultSleep,
   fetchWithRetry,
   readBody,
@@ -59,6 +61,26 @@ const ENTITY_TYPES = { NATURAL: "individual", LEGAL: "association" } as const;
 
 /** Los identificadores de la Orders API empiezan así; los de la Payments API son números. */
 const ORDER_ID_PREFIX = "ORD";
+
+/**
+ * Las categorías de los `status_detail` de un pago rechazado que tienen fuente
+ * (`docs/testing-data/mercado-pago.md`, «Escenarios de Prueba»). En la Orders API, medido el 15
+ * de octubre de 2026: el titular `FUND` dio `insufficient_amount`, y `SECU`, `EXPI` y `FORM`
+ * dieron `bad_filled_card_data`. Los demás (`rejected_by_issuer`, `required_call_for_authorize`,
+ * `high_risk`, `processing_error`) no dicen la causa y quedan fuera. Las `cc_rejected_*` son los
+ * mismos rechazos con los nombres de la Payments API.
+ */
+const MERCADOPAGO_DECLINE_CATEGORIES: Readonly<Record<string, DeclineCategory>> = {
+  insufficient_amount: "INSUFFICIENT_FUNDS",
+  bad_filled_card_data: "INVALID_CARD_DATA",
+  cc_rejected_insufficient_amount: "INSUFFICIENT_FUNDS",
+  cc_rejected_bad_filled_security_code: "INVALID_CARD_DATA",
+  cc_rejected_bad_filled_date: "INVALID_CARD_DATA",
+  cc_rejected_bad_filled_other: "INVALID_CARD_DATA",
+};
+
+/** La orden cuyo pago se rechazó; una vencida o cancelada no trae un motivo del banco. */
+const FAILED_ORDER = "failed";
 
 /**
  * El estado de la orden en el vocabulario del comercio (función 2). `processed` es el cobro
@@ -258,9 +280,19 @@ class MercadoPagoPayments implements GatewayPayments {
     return snapshot.status === "PENDING" && typeof redirectUrl === "string" && redirectUrl ? { ...snapshot, redirectUrl } : snapshot;
   }
 
+  /** El motivo del rechazo va en el pago de la orden: la orden fallida solo dice `failed`. */
   private snapshotOf(order: Record<string, any>): PaymentSnapshot {
     const nativeStatus = String(order.status ?? "");
-    return { transactionId: String(order.id), status: mapOrderStatus(nativeStatus), nativeStatus };
+    const declineReason =
+      nativeStatus === FAILED_ORDER
+        ? declineReasonOf(order.transactions?.payments?.[0]?.status_detail, MERCADOPAGO_DECLINE_CATEGORIES)
+        : undefined;
+    return {
+      transactionId: String(order.id),
+      status: mapOrderStatus(nativeStatus),
+      nativeStatus,
+      ...(declineReason ? { declineReason } : {}),
+    };
   }
 
   /** `GET /v1/orders/{id}`. */

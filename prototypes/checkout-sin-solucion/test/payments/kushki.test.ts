@@ -148,6 +148,58 @@ describe("Kushki payments module (prototype A, direct integration)", () => {
         createKushkiPayments(config).createPayment({ ...cardRequest, method: { type: "CARD", installments: 1 } }),
       ).rejects.toThrow("token del navegador");
     });
+
+    /**
+     * La forma medida el 24 de octubre de 2026 con la tarjeta «Sin Fondos» de kushki.md §1 (punto
+     * 122): el banco rechaza con 400, el motivo va en `details` y `ticketNumber` llega vacío. Los
+     * identificadores son inventados.
+     */
+    function declinedCharge(responseCode: string, responseText: string): Record<string, unknown> {
+      return {
+        code: responseCode,
+        message: "Transacción declinada.",
+        details: { ticketNumber: "", transactionId: "883641052193877226", responseCode, responseText },
+        transactionReference: "0b7d5e2a-3c4f-4a8e-9f61-2d0c7b9a4e15",
+      };
+    }
+
+    it.each([
+      ["021", "Tarjeta sin fondos", "INSUFFICIENT_FUNDS"],
+      ["017", "Tarjeta no válida", "INVALID_CARD_DATA"],
+      ["022", "Imposible verificar cvv", "INVALID_CARD_DATA"],
+      ["023", "Tarjeta bloqueada por el banco", "CARD_RESTRICTED"],
+      ["019", "Tarjeta no compatible", "UNKNOWN"],
+    ])("should take the bank's 400 %s (%s) as a decline with the %s category", async (code, reason, category) => {
+      fakeFetch({ "POST /card/v1/charges": () => json(400, declinedCharge(code, reason)) });
+
+      await expect(createKushkiPayments(config).createPayment(cardRequest)).resolves.toEqual({
+        transactionId: "883641052193877226",
+        status: "DECLINED",
+        nativeStatus: "DECLINED",
+        declineReason: { code, category },
+      });
+    });
+
+    it("should use the transactionReference when the decline brings no transactionId", async () => {
+      const body = declinedCharge("021", "Tarjeta sin fondos");
+      delete (body.details as Record<string, unknown>).transactionId;
+      fakeFetch({ "POST /card/v1/charges": () => json(400, body) });
+
+      await expect(createKushkiPayments(config).createPayment(cardRequest)).resolves.toMatchObject({
+        transactionId: "0b7d5e2a-3c4f-4a8e-9f61-2d0c7b9a4e15",
+      });
+    });
+
+    // Medido el mismo día: el K220 también trae `details`, con `responseCode: "K220"`.
+    it("should keep the K220 that brings details as an error, not as a decline", async () => {
+      const reason = "Monto de la transacción es diferente al monto de la venta inicial";
+      fakeFetch({
+        "POST /card/v1/charges": () =>
+          json(400, { code: "K220", message: reason, details: { ticketNumber: "", transactionId: "1", responseCode: "K220", responseText: reason } }),
+      });
+
+      await expect(createKushkiPayments(config).createPayment(cardRequest)).rejects.toThrow(`K220: ${reason}`);
+    });
   });
 
   describe("createPayment with PSE (Transfer In)", () => {
@@ -212,6 +264,18 @@ describe("Kushki payments module (prototype A, direct integration)", () => {
         transactionId: "e".repeat(32),
         status: expected,
         nativeStatus: native,
+      });
+    });
+
+    it("should take the PSE network code of a declined transfer as its reason", async () => {
+      fakeFetch({
+        [`GET /transfer/v1/status/${"e".repeat(32)}`]: () =>
+          json(200, { status: "declinedTransaction", token: "e".repeat(32), responseCode: "00011" }),
+      });
+
+      await expect(createKushkiPayments(config).getPaymentStatus("e".repeat(32))).resolves.toMatchObject({
+        status: "DECLINED",
+        declineReason: { code: "00011", category: "INSUFFICIENT_FUNDS" },
       });
     });
 
