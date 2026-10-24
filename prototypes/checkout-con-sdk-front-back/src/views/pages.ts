@@ -1,7 +1,7 @@
 import { Product } from "../catalog";
 import { CheckoutEnvironment } from "../checkout/environment";
-import { GatewayOption } from "../checkout/PaymentsPort";
-import { Order, OrderStatus, StatusSource } from "../orders/OrderStore";
+import { DeclineCategory, GatewayOption } from "../checkout/PaymentsPort";
+import { describeDecline, Order, OrderStatus, StatusRecord, StatusSource } from "../orders/OrderStore";
 import { BOTTLE_SPRITE } from "./art";
 import { STORE_CSS } from "./styles";
 
@@ -38,9 +38,29 @@ const RESULTS: Record<OrderStatus, { icon: string; title: string; detail: string
   ERROR: {
     icon: "!",
     title: "No pudimos procesar el pago",
-    detail: "La pasarela no respondió después de varios intentos, y el pago no quedó decidido. Vuelve a intentarlo en unos minutos.",
+    detail: "Un fallo técnico no dejó completar el pago, y no quedó decidido. Vuelve a intentarlo en unos minutos.",
   },
 };
+
+/**
+ * Lo que lee el comprador de un rechazo cuyo motivo se conoce. Un rechazo sin motivo, o con
+ * `UNKNOWN`, se queda con el texto general de `RESULTS.DECLINED`.
+ */
+const DECLINE_DETAILS: Record<Exclude<DeclineCategory, "UNKNOWN">, string> = {
+  INSUFFICIENT_FUNDS: "La tarjeta no tiene fondos suficientes. Puedes intentarlo con otra tarjeta o con PSE.",
+  INVALID_CARD_DATA:
+    "El banco no aceptó los datos de la tarjeta. Revisa el número, la fecha y el código de seguridad, o intenta con otra tarjeta.",
+  CARD_RESTRICTED: "El banco tiene restringida esta tarjeta. Comunícate con tu banco, o intenta con otra tarjeta o con PSE.",
+  FRAUD_SUSPICION: "El pago no se aprobó por seguridad. Puedes intentarlo con otra tarjeta o con PSE.",
+  NETWORK_ERROR: "El banco no respondió y el pago no se aprobó. Vuelve a intentarlo en unos minutos.",
+  AUTHENTICATION_FAILED: "No se pudo confirmar que la tarjeta es tuya. Vuelve a intentarlo, o intenta con otra tarjeta.",
+  DUPLICATED_PAYMENT: "Ya hay un pago igual a este. Revisa tus pagos antes de intentarlo otra vez.",
+};
+
+function resultDetail(order: Order): string {
+  const category = order.status === "DECLINED" ? order.declineReason?.category : undefined;
+  return category && category !== "UNKNOWN" ? DECLINE_DETAILS[category] : RESULTS[order.status].detail;
+}
 
 export function escapeHtml(value: string): string {
   return value
@@ -243,6 +263,12 @@ export function storePage(
   );
 }
 
+/** El código del rechazo, si lo hay, va junto al detalle: es lo que se audita. */
+function historyDetail(entry: StatusRecord): string {
+  const decline = entry.declineReason ? `Rechazo ${describeDecline(entry.declineReason)}` : "";
+  return [decline, entry.detail ?? ""].filter(Boolean).join(" · ");
+}
+
 function historyRows(order: Order): string {
   return order.history
     .map(
@@ -251,7 +277,7 @@ function historyRows(order: Order): string {
           <td>${SOURCE_LABELS[entry.source]}</td>
           <td>${STATUS_LABELS[entry.status]}</td>
           <td>${escapeHtml(entry.nativeStatus ?? "")}</td>
-          <td>${escapeHtml(entry.detail ?? "")}</td>
+          <td>${escapeHtml(historyDetail(entry))}</td>
         </tr>`,
     )
     .join("\n");
@@ -278,7 +304,7 @@ export function orderPage(order: Order, environment: CheckoutEnvironment, gatewa
   <article class="result__card result--${order.status}" id="order-result" data-status="${order.status}">
     <div class="result__icon" aria-hidden="true">${result.icon}</div>
     <h1>${result.title}</h1>
-    <p>${result.detail}</p>
+    <p id="order-detail">${resultDetail(order)}</p>
     <p class="result__ref">Orden ${escapeHtml(order.id)} · ${order.method === "CARD" ? "Tarjeta" : "PSE"} con ${escapeHtml(gatewayName)} · Estado: <strong id="order-status">${STATUS_LABELS[order.status]}</strong></p>
     <ul class="lines lines--summary">
       ${summaryLines(order)}

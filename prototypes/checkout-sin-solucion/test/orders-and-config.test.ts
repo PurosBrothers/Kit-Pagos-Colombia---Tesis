@@ -82,6 +82,32 @@ describe("OrderStore", () => {
 
     expect(order.history).toHaveLength(2);
   });
+
+  it("should keep the decline reason when a later decline, such as a webhook, brings none", () => {
+    const store = new OrderStore(fixedNow);
+    const order = store.create({ gateway: "token-pay", lines: [], amountInPesos: 1000, payer, method: "CARD" });
+    const declineReason = { code: "021", category: "INSUFFICIENT_FUNDS" } as const;
+
+    store.record(order, { source: "creation", status: "DECLINED", nativeStatus: "DECLINED", declineReason });
+    store.record(order, { source: "webhook", status: "DECLINED", nativeStatus: "DECLINED" });
+
+    expect(order.declineReason).toEqual(declineReason);
+  });
+
+  it("should drop the decline reason when the order stops being declined", () => {
+    const store = new OrderStore(fixedNow);
+    const order = store.create({ gateway: "token-pay", lines: [], amountInPesos: 1000, payer, method: "PSE" });
+
+    store.record(order, {
+      source: "query",
+      status: "DECLINED",
+      nativeStatus: "declinedTransaction",
+      declineReason: { code: "00011", category: "INSUFFICIENT_FUNDS" },
+    });
+    store.record(order, { source: "webhook", status: "APPROVED", nativeStatus: "approvedTransaction" });
+
+    expect(order.declineReason).toBeUndefined();
+  });
 });
 
 describe("loadCheckoutConfig", () => {

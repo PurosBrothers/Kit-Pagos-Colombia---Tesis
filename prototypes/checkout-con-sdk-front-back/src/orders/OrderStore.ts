@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { OrderLine } from "../catalog";
-import { MerchantPaymentStatus, Payer, PaymentMethodRequest } from "../checkout/PaymentsPort";
+import { DeclineReason, MerchantPaymentStatus, Payer, PaymentMethodRequest } from "../checkout/PaymentsPort";
 import { trace } from "../trace";
 
 /** `ERROR`: un fallo técnico que siguió después de reintentar; el pago no se decidió. */
@@ -17,6 +17,7 @@ export interface StatusRecord {
   status: OrderStatus;
   nativeStatus?: string;
   detail?: string;
+  declineReason?: DeclineReason;
 }
 
 export interface Order {
@@ -29,6 +30,8 @@ export interface Order {
   method: PaymentMethodRequest["type"];
   transactionId?: string;
   status: OrderStatus;
+  /** El motivo del rechazo, mientras la orden esté rechazada y alguna respuesta lo haya traído. */
+  declineReason?: DeclineReason;
   history: StatusRecord[];
 }
 
@@ -81,6 +84,8 @@ export class OrderStore {
    * Un `PENDING` que llega cuando la orden ya está aprobada o rechazada queda en el historial sin
    * cambiar el estado: las pasarelas no garantizan el orden de sus avisos, y hay una que manda dos
    * en el mismo segundo, uno todavía pendiente y otro con el desenlace.
+   *
+   * Un rechazo sin motivo, como el de un webhook, no borra el que trajo la creación o la consulta.
    */
   record(order: Order, entry: Omit<StatusRecord, "at">, transactionId?: string): void {
     if (transactionId) order.transactionId = transactionId;
@@ -91,14 +96,23 @@ export class OrderStore {
       last.status === entry.status &&
       last.nativeStatus === entry.nativeStatus;
     const late = entry.status === "PENDING" && (order.status === "APPROVED" || order.status === "DECLINED");
-    if (!late) order.status = entry.status;
+    if (!late) {
+      order.status = entry.status;
+      order.declineReason = entry.status === "DECLINED" ? (entry.declineReason ?? order.declineReason) : undefined;
+    }
     if (!repeated) order.history.push({ at: this.now().toISOString(), ...entry });
     trace(
       `  orden ${order.id} ← ${SOURCE_WORDS[entry.source]}: ${entry.status}` +
         `${entry.nativeStatus ? ` (nativo ${entry.nativeStatus})` : ""}` +
+        `${entry.declineReason ? `, rechazo ${describeDecline(entry.declineReason)}` : ""}` +
         `${transactionId ? `, transacción ${transactionId}` : ""}` +
         `${entry.detail ? ` · ${entry.detail}` : ""}${repeated ? " (sin cambios)" : ""}` +
         `${late ? ` (llegó después del desenlace; la orden sigue ${order.status})` : ""}`,
     );
   }
+}
+
+/** El motivo como lo leen la traza y el historial: el código de la pasarela y su categoría. */
+export function describeDecline(reason: DeclineReason): string {
+  return `${reason.code} (${reason.category})`;
 }

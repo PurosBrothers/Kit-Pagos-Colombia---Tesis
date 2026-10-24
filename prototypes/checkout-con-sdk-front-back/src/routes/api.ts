@@ -151,7 +151,12 @@ export async function apiRoutes(app: FastifyInstance, context: RouteContext): Pr
       });
       orders.record(
         order,
-        { source: "creation", status: payment.status, nativeStatus: payment.nativeStatus },
+        {
+          source: "creation",
+          status: payment.status,
+          nativeStatus: payment.nativeStatus,
+          declineReason: payment.declineReason,
+        },
         payment.transactionId,
       );
       return reply.code(201).send({ order, redirectUrl: payment.redirectUrl });
@@ -169,7 +174,12 @@ export async function apiRoutes(app: FastifyInstance, context: RouteContext): Pr
     if (!order.transactionId) return { order };
     try {
       const payment = await payments.getPaymentStatus(order.gateway, order.transactionId);
-      orders.record(order, { source: "query", status: payment.status, nativeStatus: payment.nativeStatus });
+      orders.record(order, {
+        source: "query",
+        status: payment.status,
+        nativeStatus: payment.nativeStatus,
+        declineReason: payment.declineReason,
+      });
       return { order };
     } catch (error) {
       return technicalFailure(error, reply, order);

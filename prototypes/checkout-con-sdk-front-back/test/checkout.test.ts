@@ -151,7 +151,45 @@ describe("checkout skeleton", () => {
       const res = await app.inject({ method: "GET", url: `/orders/${created.id}` });
 
       expect(res.body).toContain("No pudimos procesar el pago");
+      expect(res.body).toContain("Un fallo técnico no dejó completar el pago");
       expect(res.body).toContain("sin crear");
+    });
+
+    // Punto 122: el motivo del rechazo llega con su categoría, y el comprador lee qué pasó.
+    it.each([
+      ["INSUFFICIENT_FUNDS", "La tarjeta no tiene fondos suficientes"],
+      ["INVALID_CARD_DATA", "El banco no aceptó los datos de la tarjeta"],
+      ["CARD_RESTRICTED", "El banco tiene restringida esta tarjeta"],
+    ] as const)("should tell the buyer why a %s decline happened, without naming the gateway", async (category, text) => {
+      payments.createPayment.mockResolvedValueOnce({
+        transactionId: "tx-4",
+        status: "DECLINED",
+        nativeStatus: "DECLINED",
+        declineReason: { code: "021", category },
+      });
+      const created = (await createOrder(card)).json().order;
+
+      const res = await app.inject({ method: "GET", url: `/orders/${created.id}` });
+
+      expect(res.body).toContain("Tu pago fue rechazado");
+      expect(res.body).toContain(text);
+      expect(res.body).not.toContain("La pasarela no aprobó el pago");
+      expect(res.body).toContain(`Rechazo 021 (${category})`);
+    });
+
+    it("should keep the general decline text when the reason is UNKNOWN", async () => {
+      payments.createPayment.mockResolvedValueOnce({
+        transactionId: "tx-5",
+        status: "DECLINED",
+        nativeStatus: "DECLINED",
+        declineReason: { code: "019", category: "UNKNOWN" },
+      });
+      const created = (await createOrder(card)).json().order;
+
+      const res = await app.inject({ method: "GET", url: `/orders/${created.id}` });
+
+      expect(res.body).toContain("La pasarela no aprobó el pago");
+      expect(res.body).toContain("Rechazo 019 (UNKNOWN)");
     });
 
     it("should escape the payer data it shows", async () => {
@@ -298,6 +336,16 @@ describe("checkout skeleton", () => {
 
       expect(res.statusCode).toBe(201);
       expect(res.json().order.status).toBe("DECLINED");
+    });
+
+    it("should keep the decline reason on the order and in its history", async () => {
+      const declineReason = { code: "021", category: "INSUFFICIENT_FUNDS" } as const;
+      payments.createPayment.mockResolvedValueOnce({ transactionId: "tx-2", status: "DECLINED", nativeStatus: "DECLINED", declineReason });
+
+      const { order } = (await createOrder(card)).json();
+
+      expect(order.declineReason).toEqual(declineReason);
+      expect(order.history[0]).toEqual(expect.objectContaining({ source: "creation", status: "DECLINED", declineReason }));
     });
 
     it("should mark the order ERROR and answer 502 on a technical failure that survived the retries", async () => {

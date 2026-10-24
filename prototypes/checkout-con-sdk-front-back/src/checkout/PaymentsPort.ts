@@ -14,8 +14,9 @@ import { IncomingHttpHeaders } from "node:http";
  * 1. Crear el pago: `createPayment`.
  * 2. Traducir el resultado a un estado del comercio: el `status` de cada respuesta.
  * 3. Distinguir un rechazo de negocio de un fallo técnico, y reintentar solo el segundo:
- *    un rechazo vuelve como `DECLINED`; un fallo técnico se reintenta dentro del módulo y,
- *    si persiste, sale como `PaymentTechnicalError`.
+ *    un rechazo vuelve como `DECLINED`, con su `declineReason` si la pasarela da el código; un
+ *    fallo técnico se reintenta dentro del módulo y, si persiste, sale como
+ *    `PaymentTechnicalError`.
  * 4. Verificar la firma de un webhook: `verifyWebhook`. El esqueleto actualiza la orden.
  * 5. Consultar el estado por el identificador: `getPaymentStatus`.
  * 6. Registrar el estado nativo para auditoría: el `nativeStatus` de cada respuesta, que el
@@ -27,6 +28,28 @@ import { IncomingHttpHeaders } from "node:http";
 
 /** El estado de un pago visto por el comercio. */
 export type MerchantPaymentStatus = "APPROVED" | "DECLINED" | "PENDING";
+
+/**
+ * Por qué se rechazó un pago, en una categoría que el comprador puede entender sin conocer la
+ * pasarela. Son las de `RejectionCategory` del SDK, para que A y B muestren lo mismo (punto 122).
+ * `UNKNOWN` es un rechazo cuyo motivo la pasarela no informa, o cuyo código no corresponde a
+ * ninguna categoría sin interpretarlo.
+ */
+export type DeclineCategory =
+  | "INSUFFICIENT_FUNDS"
+  | "INVALID_CARD_DATA"
+  | "CARD_RESTRICTED"
+  | "FRAUD_SUSPICION"
+  | "NETWORK_ERROR"
+  | "AUTHENTICATION_FAILED"
+  | "DUPLICATED_PAYMENT"
+  | "UNKNOWN";
+
+/** El motivo de un rechazo: el código de la pasarela, para auditoría, y su categoría. */
+export interface DeclineReason {
+  code: string;
+  category: DeclineCategory;
+}
 
 export type DocumentType = "CC" | "CE" | "NIT" | "PP";
 
@@ -106,6 +129,11 @@ export interface PaymentSnapshot {
   nativeStatus: string;
   /** Si el pago exige ir a otra página (el banco en PSE, o la de la pasarela), su URL. */
   redirectUrl?: string;
+  /**
+   * Solo en un `DECLINED` cuya pasarela manda el código del rechazo. Llega al crear y al
+   * consultar; un webhook no lo trae, porque el evento del SDK no lo tiene.
+   */
+  declineReason?: DeclineReason;
 }
 
 export interface WebhookNotification {
