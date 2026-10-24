@@ -120,10 +120,14 @@ export async function tokenizeMercadoPagoCard(
  * `400 K006 "DFR029 - Bin de tarjeta inválido"`, o sea que el BIN no estaba habilitado para el
  * comercio. El 17 de octubre de 2026 tokenizó (`201`), así que la cuenta cambió sin aviso. Se
  * sigue usando una Visa de prueba genérica, que tokeniza y aprueba en las dos mediciones.
+ *
+ * `number` deja tokenizar una tarjeta de rechazo de la tabla, que tokenizan todas salvo la
+ * «Declinada en Token» (medido el 24 de octubre de 2026).
  */
 export async function tokenizeKushkiCard(
   credentials: Credentials,
   totalAmount: number,
+  number = "4242424242424242",
 ): Promise<CardToken> {
   const { status, json } = await postJson(
     `${SANDBOX_BASE_URL[Gateway.KUSHKI]}/card/v1/tokens`,
@@ -131,7 +135,7 @@ export async function tokenizeKushkiCard(
     {
       card: {
         name: "Jaime Pavlich",
-        number: "4242424242424242",
+        number,
         cvv: "123",
         expiryMonth: "11",
         expiryYear: "30",

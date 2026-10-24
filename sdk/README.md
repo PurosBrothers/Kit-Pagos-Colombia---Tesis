@@ -394,6 +394,15 @@ async function verificarEstado(transactionId: string) {
 
 `rejectionReason` solo existe cuando el estado es `DECLINED`. `rejectionCode` es el código nativo tal como lo envía la pasarela: el `status_detail` en Mercado Pago, el `failure_code` en Rapyd y el `responseCode` en Kushki. Wompi no envía un código de rechazo, así que en Wompi `rejectionReason` queda vacío. `rejectionCategory` es una categoría normalizada solo cuando hay una fuente para la correspondencia; en los demás casos es `UNKNOWN`, y conviene decidir con el código nativo.
 
+> **El rechazo de una tarjeta en Kushki, desde la 0.7.0-rc.2.** Kushki rechaza el cobro con un
+> `400`, no con un `201`, y el código del banco viene en `details.responseCode`: `021` es una
+> tarjeta sin fondos (`INSUFFICIENT_FUNDS`), `017` y `022` son datos de la tarjeta
+> (`INVALID_CARD_DATA`) y `023` es una tarjeta bloqueada (`CARD_RESTRICTED`); `019`, «tarjeta no
+> compatible», queda en `UNKNOWN`. El SDK devuelve ese `400` como una transacción `DECLINED` con
+> el código, y no como `INVALID_REQUEST`. Los `400` con códigos de Kushki (`K001`, `K004`,
+> `K220`) siguen siendo errores. El rechazo no trae `ticketNumber`, así que el identificador es
+> el `transactionId` de Kushki. Antes de la 0.7.0-rc.2, el rechazo llegaba como `INVALID_REQUEST`.
+
 `getPaymentStatus()` y `getPseBanks()` se reintentan solos ante fallos transitorios
 (`CONNECTION_FAILED`, `GATEWAY_TIMEOUT`, `GATEWAY_SERVER_ERROR`, `RATE_LIMIT_EXCEEDED`,
 `RESOURCE_LOCKED`), hasta
