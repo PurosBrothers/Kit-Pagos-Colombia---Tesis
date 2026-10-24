@@ -324,7 +324,7 @@ describe("prepareServer", () => {
     const summary = startupSummary(prepared);
 
     expect(prepared.sources).toEqual({ alfa: "archivo", beta: "argumento", gamma: "variable" });
-    expect(summary).toContain("Prototipo C en http://localhost:4111");
+    expect(summary).toContain("Prototipo C en http://localtest.me:4111");
     expect(summary).toContain("Llaves públicas para tarjeta: alfa (archivo), beta (argumento), gamma (variable)");
     expect(summary).toContain(`Archivo .env: ${envFile}`);
     expect(summary).not.toContain("no se leyó");
@@ -341,14 +341,15 @@ describe("prepareServer", () => {
     expect(startupSummary(prepared)).toContain(`Archivo .env: ${noEnvFile} (no existe; no se leyó)`);
   });
 
-  it("points to the tunnel only when it charges in the sandbox", () => {
+  it("asks to open the page on localtest.me only when it charges in the sandbox, and never for a tunnel", () => {
     writeFileSync(join(root, "index.html"), "<!doctype html>");
     const sandbox = prepareServer([], {}, root, noEnvFile);
     const simulator = prepareServer(["--environment=simulator"], {}, root, noEnvFile);
     if ("help" in sandbox || "help" in simulator) throw new Error("no se esperaba la ayuda");
 
-    expect(startupSummary(sandbox)).toContain("sirva la página por un túnel");
-    expect(startupSummary(simulator)).not.toContain("túnel");
+    expect(startupSummary(sandbox)).toContain("Ábrala en localtest.me y no en localhost");
+    expect(startupSummary(simulator)).not.toContain("no en localhost");
+    expect(startupSummary(sandbox)).not.toContain("túnel");
   });
 
   it("serves in /config.json only the public keys of a .env that also holds private secrets", async () => {
@@ -385,6 +386,33 @@ describe("prepareServer", () => {
       expect(body).not.toContain("SECRETO_FALSO");
     } finally {
       await new Promise((resolve) => prepared.server.close(resolve));
+    }
+  });
+
+  it("writes one trace line per request it serves, and none without a writer", async () => {
+    writeFileSync(join(root, "index.html"), "<!doctype html>");
+    const lines: string[] = [];
+    const traced = prepareServer([], {}, root, noEnvFile, (line: string) => lines.push(line));
+    const silent = prepareServer([], {}, root, noEnvFile);
+    if ("help" in traced || "help" in silent) throw new Error("no se esperaba la ayuda");
+    await new Promise<void>((resolve) => traced.server.listen(0, "127.0.0.1", resolve));
+    await new Promise<void>((resolve) => silent.server.listen(0, "127.0.0.1", resolve));
+
+    try {
+      const tracedPort = (traced.server.address() as AddressInfo).port;
+      await (await fetch(`http://127.0.0.1:${tracedPort}/`)).text();
+      await (await fetch(`http://127.0.0.1:${tracedPort}/config.json`)).text();
+      await (await fetch(`http://127.0.0.1:${tracedPort}/no-existe.js`)).text();
+      await (await fetch(`http://127.0.0.1:${(silent.server.address() as AddressInfo).port}/`)).text();
+
+      expect(lines).toHaveLength(3);
+      expect(lines[0]).toMatch(/^\[tienda C\] GET \/ → 200 · \d+ ms$/);
+      expect(lines[1]).toMatch(/^\[tienda C\] GET \/config\.json → 200 · \d+ ms · la API, el ambiente y las llaves públicas para el navegador$/);
+      expect(lines[2]).toMatch(/^\[tienda C\] GET \/no-existe\.js → 404/);
+      expect(startupSummary(traced)).toContain("consola del navegador (F12)");
+    } finally {
+      await new Promise((resolve) => traced.server.close(resolve));
+      await new Promise((resolve) => silent.server.close(resolve));
     }
   });
 });

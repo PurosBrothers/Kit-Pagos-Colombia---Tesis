@@ -6,19 +6,19 @@
 
 **Kit Pagos Colombia** es un SDK unificado en TypeScript para la integración de pasarelas de pago en Colombia (**Wompi**, **Mercado Pago**, **Kushki** y **Rapyd**).
 
-Diseñado bajo los principios de **Arquitectura Hexagonal (Ports & Adapters)** y **Domain-Driven Design (DDD)**, permite a comercios y desarrolladores desacoplar por completo su lógica de negocio de los detalles propietarios de cada pasarela, habilitando la intercambiabilidad de pasarelas mediante configuración pura, sin modificar el código de la aplicación.
+Está construido con **arquitectura hexagonal (puertos y adaptadores)**: el dominio no conoce HTTP ni pasarelas, y cada pasarela es un adaptador. Para el comercio, cambiar de pasarela es cambiar `gateway` y sus credenciales, y el código del cobro, de la consulta y del webhook queda igual. Lo que no se puede unificar está en [Lo que el SDK no hace](#lo-que-el-sdk-no-hace).
 
 ---
 
 ## Características Principales
 
-- **Intercambiabilidad real sin *vendor lock-in*:** Permite cambiar de proveedor de pagos (ej. de Wompi a Mercado Pago o Kushki) modificando únicamente el archivo de configuración.
-- **Tipado estricto de extremo a extremo:** Contratos, entidades, objetos de valor y enumeraciones en TypeScript con declaraciones `.d.ts` completas.
-- **Aritmética financiera exacta:** Manejo de montos mediante el objeto de valor `Amount` (con respaldo de `big.js`), previniendo errores de redondeo de punto flotante IEEE 754 y calculando unidades menores según ISO 4217 (`COP`).
-- **Verificación criptográfica de Webhooks:** Validación de firmas nativas (HMAC-SHA256, SHA-256) con comparación en tiempo constante (`crypto.timingSafeEqual`) y **protección contra ataques de repetición (*anti-replay attacks*)** con ventana de tolerancia temporal configurable.
-- **Gestión de fallos y resiliencia:** Política de reintentos automáticos con retroceso exponencial (*exponential backoff*) y fluctuación (*jitter*) ante fallos de red transitorios, aislando errores permanentes de negocio.
-- **Seguridad y privacidad por diseño (RF-08):** Sanitización automática de llaves privadas, tokens `Bearer` y secretos en mensajes de error y registros para evitar filtraciones en logs de producción.
-- **Tokenización segura en navegador (`kit-pagos-colombia/browser`):** Módulo frontend liviano (unos 22 KB sin minificar, 5,3 KB con gzip) sin dependencias de Node.js para tokenizar tarjetas directamente contra Wompi, Mercado Pago y Kushki respetando PCI DSS.
+- **Una sola interfaz para las cuatro pasarelas:** `createPayment()`, `getPaymentStatus()`, `getPseBanks()` y `validateWebhook()`, con los mismos tipos en Wompi, Mercado Pago, Kushki y Rapyd.
+- **Tipado estricto:** contratos, entidades, objetos de valor y enumeraciones en TypeScript, con sus declaraciones `.d.ts`. El resultado de un cobro es una unión que obliga a tratar la redirección.
+- **Montos exactos:** el objeto de valor `Amount` usa `big.js`, sin los errores de redondeo del punto flotante, y calcula las unidades menores según ISO 4217. Cada adaptador manda el monto en la unidad que pide su pasarela: centavos en Wompi y pesos en Mercado Pago.
+- **Verificación de webhooks:** la firma nativa de cada pasarela (HMAC-SHA256 o SHA-256), comparada en tiempo constante (`crypto.timingSafeEqual`), y una ventana de tolerancia contra la repetición de notificaciones viejas, configurable.
+- **Reintentos solo donde no hay riesgo:** `getPaymentStatus()` y `getPseBanks()` se reintentan ante fallos transitorios, con retroceso exponencial y fluctuación. `createPayment()` nunca se reintenta, para no cobrar dos veces.
+- **Sin credenciales en los errores (RF-08):** las llaves configuradas, los tokens `Bearer` y los secretos se borran del mensaje y del cuerpo de cada `KitPagosError`, para que no terminen en sus registros.
+- **Tokenización en el navegador (`kit-pagos-colombia/browser`):** un módulo sin dependencias de Node.js (21 955 bytes sin minificar y 5,3 KB con gzip en la 0.6.0) que tokeniza la tarjeta contra Wompi, Mercado Pago y Kushki. El número de la tarjeta no pasa por su servidor; la página donde se escribe sí hay que protegerla (ver [Despliegue a producción](#despliegue-a-producción-y-consideraciones-reales), §2).
 
 ---
 
@@ -37,6 +37,19 @@ Diseñado bajo los principios de **Arquitectura Hexagonal (Ports & Adapters)** y
 > intenta y, cuando contesta eso, lanza `UNSUPPORTED_OPERATION` explicándolo, en vez de
 > acusar a sus credenciales. No se queda sin el dato: el estado ya viene resuelto en la
 > respuesta de `createPayment()`, y los cambios posteriores llegan por webhook.
+
+---
+
+## Lo que el SDK no hace
+
+- **Los tokens de tarjeta no son portables.** Se emiten contra la pasarela que va a cobrar, así que cambiar de pasarela cambia también la tokenización del navegador.
+- **Cada pasarela pide sus datos, y el SDK no los inventa.** Por ejemplo, Mercado Pago exige para PSE nombre y apellido separados, teléfono con indicativo, dirección e IP del pagador. Si falta un dato, el SDK lo dice antes de salir a la red, con `INVALID_REQUEST` y la lista de lo que falta.
+- **La redirección no desaparece.**
+  - Con PSE redirigen las cuatro.
+  - Con tarjeta, Rapyd cobra en su página alojada, y Wompi y Kushki pueden pedir 3DS.
+  - El resultado de `createPayment()` obliga a tratar las dos ramas.
+- **Solo tarjeta y PSE.** No hay efectivo, ni Nequi, ni suscripciones, ni reembolsos.
+- **No protege la página de pago ni decide el monto.** La cabecera Content-Security-Policy de la página donde se escribe la tarjeta la manda su servidor, y el monto lo calcula su servidor con su catálogo: el SDK cobra lo que se le pide. Está explicado en [Despliegue a producción](#despliegue-a-producción-y-consideraciones-reales), §2.
 
 ---
 
@@ -62,10 +75,10 @@ pnpm add kit-pagos-colombia
 
 - **Paso 1:** [Inicializar el SDK](#1-inicializar-el-sdk)
 - **Paso 2:** [Crear una Transacción con Tarjeta](#2-crear-una-transacción-con-tarjeta)
-  - 🌐 **Frontend:** [Tokenización en el Navegador con `kit-pagos-colombia/browser` (PCI DSS)](#21-tokenización-en-el-navegador-kit-pagos-colombiabrowser)
+  - 🌐 **Frontend:** [Tokenización en el Navegador con `kit-pagos-colombia/browser`](#21-tokenización-en-el-navegador-kit-pagos-colombiabrowser)
 - **Paso 3:** [Crear una Transacción con PSE](#3-crear-una-transacción-con-pse-redirección-bancaria)
 - **Paso 4:** [Consultar Estado de una Transacción](#4-consultar-estado-de-una-transacción)
-- **Paso 5:** [Verificar Webhooks (Notificaciones)](#5-verificar-webhooks-notificaciones-de-la-pasarela)
+- **Paso 5:** [Validar y Conciliar Webhooks](#5-validar-y-conciliar-webhooks)
 - **Paso 6:** [Manejo Unificado de Errores](#6-manejo-unificado-de-errores)
 
 ### 1. Inicializar el SDK
@@ -85,20 +98,21 @@ const sdk = new KitPagos({
       webhookSecret: process.env.WOMPI_EVENTS_SECRET,      // Verifica los webhooks que recibe
     },
     [Gateway.MERCADOPAGO]: {
-      publicKey: process.env.MP_PUBLIC_KEY!,
-      privateKey: process.env.MP_ACCESS_TOKEN!,
-      webhookSecret: process.env.MP_WEBHOOK_SECRET,
+      publicKey: process.env.MERCADOPAGO_PUBLIC_KEY!,
+      privateKey: process.env.MERCADOPAGO_ACCESS_TOKEN!,
+      webhookSecret: process.env.MERCADOPAGO_WEBHOOK_SECRET,
     },
     [Gateway.KUSHKI]: {
-      publicKey: process.env.KUSHKI_PUBLIC_ID!,
-      privateKey: process.env.KUSHKI_PRIVATE_ID!,
+      publicKey: process.env.KUSHKI_PUBLIC_MERCHANT_ID!,
+      privateKey: process.env.KUSHKI_PRIVATE_MERCHANT_ID!,
       webhookSecret: process.env.KUSHKI_WEBHOOK_SECRET,
     },
     [Gateway.RAPYD]: {
       publicKey: process.env.RAPYD_API_ACCESS_KEY!,
       privateKey: process.env.RAPYD_API_SECRET_KEY!,
-      // Rapyd es la única que firma sus webhooks con la misma llave de la API,
-      // así que aquí `webhookSecret` no hace falta.
+      // Rapyd firma sus webhooks con la misma llave de la API, así que no lleva
+      // `webhookSecret`; sí lleva la URL del webhook tal como está en su panel.
+      webhookUrl: "https://mitienda.com/webhooks/rapyd",
     },
   },
   maxRetries: 3,                 // Reintentos automáticos ante fallos transitorios
@@ -116,14 +130,18 @@ const sdk = new KitPagos({
 > `KitPagos` lanza `INVALID_REQUEST`. El límite es **por intento**: una consulta que se
 > reintenta puede tardar hasta `(maxRetries + 1) × timeoutMs`, más las pausas entre intentos.
 
-> **Entornos y Resolución Automática de URLs (`environment`).** Puede especificar el entorno destino mediante la opción `environment: "simulator" | "sandbox" | "production"`. El SDK resuelve automáticamente la URL oficial de cada pasarela desde un catálogo cerrado integrado. Por defecto el ambiente es `simulator` y apunta al simulador local (`http://localhost:3000/v1/sim/{gateway}`); para usar el simulador desplegado en Render, indíquelo con `baseUrl` (ver «Simulador Integrado y en la Nube» más abajo). Si necesita apuntar a una URL específica o mock propio, el parámetro `baseUrl` sigue disponible como anulación explícita.
+> **Entornos y Resolución Automática de URLs (`environment`).** Puede especificar el entorno destino mediante la opción `environment: "simulator" | "sandbox" | "production"`. El SDK resuelve automáticamente la URL oficial de cada pasarela desde un catálogo cerrado integrado. Por defecto el ambiente es `simulator` y apunta al simulador local (`http://localhost:3000/v1/sim/{gateway}`); para usar el simulador desplegado en Render, indíquelo con `baseUrl` (ver «El simulador de Render» más abajo, con lo que se puede cobrar ahí). Si necesita apuntar a una URL específica o mock propio, el parámetro `baseUrl` sigue disponible como anulación explícita.
 
 > **`webhookSecret` no es la llave de API.** En Wompi, Mercado Pago y Kushki el secreto que
 > firma los webhooks es un valor distinto, que se saca de otra parte del panel. Si lo omite,
 > el SDK cae a `privateKey` por compatibilidad y **la verificación de webhooks reales de esas
 > tres va a fallar**, con un error de firma inválida que parece un ataque y es configuración.
 > En Wompi, además, `integritySecret` y `webhookSecret` son dos secretos distintos: el primero
-> firma lo que envía, el segundo verifica lo que le llega.
+> firma lo que envía, el segundo verifica lo que le llega. Sin `integritySecret`, `createPayment()`
+> en Wompi falla con `INVALID_CREDENTIALS` antes de salir a la red, porque Wompi no crea ninguna
+> transacción sin firma.
+>
+> Los nombres de las variables son los de `.env.example` en la raíz del repositorio.
 
 ---
 
@@ -141,9 +159,8 @@ async function cobrarConTarjeta() {
       email: "cliente@ejemplo.com",
       fullName: "Jaime Pavlich",
     }),
-    // El token lo emite la tokenización de la pasarela desde el navegador, y el SDK lo
-    // trata como cadena opaca: el número de la tarjeta nunca llega a su servidor, que es
-    // lo que lo mantiene fuera del alcance de PCI DSS.
+    // El token lo emite la pasarela al tokenizar en el navegador, y el SDK lo trata como
+    // cadena opaca: el número de la tarjeta nunca llega a su servidor.
     paymentMethod: PaymentMethod.card("tok_test_card_12345", { installments: 1 }),
   });
 
@@ -162,7 +179,11 @@ async function cobrarConTarjeta() {
 ```
 
 > Con tarjeta también puede recibir `REDIRECT_REQUIRED`: Rapyd cobra en su página alojada, y
-> cualquiera de las cuatro puede pedir autenticación 3DS. Trate siempre las dos ramas.
+> Wompi y Kushki pueden pedir autenticación 3DS. Mercado Pago no redirige con tarjeta (ver la
+> nota siguiente). Trate siempre las dos ramas.
+>
+> El monto del cobro lo calcula su servidor con los precios de su catálogo, nunca el navegador:
+> el SDK cobra lo que se le pide (ver [Despliegue a producción](#despliegue-a-producción-y-consideraciones-reales), §2).
 
 > **Mercado Pago cobra la tarjeta por la Orders API desde la versión 0.6.0.** Hasta la 0.5.0
 > usaba la Payments API (`POST /v1/payments`), que con las credenciales `APP_USR-` del vendedor
@@ -188,7 +209,7 @@ async function cobrarConTarjeta() {
 
 #### 2.1 Tokenización en el Navegador (`kit-pagos-colombia/browser`)
 
-Para cumplir con **PCI DSS**, los datos sensibles de la tarjeta (número PAN, CVC, fecha de expiración) **nunca deben entrar al backend del comercio ni al SDK de servidor**.
+Los datos de la tarjeta (número, CVC y vencimiento) **no deben llegar a su servidor**: si llegan, ese servidor entra en el alcance de PCI DSS, aunque los reenvíe de inmediato. Por eso el SDK de servidor no los acepta, y la tarjeta se tokeniza en el navegador.
 
 El paquete exporta un punto de entrada independiente y liviano para el frontend (`kit-pagos-colombia/browser`, unos 22 KB sin minificar y 5,3 KB con gzip, sin módulos de Node.js). Tokeniza con Wompi, Mercado Pago y, desde la 0.6.0-rc.4, Kushki:
 
@@ -212,7 +233,7 @@ async function tokenizarTarjetaEnNavegador() {
   // 1. Tokenización contra Wompi:
   const wompiResult = await KitPagosBrowser.tokenizeCard({
     gateway: Gateway.WOMPI,
-    publicKey: "pub_prod_1234567890", // O pub_test_... para sandbox
+    publicKey: "pub_test_1234567890", // pub_prod_... con environment: "production"
     environment: "sandbox",          // "sandbox" | "production" | "simulator"
     card: datosFormulario,
     timeoutMs: 15_000,               // Opcional: límite de la petición (por defecto 30 s)
@@ -255,7 +276,9 @@ async function tokenizarTarjetaEnNavegador() {
 > La tokenización usa `POST /card/v1/tokens` con el merchant id público en la cabecera
 > `Public-Merchant-Id`; su CORS se midió el 17 de octubre de 2026 contra UAT.
 
-> **PCI DSS:** Al usar `KitPagosBrowser`, el número de tarjeta viaja exclusivamente entre el navegador del pagador y los servidores de la pasarela. Su backend solo recibe y almacena el token opaco. Rapyd no tokeniza en el navegador: cobra la tarjeta en su página alojada, así que `KitPagosBrowser` la rechaza con `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones; con Rapyd, cree el pago con tarjeta y sin token, y siga la redirección.
+> **Lo que cubre y lo que no.** Con `KitPagosBrowser`, el número de la tarjeta viaja solo entre el navegador del pagador y los servidores de la pasarela, y su backend recibe el token opaco. Eso deja su servidor fuera de los datos de la tarjeta, pero **no protege la página donde se escribe**. El formulario es suyo: un script malicioso que corra en esa página podría leer el número antes de que se tokenice, y por eso el comercio queda en SAQ A-EP. Lo que lo limita es una cabecera Content-Security-Policy que manda su servidor (ver [Despliegue a producción](#despliegue-a-producción-y-consideraciones-reales), §2).
+>
+> Rapyd no tokeniza en el navegador: cobra la tarjeta en su página alojada, así que `KitPagosBrowser` la rechaza con `KitPagosError(UNSUPPORTED_OPERATION)` sin abrir conexiones. Con Rapyd, cree el pago con tarjeta y sin token, y siga la redirección.
 
 > **Compatibilidad de `kit-pagos-colombia/browser` fuera del navegador.** TypeScript resuelve
 > sus tipos con `moduleResolution` `bundler`, `node16` y `node10`. El archivo es un módulo ES
@@ -314,9 +337,11 @@ async function pagarConPSE() {
 }
 ```
 
-> Los `bankCode` salen de `sdk.getPseBanks()` y **solo valen en la pasarela que los dio**:
-> cambiar de pasarela obliga a volver a pedir la lista. Es la consecuencia de que cada una
-> identifique los bancos a su manera; lo que el SDK garantiza es que usted no tenga que saber cómo.
+> Los `code` que devuelve `sdk.getPseBanks()` **solo valen en la pasarela que los dio**:
+> cambiar de pasarela obliga a volver a pedir la lista. Si el banco ya se conoce, `PseBankCode`
+> (el código de compensación de ACH Colombia, como `PseBankCode.BANCOLOMBIA`) sirve en las cuatro:
+> el SDK lo traduce para Rapyd. La excepción son los bancos ficticios de los sandboxes de Wompi y
+> Kushki, que solo existen con el código de `getPseBanks()`.
 
 > Contra el sandbox de Rapyd, desde la 0.6.0-rc.3, `getPseBanks()` devuelve solo los bancos que
 > esa cuenta puede cobrar. El sandbox lista todos los métodos de la plataforma, y con los demás el
@@ -338,7 +363,10 @@ async function pagarConPSE() {
 > como una transacción `PENDING` con el identificador de la orden y `rawStatus` `processing`, en
 > vez de fallar con `MALFORMED_RESPONSE`. Consulte su estado con `getPaymentStatus()` para
 > conocer el desenlace: esas órdenes terminaron en `failed / processing_error`, que el SDK
-> entrega como `DECLINED` con `rejectionCode` `processing_error`.
+> entrega como `DECLINED` con `rejectionCode` `processing_error`. En el sandbox esto pasa por
+> ventanas, y se recupera solo con la misma aplicación: el 19 de octubre de 2026 falló entre las
+> 14:09 y las 14:17, y desde las 14:25 volvió a entregar la URL del banco. Si le pasa, espere
+> entre 10 y 15 minutos y vuelva a intentar, sin crear una aplicación nueva.
 
 > Mercado Pago exige además `ipAddress`, la IP del pagador. Desde la versión 0.6.0 el SDK la
 > normaliza antes de enviarla: quita los espacios, convierte `::ffff:a.b.c.d` en `a.b.c.d` y
@@ -365,6 +393,15 @@ async function verificarEstado(transactionId: string) {
 ```
 
 `rejectionReason` solo existe cuando el estado es `DECLINED`. `rejectionCode` es el código nativo tal como lo envía la pasarela: el `status_detail` en Mercado Pago, el `failure_code` en Rapyd y el `responseCode` en Kushki. Wompi no envía un código de rechazo, así que en Wompi `rejectionReason` queda vacío. `rejectionCategory` es una categoría normalizada solo cuando hay una fuente para la correspondencia; en los demás casos es `UNKNOWN`, y conviene decidir con el código nativo.
+
+> **El rechazo de una tarjeta en Kushki, desde la 0.7.0-rc.2.** Kushki rechaza el cobro con un
+> `400`, no con un `201`, y el código del banco viene en `details.responseCode`: `021` es una
+> tarjeta sin fondos (`INSUFFICIENT_FUNDS`), `017` y `022` son datos de la tarjeta
+> (`INVALID_CARD_DATA`) y `023` es una tarjeta bloqueada (`CARD_RESTRICTED`); `019`, «tarjeta no
+> compatible», queda en `UNKNOWN`. El SDK devuelve ese `400` como una transacción `DECLINED` con
+> el código, y no como `INVALID_REQUEST`. Los `400` con códigos de Kushki (`K001`, `K004`,
+> `K220`) siguen siendo errores. El rechazo no trae `ticketNumber`, así que el identificador es
+> el `transactionId` de Kushki. Antes de la 0.7.0-rc.2, el rechazo llegaba como `INVALID_REQUEST`.
 
 `getPaymentStatus()` y `getPseBanks()` se reintentan solos ante fallos transitorios
 (`CONNECTION_FAILED`, `GATEWAY_TIMEOUT`, `GATEWAY_SERVER_ERROR`, `RATE_LIMIT_EXCEEDED`,
@@ -411,6 +448,8 @@ app.post("/webhook", (req, res) => {
     console.log(`Evento: ${event.eventType}`);
     console.log(`Transacción: ${event.gatewayTransactionId}`);
     console.log(`Nuevo Estado: ${event.newStatus}`);
+    console.log(`Estado nativo: ${event.rawStatus ?? "sin estado firmado"}`);
+    console.log(`Orden: ${event.orderReference ?? "sin referencia firmada"}`);
 
     res.status(200).send("OK");
   } catch (error) {
@@ -430,6 +469,18 @@ app.post("/webhook", (req, res) => {
 `newStatus: "PENDING"`: la firma no cubre el cuerpo de la notificación, así que el SDK no confía en
 ningún estado que venga en él. Consulte el estado real con
 `getPaymentStatus(event.gatewayTransactionId)`.
+
+> **El estado nativo y la referencia de la orden, desde la 0.7.0-rc.1.** El evento trae dos
+> campos opcionales, y solo cuando la firma cubre el dato del que salen:
+>
+> - **`rawStatus`** es el estado tal como lo mandó la pasarela, para guardarlo sin traducir:
+>   `APPROVED` en Wompi, `APPROVAL` en el cargo de Kushki, `CLO` en el pago de Rapyd. Mercado Pago
+>   no lo trae.
+> - **`orderReference`** es la referencia de la orden que usted mandó al cobrar. Hoy solo la trae
+>   Rapyd, y es la que resuelve su cobro con tarjeta. Ese cobro se crea como checkout, así que
+>   `createPayment()` devuelve el id del checkout, y el webhook trae el del pago. El pago no
+>   trae ningún campo que apunte al checkout (medido el 21 de octubre de 2026). Busque la orden
+>   por `gatewayTransactionId` y, si no aparece, por `orderReference`.
 
 **Webhooks de una pasarela que no es la activa.** Durante una migración usted cobra por la pasarela
 nueva y sigue recibiendo webhooks de la vieja por semanas: pagos ya iniciados, conciliaciones,
@@ -526,7 +577,7 @@ async function cobrarConDiagnostico(request: CreatePaymentRequest) {
 
 ---
 
-## 🚀 Despliegue a Producción y Consideraciones Reales
+## Despliegue a Producción y Consideraciones Reales
 
 Si va a utilizar este SDK en un entorno de producción para procesar pagos reales con dinero de verdad, tenga en cuenta las siguientes consideraciones de arquitectura y normativa financiera:
 
@@ -541,49 +592,90 @@ El SDK incluye un catálogo cerrado de URLs para los tres ambientes soportados, 
 | **Kushki** | `https://api-uat.kushkipagos.com` | `https://api.kushkipagos.com` |
 | **Rapyd** | `https://sandboxapi.rapyd.net/v1` | `https://api.rapyd.net/v1` |
 
-**Simulador Integrado y en la Nube (`environment: "simulator"`):**
-Por defecto apunta al simulador local (`http://localhost:3000/v1/sim/{gateway}`), para que ninguna petición salga de la máquina sin pedirlo. Para usar el simulador desplegado en Render (o consultar su documentación interactiva OpenAPI 3.0 en [`/docs`](https://kit-pagos-colombia.onrender.com/docs), detallada en [`simulator-api/README.md`](../simulator-api/README.md)), se indica con `baseUrl`:
+**El simulador (`environment: "simulator"`).** Es el ambiente por omisión, y apunta a la API de Simulación local (`http://localhost:3000/v1/sim/{gateway}`), para que ninguna petición salga de la máquina sin pedirlo. El simulador verifica las firmas de Wompi y Rapyd. Si corre sin perfil (sin `.env`), usa los secretos por omisión `test_integrity_kit_pagos_simulator` (el de integridad de Wompi) y `rapyd_secret_kit_pagos_simulator` (punto 86 del `architecture-log.md`):
+
 ```typescript
 const sdkSimulador = new KitPagos({
   gateway: Gateway.WOMPI,
-  baseUrl: "https://kit-pagos-colombia.onrender.com/v1/sim/wompi",
+  environment: "simulator", // http://localhost:3000/v1/sim/wompi
   credentials: {
     [Gateway.WOMPI]: {
       publicKey: "pub_test_demo",
       privateKey: "prv_test_demo",
+      integritySecret: "test_integrity_kit_pagos_simulator", // el del simulador sin perfil
     },
   },
 });
 ```
 
-**Para procesar pagos reales en producción o pruebas en sandbox**, basta con configurar `environment`:
+Medido el 19 de octubre de 2026 contra un simulador sin perfil: con ese secreto, un PSE de Wompi se creó (`REDIRECT_REQUIRED`) y la consulta dio `APPROVED`. Con otro secreto, el simulador respondió `422` «La firma es inválida», como Wompi.
+
+**El simulador de Render** (con su documentación OpenAPI 3.0 en [`/docs`](https://kit-pagos-colombia.onrender.com/docs), detallada en [`simulator-api/README.md`](../simulator-api/README.md)) se usa con `baseUrl`, por ejemplo `https://kit-pagos-colombia.onrender.com/v1/sim/kushki`. Ese despliegue verifica las firmas de Wompi y Rapyd con los secretos del equipo, así que desde su código solo cobran Mercado Pago y Kushki con llaves de demostración. Medido el 19 de octubre de 2026:
+
+- Kushki y Mercado Pago listaron bancos y crearon un PSE (`REDIRECT_REQUIRED`).
+- Wompi, sin `integritySecret`, falló con `INVALID_CREDENTIALS` antes de la red.
+- Wompi, con el secreto por omisión, recibió `422` «La firma es inválida».
+
+Para Wompi y Rapyd, use el simulador local o la API REST `/v1/api` de ese mismo despliegue, que firma en el servidor.
+
+**Sandbox y producción.** `environment` elige las URL del catálogo, pero no es lo único que cambia al cobrar de verdad:
 
 ```typescript
 import { KitPagos, Gateway } from "kit-pagos-colombia";
 
-const sdkMultiPasarela = new KitPagos({
+const sdkProduccion = new KitPagos({
   gateway: Gateway.WOMPI,
   environment: "production",
   credentials: {
     [Gateway.WOMPI]: {
       publicKey: process.env.WOMPI_PUBLIC_KEY!,
       privateKey: process.env.WOMPI_PRIVATE_KEY!,
+      integritySecret: process.env.WOMPI_INTEGRITY_SECRET!, // Sin él, Wompi no crea transacciones
+      webhookSecret: process.env.WOMPI_EVENTS_SECRET!,
     },
     [Gateway.MERCADOPAGO]: {
-      publicKey: process.env.MP_PUBLIC_KEY!,
-      privateKey: process.env.MP_ACCESS_TOKEN!,
+      publicKey: process.env.MERCADOPAGO_PUBLIC_KEY!,
+      privateKey: process.env.MERCADOPAGO_ACCESS_TOKEN!,
+      webhookSecret: process.env.MERCADOPAGO_WEBHOOK_SECRET!,
     },
   },
 });
 ```
 
-### 2. Tokenización en Frontend y Cumplimiento PCI-DSS
-Por regulaciones bancarias internacionales (PCI-DSS) y de la Superintendencia Financiera de Colombia (SFC), **un servidor backend nunca debe recibir datos sensibles de tarjetas (número de 16 dígitos, fecha de expiración o CVV) en texto plano**, a menos que cuente con certificación PCI-DSS Nivel 1.
+Al pasar a producción también hay que hacer esto:
 
-Por esta razón, el SDK opera como un backend seguro que consume **tokens**:
-1. **En el Navegador (Frontend):** El usuario ingresa su tarjeta en un formulario web que la tokeniza con `KitPagosBrowser` (Wompi, Mercado Pago y Kushki) o con la librería oficial de la pasarela activa. Con Rapyd no hay token: el pago se crea sin él y el pagador escribe la tarjeta en la página alojada de Rapyd.
-2. **Generación del Token:** La pasarela valida la tarjeta directamente desde el navegador y devuelve un token temporal (ej. `tok_test_card_12345`).
-3. **Procesamiento en Backend:** Su frontend envía ese token a su servidor Node.js, donde `KitPagos` ejecuta el cobro de forma segura mediante `PaymentMethod.card(token, { installments })`.
+- usar las llaves productivas, incluidos los secretos de webhook, que son distintos por ambiente;
+- registrar las URL de webhook en el panel de cada pasarela y comprobar que lleguen;
+- sincronizar el reloj del servidor, porque la ventana contra la repetición de webhooks depende de él;
+- cumplir lo del punto 2.
+
+La lista completa está en la [guía de implementación](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/blob/main/docs/03-sdk/4-guia-de-implementacion.md), §9 y §10.
+
+### 2. La tarjeta, la página de pago y el monto
+
+**El número de la tarjeta no debe llegar a su servidor.** Si llega, ese servidor entra en el alcance de PCI DSS, aunque lo reenvíe de inmediato a la pasarela. El SDK de servidor no lo acepta: `PaymentMethod.card()` recibe un token.
+
+1. **En el navegador:** el pagador escribe la tarjeta en un formulario que la tokeniza con `KitPagosBrowser` (Wompi, Mercado Pago y Kushki) o con la librería oficial de la pasarela. Con Rapyd no hay token: el pago se crea sin él y el pagador escribe la tarjeta en la página alojada de Rapyd.
+2. **El token:** la pasarela recibe la tarjeta directamente desde el navegador y devuelve un token (por ejemplo, `tok_test_…` en Wompi).
+3. **En su servidor:** el frontend le manda el token, y `KitPagos` cobra con `PaymentMethod.card(token, { installments })`.
+
+**La página donde se escribe la tarjeta sí queda en el alcance.**
+
+- **El riesgo.** Con `KitPagosBrowser` el formulario es suyo, y el comercio queda en SAQ A-EP. Un script malicioso en esa página podría leer el número antes de que se tokenice y mandarlo a otro dominio. Puede llegar por un XSS, en una dependencia comprometida o en un archivo que cambió en un CDN.
+- **La defensa.** Lo que lo limita es una cabecera `Content-Security-Policy` que manda su servidor, con `connect-src` limitado a su API y al host de tokenización de cada pasarela que use:
+  - Wompi: `sandbox.wompi.co` o `production.wompi.co`;
+  - Mercado Pago: `api.mercadopago.com`;
+  - Kushki: `api-uat.kushkipagos.com` o `api.kushkipagos.com`.
+- **Lo medido** (19 de octubre de 2026, Chrome 148, con la 0.6.0 desde jsDelivr). Con esa política, las tres tokenizaron y un envío a otro dominio quedó bloqueado.
+- **Si carga el módulo con integridad desde un import map,** la CSP tiene que llevar el hash de ese import map. Sin él, el navegador bloquea el mapa y carga el módulo sin verificar su integridad, sin ningún error en la página.
+- **La política completa y lo que no cierra** están en la [guía de implementación](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/blob/main/docs/03-sdk/4-guia-de-implementacion.md), §9. Si necesita que el número nunca entre a su página (SAQ A), use los campos alojados de la pasarela en iframes: `KitPagosBrowser` no los envuelve.
+
+**El monto lo decide su servidor.**
+
+- **El problema.** El SDK cobra el monto que se le pide, y no conoce los precios de su tienda. Si el monto viene del navegador, el pagador lo puede cambiar antes de pagar. La firma de integridad de Wompi solo garantiza que nadie lo cambió después de firmado.
+- **Qué hacer.** Calcule el total en el servidor, con su catálogo. Antes de despachar, compare la transacción aprobada con la orden: `transaction.amount.equals(...)`, `currency` y `orderReference`.
+
+Los prototipos del proyecto no mandan esa cabecera, y el que corre solo en el navegador decide el monto en la página. Son demostraciones contra los sandboxes, no plantillas para producción.
 
 ---
 

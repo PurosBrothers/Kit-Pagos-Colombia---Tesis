@@ -88,6 +88,55 @@ describe("Rapyd events the SDK translates", () => {
 
     expect(res.json()).toMatchObject({ gatewayTransactionId: "payment_1", newStatus: "APPROVED" });
   });
+
+  it("a paid checkout sends the sequence measured in the sandbox, every notice signed", async () => {
+    const checkout: RapydCheckout = {
+      id: "checkout_1",
+      status: "DON",
+      redirect_url: "",
+      payment: { id: "payment_1", status: "CLO", paid: true, amount: "50000", currency_code: "COP" },
+    };
+
+    const sequence = generator.generateSequence({ gateway: Gateway.RAPYD, kind: "checkout", record: checkout });
+
+    expect(sequence.map((webhook) => JSON.parse(webhook.body).type)).toEqual([
+      "PAYMENT_SUCCEEDED",
+      "PAYMENT_UPDATED",
+      "PAYMENT_COMPLETED",
+    ]);
+    for (const webhook of sequence) {
+      expect((await verify("rapyd", webhook)).statusCode).toBe(200);
+    }
+  });
+
+  it.each([
+    ["a payment", { gateway: Gateway.RAPYD, kind: "payment", record: rapydPayment({}) }, "PAYMENT_COMPLETED"],
+    [
+      "a checkout whose payment was declined",
+      {
+        gateway: Gateway.RAPYD,
+        kind: "checkout",
+        record: {
+          id: "checkout_2",
+          status: "DON",
+          redirect_url: "",
+          payment: {
+            id: "payment_2",
+            status: "ERR",
+            paid: false,
+            amount: "50000",
+            currency_code: "COP",
+            failure_code: "ERROR_PROCESSING_CARD - [05]",
+          },
+        },
+      },
+      "PAYMENT_FAILED",
+    ],
+  ] as const)("%s sends a single notice", (_name, subject, type) => {
+    const sequence = generator.generateSequence(subject as Parameters<SignatureGenerator["generateSequence"]>[0]);
+
+    expect(sequence.map((webhook) => JSON.parse(webhook.body).type)).toEqual([type]);
+  });
 });
 
 describe("events without a documented body are not emitted", () => {

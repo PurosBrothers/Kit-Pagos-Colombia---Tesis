@@ -66,16 +66,19 @@ export class KushkiWebhookHandler implements GatewayWebhookHandler {
    * El estado sigue la misma división: tarjeta lo trae en `transaction_status` (`APPROVAL`,
    * `DECLINED`) y transferencia en `status` (`approvedTransaction`, `declinedTransaction`…).
    * `transaction_status` va primero porque la tabla del webhook de tarjeta también lista un
-   * campo `status`, sin documentar sus valores.
+   * campo `status`, sin documentar sus valores. Ese mismo valor sale tal cual en `rawStatus`: la
+   * firma cubre el cuerpo entero.
    */
   parse(webhook: IncomingWebhook): WebhookEvent {
     const body = JSON.parse(webhook.payload);
+    const rawStatus: string = body.transaction_status ?? body.status ?? "";
 
     return new WebhookEvent({
       eventType: DEFAULT_EVENT_TYPE,
       gatewayTransactionId: String(body.ticket_number ?? body.token ?? ""),
-      newStatus: mapStatus(body.transaction_status ?? body.status ?? ""),
+      newStatus: mapStatus(rawStatus),
       gateway: Gateway.KUSHKI,
+      rawStatus: rawStatus || undefined,
     });
   }
 }

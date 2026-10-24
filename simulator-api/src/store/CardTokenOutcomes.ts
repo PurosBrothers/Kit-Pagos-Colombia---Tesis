@@ -2,7 +2,7 @@
  * El desenlace que deriva de los datos de una tarjeta de prueba, por token (issue #122).
  *
  * En el sandbox real el desenlace de un cobro con tarjeta lo deciden los datos de la
- * tarjeta: el número en Wompi, el nombre del titular en Mercado Pago. Esos datos viajan en
+ * tarjeta: el número en Wompi y en Kushki, el nombre del titular en Mercado Pago. Esos datos viajan en
  * la tokenización y el cobro llega después con solo el token, así que el simulador tiene que
  * recordar qué decidieron.
  *
@@ -14,7 +14,10 @@
 export interface CardTokenOutcome {
   /** El escenario que se aplica al cobrar con este token. */
   scenario: string;
-  /** El `status_detail` nativo, solo en las pasarelas que distinguen varios rechazos. */
+  /**
+   * El motivo nativo, solo en las pasarelas que distinguen varios rechazos: el `status_detail`
+   * en Mercado Pago, el `responseCode` en Kushki.
+   */
   statusDetail?: string;
   /**
    * El `status_detail` del pago cuando el cobro llega como orden de la Orders API, que usa

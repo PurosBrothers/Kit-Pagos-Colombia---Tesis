@@ -93,7 +93,13 @@ Esta sección es tan importante como la anterior. Un SDK que promete más de lo 
 
 **Los códigos de banco de PSE son portables, salvo en los sandboxes.** Cada pasarela nombra los bancos a su manera: el mismo Bancolombia es `1007` en Mercado Pago y `co_pse_bancolombia_bank` en Rapyd. Pero existe un estándar, el código de compensación que publica el Banco de la República y que usa ACH Colombia, y el SDK lo expone como `PseBankCode`. Con `PseBankCode.BANCOLOMBIA` el comercio pide ese banco en cualquiera de las cuatro pasarelas, y el SDK hace la traducción que Rapyd necesita. La excepción son los bancos ficticios de los sandboxes de Wompi y Kushki, que solo existen con el código que devuelve `getPseBanks()` (punto 68 del `architecture-log.md`).
 
-**Los tokens de tarjeta tampoco son portables.** Los emite cada pasarela y solo valen en ella. La tokenización sigue viviendo en el frontend, con la librería del proveedor, y el SDK no la toca: si la tocara, metería al comercio en el alcance de PCI DSS, que es justo lo que hay que evitar.
+**Los tokens de tarjeta tampoco son portables.** Los emite cada pasarela y solo valen en ella. La tokenización vive en el navegador: la hace `KitPagosBrowser` contra la ruta de cada pasarela, o la librería del proveedor. El SDK de servidor nunca recibe el número, porque recibirlo metería al comercio en el alcance de PCI DSS, que es justo lo que hay que evitar.
+
+**El SDK no protege la página donde se escribe la tarjeta, y los prototipos tampoco.** Con `KitPagosBrowser` el formulario es del comercio, y un script malicioso que corra en esa página puede leer el número antes de que se tokenice. Lo que lo limita es una cabecera Content-Security-Policy, y esa la manda el servidor del comercio, no el SDK. Ninguno de los tres prototipos la manda: son demostraciones contra los sandboxes, no plantillas para producción. Joan lo decidió así el 19 de octubre de 2026.
+
+**El SDK tampoco decide el monto: cobra lo que se le pide.** En el prototipo C, el monto lo calcula el navegador.
+
+Lo que un comercio tiene que agregar, con la CSP medida, está en la [guía de implementación](../03-sdk/4-guia-de-implementacion.md) §9 (punto 114 del `architecture-log.md`).
 
 **Los datos que exige cada pasarela varían, y el SDK no los puede inventar.** Mercado Pago exige dirección IP del pagador, teléfono con indicativo separado y dirección para PSE; Wompi no. El SDK unifica el modelo, pero si la pasarela pide un dato, ese dato tiene que existir. Lo que hace es fallar temprano y con un mensaje claro —`INVALID_REQUEST` listando qué falta— en lugar de mandar una petición incompleta y traducir un error remoto ambiguo.
 
