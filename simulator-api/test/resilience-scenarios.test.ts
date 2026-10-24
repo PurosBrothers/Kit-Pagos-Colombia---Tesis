@@ -257,7 +257,8 @@ describe("Failure and Resilience Scenario Integration (Issue #65)", () => {
         },
       };
 
-      it("Business rejection (DECLINED) returns HTTP 201 with transactionStatus DECLINED", async () => {
+      // Kushki rechaza con 400 y el motivo en `details`, medido el 24 de octubre de 2026 (punto 122).
+      it("Business rejection (DECLINED) returns HTTP 400 with the bank's code in details", async () => {
         const app = buildApp();
         const res = await app.inject({
           method: "POST",
@@ -266,8 +267,8 @@ describe("Failure and Resilience Scenario Integration (Issue #65)", () => {
           payload: kushkiBody,
         });
 
-        expect(res.statusCode).toBe(201);
-        expect(res.json().details.transactionStatus).toBe("DECLINED");
+        expect(res.statusCode).toBe(400);
+        expect(res.json().details.responseCode).toBe("017");
         await app.close();
       });
 

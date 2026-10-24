@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { DECLINED_MESSAGE, KushkiCardDecline } from "./testCards";
 import {
   KushkiBank,
   KushkiChargeResponse,
   KushkiCreateChargeRequestBody,
+  KushkiDeclinedChargeError,
   KushkiTransactionStatus,
   KushkiTransferInitResponse,
   KushkiTransferStatusResponse,
@@ -79,15 +81,38 @@ export class KushkiChargeMockFactory {
   }
 
   /**
-   * Construye una respuesta de rechazo. Deliberadamente con el mismo shape
-   * y el mismo código HTTP que una aprobada: es el escenario que da valor
-   * a la prueba, porque un adaptador que decide éxito mirando el status
-   * HTTP en vez del cuerpo va a reportar este rechazo como aprobado.
+   * El registro de un cobro rechazado, con la misma forma que uno aprobado y `DECLINED`. Es lo
+   * que se guarda para la consulta; lo que responde la creación es `buildDeclinedChargeError()`.
    */
   buildDeclinedResponse(
     requestBody: KushkiCreateChargeRequestBody,
   ): KushkiChargeResponse {
     return this.buildResponse(requestBody, "DECLINED");
+  }
+
+  /**
+   * El `400` con el que Kushki responde un cobro rechazado (medido el 24 de octubre de 2026,
+   * punto 122). Antes el mock lo respondía con `201` y `DECLINED` en el cuerpo, porque se creía
+   * que Kushki nunca usaba el status HTTP para un rechazo; la cuenta UAT aprobaba todo y no se
+   * había podido observar. El identificador es el del registro guardado, para que la consulta
+   * y el disparo de su webhook lo encuentren.
+   */
+  buildDeclinedChargeError(
+    record: KushkiChargeResponse,
+    decline: KushkiCardDecline,
+  ): KushkiDeclinedChargeError {
+    return {
+      code: decline.responseCode,
+      message: DECLINED_MESSAGE,
+      details: {
+        ticketNumber: "",
+        transactionId: record.ticketNumber,
+        responseCode: decline.responseCode,
+        responseText: decline.responseText,
+        approvedTransactionAmount: 0,
+      },
+      transactionReference: record.transactionReference,
+    };
   }
 
   buildInitializedResponse(
