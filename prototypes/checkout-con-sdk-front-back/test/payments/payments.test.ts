@@ -588,6 +588,34 @@ describe("payments module (kit-pagos-colombia)", () => {
     it("should name its missing keys when no gateway can charge in the sandbox", () => {
       expect(() => createPayments({})).toThrow("Kushki: KUSHKI_PUBLIC_MERCHANT_ID, KUSHKI_PRIVATE_MERCHANT_ID");
     });
+
+    // El SDK 0.7.0-rc.2 devuelve el 400 de un rechazo del banco como DECLINED con su motivo (punto 122).
+    it("should hand the skeleton the SDK's rejection reason, with its category", async () => {
+      mockCreatePayment.mockResolvedValue({
+        outcome: "TRANSACTION",
+        transaction: {
+          ...fakeTransaction("883641052193877226", "DECLINED"),
+          rejectionReason: { rejectionCode: "021", rejectionCategory: "INSUFFICIENT_FUNDS" },
+        },
+      });
+
+      const snapshot = await createPayments(KUSHKI_KEYS).createPayment({ ...cardRequest, gateway: "kushki" });
+
+      expect(snapshot).toEqual({
+        transactionId: "883641052193877226",
+        status: "DECLINED",
+        nativeStatus: "DECLINED",
+        declineReason: { code: "021", category: "INSUFFICIENT_FUNDS" },
+      });
+    });
+
+    it("should not invent a reason for a decline the SDK gives without one", async () => {
+      mockCreatePayment.mockResolvedValue({ outcome: "TRANSACTION", transaction: fakeTransaction("tx-2", "DECLINED") });
+
+      const snapshot = await createPayments(KUSHKI_KEYS).createPayment({ ...cardRequest, gateway: "kushki" });
+
+      expect(snapshot).not.toHaveProperty("declineReason");
+    });
   });
 
   describe("Rapyd", () => {

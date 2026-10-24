@@ -13,6 +13,7 @@ import {
 import type { TransactionStatus, WebhookEvent } from "kit-pagos-colombia";
 import {
   CreatePaymentRequest,
+  DeclineCategory,
   IncomingWebhook,
   MerchantPaymentStatus,
   PaymentSnapshot,
@@ -222,15 +223,23 @@ function toMerchantStatus(status: TransactionStatus): MerchantPaymentStatus {
   return "DECLINED";
 }
 
+/**
+ * La transacción del SDK en el puerto. El motivo del rechazo lo normaliza el SDK, con el código
+ * de la pasarela y su categoría (`rejectionReason`), y pasa tal cual: las categorías del puerto
+ * son las suyas.
+ */
 function toSnapshot(transaction: {
   gatewayTransactionId: { value: string };
   getStatus(): TransactionStatus;
   rawStatus: string;
+  rejectionReason?: { rejectionCode: string; rejectionCategory: DeclineCategory };
 }): PaymentSnapshot {
+  const reason = transaction.rejectionReason;
   return {
     transactionId: transaction.gatewayTransactionId.value,
     status: toMerchantStatus(transaction.getStatus()),
     nativeStatus: transaction.rawStatus,
+    ...(reason ? { declineReason: { code: reason.rejectionCode, category: reason.rejectionCategory } } : {}),
   };
 }
 
