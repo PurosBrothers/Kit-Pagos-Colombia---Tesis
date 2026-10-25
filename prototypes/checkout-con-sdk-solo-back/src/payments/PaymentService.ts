@@ -27,9 +27,12 @@ export interface ProcessPaymentInput {
     documentType: string;
     documentNumber: string;
     phone: string;
+    /** La dirección la escribe el comprador; Mercado Pago la exige para PSE. */
     streetName?: string;
     streetNumber?: string;
+    neighborhood?: string;
     city?: string;
+    zipCode?: string;
   };
   method:
     | {
@@ -65,6 +68,31 @@ export interface PaymentStatusResponse {
   isApproved: boolean;
   isPending: boolean;
   isFinal: boolean;
+  rejectionReason?: {
+    rejectionCode: string;
+    rejectionCategory: string;
+  };
+}
+
+/** El estado del comercio, como lo dice el SDK. */
+export type MerchantStatus = "APPROVED" | "DECLINED" | "PENDING";
+
+/**
+ * Traduce el estado del SDK al del comercio. `DECLINED`, `EXPIRED`, `VOIDED` y `ERROR` comparten el
+ * desenlace: el pago no se completó. Antes se mostraban como `PENDING`, y la página consultaba un
+ * pago que ya no iba a cambiar. El valor exacto queda en `nativeStatus`.
+ */
+export function toMerchantStatus(status: string): MerchantStatus {
+  if (status === "APPROVED") return "APPROVED";
+  if (status === "PENDING") return "PENDING";
+  return "DECLINED";
+}
+
+/** Los cinco campos de la dirección, o ninguno: el SDK no recibe una dirección a medias ni inventada. */
+function payerAddress(payer: ProcessPaymentInput["payer"]) {
+  const { streetName, streetNumber, neighborhood, city, zipCode } = payer;
+  if (!streetName || !streetNumber || !neighborhood || !city || !zipCode) return undefined;
+  return { streetName, streetNumber, neighborhood, city, zipCode };
 }
 
 export class PaymentService {
@@ -114,10 +142,12 @@ export class PaymentService {
         [Gateway.KUSHKI]: {
           publicKey: creds.kushki.publicMerchantId,
           privateKey: creds.kushki.privateMerchantId,
+          webhookSecret: creds.kushki.webhookSecret,
         },
         [Gateway.RAPYD]: {
           publicKey: creds.rapyd.accessKey,
           privateKey: creds.rapyd.secretKey,
+          webhookUrl: creds.rapyd.webhookUrl,
         },
       },
       // Ambiente: SANDBOX por defecto, o SIMULATOR si se especificó explícitamente
@@ -159,9 +189,9 @@ export class PaymentService {
     const gateway = this.parseGateway(input.gateway);
     const sdk = this.getSdk(gateway);
 
-    const nameParts = input.payer.fullName.trim().split(" ");
-    const firstName = nameParts[0] || "Cliente";
-    const lastName = nameParts.slice(1).join(" ") || "Mate";
+    const [firstName, ...rest] = input.payer.fullName.trim().split(/\s+/);
+    const lastName = rest.join(" ") || firstName;
+    const address = payerAddress(input.payer);
 
     const payer = new Payer({
       email: input.payer.email,
@@ -172,13 +202,7 @@ export class PaymentService {
       documentNumber: input.payer.documentNumber,
       phone: input.payer.phone,
       phoneAreaCode: "57",
-      address: {
-        streetName: input.payer.streetName || "Carrera 7",
-        streetNumber: input.payer.streetNumber || "32-16",
-        city: input.payer.city || "Bogotá",
-        zipCode: "110111",
-        neighborhood: "Chapinero",
-      },
+      ...(address ? { address } : {}),
     });
 
     let paymentMethod: PaymentMethod;
@@ -193,19 +217,9 @@ export class PaymentService {
       });
     }
 
-    // NOTA TÉCNICA (Mercado Pago PSE):
-    // La API de Orders de Mercado Pago rechaza con HTTP 402 ("processing_error") si callback_url
-    // contiene "localhost" o "127.0.0.1". Sustituimos el host por "localtest.me" (que en cualquier
-    // sistema operativo resuelve por DNS público a 127.0.0.1) permitiendo la redirección local.
-    let effectiveReturnUrl = input.returnUrl;
-    if (
-      gateway === Gateway.MERCADOPAGO &&
-      (effectiveReturnUrl.includes("localhost") || effectiveReturnUrl.includes("127.0.0.1"))
-    ) {
-      effectiveReturnUrl = effectiveReturnUrl.replace("localhost", "localtest.me").replace("127.0.0.1", "localtest.me");
-    }
-
-    const returnUrlConfig = new ReturnUrlConfig(effectiveReturnUrl);
+    // La URL de retorno sale de PUBLIC_BASE_URL, que por omisión es `localtest.me`: Mercado Pago no
+    // acepta volver de un PSE a `localhost` (punto 120).
+    const returnUrlConfig = new ReturnUrlConfig(input.returnUrl);
 
     const result = await sdk.createPayment({
         amount: new Amount(input.amountInPesos.toFixed(2)),
@@ -230,9 +244,7 @@ export class PaymentService {
       }
 
       const tx = result.transaction;
-      const txStatus = tx.getStatus();
-      const status: "APPROVED" | "DECLINED" | "PENDING" =
-        txStatus === "APPROVED" ? "APPROVED" : txStatus === "DECLINED" ? "DECLINED" : "PENDING";
+      const status = toMerchantStatus(tx.getStatus());
 
       const rejection = tx.rejectionReason;
 
@@ -260,17 +272,18 @@ export class PaymentService {
     const sdk = this.getSdk(gateway);
 
     const tx = await sdk.getPaymentStatus(transactionId);
-    const txStatus = tx.getStatus();
-    const status: "APPROVED" | "DECLINED" | "PENDING" =
-      txStatus === "APPROVED" ? "APPROVED" : txStatus === "DECLINED" ? "DECLINED" : "PENDING";
+    const rejection = tx.rejectionReason;
 
     return {
       transactionId: tx.gatewayTransactionId.value,
-      status,
+      status: toMerchantStatus(tx.getStatus()),
       nativeStatus: tx.rawStatus,
       isApproved: tx.isApproved(),
       isPending: tx.isPending(),
       isFinal: tx.isFinal(),
+      ...(rejection
+        ? { rejectionReason: { rejectionCode: rejection.rejectionCode, rejectionCategory: rejection.rejectionCategory } }
+        : {}),
     };
   }
 

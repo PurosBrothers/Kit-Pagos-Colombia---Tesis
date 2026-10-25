@@ -1,5 +1,6 @@
+import { createHmac } from "node:crypto";
 import { Gateway, KitPagos } from "kit-pagos-colombia";
-import { PaymentService } from "../src/payments/PaymentService";
+import { PaymentService, toMerchantStatus } from "../src/payments/PaymentService";
 import { resolveConfig } from "../src/config";
 
 describe("PaymentService (SDK en Backend)", () => {
@@ -151,6 +152,105 @@ describe("PaymentService (SDK en Backend)", () => {
       expect(res.status).toBe("APPROVED");
       expect(res.isFinal).toBe(true);
     });
+  });
+
+  describe("la dirección del pagador", () => {
+    const basePayer = { fullName: "Mateo Gómez", email: "m@example.com", documentType: "CC", documentNumber: "123", phone: "3001234567" };
+
+    function captureSdkRequest() {
+      const mockSdk = {
+        createPayment: jest.fn().mockResolvedValue({
+          outcome: "REDIRECT_REQUIRED",
+          redirect: { redirectUrl: "https://banco.example", gatewayTransactionId: { value: "pse-1" }, rawStatus: "PENDING" },
+        }),
+      };
+      jest.spyOn(service, "getSdk").mockReturnValue(mockSdk as any);
+      return mockSdk;
+    }
+
+    it("no la inventa: sin los cinco campos, el pagador va sin dirección", async () => {
+      const mockSdk = captureSdkRequest();
+
+      await service.createPayment({
+        gateway: "MERCADOPAGO",
+        orderReference: "MATE-1",
+        amountInPesos: 28000,
+        returnUrl: "http://localtest.me:4200/?retorno=1&orderId=MATE-1",
+        payer: { ...basePayer, streetName: "Calle 85" },
+        method: { type: "PSE", bankCode: "1007" },
+      });
+
+      expect(mockSdk.createPayment.mock.calls[0][0].payer.address).toBeUndefined();
+    });
+
+    it("con los cinco campos, manda la que escribió el comprador", async () => {
+      const mockSdk = captureSdkRequest();
+      const address = { streetName: "Calle 85", streetNumber: "11-53", neighborhood: "El Retiro", city: "Bogotá", zipCode: "110221" };
+
+      await service.createPayment({
+        gateway: "MERCADOPAGO",
+        orderReference: "MATE-2",
+        amountInPesos: 28000,
+        returnUrl: "http://localtest.me:4200/?retorno=1&orderId=MATE-2",
+        payer: { ...basePayer, ...address },
+        method: { type: "PSE", bankCode: "1007" },
+      });
+
+      const sent = mockSdk.createPayment.mock.calls[0][0];
+      expect(sent.payer.address).toEqual(address);
+      expect(sent.returnUrlConfig.successUrl ?? sent.returnUrlConfig.url ?? JSON.stringify(sent.returnUrlConfig)).toContain("localtest.me");
+    });
+  });
+
+  describe("toMerchantStatus", () => {
+    it.each([
+      ["APPROVED", "APPROVED"],
+      ["PENDING", "PENDING"],
+      ["DECLINED", "DECLINED"],
+      ["EXPIRED", "DECLINED"],
+      ["VOIDED", "DECLINED"],
+      ["ERROR", "DECLINED"],
+    ])("traduce %s del SDK como %s: solo se consulta lo que puede cambiar", (sdkStatus, expected) => {
+      expect(toMerchantStatus(sdkStatus)).toBe(expected);
+    });
+  });
+
+  it("devuelve el motivo del rechazo al consultar, como un PSE de Kushki sin fondos", async () => {
+    const mockSdk = {
+      getPaymentStatus: jest.fn().mockResolvedValue({
+        getStatus: () => "DECLINED",
+        isApproved: () => false,
+        isPending: () => false,
+        isFinal: () => true,
+        gatewayTransactionId: { value: "tok-1" },
+        rawStatus: "declinedTransaction",
+        rejectionReason: { rejectionCode: "00011", rejectionCategory: "INSUFFICIENT_FUNDS" },
+      }),
+    };
+    jest.spyOn(service, "getSdk").mockReturnValue(mockSdk as any);
+
+    const res = await service.getPaymentStatus("KUSHKI", "tok-1");
+
+    expect(res.status).toBe("DECLINED");
+    expect(res.rejectionReason).toEqual({ rejectionCode: "00011", rejectionCategory: "INSUFFICIENT_FUNDS" });
+  });
+
+  it("le da al SDK el secreto de webhooks de Kushki: un aviso firmado sobre el cuerpo crudo verifica", () => {
+    const secret = "secreto-de-prueba-kushki";
+    const withSecret = new PaymentService({
+      ...config,
+      environment: "sandbox",
+      credentials: { ...config.credentials, kushki: { publicMerchantId: "pub", privateMerchantId: "priv", webhookSecret: secret } },
+    });
+    const rawBody = JSON.stringify({ ticket_number: "123456789012345678", transaction_status: "APPROVAL", amount: { subtotalIva0: 28000 } });
+    // El SDK lee `x-kushki-id` como la marca de tiempo del aviso y la compara con la hora actual.
+    const kushkiId = String(Math.floor(Date.now() / 1000));
+    const signature = createHmac("sha256", secret).update(`${rawBody}.${kushkiId}`).digest("hex");
+
+    const event = withSecret.validateWebhook("KUSHKI", rawBody, { "x-kushki-signature": signature, "x-kushki-id": kushkiId });
+
+    expect(event.gatewayTransactionId).toBe("123456789012345678");
+    expect(event.rawStatus).toBe("APPROVAL");
   });
 
   describe("validateWebhook", () => {

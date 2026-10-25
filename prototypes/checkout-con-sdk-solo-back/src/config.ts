@@ -15,7 +15,7 @@ export interface GatewayPublicConfig {
 export interface AppConfig {
   port: number;
   publicBaseUrl: string;
-  environment: "simulator" | "sandbox" | "production";
+  environment: "simulator" | "sandbox";
   simulatorBaseUrl: string;
   credentials: {
     wompi: {
@@ -32,10 +32,13 @@ export interface AppConfig {
     kushki: {
       publicMerchantId: string;
       privateMerchantId: string;
+      webhookSecret?: string;
     };
     rapyd: {
       accessKey: string;
       secretKey: string;
+      /** La URL exacta registrada en el panel de Rapyd: entra en la firma de sus webhooks. */
+      webhookUrl?: string;
     };
   };
 }
@@ -69,17 +72,20 @@ loadDotenvFromWorkspace();
 
 export function resolveConfig(): AppConfig {
   const port = Number(process.env.PORT || 4200);
-  const publicBaseUrl = process.env.PUBLIC_BASE_URL || `http://localhost:${port}`;
+  // `localtest.me` es un dominio público que resuelve a 127.0.0.1: Mercado Pago no deja volver de un
+  // PSE a `localhost`, y así el banco devuelve al comprador a esta máquina sin túnel (punto 120).
+  const publicBaseUrl = (process.env.PUBLIC_BASE_URL?.trim() || `http://localtest.me:${port}`).replace(/\/+$/, "");
 
   // ==========================================================================
   // CONFIGURACIÓN DE AMBIENTE:
   // - "sandbox" (POR DEFECTO): Apunta a las APIs oficiales de prueba de cada pasarela.
   // - "simulator" (EXPLÍCITO): Apunta al simulador local de la tesis (simulator-api).
-  // - "production": Apunta a los servidores de producción de cada pasarela.
+  // Como A y B, no cobra en producción: la página tokeniza contra los hosts de sandbox.
   // ==========================================================================
-  const rawEnv = (process.env.KIT_PAGOS_ENVIRONMENT || "sandbox").toLowerCase();
-  const environment: "simulator" | "sandbox" | "production" =
-    rawEnv === "simulator" ? "simulator" : rawEnv === "production" ? "production" : "sandbox";
+  const environment = (process.env.KIT_PAGOS_ENVIRONMENT?.trim() || "sandbox").toLowerCase();
+  if (environment !== "sandbox" && environment !== "simulator") {
+    throw new Error(`KIT_PAGOS_ENVIRONMENT tiene que ser sandbox o simulator, no «${environment}».`);
+  }
 
   // URL del simulador propio desarrollado para la tesis (simulator-api, típicamente en localhost:3000)
   const simulatorBaseUrl = process.env.SIMULATOR_SDK_BASE_URL || "http://localhost:3000";
@@ -106,10 +112,12 @@ export function resolveConfig(): AppConfig {
       kushki: {
         publicMerchantId: process.env.KUSHKI_PUBLIC_MERCHANT_ID ?? "",
         privateMerchantId: process.env.KUSHKI_PRIVATE_MERCHANT_ID ?? "",
+        webhookSecret: process.env.KUSHKI_WEBHOOK_SECRET,
       },
       rapyd: {
         accessKey: process.env.RAPYD_API_ACCESS_KEY ?? "",
         secretKey: process.env.RAPYD_API_SECRET_KEY ?? "",
+        webhookUrl: process.env.RAPYD_WEBHOOK_URL,
       },
     },
   };
@@ -122,7 +130,7 @@ export function getPublicGatewayConfigs(config: AppConfig): Record<string, Gatew
   return {
     [Gateway.WOMPI]: {
       gateway: Gateway.WOMPI,
-      name: "Wompi (Bancolombia)",
+      name: "Wompi",
       publicKey: config.credentials.wompi.publicKey,
       // ENDPOINT DE TOKENIZACIÓN EN FRONTEND:
       // - Simulador de Tesis: [SIMULADOR LOCAL] ${sim}/v1/sim/wompi/tokens/cards
@@ -148,7 +156,7 @@ export function getPublicGatewayConfigs(config: AppConfig): Record<string, Gatew
     },
     [Gateway.KUSHKI]: {
       gateway: Gateway.KUSHKI,
-      name: "Kushki Pagos",
+      name: "Kushki",
       publicKey: config.credentials.kushki.publicMerchantId,
       // ENDPOINT DE TOKENIZACIÓN EN FRONTEND:
       // - Simulador de Tesis: [SIMULADOR LOCAL] ${sim}/v1/sim/kushki/card/v1/tokens
@@ -162,7 +170,7 @@ export function getPublicGatewayConfigs(config: AppConfig): Record<string, Gatew
     },
     [Gateway.RAPYD]: {
       gateway: Gateway.RAPYD,
-      name: "Rapyd Payments",
+      name: "Rapyd",
       publicKey: config.credentials.rapyd.accessKey,
       tokenizationUrl: "", // Rapyd no tokeniza en navegador: usa checkout alojado (Hosted Checkout)
       supportsCard: true,

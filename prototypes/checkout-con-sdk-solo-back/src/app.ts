@@ -12,31 +12,39 @@ export interface AppOptions {
   orders?: OrderStore;
 }
 
+declare module "fastify" {
+  interface FastifyRequest {
+    /** El cuerpo exactamente como llegó por la red: Kushki y Rapyd firman esos bytes. */
+    rawBody?: string;
+  }
+}
+
 export function buildApp(options: AppOptions): FastifyInstance {
-  const app = Fastify({ logger: false });
+  // Detrás de un túnel, la IP del pagador llega en X-Forwarded-For, y Mercado Pago la exige para PSE.
+  const app = Fastify({ logger: false, trustProxy: true });
   const config = options.config;
   const payments = options.payments || new PaymentService(config);
   const orders = options.orders || new OrderStore();
 
-  // Middleware para capturar cuerpo crudo en webhooks
+  // El texto se guarda antes de parsear: si el webhook se verificara sobre el JSON vuelto a
+  // serializar, cualquier diferencia de espacios u orden rompería la firma.
   app.addContentTypeParser(
     ["application/json", "text/plain"],
     { parseAs: "string" },
-    (_req, body, done) => {
-      done(null, body);
+    (req, body, done) => {
+      const text = typeof body === "string" ? body : body.toString("utf8");
+      req.rawBody = text;
+      if (!String(req.headers["content-type"] ?? "").includes("application/json") || text.trim() === "") {
+        done(null, text);
+        return;
+      }
+      try {
+        done(null, JSON.parse(text));
+      } catch {
+        done(null, text);
+      }
     },
   );
-
-  // Hook para parsear JSON cuando corresponda
-  app.addHook("preValidation", async (req) => {
-    if (typeof req.body === "string" && req.headers["content-type"]?.includes("application/json")) {
-      try {
-        req.body = JSON.parse(req.body);
-      } catch {
-        // Dejar como string si no es JSON válido
-      }
-    }
-  });
 
   app.setErrorHandler((error: FastifyError, _request, reply) => {
     if (error.validation) {
