@@ -4347,7 +4347,86 @@ A, que integra a mano, tampoco lo trataba como rechazo: su `kushki.ts` lanzaba e
 - **El rechazo al tokenizar se quedó en el formulario**, por decisión de Joan: no hay orden todavía, y Kushki no manda el motivo en ese `400`.
 - **Rapyd no llega a la tienda con el motivo.** La tarjeta «Insufficient Funds» (`4111 1111 1111 1151`) en su página alojada muestra el error ahí mismo («Error processing card. Please add funds…»), deja reintentar y no devuelve al comprador. El checkout sigue en `NEW`, y la consulta no trae ningún pago. El `[51]` solo aplica cuando se consulta un pago `ERR`.
 
-**Estado:** Resuelto en código y medido en A y en B. Queda la publicación de `kit-pagos-colombia@0.7.0-rc.2` con la etiqueta `next`, de la que dependen los lockfiles de A, B y el simulador. El despliegue de Render toma la `0.7.0-rc.2` cuando este PR llegue a la rama que despliega; esa rama falta confirmarla en el panel.
+**Estado:** Resuelto en código y medido en A y en B. `kit-pagos-colombia@0.7.0-rc.2` se publicó el 24 de octubre de 2026 con la etiqueta `next`, y el #162 entró a `devops` ese día (`ee56fec`).
+
+**Render no desplegó el merge.** Un cobro de Kushki con `x-simulate-scenario: DECLINED` en `kit-pagos-colombia.onrender.com` respondió `201` antes del merge, 3 minutos después y 2 horas después (00:57Z del 25 de octubre, tras 33 s de arranque en frío); el simulador de `devops` responde `400 017`. Sin el panel no se sabe la causa:
+
+- GitHub no registra los despliegues de Render;
+- `render.yaml` no fija la rama, y la del repositorio por omisión es `main`;
+- `docs/02-arquitectura/4-despliegue-en-render-y-coleccion-postman.md` dice `devops`.
+
+No es una dependencia que exija una versión reciente: el repositorio no tiene `.npmrc`, y la CI construye el simulador con Node 20, el mismo de `render.yaml`. Queda confirmarlo en el panel.
+
+### 123. El prototipo D toma el aspecto y el comportamiento de pagos de A y B, y conserva su estructura (PR #163, issue #164)
+
+**Responsables:** Joshua (el prototipo) y Orduz (la revisión).
+
+**Contexto.** Joshua construyó D en el PR #163, el 21 de octubre de 2026, antes del #162. D cobra las cuatro pasarelas con `kit-pagos-colombia` solo en el servidor (`PaymentService.ts`), y la página tokeniza la tarjeta con `fetch`, sin `kit-pagos-colombia/browser`. El issue #164 fija lo que su revisión comprueba. Después del #162, el 24 de octubre, Joan pidió llevar `devops` a la rama de Joshua y unificar D con A y B en el diseño y en las versiones del SDK y la API.
+
+**Decisiones de Joan (24 de octubre de 2026):**
+
+- **La estructura se queda.** D conserva `PaymentService.ts`, su HTML estático y sus rutas `/api/*`. Toma el aspecto de A y B: la franja, «Este prototipo es», el catálogo con dibujos, el carrito y la página de la orden con su detalle técnico. No parte del esqueleto común, y `check-skeleton-parity.sh` no lo compara.
+- **Los cambios van en la rama de Joshua**, sobre su commit, y lo aprueba Henao.
+- **Se arreglan todos los defectos de funcionamiento**, con pruebas y medidos contra los sandboxes.
+- **El texto del PR lo escribimos nosotros** y lo revisa Joshua: por pasarela, cómo se captura la tarjeta y qué alcance de PCI DSS deja.
+
+**Lo que se arregló.** La versión: el `package-lock.json` enlazaba `../../sdk`, y `npm ci` no reproducía. D pasa a `kit-pagos-colombia@0.7.0-rc.2` del registro. Los defectos:
+
+| Defecto | Arreglo |
+|---|---|
+| La firma de los webhooks se verificaba sobre el JSON vuelto a serializar | Se verifica sobre el cuerpo crudo (`rawBody`) |
+| El historial guardaba el estado traducido del SDK | Guarda el nativo firmado (`rawStatus`, punto 118) |
+| El webhook de la tarjeta de Rapyd no encontraba su orden | La busca por `orderReference` cuando no la encuentra por la transacción |
+| `EXPIRED`, `VOIDED` y `ERROR` quedaban `PENDING` | `toMerchantStatus()`: solo `APPROVED` y `PENDING` se conservan; lo demás es `DECLINED` |
+| Se mandaba una dirección inventada | Los cinco campos que escribe el comprador, o ninguno |
+| Los webhooks llegaban a `/api/webhooks` | `/webhooks/<pasarela>`, como en A y B |
+| El SDK no recibía el secreto de Kushki ni la URL registrada de Rapyd | `KUSHKI_WEBHOOK_SECRET` y `RAPYD_WEBHOOK_URL` |
+| Un `PENDING` tardío pisaba el desenlace | Queda en el historial sin cambiar la orden |
+| El motivo del rechazo no llegaba | La orden guarda el `rejectionReason`, y la página muestra el texto de su categoría (punto 122) |
+| El aviso de Mercado Pago no trae el estado, y la orden quedaba `PENDING` | Ante un aviso pendiente, D consulta el pago, como B |
+| Un fallo al crear el pago registraba en la terminal y devolvía al navegador el cuerpo de la pasarela | Solo el código y el mensaje |
+| El monto lo decidía el navegador | Lo pone el servidor con su catálogo; del navegador cuentan el producto y la cantidad (punto 114) |
+| `KIT_PAGOS_ENVIRONMENT=production` decía «producción» y cobraba en el sandbox | Como A y B, solo `sandbox` o `simulator`; con otro valor no arranca |
+| `npm start` corría `dist/` sin compilar | `prestart` compila, como en A y B |
+| Mercado Pago necesitaba cambiar `localhost` por `localtest.me` | La tienda abre en `localtest.me` (punto 120) |
+
+**Cómo captura la tarjeta, y qué alcance deja.** Wompi, Mercado Pago y Kushki tokenizan desde un formulario de la tienda, con `fetch` a la API de cada pasarela. El PCI SSC pone ese caso en SAQ A-EP (SAQ Instructions and Guidelines v4.0.1 r1, p. 9). Las tres ofrecen campos alojados que permitirían aspirar a SAQ A:
+
+- el widget de Wompi;
+- los campos de Checkout API o los Bricks de Mercado Pago, a los que su tabla asigna SAQ A;
+- los Hosted Fields de Kushki, su camino recomendado para quien no tiene certificación PCI.
+
+Rapyd cobra en su página alojada, una redirección, y deja la tarjeta fuera de la tienda: SAQ A. El `README.md` de D cita cada fuente.
+
+- **Lo que se descartó:** cambiar a las librerías oficiales. Es la estructura que Joan decidió conservar, y D existe para mostrar el SDK sin módulo de navegador.
+- **El número no pasa por el servidor:** una prueba comprueba que la página solo le manda el token.
+
+**Lo medido contra los sandboxes**, en el navegador, el 24 y el 25 de octubre de 2026:
+
+| Pasarela | Tarjeta | PSE |
+|---|---|---|
+| Wompi | `PENDING` al crear, `APPROVED` con la consulta | Banco 1: `APPROVED` |
+| Mercado Pago | `APRO`: `APPROVED (processed)`. `FUND`: rechazo `insufficient_amount (INSUFFICIENT_FUNDS)` | «Banco Prueba PSE», vuelve a `localtest.me`: `APPROVED (processed)` |
+| Kushki | Aprobada: `APPROVED (APPROVAL)`, también con dos productos por $153.000, el monto del token. Sin fondos: rechazo `021 (INSUFFICIENT_FUNDS)` | «Kushki Bank» y vuelve; queda `initializedTransaction` |
+| Rapyd | Su página con 3DS: `APPROVED (CLO)` | 9 bancos; Success: `APPROVED (CLO)` |
+
+**Los webhooks, firmados por el simulador local**, con D en modo `simulator`:
+
+- **El PSE de las cuatro** verifica y actualiza la orden. Mercado Pago queda `APPROVED (processed)` porque D consulta el pago.
+- **La tarjeta de Rapyd** manda tres avisos, y los tres encuentran la orden por la referencia.
+- **Kushki** se probó con un secreto de prueba, el mismo en el simulador y en D: el `.env` no trae uno, porque no hubo acceso a su consola de UAT.
+
+Los webhooks reales del sandbox no se midieron en D; en A y B sí (punto 121). Se miden en el ensayo con ngrok del issue #165.
+
+**Lo que D sigue haciendo distinto, declarado en su `README.md`:**
+
+- ofrece las cuatro pasarelas aunque falten sus llaves;
+- no tiene la traza `[checkout]` en la terminal;
+- su umbral de ramas es 60 %;
+- usa la tokenización simple de Wompi (punto 81);
+- no manda el identificador de dispositivo de Mercado Pago (punto 78).
+
+**Estado:** Resuelto en la rama del #163 y medido. D entra en la matriz de prototipos de `.github/workflows/ci.yml` en el mismo PR, y lo aprueba Henao. Los webhooks reales de D quedan para el #165.
 
 ---
 
