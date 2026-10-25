@@ -6,8 +6,8 @@ export interface Product {
   detail: string;
   notes: string;
   price: number;
-  tag: string;
-  icon: string;
+  /** El dibujo de la tarjeta: el id de un `<symbol>` del sprite de `index.html`. */
+  art: string;
 }
 
 export const PRODUCTS: readonly Product[] = [
@@ -15,12 +15,11 @@ export const PRODUCTS: readonly Product[] = [
     id: "mate-tradicional",
     name: "Yerba Mate Tradicional Orgánica",
     subtitle: "El clásico equilibrio misionero",
-    origin: "Apostoles, Misiones",
+    origin: "Apóstoles, Misiones",
     detail: "Bolsa de lienzo kraft con cierre ziploc · 500 g",
     notes: "Hierbas silvestres, notas a pasto fresco y amargor aterciopelado de larga duración",
     price: 28_000,
-    tag: "Orgánica 100%",
-    icon: "🍃",
+    art: "art-yerba-tradicional",
   },
   {
     id: "mate-barbacua",
@@ -30,8 +29,7 @@ export const PRODUCTS: readonly Product[] = [
     detail: "Estacionamiento natural de 24 meses · 500 g",
     notes: "Toques tostados a roble y cedro, cuerpo denso, retrogusto complejo a frutos secos",
     price: 34_000,
-    tag: "Secado Artesanal",
-    icon: "🪵",
+    art: "art-yerba-barbacua",
   },
   {
     id: "mate-despalada",
@@ -41,8 +39,7 @@ export const PRODUCTS: readonly Product[] = [
     detail: "Molienda fina sin palo · 500 g",
     notes: "Intensa, espumosa, alta concentración mineral y máxima persistencia de infusión",
     price: 38_000,
-    tag: "Pura Hoja",
-    icon: "✨",
+    art: "art-yerba-despalada",
   },
   {
     id: "set-imperial",
@@ -52,8 +49,7 @@ export const PRODUCTS: readonly Product[] = [
     detail: "Calabaza seleccionada forrada en cuero vaqueta legítimo y bombilla cincelada",
     notes: "Base de cuatro patas reforzada con costuras manuales y virola cincelada a mano",
     price: 125_000,
-    tag: "Edición Maestra",
-    icon: "🧉",
+    art: "art-mate-imperial",
   },
   {
     id: "bombilla-cincelada",
@@ -63,8 +59,7 @@ export const PRODUCTS: readonly Product[] = [
     detail: "Acero inoxidable 304 · 19 cm · Desmontable",
     notes: "Diseño ergonómico curvo, fácil limpieza interior y cero retención de sedimentos",
     price: 32_000,
-    tag: "Inoxidable",
-    icon: "🥢",
+    art: "art-bombilla",
   },
 ];
 

@@ -53,14 +53,19 @@ describe("API Routes (Fastify)", () => {
     const res = await app.inject({ method: "GET", url: "/" });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("text/html");
-    expect(res.body).toContain("AUSTRAL MATE");
+    expect(res.body).toContain("Austral Mate");
+    // La misma vitrina que A y B: la franja, «Este prototipo es» y la página de la orden.
+    expect(res.body).toContain('class="demo-ribbon"');
+    expect(res.body).toContain("Este prototipo es");
+    expect(res.body).toContain("prototipo D de Kit Pagos Colombia");
+    expect(res.body).toContain("Detalle técnico de la orden");
   });
 
   it("GET /styles.css sirve los estilos CSS", async () => {
     const res = await app.inject({ method: "GET", url: "/styles.css" });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("text/css");
-    expect(res.body).toContain("--color-primary");
+    expect(res.body).toContain("--brand");
   });
 
   it("GET /checkout.js sirve el script del cliente", async () => {

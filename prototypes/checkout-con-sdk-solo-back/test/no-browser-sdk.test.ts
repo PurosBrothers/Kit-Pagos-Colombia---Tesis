@@ -11,6 +11,17 @@ describe("Verificación Arquitectónica: Cero SDK en el Frontend", () => {
     expect(checkoutJsContent).not.toContain("@kit-pagos");
   });
 
+  it("al servidor del comercio solo le manda el token de la tarjeta, nunca el número ni el CVC", () => {
+    const start = checkoutJsContent.indexOf("async function cardMethod");
+    const cardMethod = checkoutJsContent.slice(start, checkoutJsContent.indexOf('form.addEventListener("submit"', start));
+
+    expect(cardMethod.match(/return \{[^}]*\}/g)).toEqual([
+      'return { type: "CARD", installments }',
+      'return { type: "CARD", cardToken, installments }',
+    ]);
+    expect(checkoutJsContent).toContain("body: JSON.stringify({ gateway: gateway.id, items, payer, method })");
+  });
+
   it("garantiza que checkout.js contiene la tokenización nativa directa para las pasarelas", () => {
     // Wompi directo
     expect(checkoutJsContent).toContain("Wompi");

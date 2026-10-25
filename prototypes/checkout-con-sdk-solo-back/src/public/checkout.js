@@ -1,494 +1,156 @@
-// @ts-check
 /**
- * ============================================================================
- * AUSTRAL MATE — CHECKOUT CLIENT (SDK SOLO EN BACKEND)
- * ============================================================================
- * 
- * Este script corre 100% en el navegador del pagador.
- * 
- * REGLA ARQUITECTÓNICA DE LA TESIS:
- * - NO importa ni depende del módulo frontend del SDK.
- * - Realiza la tokenización de tarjeta DIRECTAMENTE contra los endpoints nativos
- *   de cada pasarela (Wompi, Mercado Pago, Kushki) utilizando fetch estándar.
- * - Para Rapyd, el cobro con tarjeta se realiza mediante Checkout Alojado (Hosted Page).
- * - Envía únicamente el token resultante al backend del comercio (POST /api/payments),
- *   donde el SDK de servidor orquesta el cobro.
+ * El script de «Austral Mate», el prototipo D.
+ *
+ * El SDK vive solo en el servidor. La página tokeniza la tarjeta con `fetch` contra la API pública de
+ * cada pasarela (o contra el simulador), sin el módulo de navegador de Kit Pagos, y al servidor de la
+ * tienda solo llega el token (POST /api/payments). Rapyd recibe la tarjeta en su propia página.
+ *
+ * La vitrina, el carrito y la página de la orden son las de A y B, para que las cuatro tiendas se vean
+ * iguales.
  */
+"use strict";
 
-// Estado global de la aplicación cliente
+const CART_KEY = "kit-pagos-prototipo-d:cart";
+const MAX_QUANTITY = 9;
+const POLL_INTERVAL_MS = 2500;
+const POLL_ATTEMPTS = 8;
+
+const pesos = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
+
+const RIBBONS = {
+  sandbox: "Tienda de demostración · cobra en el sandbox oficial de cada pasarela, sin dinero real",
+  simulator: "Tienda de demostración · cobra en la API de Simulación de Kit Pagos, sin dinero real",
+};
+
+const STATUS_LABELS = { APPROVED: "Aprobado", DECLINED: "Rechazado", PENDING: "Pendiente", ERROR: "Error técnico" };
+const SOURCE_LABELS = { creation: "Creación", query: "Consulta", webhook: "Webhook" };
+
+/** Lo que lee el comprador según el estado de su orden, como en A y B. */
+const RESULTS = {
+  APPROVED: { icon: "✓", title: "¡Gracias! Tu pago fue aprobado", detail: "Ya estamos empacando tu pedido. Te escribimos cuando salga para tu casa." },
+  DECLINED: { icon: "✕", title: "Tu pago fue rechazado", detail: "La pasarela no aprobó el pago. Puedes volver a intentarlo con otra tarjeta o con PSE." },
+  PENDING: { icon: "…", title: "Tu pago está en proceso", detail: "Estamos esperando la confirmación de la pasarela. Esta página se actualiza sola." },
+  ERROR: { icon: "!", title: "No pudimos procesar el pago", detail: "Un fallo técnico no dejó completar el pago, y no quedó decidido. Vuelve a intentarlo en unos minutos." },
+};
+
+/** El motivo de un rechazo, por categoría; `UNKNOWN` y los rechazos sin motivo conservan el texto general. */
+const DECLINE_DETAILS = {
+  INSUFFICIENT_FUNDS: "La tarjeta no tiene fondos suficientes. Puedes intentarlo con otra tarjeta o con PSE.",
+  INVALID_CARD_DATA: "El banco no aceptó los datos de la tarjeta. Revisa el número, la fecha y el código de seguridad, o intenta con otra tarjeta.",
+  CARD_RESTRICTED: "El banco tiene restringida esta tarjeta. Comunícate con tu banco, o intenta con otra tarjeta o con PSE.",
+  FRAUD_SUSPICION: "El pago no se aprobó por seguridad. Puedes intentarlo con otra tarjeta o con PSE.",
+  NETWORK_ERROR: "El banco no respondió y el pago no se aprobó. Vuelve a intentarlo en unos minutos.",
+  AUTHENTICATION_FAILED: "No se pudo confirmar que la tarjeta es tuya. Vuelve a intentarlo, o intenta con otra tarjeta.",
+  DUPLICATED_PAYMENT: "Ya hay un pago igual a este. Revisa tus pagos antes de intentarlo otra vez.",
+};
+
+/** La configuración pública que manda el servidor: el ambiente y, por pasarela, su llave pública y su URL de tokenización. */
 let appConfig = null;
 let products = [];
-let cart = {}; // { [productId]: quantity }
-let activeGateway = "WOMPI";
-let activeMethod = "CARD";
-let currentPollingTimer = null;
 
-// Helpers de selección del DOM
 function byId(id) {
   return document.getElementById(id);
 }
 
-function formatPesos(pesos) {
-  return new Intl.NumberFormat("es-CO", {
-    style: "currency",
-    currency: "COP",
-    maximumFractionDigits: 0,
-  }).format(pesos);
+function value(id) {
+  return byId(id).value.trim();
 }
 
 // ----------------------------------------------------------------------------
-// LOGS Y GAVETA DE INSPECCIÓN TÉCNICA
+// La traza del navegador, en la consola (F12) con [tienda D], como en A y B: cada llamada de la
+// página a la tienda y la tokenización, que sale directo a la pasarela. Nunca registra el cuerpo de
+// la petición, que lleva la tarjeta, ni una llave completa.
 // ----------------------------------------------------------------------------
-function logTrace(col, text) {
-  console.log(`[${col.toUpperCase()}]`, text);
-  const elementId = `trace-${col}-log`;
-  const el = byId(elementId);
-  if (el) {
-    const timestamp = new Date().toLocaleTimeString();
-    el.textContent = `[${timestamp}] ${text}`;
-  }
+const KEY_PATTERNS = [
+  [/\b(pub|prv)_(test|prod|stagtest)_[A-Za-z0-9]+/g, "$1_$2_…"],
+  [/\b(APP_USR|TEST)-[A-Za-z0-9-]+/g, "$1-…"],
+];
+
+function traceLine(...parts) {
+  console.info("[tienda D]", ...parts);
 }
 
-function initDrawer() {
-  const toggle = byId("drawer-toggle");
-  const body = byId("drawer-body");
-  const arrow = byId("drawer-arrow");
-
-  if (toggle && body && arrow) {
-    toggle.addEventListener("click", () => {
-      const isHidden = body.classList.contains("hidden");
-      if (isHidden) {
-        body.classList.remove("hidden");
-        arrow.textContent = "▼";
-      } else {
-        body.classList.add("hidden");
-        arrow.textContent = "▲";
-      }
-    });
-  }
+function describeCall(method, url) {
+  const parsed = new URL(url, window.location.href);
+  const sameOrigin = parsed.origin === window.location.origin;
+  const shown = sameOrigin ? parsed.pathname : `${parsed.host}${parsed.pathname}`;
+  const masked = KEY_PATTERNS.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), shown);
+  return sameOrigin
+    ? `navegador → tienda    ${method} ${masked}`
+    : `navegador → pasarela  ${method} ${masked} (directo, sin pasar por la tienda)`;
 }
 
-// ----------------------------------------------------------------------------
-// 1. CARGA INICIAL DE CONFIGURACIÓN Y PRODUCTOS
-// ----------------------------------------------------------------------------
-async function initApp() {
-  initDrawer();
-  setupCardPreview();
-
+const nativeFetch = window.fetch.bind(window);
+window.fetch = async (input, init = {}) => {
+  const url = typeof input === "string" ? input : input.url;
+  const method = (init.method || "GET").toUpperCase();
+  const started = performance.now();
   try {
-    // 1. Cargar Configuración pública
-    const configRes = await fetch("/api/config");
-    appConfig = await configRes.json();
-    
-    byId("env-text").textContent = `Ambiente: ${appConfig.environment.toUpperCase()}`;
-    logTrace("front", `Configuración cargada. Ambiente: ${appConfig.environment}`);
-
-    // 2. Cargar Catálogo de productos
-    const prodRes = await fetch("/api/products");
-    const prodData = await prodRes.json();
-    products = prodData.products || [];
-    renderCatalog();
-
-    // 3. Configurar eventos de pasarelas y métodos
-    setupGatewaySelector();
-    setupMethodTabs();
-    setupFormSubmission();
-
-    // 4. Agregar un producto inicial de muestra al carrito
-    if (products.length > 0) {
-      cart[products[0].id] = 1;
-      renderCart();
-    }
-
-    // 5. Cargar bancos para PSE de la pasarela activa
-    loadBanksForGateway(activeGateway);
-
-    // 6. Si volvemos del banco / checkout alojado, mostrar el resultado de esa orden
-    await handleReturnFromGateway();
-  } catch (err) {
-    console.error("Error inicializando la tienda:", err);
-    logTrace("front", `Error al inicializar: ${err.message}`);
+    const response = await nativeFetch(input, init);
+    traceLine(`${describeCall(method, url)} → ${response.status} · ${Math.round(performance.now() - started)} ms`);
+    return response;
+  } catch (error) {
+    traceLine(`${describeCall(method, url)} → sin respuesta: ${error.message}`);
+    throw error;
   }
+};
+
+async function readJson(response) {
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || `La tienda respondió ${response.status}`);
+  return body;
 }
 
-/**
- * Regreso desde PSE / Hosted Checkout: la URL trae ?retorno=1&orderId=...
- * Recupera la orden del backend y muestra el resultado, consultando el estado real
- * (KitPagos.getPaymentStatus) hasta que deje de estar PENDING.
- */
-async function handleReturnFromGateway() {
-  const params = new URLSearchParams(window.location.search);
-  const orderId = params.get("orderId");
-  if (params.get("retorno") !== "1" || !orderId) return;
-
+// ----------------------------------------------------------------------------
+// El carrito, en el almacenamiento del navegador
+// ----------------------------------------------------------------------------
+function loadCart() {
   try {
-    const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}`);
-    if (!res.ok) {
-      window.history.replaceState({}, "", window.location.pathname);
-      logTrace("front", `Orden ${orderId} no encontrada (las órdenes viven en memoria y se pierden al reiniciar el servidor).`);
-      return;
-    }
-    const { order } = await res.json();
-    const last = order.history[order.history.length - 1] || {};
-    activeGateway = order.gateway;
-    window.history.replaceState({}, "", window.location.pathname);
-    logTrace("front", `Regreso del banco. Orden ${order.id}, consultando estado real...`);
-    showResult({
-      orderId: order.id,
-      transactionId: order.transactionId,
-      status: order.status === "ERROR" ? "PENDING" : order.status,
-      nativeStatus: last.nativeStatus,
-    });
-    if (order.transactionId) {
-      // Consulta inmediata, sin esperar el primer ciclo de polling
-      const data = await checkStatusOnce(order.gateway, order.transactionId);
-      if (data && data.status === "PENDING") startStatusPolling(order.gateway, order.transactionId);
-    }
-  } catch (err) {
-    logTrace("front", `No se pudo recuperar la orden: ${err.message}`);
+    const parsed = JSON.parse(localStorage.getItem(CART_KEY) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
   }
 }
 
-// ----------------------------------------------------------------------------
-// 2. RENDER DEL CATÁLOGO DE YERBA MATE
-// ----------------------------------------------------------------------------
-function renderCatalog() {
-  const grid = byId("products-grid");
-  if (!grid) return;
-  grid.innerHTML = "";
+function saveCart(cart) {
+  if (Object.keys(cart).length === 0) localStorage.removeItem(CART_KEY);
+  else localStorage.setItem(CART_KEY, JSON.stringify(cart));
+}
 
-  byId("catalog-count").textContent = `${products.length} variedades`;
+function cartCount(cart) {
+  return Object.values(cart).reduce((count, quantity) => count + quantity, 0);
+}
 
-  products.forEach((prod) => {
-    const card = document.createElement("div");
-    card.className = "product-card";
-    card.innerHTML = `
-      <div class="product-top">
-        <div class="product-icon">${prod.icon}</div>
-        <span class="product-tag">${prod.tag}</span>
-      </div>
-      <h3 class="product-name">${prod.name}</h3>
-      <span class="product-subtitle">${prod.subtitle}</span>
-      <p class="product-notes">${prod.notes}</p>
-      <span class="product-origin">📍 ${prod.origin} · ${prod.detail}</span>
-      <div class="product-footer">
-        <span class="product-price">${formatPesos(prod.price)}</span>
-        <button type="button" class="btn-add-cart" data-id="${prod.id}">
-          <span>+ Agregar</span>
-        </button>
-      </div>
-    `;
+function renderCount(cart) {
+  byId("cart-count").textContent = String(cartCount(cart));
+}
 
-    const addBtn = card.querySelector(".btn-add-cart");
-    addBtn.addEventListener("click", () => {
-      cart[prod.id] = (cart[prod.id] || 0) + 1;
-      renderCart();
-    });
-
-    grid.appendChild(card);
-  });
+function element(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
 }
 
 // ----------------------------------------------------------------------------
-// 3. GESTIÓN DEL CARRITO DE COMPRAS
-// ----------------------------------------------------------------------------
-function renderCart() {
-  const cartEmpty = byId("cart-empty");
-  const cartContent = byId("cart-content");
-  const cartItemsList = byId("cart-items");
-  const cartCountBadge = byId("cart-badge-count");
-  const cartSubtotal = byId("cart-subtotal");
-  const cartTotal = byId("cart-total");
-  const btnTotalAmount = byId("btn-total-amount");
-  const submitBtn = byId("pay-submit-btn");
-
-  const items = Object.entries(cart)
-    .filter(([_, qty]) => qty > 0)
-    .map(([id, qty]) => {
-      const p = products.find((prod) => prod.id === id);
-      return { product: p, quantity: qty, subtotal: p ? p.price * qty : 0 };
-    })
-    .filter((item) => item.product !== undefined);
-
-  const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
-  const totalAmount = items.reduce((sum, item) => sum + item.subtotal, 0);
-
-  cartCountBadge.textContent = `${totalQty} ${totalQty === 1 ? "ítem" : "ítems"}`;
-
-  if (items.length === 0) {
-    cartEmpty.classList.remove("hidden");
-    cartContent.classList.add("hidden");
-    submitBtn.disabled = true;
-    btnTotalAmount.textContent = "$0 COP";
-    return;
-  }
-
-  cartEmpty.classList.add("hidden");
-  cartContent.classList.remove("hidden");
-  submitBtn.disabled = false;
-
-  cartItemsList.innerHTML = "";
-  items.forEach((item) => {
-    const li = document.createElement("li");
-    li.className = "cart-item";
-    li.innerHTML = `
-      <div class="item-info">
-        <span class="item-name">${item.product.name}</span>
-        <span class="item-unit-price">${formatPesos(item.product.price)} c/u</span>
-      </div>
-      <div class="item-qty-controls">
-        <button type="button" class="btn-qty" data-action="dec" data-id="${item.product.id}">−</button>
-        <span class="item-qty">${item.quantity}</span>
-        <button type="button" class="btn-qty" data-action="inc" data-id="${item.product.id}">+</button>
-      </div>
-      <span class="item-total">${formatPesos(item.subtotal)}</span>
-    `;
-
-    li.querySelector('[data-action="dec"]').addEventListener("click", () => {
-      if (cart[item.product.id] > 1) {
-        cart[item.product.id] -= 1;
-      } else {
-        delete cart[item.product.id];
-      }
-      renderCart();
-    });
-
-    li.querySelector('[data-action="inc"]').addEventListener("click", () => {
-      cart[item.product.id] = Math.min(9, cart[item.product.id] + 1);
-      renderCart();
-    });
-
-    cartItemsList.appendChild(li);
-  });
-
-  const formattedTotal = formatPesos(totalAmount);
-  cartSubtotal.textContent = formattedTotal;
-  cartTotal.textContent = formattedTotal;
-  btnTotalAmount.textContent = formattedTotal;
-}
-
-// ----------------------------------------------------------------------------
-// 4. CONFIGURACIÓN DE SELECTORES (PASARELAS Y MÉTODOS)
-// ----------------------------------------------------------------------------
-function setupGatewaySelector() {
-  const options = document.querySelectorAll(".gateway-option");
-  options.forEach((opt) => {
-    opt.addEventListener("click", () => {
-      options.forEach((o) => o.classList.remove("active"));
-      opt.classList.add("active");
-      const radio = opt.querySelector('input[type="radio"]');
-      radio.checked = true;
-      activeGateway = radio.value;
-
-      updateGatewayUi(activeGateway);
-      logTrace("front", `Pasarela cambiada a: ${activeGateway}`);
-    });
-  });
-}
-
-function updateGatewayUi(gateway) {
-  const tokenAlertDesc = byId("tokenization-desc");
-  const rapydHostedNotice = byId("rapyd-hosted-notice");
-  const cardFieldsInputs = byId("card-fields-inputs");
-  const cardPreview = byId("card-preview");
-  const tabPse = byId("tab-pse");
-
-  if (gateway === "RAPYD") {
-    // Rapyd usa hosted checkout para tarjeta, no tokeniza en browser
-    rapydHostedNotice.classList.remove("hidden");
-    cardFieldsInputs.classList.add("hidden");
-    cardPreview.classList.add("hidden");
-    tokenAlertDesc.textContent = "Rapyd redirige a su Hosted Checkout seguro. Cero datos de tarjeta en el cliente.";
-    // Rapyd: tarjeta por Hosted Checkout, pero PSE sí está soportado (lista de bancos co_pse_*)
-    tabPse.style.display = "block";
-  } else {
-    rapydHostedNotice.classList.add("hidden");
-    cardFieldsInputs.classList.remove("hidden");
-    cardPreview.classList.remove("hidden");
-    tabPse.style.display = "block";
-
-    if (gateway === "WOMPI") {
-      tokenAlertDesc.textContent = "Tokenización nativa directa contra endpoint de Wompi (POST /v1/tokens/cards).";
-      byId("card-number").value = "4242 4242 4242 4242";
-      byId("card-holder").value = "Mateo Gómez Silveira";
-      byId("card-month").value = "12";
-      byId("card-year").value = "30";
-      byId("card-cvc").value = "123";
-      byId("payer-name").value = "Mateo Gómez Silveira";
-      byId("payer-doc-type").value = "CC";
-      byId("payer-doc-num").value = "1098765432";
-      byId("card-number").dispatchEvent(new Event("input"));
-      byId("card-holder").dispatchEvent(new Event("input"));
-      byId("card-month").dispatchEvent(new Event("change"));
-    } else if (gateway === "MERCADOPAGO") {
-      tokenAlertDesc.textContent = "Tokenización nativa directa contra endpoint de Mercado Pago (POST /v1/card_tokens).";
-      // Autocompletar con tarjeta y titular APRO homologados para sandbox de Mercado Pago
-      byId("card-number").value = "5254 1336 7440 3564";
-      byId("card-holder").value = "APRO";
-      byId("card-month").value = "11";
-      byId("card-year").value = "30";
-      byId("card-cvc").value = "123";
-      byId("payer-name").value = "APRO";
-      byId("payer-doc-type").value = "CC";
-      byId("payer-doc-num").value = "123456789";
-      byId("card-number").dispatchEvent(new Event("input"));
-      byId("card-holder").dispatchEvent(new Event("input"));
-      byId("card-month").dispatchEvent(new Event("change"));
-    } else if (gateway === "KUSHKI") {
-      tokenAlertDesc.textContent = "Tokenización nativa directa contra endpoint de Kushki (POST /card/v1/tokens).";
-      byId("card-number").value = "4242 4242 4242 4242";
-      byId("card-holder").value = "Mateo Gómez Silveira";
-      byId("card-month").value = "12";
-      byId("card-year").value = "30";
-      byId("card-cvc").value = "123";
-      byId("payer-name").value = "Mateo Gómez Silveira";
-      byId("payer-doc-type").value = "CC";
-      byId("payer-doc-num").value = "1098765432";
-      byId("card-number").dispatchEvent(new Event("input"));
-      byId("card-holder").dispatchEvent(new Event("input"));
-      byId("card-month").dispatchEvent(new Event("change"));
-    }
-  }
-
-  // Si estamos en la pestaña PSE, recargar los bancos de esa pasarela
-  if (activeMethod === "PSE") {
-    loadBanksForGateway(gateway);
-  }
-}
-
-function setupMethodTabs() {
-  const tabs = document.querySelectorAll(".tab-btn");
-  tabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      const method = tab.getAttribute("data-method");
-      switchMethod(method);
-    });
-  });
-}
-
-function switchMethod(method) {
-  activeMethod = method;
-  document.querySelectorAll(".tab-btn").forEach((t) => {
-    if (t.getAttribute("data-method") === method) {
-      t.classList.add("active");
-    } else {
-      t.classList.remove("active");
-    }
-  });
-
-  const cardPanel = byId("card-panel");
-  const psePanel = byId("pse-panel");
-
-  if (method === "CARD") {
-    cardPanel.classList.remove("hidden");
-    psePanel.classList.add("hidden");
-  } else {
-    cardPanel.classList.add("hidden");
-    psePanel.classList.remove("hidden");
-    loadBanksForGateway(activeGateway);
-  }
-  logTrace("front", `Método seleccionado: ${method}`);
-}
-
-async function loadBanksForGateway(gateway) {
-  const bankSelect = byId("pse-bank");
-  if (!bankSelect) return;
-  bankSelect.innerHTML = '<option value="">Cargando lista oficial de bancos...</option>';
-
-  try {
-    const res = await fetch(`/api/banks?gateway=${gateway}`);
-    const data = await res.json();
-    if (data.banks && data.banks.length > 0) {
-      bankSelect.innerHTML = data.banks
-        .map((b) => `<option value="${b.code}">${b.name}</option>`)
-        .join("");
-      logTrace("back", `Bancos PSE cargados desde Backend (KitPagos.getPseBanks): ${data.banks.length} entidades.`);
-    } else {
-      bankSelect.innerHTML = '<option value="1">Banco de Pruebas PSE (Sandbox)</option>';
-    }
-  } catch (err) {
-    bankSelect.innerHTML = '<option value="1">Banco Unión de Pruebas (Mock)</option>';
-  }
-}
-
-// ----------------------------------------------------------------------------
-// 5. INTERACTIVIDAD DE LA TARJETA (PREVIEW Y FORMATEO)
-// ----------------------------------------------------------------------------
-function setupCardPreview() {
-  const numInput = byId("card-number");
-  const holderInput = byId("card-holder");
-  const monthSelect = byId("card-month");
-  const yearSelect = byId("card-year");
-
-  const numDisplay = byId("card-number-display");
-  const holderDisplay = byId("card-holder-display");
-  const expDisplay = byId("card-exp-display");
-  const brandDisplay = byId("card-brand-display");
-
-  numInput.addEventListener("input", (e) => {
-    let val = e.target.value.replace(/\D/g, "").slice(0, 16);
-    // Formatear en bloques de 4
-    let formatted = val.match(/.{1,4}/g)?.join(" ") || "";
-    e.target.value = formatted;
-    numDisplay.textContent = formatted || "•••• •••• •••• ••••";
-
-    // Detección de franquicia
-    if (val.startsWith("4")) {
-      brandDisplay.textContent = "VISA";
-    } else if (/^5[1-5]/.test(val)) {
-      brandDisplay.textContent = "MASTERCARD";
-    } else if (/^3[47]/.test(val)) {
-      brandDisplay.textContent = "AMEX";
-    } else {
-      brandDisplay.textContent = "CARD";
-    }
-  });
-
-  holderInput.addEventListener("input", (e) => {
-    holderDisplay.textContent = e.target.value.toUpperCase() || "TITULAR";
-  });
-
-  const updateExp = () => {
-    expDisplay.textContent = `${monthSelect.value}/${yearSelect.value}`;
-  };
-  monthSelect.addEventListener("change", updateExp);
-  yearSelect.addEventListener("change", updateExp);
-  updateExp();
-}
-
-// ----------------------------------------------------------------------------
-// 6. TOKENIZACIÓN NATIVA EN FRONTEND (SIN SDK)
+// La tokenización en el navegador, sin el SDK
 // ----------------------------------------------------------------------------
 /**
- * Tokeniza la tarjeta DIRECTAMENTE contra la API nativa de la pasarela.
- * Esta función demuestra que el navegador NO usa el SDK de navegador.
+ * Tokeniza la tarjeta directamente contra la API de la pasarela. El endpoint y la llave pública los
+ * manda el servidor en /api/config, según el ambiente: el sandbox oficial o el simulador.
  */
 async function tokenizeCardDirectly(gateway, cardData, totalAmountInPesos) {
   const gwConfig = appConfig?.gateways?.[gateway];
-  if (!gwConfig) {
-    throw new Error(`No hay configuración disponible para ${gateway}`);
-  }
-
+  if (!gwConfig) throw new Error(`No hay configuración disponible para ${gateway}`);
   const endpoint = gwConfig.tokenizationUrl;
   const pubKey = gwConfig.publicKey;
 
-  // NOTA DE ARQUITECTURA (Simulador vs Pasarelas Externas):
-  // El 'endpoint' lo provee el backend en /api/config según el ambiente activo:
-  // - En 'sandbox' (por defecto): Apunta a la API oficial de pruebas (sandbox.wompi.co, api.mercadopago.com, api-uat.kushkipagos.com).
-  // - En 'simulator': Apunta a NUESTRO simulador local de tesis (simulator-api en /v1/sim/{gateway}/...).
-  logTrace(
-    "front",
-    `[TOKENIZACIÓN NATIVA] Iniciando llamada directa a ${gateway} (${endpoint})...`
-  );
-
-  // 1. WOMPI NATIVO (POST /v1/tokens/cards o /v1/sim/wompi/tokens/cards)
+  // Wompi: POST /v1/tokens/cards con la llave pública en Authorization.
   if (gateway === "WOMPI") {
     const res = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${pubKey}`,
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${pubKey}` },
       body: JSON.stringify({
         number: cardData.number,
         cvc: cardData.cvc,
@@ -497,320 +159,416 @@ async function tokenizeCardDirectly(gateway, cardData, totalAmountInPesos) {
         card_holder: cardData.holder,
       }),
     });
-
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.data?.id) {
-      const errDetail = data.error?.messages ? JSON.stringify(data.error.messages) : data.error?.reason || res.statusText;
-      throw new Error(`Error tokenizando con Wompi: ${errDetail}`);
+      const reason = data.error?.messages ? JSON.stringify(data.error.messages) : data.error?.reason || res.statusText;
+      throw new Error(`Wompi rechazó la tarjeta: ${reason}`);
     }
-
-    logTrace("front", `[WOMPI TOKEN RECIBIDO]: ${data.data.id}`);
     return data.data.id;
   }
 
-  // 2. MERCADO PAGO NATIVO
+  // Mercado Pago: POST /v1/card_tokens con la llave pública en la URL.
   if (gateway === "MERCADOPAGO") {
-    const url = `${endpoint}?public_key=${encodeURIComponent(pubKey)}`;
-    const res = await fetch(url, {
+    const res = await fetch(`${endpoint}?public_key=${encodeURIComponent(pubKey)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         card_number: cardData.number,
         security_code: cardData.cvc,
         expiration_month: parseInt(cardData.expMonth, 10),
-        expiration_year: parseInt(`20${cardData.expYear}`, 10),
+        expiration_year: parseInt(cardData.expYear.length === 2 ? `20${cardData.expYear}` : cardData.expYear, 10),
         cardholder: {
           name: cardData.holder,
-          identification: {
-            type: cardData.docType,
-            number: cardData.docNumber,
-          },
+          identification: { type: cardData.docType, number: cardData.docNumber },
         },
       }),
     });
-
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.id) {
-      const msg = data.message || data.cause?.[0]?.description || res.statusText;
-      throw new Error(`Error tokenizando con Mercado Pago: ${msg}`);
+      throw new Error(`Mercado Pago rechazó la tarjeta: ${data.message || data.cause?.[0]?.description || res.statusText}`);
     }
-
-    logTrace("front", `[MERCADO PAGO TOKEN RECIBIDO]: ${data.id}`);
     return data.id;
   }
 
-  // 3. KUSHKI NATIVO
+  // Kushki: POST /card/v1/tokens con el Public-Merchant-Id. El token queda atado al monto del cobro.
   if (gateway === "KUSHKI") {
     const res = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Public-Merchant-Id": pubKey,
-      },
+      headers: { "Content-Type": "application/json", "Public-Merchant-Id": pubKey },
       body: JSON.stringify({
         card: {
           name: cardData.holder,
           number: cardData.number,
           cvv: cardData.cvc,
-          expiryMonth: cardData.expMonth,
-          expiryYear: cardData.expYear,
+          expiryMonth: cardData.expMonth.padStart(2, "0"),
+          expiryYear: cardData.expYear.slice(-2),
         },
         currency: "COP",
         totalAmount: totalAmountInPesos,
       }),
     });
-
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.token) {
-      const msg = data.message || res.statusText;
-      throw new Error(`Error tokenizando con Kushki: ${msg}`);
+      throw new Error(`Kushki rechazó la tarjeta: ${data.message || res.statusText}${data.code ? ` (${data.code})` : ""}`);
     }
-
-    logTrace("front", `[KUSHKI TOKEN RECIBIDO]: ${data.token}`);
     return data.token;
   }
 
-  // 4. RAPYD
-  if (gateway === "RAPYD") {
-    // No requiere token de navegador: cobrará por checkout alojado
-    return undefined;
-  }
+  // Rapyd no tokeniza en el navegador: el pago con tarjeta se hace en su página.
+  if (gateway === "RAPYD") return undefined;
 
-  throw new Error(`Pasarela ${gateway} no admite tokenización nativa en frontend.`);
+  throw new Error(`La pasarela ${gateway} no tokeniza en el navegador.`);
 }
 
 // ----------------------------------------------------------------------------
-// 7. ENVÍO DEL PAGO AL BACKEND DEL COMERCIO
+// La vitrina y el pedido
 // ----------------------------------------------------------------------------
-function setupFormSubmission() {
+function productCard(product) {
+  const item = element("li", "product");
+  const art = element("div", "product__art");
+  art.innerHTML = `<svg viewBox="0 0 200 220" preserveAspectRatio="xMidYMid slice" role="img"><use href="#${product.art}"></use></svg>`;
+  art.firstElementChild.setAttribute("aria-label", product.name);
+  const body = element("div", "product__body");
+  const buy = element("div", "product__buy");
+  const button = element("button", "add", "Agregar al pedido");
+  button.type = "button";
+  button.dataset.productId = product.id;
+  buy.append(element("span", "price", pesos.format(product.price)), button);
+  body.append(
+    element("span", "product__origin", product.origin),
+    element("h3", "product__title", product.name),
+    element("p", "product__maker", product.subtitle),
+    element("p", "product__detail", product.detail),
+    element("p", "product__blurb", product.notes),
+    buy,
+  );
+  item.append(art, body);
+  return item;
+}
+
+function setUpStore() {
   const form = byId("checkout-form");
-  const submitBtn = byId("pay-submit-btn");
-  const spinner = byId("btn-spinner");
+  const payButton = byId("pay-button");
+  const lines = byId("cart-lines");
+  const gatewaySelect = byId("gateway");
+  const byProductId = new Map(products.map((product) => [product.id, product]));
+  let cart = Object.fromEntries(
+    Object.entries(loadCart()).filter(([id, quantity]) => byProductId.has(id) && Number.isInteger(quantity) && quantity > 0),
+  );
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
+  byId("products").replaceChildren(...products.map(productCard));
+  for (const gateway of Object.values(appConfig.gateways)) {
+    const option = new Option(gateway.name, gateway.gateway);
+    option.dataset.hosted = String(gateway.isHosted);
+    gatewaySelect.append(option);
+  }
 
-    const items = Object.entries(cart)
-      .filter(([_, qty]) => qty > 0)
-      .map(([id, qty]) => {
-        const p = products.find((prod) => prod.id === id);
-        return {
-          productId: p.id,
-          productName: p.name,
-          quantity: qty,
-          unitPrice: p.price,
-          subtotal: p.price * qty,
-        };
-      });
+  const show = (text) => {
+    byId("message").textContent = text;
+  };
 
-    const totalAmount = items.reduce((sum, item) => sum + item.subtotal, 0);
-    if (totalAmount <= 0) {
-      alert("Por favor agrega al menos una hierba o accesorio al carrito.");
-      return;
+  function setQuantity(id, quantity) {
+    const next = { ...cart };
+    const clamped = Math.min(MAX_QUANTITY, Math.max(0, quantity));
+    if (clamped === 0) delete next[id];
+    else next[id] = clamped;
+    cart = next;
+    saveCart(cart);
+    render();
+  }
+
+  function lineItem(product, quantity) {
+    const item = element("li", "line");
+    const stepper = element("span", "stepper");
+    const less = element("button", "", "−");
+    less.type = "button";
+    less.setAttribute("aria-label", `Quitar un ${product.name}`);
+    less.addEventListener("click", () => setQuantity(product.id, quantity - 1));
+    const more = element("button", "", "+");
+    more.type = "button";
+    more.setAttribute("aria-label", `Agregar un ${product.name}`);
+    more.disabled = quantity >= MAX_QUANTITY;
+    more.addEventListener("click", () => setQuantity(product.id, quantity + 1));
+    stepper.append(less, element("span", "", String(quantity)), more);
+    item.append(
+      element("span", "line__name", product.name),
+      element("span", "line__price", pesos.format(product.price * quantity)),
+      element("span", "line__detail", `${pesos.format(product.price)} c/u`),
+      stepper,
+    );
+    return item;
+  }
+
+  function cartTotal() {
+    return products.reduce((sum, product) => sum + product.price * (cart[product.id] ?? 0), 0);
+  }
+
+  function render() {
+    const entries = products.filter((product) => cart[product.id] > 0);
+    const total = cartTotal();
+    lines.replaceChildren(...entries.map((product) => lineItem(product, cart[product.id])));
+    byId("cart-empty").hidden = entries.length > 0;
+    byId("cart-totals").hidden = entries.length === 0;
+    byId("subtotal").textContent = pesos.format(total);
+    byId("total").textContent = pesos.format(total);
+    form.hidden = entries.length === 0;
+    payButton.textContent = `Pagar ${pesos.format(total)}`;
+    for (const button of document.querySelectorAll(".add")) {
+      const inCart = (cart[button.dataset.productId] ?? 0) > 0;
+      button.classList.toggle("add--in-cart", inCart);
+      button.textContent = inCart ? "Agregar otro" : "Agregar al pedido";
     }
+    renderCount(cart);
+  }
 
-    submitBtn.disabled = true;
-    spinner.classList.remove("hidden");
+  for (const button of document.querySelectorAll(".add")) {
+    button.addEventListener("click", () => setQuantity(button.dataset.productId, (cart[button.dataset.productId] ?? 0) + 1));
+  }
 
-    const payer = {
-      fullName: byId("payer-name").value.trim(),
-      email: byId("payer-email").value.trim(),
-      phone: byId("payer-phone").value.trim(),
-      documentType: byId("payer-doc-type").value,
-      documentNumber: byId("payer-doc-num").value.trim(),
-    };
+  // Los bancos de PSE son de cada pasarela: se piden una vez por pasarela.
+  const banksByGateway = new Map();
 
-    let paymentMethodPayload;
+  function selectedMethod() {
+    return form.querySelector("input[name=method]:checked").value;
+  }
 
+  function selectedGateway() {
+    const option = gatewaySelect.selectedOptions[0];
+    return { id: gatewaySelect.value, name: option?.textContent ?? "", hosted: option?.dataset.hosted === "true" };
+  }
+
+  async function loadPseBanks(gatewayId) {
+    const select = byId("bankCode");
+    select.replaceChildren(new Option("Cargando bancos…", ""));
+    payButton.disabled = true;
     try {
-      if (activeMethod === "CARD") {
-        let cardToken;
-        if (activeGateway !== "RAPYD") {
-          const rawNum = byId("card-number").value.replace(/\D/g, "");
-          const cardData = {
-            number: rawNum,
-            holder: byId("card-holder").value.trim(),
-            expMonth: byId("card-month").value,
-            expYear: byId("card-year").value,
-            cvc: byId("card-cvc").value.trim(),
-            docType: payer.documentType,
-            docNumber: payer.documentNumber,
-          };
-
-          cardToken = await tokenizeCardDirectly(activeGateway, cardData, totalAmount);
-        }
-
-        paymentMethodPayload = {
-          type: "CARD",
-          cardToken,
-          installments: parseInt(byId("card-installments").value, 10) || 1,
-        };
-      } else {
-        // PSE
-        const bankCode = byId("pse-bank").value;
-        if (!bankCode) {
-          throw new Error("Por favor selecciona un banco para continuar con PSE.");
-        }
-        paymentMethodPayload = {
-          type: "PSE",
-          bankCode,
-          personType: byId("pse-person-type").value,
-        };
+      if (!banksByGateway.has(gatewayId)) {
+        const { banks } = await readJson(await fetch(`/api/banks?gateway=${encodeURIComponent(gatewayId)}`));
+        banksByGateway.set(gatewayId, banks);
       }
+      if (gatewaySelect.value !== gatewayId) return;
+      select.replaceChildren(...banksByGateway.get(gatewayId).map((bank) => new Option(bank.name, bank.code)));
+      payButton.disabled = false;
+    } catch (error) {
+      show(`No se pudo cargar la lista de bancos: ${error.message}`);
+    }
+  }
 
-      // Despacho seguro al backend del comercio
-      logTrace("back", `[POST /api/payments] Enviando orden a backend con token efímero...`);
+  /** Lo que se ve depende del medio y de la pasarela: Rapyd recibe la tarjeta en su página. */
+  function showMethod() {
+    show("");
+    const isPse = selectedMethod() === "PSE";
+    const hosted = selectedGateway().hosted;
+    byId("card-fields").hidden = isPse || hosted;
+    byId("hosted-card").hidden = isPse || !hosted;
+    byId("pse-fields").hidden = !isPse;
+    if (isPse) loadPseBanks(gatewaySelect.value);
+    else payButton.disabled = false;
+  }
 
-      const res = await fetch("/api/payments", {
+  form.addEventListener("change", (event) => {
+    if (event.target.name === "method" || event.target.name === "gateway") showMethod();
+  });
+
+  form.addEventListener("input", () => {
+    byId("buyer-summary").textContent = `${value("fullName")} · ${value("email")}`;
+  });
+
+  async function cardMethod(gateway) {
+    const installments = Number(value("installments")) || 1;
+    if (gateway.hosted) {
+      traceLine(`tarjeta: ${gateway.name} la recibe en su propia página; la tienda no la ve`);
+      return { type: "CARD", installments };
+    }
+    traceLine("tarjeta: la página la tokeniza con fetch, sin el SDK de navegador; al servidor solo llega el token");
+    const cardToken = await tokenizeCardDirectly(
+      gateway.id,
+      {
+        number: value("cardNumber").replace(/\D/g, ""),
+        holder: value("cardHolder"),
+        expMonth: value("expMonth"),
+        expYear: value("expYear"),
+        cvc: value("cvc"),
+        docType: value("documentType"),
+        docNumber: value("documentNumber"),
+      },
+      cartTotal(),
+    );
+    return { type: "CARD", cardToken, installments };
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    show("");
+    payButton.disabled = true;
+    payButton.textContent = "Procesando el pago…";
+    try {
+      const gateway = selectedGateway();
+      const method =
+        selectedMethod() === "PSE"
+          ? { type: "PSE", bankCode: value("bankCode"), personType: value("personType") }
+          : await cardMethod(gateway);
+      // El servidor pone los precios y el monto con su catálogo.
+      const items = products
+        .filter((product) => cart[product.id] > 0)
+        .map((product) => ({ productId: product.id, quantity: cart[product.id] }));
+      const payer = {
+        fullName: value("fullName"),
+        email: value("email"),
+        documentType: value("documentType"),
+        documentNumber: value("documentNumber"),
+        phone: value("phone"),
+        streetName: value("streetName"),
+        streetNumber: value("streetNumber"),
+        neighborhood: value("neighborhood"),
+        city: value("city"),
+        zipCode: value("zipCode"),
+      };
+      traceLine(`pagar ${cartCount(cart)} ${cartCount(cart) === 1 ? "producto" : "productos"} con ${method.type === "PSE" ? "PSE" : "tarjeta"} por ${gateway.name}`);
+      const response = await fetch("/api/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          gateway: activeGateway,
-          items,
-          amountInPesos: totalAmount,
-          payer,
-          method: paymentMethodPayload,
-        }),
+        body: JSON.stringify({ gateway: gateway.id, items, payer, method }),
       });
-
-      const paymentResult = await res.json();
-      if (!res.ok) {
-        throw new Error(paymentResult.error || `Fallo en el servidor: HTTP ${res.status}`);
-      }
-
-      logTrace("sdk", `[SDK EN BACKEND]: Pago creado exitosamente. Status: ${paymentResult.status}, TX: ${paymentResult.transactionId}`);
-      showResult(paymentResult);
-    } catch (err) {
-      alert(`No se pudo procesar el pago: ${err.message}`);
-      logTrace("front", `Error procesando pago: ${err.message}`);
-      submitBtn.disabled = false;
-      spinner.classList.add("hidden");
+      const body = await response.json().catch(() => ({}));
+      // Un fallo técnico también crea la orden, en ERROR: se muestra como en A y B.
+      if (!body.orderId) throw new Error(body.error || `La tienda respondió ${response.status}`);
+      // El carrito se queda hasta que la orden se apruebe: si el pago se rechaza, se reintenta sin armarlo otra vez.
+      traceLine(body.redirectUrl ? `redirigiendo a otra página para pagar: ${new URL(body.redirectUrl).host}` : `abriendo la orden ${body.orderId}`);
+      window.location.assign(body.redirectUrl || `/?orden=${encodeURIComponent(body.orderId)}`);
+    } catch (error) {
+      show(`No se pudo completar el pago: ${error.message}`);
+      payButton.disabled = false;
+      render();
     }
   });
+
+  render();
+  showMethod();
 }
 
 // ----------------------------------------------------------------------------
-// 8. RESULTADO, REDIRECCIÓN Y POLLING
+// La página de la orden, como en A y B
 // ----------------------------------------------------------------------------
-function showResult(result) {
-  byId("checkout-section").classList.add("hidden");
-  const resultCard = byId("result-card");
-  resultCard.classList.remove("hidden");
+function declineText(reason) {
+  return reason ? `Rechazo ${reason.rejectionCode} (${reason.rejectionCategory})` : "";
+}
 
-  byId("res-order-id").textContent = result.orderId || "-";
-  byId("res-tx-id").textContent = result.transactionId || "-";
-  byId("res-gateway").textContent = activeGateway;
-  byId("res-native-status").textContent = result.nativeStatus || "-";
+function renderOrder(order) {
+  const result = RESULTS[order.status] ?? RESULTS.PENDING;
+  const category = order.status === "DECLINED" ? order.rejectionReason?.rejectionCategory : undefined;
+  const gatewayName = appConfig.gateways[order.gateway]?.name ?? order.gateway;
+  byId("order-result").className = `result__card result--${order.status}`;
+  byId("order-result").dataset.status = order.status;
+  byId("result-icon").textContent = result.icon;
+  byId("result-title").textContent = result.title;
+  byId("order-detail").textContent = (category && DECLINE_DETAILS[category]) || result.detail;
+  const ref = byId("result-ref");
+  ref.replaceChildren(
+    `Orden ${order.id} · ${order.method === "CARD" ? "Tarjeta" : "PSE"} con ${gatewayName} · Estado: `,
+    element("strong", "", STATUS_LABELS[order.status] ?? order.status),
+  );
+  byId("result-lines").replaceChildren(
+    ...order.items.map((line) => {
+      const item = element("li", "line");
+      item.append(
+        element("span", "line__name", line.productName),
+        element("span", "line__price", pesos.format(line.subtotal)),
+        element("span", "line__detail", `${line.quantity} × ${pesos.format(line.unitPrice)}`),
+      );
+      return item;
+    }),
+  );
+  byId("result-total").textContent = pesos.format(order.amountInPesos);
+  byId("result-transaction").textContent = order.transactionId ?? "sin crear";
+  byId("result-history").replaceChildren(
+    ...order.history.map((entry) => {
+      const row = element("tr");
+      const detail = [declineText(entry.rejectionReason), entry.detail ?? ""].filter(Boolean).join(" · ");
+      for (const text of [entry.at, SOURCE_LABELS[entry.source] ?? entry.source, STATUS_LABELS[entry.status] ?? entry.status, entry.nativeStatus ?? "", detail]) {
+        row.append(element("td", "", text));
+      }
+      return row;
+    }),
+  );
+}
 
-  updateStatusBadge(result.status);
+async function readOrder(orderId) {
+  const { order } = await readJson(await fetch(`/api/orders/${encodeURIComponent(orderId)}`));
+  return order;
+}
 
-  const redirectBtn = byId("btn-redirect-bank");
-  if (result.redirectUrl) {
-    // Redirección inmediata (PSE / Hosted Checkout), sin pedir clic al usuario
-    redirectBtn.href = result.redirectUrl;
-    redirectBtn.style.display = "none";
-    byId("result-title").textContent = "Redirigiendo...";
-    byId("result-subtitle").textContent = "Te estamos llevando a la plataforma autorizada para completar tu pago.";
-    byId("result-icon").textContent = "🔄";
-    window.location.assign(result.redirectUrl);
+/** Le pregunta a la pasarela, por el SDK en el servidor, y vuelve a leer la orden. */
+async function refreshOrder(order) {
+  if (order.transactionId) {
+    const response = await fetch(`/api/payments/${encodeURIComponent(order.gateway)}/${encodeURIComponent(order.transactionId)}`);
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || `La tienda respondió ${response.status}`);
+    }
+  }
+  return readOrder(order.id);
+}
+
+async function setUpOrderPage(orderId) {
+  byId("store").hidden = true;
+  byId("order-view").hidden = false;
+  const message = byId("order-message");
+  renderCount(loadCart());
+  let order = await readOrder(orderId);
+  renderOrder(order);
+  traceLine(`orden ${order.id}: ${order.status}${order.status === "PENDING" ? "; la página la consulta sola" : ""}`);
+  if (order.status === "APPROVED") {
+    saveCart({});
+    renderCount({});
+  }
+
+  byId("refresh-order").addEventListener("click", async () => {
+    message.textContent = "Consultando…";
+    try {
+      order = await refreshOrder(order);
+      renderOrder(order);
+      message.textContent = "";
+    } catch (error) {
+      message.textContent = `No se pudo consultar el estado: ${error.message}`;
+    }
+  });
+
+  // Al volver del banco el pago suele seguir en proceso: se consulta solo hasta que cambie.
+  if (order.status !== "PENDING") return;
+  for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    try {
+      const next = await refreshOrder(order);
+      if (next.status !== order.status || next.history.length !== order.history.length) {
+        order = next;
+        renderOrder(order);
+        if (order.status === "APPROVED") saveCart({});
+      }
+      if (order.status !== "PENDING") return;
+    } catch {
+      // La siguiente vuelta lo intenta otra vez; el botón queda para hacerlo a mano.
+    }
+  }
+}
+
+async function main() {
+  appConfig = await readJson(await fetch("/api/config"));
+  byId("ribbon").textContent = RIBBONS[appConfig.environment] ?? RIBBONS.sandbox;
+  const params = new URLSearchParams(window.location.search);
+  // La vuelta del banco o de la página de Rapyd trae ?retorno=1&orderId=…; la creación, ?orden=….
+  const orderId = params.get("orden") || (params.get("retorno") === "1" ? params.get("orderId") : null);
+  if (orderId) {
+    await setUpOrderPage(orderId);
     return;
-  } else {
-    redirectBtn.style.display = "none";
   }
-
-  // Si está pendiente y tenemos ID de transacción, iniciar polling
-  if (result.status === "PENDING" && result.transactionId && !result.redirectUrl) {
-    startStatusPolling(activeGateway, result.transactionId);
-  } else if (result.status === "APPROVED") {
-    byId("result-title").textContent = "¡Pago Aprobado!";
-    byId("result-subtitle").textContent = "Tu pedido de hierbas de mate ha sido confirmado exitosamente.";
-    byId("result-icon").textContent = "🎉";
-    // Vaciar carrito
-    cart = {};
-    renderCart();
-  } else if (result.status === "DECLINED") {
-    byId("result-title").textContent = "Pago Rechazado";
-    byId("result-subtitle").textContent = "La pasarela no autorizó la transacción.";
-    byId("result-icon").textContent = "❌";
-  }
-
-  // Botón nueva compra
-  byId("btn-new-order").addEventListener("click", () => {
-    if (currentPollingTimer) clearInterval(currentPollingTimer);
-    resultCard.classList.add("hidden");
-    byId("checkout-section").classList.remove("hidden");
-    byId("pay-submit-btn").disabled = false;
-    byId("btn-spinner").classList.add("hidden");
-  });
-
-  // Botón reintentar consulta
-  byId("btn-recheck").addEventListener("click", () => {
-    if (result.transactionId) {
-      checkStatusOnce(activeGateway, result.transactionId);
-    }
-  });
+  ({ products } = await readJson(await fetch("/api/products")));
+  setUpStore();
 }
 
-function updateStatusBadge(status) {
-  const badge = byId("res-status-badge");
-  badge.className = `status-badge ${status}`;
-  badge.textContent = status;
-}
-
-async function checkStatusOnce(gateway, txId) {
-  try {
-    logTrace("sdk", `Consultando estado con KitPagos.getPaymentStatus('${txId}')...`);
-    const res = await fetch(`/api/payments/${gateway}/${txId}`);
-    const data = await res.json();
-    if (res.ok) {
-      byId("res-native-status").textContent = data.nativeStatus;
-      updateStatusBadge(data.status);
-      if (data.status === "APPROVED") {
-        byId("result-title").textContent = "¡Pago Aprobado!";
-        byId("result-subtitle").textContent = "Transacción confirmada por la pasarela.";
-        byId("result-icon").textContent = "✅";
-      } else if (data.status === "DECLINED") {
-        byId("result-title").textContent = "Pago Rechazado";
-        byId("result-icon").textContent = "❌";
-      }
-      return data;
-    }
-  } catch (err) {
-    console.warn("Fallo temporal consultando estado:", err);
-  }
-  return null;
-}
-
-function startStatusPolling(gateway, txId) {
-  let attempt = 0;
-  const maxAttempts = 10;
-  const progressBar = byId("progress-fill");
-
-  byId("result-title").textContent = "Esperando Confirmación...";
-  byId("result-subtitle").textContent = "Consultando el estado de la transacción en la pasarela...";
-
-  if (currentPollingTimer) clearInterval(currentPollingTimer);
-
-  currentPollingTimer = setInterval(async () => {
-    attempt += 1;
-    const pct = (attempt / maxAttempts) * 100;
-    progressBar.style.width = `${pct}%`;
-
-    const statusRes = await checkStatusOnce(gateway, txId);
-    if (statusRes && statusRes.status !== "PENDING") {
-      clearInterval(currentPollingTimer);
-      progressBar.style.width = "100%";
-      return;
-    }
-
-    if (attempt >= maxAttempts) {
-      clearInterval(currentPollingTimer);
-      byId("result-subtitle").textContent = "El pago continúa en validación asíncrona. Puedes consultar de nuevo más tarde.";
-    }
-  }, 1800);
-}
-
-// ----------------------------------------------------------------------------
-// INICIALIZACIÓN
-// ----------------------------------------------------------------------------
-window.addEventListener("DOMContentLoaded", initApp);
+main().catch((error) => {
+  traceLine(`no se pudo cargar la tienda: ${error.message}`);
+  const message = byId("order-view").hidden ? byId("message") : byId("order-message");
+  message.textContent = `No se pudo cargar la tienda: ${error.message}`;
+  byId("checkout-form").hidden = false;
+});
