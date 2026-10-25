@@ -156,7 +156,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        prototype: [checkout-sin-solucion, checkout-con-sdk-front-back]
+        prototype: [checkout-sin-solucion, checkout-con-sdk-front-back, checkout-con-sdk-solo-back]
     defaults:
       run:
         working-directory: ./prototypes/${{ matrix.prototype }}
