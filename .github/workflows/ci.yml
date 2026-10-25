@@ -216,5 +216,5 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check that only the payments module differs and that A does not use the SDK
+      - name: Check that only the payments module differs and that D does not use the SDK
         run: ./prototypes/check-skeleton-parity.sh
