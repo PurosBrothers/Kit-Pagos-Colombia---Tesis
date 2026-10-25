@@ -3,7 +3,7 @@ import { IncomingHttpHeaders } from "node:http";
 /**
  * El contrato entre el esqueleto común y el módulo de pagos de cada prototipo.
  *
- * Es lo único que el esqueleto sabe de los pagos. El prototipo A lo implementa con `fetch`
+ * Es lo único que el esqueleto sabe de los pagos. El prototipo D lo implementa con `fetch`
  * contra la API nativa de cada pasarela y el B con `kit-pagos-colombia`, cada uno en su
  * `src/payments/`. Desde el punto 117 los dos cubren las cuatro pasarelas, y el comprador elige
  * una en la tienda: cada operación recibe la pasarela con el `id` que dio `listGateways()`. El
@@ -31,7 +31,7 @@ export type MerchantPaymentStatus = "APPROVED" | "DECLINED" | "PENDING";
 
 /**
  * Por qué se rechazó un pago, en una categoría que el comprador puede entender sin conocer la
- * pasarela. Son las de `RejectionCategory` del SDK, para que A y B muestren lo mismo (punto 122).
+ * pasarela. Son las de `RejectionCategory` del SDK, para que B y D muestren lo mismo (punto 122).
  * `UNKNOWN` es un rechazo cuyo motivo la pasarela no informa, o cuyo código no corresponde a
  * ninguna categoría sin interpretarlo.
  */

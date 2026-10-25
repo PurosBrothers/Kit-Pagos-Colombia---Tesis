@@ -71,12 +71,12 @@ describe("checkout skeleton", () => {
       }
     });
 
-    it("should explain under the title that this is prototype A, which integrates without the SDK", async () => {
+    it("should explain under the title that this is prototype D, which integrates without the SDK", async () => {
       const res = await app.inject({ method: "GET", url: "/" });
 
       const afterTitle = res.body.slice(res.body.indexOf('id="catalog-title"'));
       expect(afterTitle.indexOf("Este prototipo es")).toBeLessThan(afterTitle.indexOf('class="products"'));
-      expect(res.body).toContain("prototipo A de Kit Pagos Colombia");
+      expect(res.body).toContain("prototipo D de Kit Pagos Colombia");
       expect(res.body).toContain("sin el SDK");
     });
 

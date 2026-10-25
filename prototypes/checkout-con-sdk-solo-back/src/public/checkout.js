@@ -1,11 +1,11 @@
 /**
- * El script de «Austral Mate», el prototipo D.
+ * El script de «Austral Mate», el prototipo A.
  *
  * El SDK vive solo en el servidor. La página tokeniza la tarjeta con `fetch` contra la API pública de
  * cada pasarela (o contra el simulador), sin el módulo de navegador de Kit Pagos, y al servidor de la
  * tienda solo llega el token (POST /api/payments). Rapyd recibe la tarjeta en su propia página.
  *
- * La vitrina, el carrito y la página de la orden son las de A y B, para que las cuatro tiendas se vean
+ * La vitrina, el carrito y la página de la orden son las de B y D, para que las cuatro tiendas se vean
  * iguales.
  */
 "use strict";
@@ -25,7 +25,7 @@ const RIBBONS = {
 const STATUS_LABELS = { APPROVED: "Aprobado", DECLINED: "Rechazado", PENDING: "Pendiente", ERROR: "Error técnico" };
 const SOURCE_LABELS = { creation: "Creación", query: "Consulta", webhook: "Webhook" };
 
-/** Lo que lee el comprador según el estado de su orden, como en A y B. */
+/** Lo que lee el comprador según el estado de su orden, como en B y D. */
 const RESULTS = {
   APPROVED: { icon: "✓", title: "¡Gracias! Tu pago fue aprobado", detail: "Ya estamos empacando tu pedido. Te escribimos cuando salga para tu casa." },
   DECLINED: { icon: "✕", title: "Tu pago fue rechazado", detail: "La pasarela no aprobó el pago. Puedes volver a intentarlo con otra tarjeta o con PSE." },
@@ -57,7 +57,7 @@ function value(id) {
 }
 
 // ----------------------------------------------------------------------------
-// La traza del navegador, en la consola (F12) con [tienda D], como en A y B: cada llamada de la
+// La traza del navegador, en la consola (F12) con [tienda A], como en B y D: cada llamada de la
 // página a la tienda y la tokenización, que sale directo a la pasarela. Nunca registra el cuerpo de
 // la petición, que lleva la tarjeta, ni una llave completa.
 // ----------------------------------------------------------------------------
@@ -67,7 +67,7 @@ const KEY_PATTERNS = [
 ];
 
 function traceLine(...parts) {
-  console.info("[tienda D]", ...parts);
+  console.info("[tienda A]", ...parts);
 }
 
 function describeCall(method, url) {
@@ -472,7 +472,7 @@ function setUpStore() {
         body: JSON.stringify({ gateway: gateway.id, items, payer, method }),
       });
       const body = await response.json().catch(() => ({}));
-      // Un fallo técnico también crea la orden, en ERROR: se muestra como en A y B.
+      // Un fallo técnico también crea la orden, en ERROR: se muestra como en B y D.
       if (!body.orderId) throw new Error(body.error || `La tienda respondió ${response.status}`);
       // El carrito se queda hasta que la orden se apruebe: si el pago se rechaza, se reintenta sin armarlo otra vez.
       traceLine(body.redirectUrl ? `redirigiendo a otra página para pagar: ${new URL(body.redirectUrl).host}` : `abriendo la orden ${body.orderId}`);
@@ -489,7 +489,7 @@ function setUpStore() {
 }
 
 // ----------------------------------------------------------------------------
-// La página de la orden, como en A y B
+// La página de la orden, como en B y D
 // ----------------------------------------------------------------------------
 function declineText(reason) {
   return reason ? `Rechazo ${reason.rejectionCode} (${reason.rejectionCategory})` : "";

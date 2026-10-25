@@ -18,7 +18,7 @@ app.listen({ port: config.port, host: "0.0.0.0" }, (err, address) => {
     console.error(err);
     process.exit(1);
   }
-  console.log(`Prototipo D (Austral Mate) en ${config.publicBaseUrl}, escuchando en ${address}.`);
+  console.log(`Prototipo A (Austral Mate) en ${config.publicBaseUrl}, escuchando en ${address}.`);
   console.log(`Webhooks en ${config.publicBaseUrl}/webhooks/<pasarela>: wompi, mercadopago, kushki y rapyd.`);
   console.log(
     config.environment === "simulator"

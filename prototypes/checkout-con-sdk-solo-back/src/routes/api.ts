@@ -61,7 +61,7 @@ export async function apiRoutes(app: FastifyInstance, options: ApiRoutesOptions)
     if (!body || !body.gateway || !body.payer || !body.method) {
       return reply.code(400).send({ error: "Faltan campos obligatorios en la orden de pago" });
     }
-    // El monto lo decide el servidor con los precios del catálogo, como en A y B (punto 114):
+    // El monto lo decide el servidor con los precios del catálogo, como en B y D (punto 114):
     // del navegador solo cuentan el producto y la cantidad.
     const cart = cartFrom(body.items);
     const lines = cartLines(cart);
@@ -192,7 +192,7 @@ export async function apiRoutes(app: FastifyInstance, options: ApiRoutesOptions)
     return reply.send({ order });
   });
 
-  // 7. Webhooks entrantes, en la misma ruta que A y B: es la que se registra en cada panel.
+  // 7. Webhooks entrantes, en la misma ruta que B y D: es la que se registra en cada panel.
   app.post(
     "/webhooks/:gateway",
     async (

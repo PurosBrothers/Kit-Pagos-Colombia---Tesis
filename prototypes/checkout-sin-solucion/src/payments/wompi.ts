@@ -12,7 +12,7 @@ import { paymentsEnvironment } from "../checkout/environment";
 import { GatewayModule, GatewayPayments, readEnv } from "./gateway";
 
 /**
- * Configuración de integración directa con Wompi (Prototipo A - Control).
+ * Configuración de integración directa con Wompi (Prototipo D - Control).
  * Se lee del entorno por omisión, sin valores de producción en el repositorio.
  */
 export interface WompiPaymentsConfig {
@@ -63,7 +63,7 @@ function mapWompiStatus(rawStatus: string): MerchantPaymentStatus {
 }
 
 /**
- * Módulo de pagos del Prototipo A (control): integración directa con `fetch`
+ * Módulo de pagos del Prototipo D (control): integración directa con `fetch`
  * contra la API nativa de Wompi, siguiendo su documentación oficial.
  */
 class WompiPaymentsAdapter implements GatewayPayments {
@@ -419,14 +419,14 @@ class WompiPaymentsAdapter implements GatewayPayments {
 }
 
 /**
- * Crea la integración directa con Wompi del prototipo A.
+ * Crea la integración directa con Wompi del prototipo D.
  */
 export function createWompiPayments(config?: Partial<WompiPaymentsConfig>): GatewayPayments {
   return new WompiPaymentsAdapter(config);
 }
 
 /**
- * Wompi en el registro de pasarelas del prototipo A (`index.ts`). El registro ya comprobó las
+ * Wompi en el registro de pasarelas del prototipo D (`index.ts`). El registro ya comprobó las
  * llaves del sandbox; aquí la configuración sale del entorno que recibió.
  */
 export const wompiModule: GatewayModule = {

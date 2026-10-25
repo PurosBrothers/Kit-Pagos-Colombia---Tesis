@@ -11,7 +11,7 @@ import {
 } from "../checkout/PaymentsPort";
 
 /**
- * Lo que integra a mano cada pasarela del prototipo A: las seis funciones del plan de
+ * Lo que integra a mano cada pasarela del prototipo D: las seis funciones del plan de
  * evaluación (§2) contra su API nativa. `index.ts` las reúne en el `PaymentsPort` del
  * esqueleto y les pasa la operación según la pasarela que eligió el comprador.
  */
@@ -24,7 +24,7 @@ export interface GatewayPayments {
   verifyWebhook(webhook: IncomingWebhook): Promise<WebhookNotification | null>;
 }
 
-/** Una pasarela del prototipo A: cómo se presenta, qué llaves exige el sandbox y cómo se construye. */
+/** Una pasarela del prototipo D: cómo se presenta, qué llaves exige el sandbox y cómo se construye. */
 export interface GatewayModule {
   option: GatewayOption;
   /** Las variables sin las que la pasarela no cobra en su sandbox oficial. */

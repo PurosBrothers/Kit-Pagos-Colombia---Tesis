@@ -20,7 +20,7 @@ beforeAll(() => {
 const DEFAULT_INTEGRITY_SECRET = "test_integrity_kit_pagos_simulator";
 const EVENTS_SECRET = "events_secret_123";
 
-describe("Wompi payments module (Prototype A - Direct Integration)", () => {
+describe("Wompi payments module (Prototype D - Direct Integration)", () => {
   let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {

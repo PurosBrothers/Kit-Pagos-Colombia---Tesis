@@ -29,7 +29,7 @@ import type { IncomingHttpHeaders } from "node:http";
 
 /**
  * El módulo de pagos del prototipo B: las seis funciones del puerto (plan de evaluación,
- * §2) delegadas en `kit-pagos-colombia`. Es lo único que cambia frente al prototipo A.
+ * §2) delegadas en `kit-pagos-colombia`. Es lo único que cambia frente al prototipo D.
  *
  * Las pasarelas son las de `gateways.ts`, en el ambiente que diga el esqueleto: el sandbox
  * oficial por omisión o la API de Simulación (puntos 111 y 117). El módulo no conoce ninguna

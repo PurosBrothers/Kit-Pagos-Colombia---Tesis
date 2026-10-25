@@ -63,7 +63,7 @@ function fakeFetch(routes: Record<string, (init: RequestInit) => Response>) {
 const headersOf = (call: { init: RequestInit }) => call.init.headers as Record<string, string>;
 const bodyOf = (call: { init: RequestInit }) => JSON.parse(String(call.init.body));
 
-describe("Kushki payments module (prototype A, direct integration)", () => {
+describe("Kushki payments module (prototype D, direct integration)", () => {
   const originalFetch = globalThis.fetch;
   afterEach(() => {
     globalThis.fetch = originalFetch;

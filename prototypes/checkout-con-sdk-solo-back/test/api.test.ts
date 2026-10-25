@@ -54,10 +54,10 @@ describe("API Routes (Fastify)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("text/html");
     expect(res.body).toContain("Austral Mate");
-    // La misma vitrina que A y B: la franja, «Este prototipo es» y la página de la orden.
+    // La misma vitrina que B y D: la franja, «Este prototipo es» y la página de la orden.
     expect(res.body).toContain('class="demo-ribbon"');
     expect(res.body).toContain("Este prototipo es");
-    expect(res.body).toContain("prototipo D de Kit Pagos Colombia");
+    expect(res.body).toContain("prototipo A de Kit Pagos Colombia");
     expect(res.body).toContain("Detalle técnico de la orden");
   });
 
@@ -453,7 +453,7 @@ describe("API Routes (Fastify)", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it("ya no recibe webhooks en /api/webhooks: la ruta es la de A y B", async () => {
+  it("ya no recibe webhooks en /api/webhooks: la ruta es la de B y D", async () => {
     const res = await app.inject({ method: "POST", url: "/api/webhooks/WOMPI", headers: { "content-type": "application/json" }, payload: "{}" });
 
     expect(res.statusCode).toBe(404);

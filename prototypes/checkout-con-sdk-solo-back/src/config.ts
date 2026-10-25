@@ -80,7 +80,7 @@ export function resolveConfig(): AppConfig {
   // CONFIGURACIÓN DE AMBIENTE:
   // - "sandbox" (POR DEFECTO): Apunta a las APIs oficiales de prueba de cada pasarela.
   // - "simulator" (EXPLÍCITO): Apunta al simulador local de la tesis (simulator-api).
-  // Como A y B, no cobra en producción: la página tokeniza contra los hosts de sandbox.
+  // Como B y D, no cobra en producción: la página tokeniza contra los hosts de sandbox.
   // ==========================================================================
   const environment = (process.env.KIT_PAGOS_ENVIRONMENT?.trim() || "sandbox").toLowerCase();
   if (environment !== "sandbox" && environment !== "simulator") {

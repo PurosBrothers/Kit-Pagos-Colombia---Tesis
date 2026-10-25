@@ -813,7 +813,7 @@ same owner as the OAuth app».
 
 Con la clave revelada en la sesión del vendedor de prueba validaron las 25. Ese mismo día, por un
 túnel, las notificaciones reales de tarjetas aprobadas verificaron y actualizaron la orden en los dos
-prototipos, A y B.
+prototipos, B y D.
 
 **Cómo dejarlo bien:**
 

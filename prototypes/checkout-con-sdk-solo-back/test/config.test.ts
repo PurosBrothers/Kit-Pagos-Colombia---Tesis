@@ -38,13 +38,13 @@ describe("resolveConfig", () => {
     expect(resolveConfig().environment).toBe("simulator");
   });
 
-  it("no arranca con otro ambiente, como A y B: la página solo tokeniza contra los hosts de sandbox", () => {
+  it("no arranca con otro ambiente, como B y D: la página solo tokeniza contra los hosts de sandbox", () => {
     process.env.KIT_PAGOS_ENVIRONMENT = "production";
 
     expect(() => resolveConfig()).toThrow("KIT_PAGOS_ENVIRONMENT tiene que ser sandbox o simulator, no «production».");
   });
 
-  it("nombra las pasarelas como A y B", () => {
+  it("nombra las pasarelas como B y D", () => {
     const names = Object.values(getPublicGatewayConfigs(resolveConfig())).map((gateway) => gateway.name);
 
     expect(names).toEqual(["Wompi", "Mercado Pago", "Kushki", "Rapyd"]);

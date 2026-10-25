@@ -8,7 +8,7 @@ El experimento de la Fase 5 compara dos prototipos funcionalmente idénticos: un
 
 ## 1. Los dos prototipos y la regla que hace válida la comparación
 
-| | Prototipo A — control | Prototipo B — tratamiento |
+| | Prototipo D — control | Prototipo B — tratamiento |
 |---|---|---|
 | Carpeta | `prototypes/checkout-sin-solucion/` | `prototypes/checkout-con-sdk-front-back/` |
 | Cómo cobra | Integración directa contra la API nativa de cada una de las cuatro pasarelas | Las cuatro a través de `kit-pagos-colombia` |
@@ -21,14 +21,14 @@ La forma práctica de garantizarlo: construir un **esqueleto común**, copiarlo 
 El esqueleto está en `prototypes/` desde el issue #130 (punto 90 del `architecture-log.md`, y [`prototypes/README.md`](../../prototypes/README.md)):
 
 - **El módulo de pagos de cada prototipo** es `src/payments/` y `test/payments/`. Incluye `src/payments/browser/client.js`, que tokeniza la tarjeta en el navegador.
-- **Lo demás es el esqueleto**, incluido el contrato `src/checkout/PaymentsPort.ts`. `prototypes/check-skeleton-parity.sh` comprueba en la CI que sea idéntico en los dos, salvo las vitrinas, «La Candelaria Cómics» en A y «La Bodega de Chapinero» en B (páginas, catálogo, órdenes y sus pruebas). Son una excepción declarada desde el 19 de octubre de 2026 (puntos 110 y 116 del `architecture-log.md`), y no están en `src/payments/`, así que no entran en el conteo.
+- **Lo demás es el esqueleto**, incluido el contrato `src/checkout/PaymentsPort.ts`. `prototypes/check-skeleton-parity.sh` comprueba en la CI que sea idéntico en los dos, salvo las vitrinas, «La Candelaria Cómics» en D y «La Bodega de Chapinero» en B (páginas, catálogo, órdenes y sus pruebas). Son una excepción declarada desde el 19 de octubre de 2026 (puntos 110 y 116 del `architecture-log.md`), y no están en `src/payments/`, así que no entran en el conteo.
 - **Cambios en los módulos de pagos que no hizo su autor, y que hay que declarar al medir:**
-  - **para cobrar en el ambiente del esqueleto:** en el de David (A), 23 líneas agregadas y 2 quitadas en `src/payments/index.ts` (punto 111); en el de Andrés (B), 29 agregadas y 9 quitadas, más sus pruebas (punto 116);
-  - **para las cuatro pasarelas** (punto 117): el contrato para varias pasarelas en el commit base, y Mercado Pago, Kushki y Rapyd, que escribe Orduz en A y en B.
-- **Los dos `package.json` traen `kit-pagos-colombia`**, para que también las dependencias sean idénticas. El mismo script falla si el módulo de pagos de A menciona el SDK.
+  - **para cobrar en el ambiente del esqueleto:** en el de David (D), 23 líneas agregadas y 2 quitadas en `src/payments/index.ts` (punto 111); en el de Andrés (B), 29 agregadas y 9 quitadas, más sus pruebas (punto 116);
+  - **para las cuatro pasarelas** (punto 117): el contrato para varias pasarelas en el commit base, y Mercado Pago, Kushki y Rapyd, que escribe Orduz en B y en D.
+- **Los dos `package.json` traen `kit-pagos-colombia`**, para que también las dependencias sean idénticas. El mismo script falla si el módulo de pagos de D menciona el SDK.
 - **La línea base del conteo** es el commit que agrega el esqueleto.
 
-Y la otra mitad de la regla, la que es fácil de olvidar: los dos tienen que cubrir la misma funcionalidad, incluidos los tres puntos que un prototipo apurado omitiría —distinguir rechazo de fallo técnico, verificar la firma del webhook, y registrar el estado nativo para auditoría—. Un prototipo A que solo llame al endpoint de cobro no es una integración real: es la mitad de una, y compararla contra el framework completo **infla artificialmente la diferencia** a favor de la tesis.
+Y la otra mitad de la regla, la que es fácil de olvidar: los dos tienen que cubrir la misma funcionalidad, incluidos los tres puntos que un prototipo apurado omitiría —distinguir rechazo de fallo técnico, verificar la firma del webhook, y registrar el estado nativo para auditoría—. Un prototipo D que solo llame al endpoint de cobro no es una integración real: es la mitad de una, y compararla contra el framework completo **infla artificialmente la diferencia** a favor de la tesis.
 
 ---
 
@@ -59,7 +59,7 @@ Si una pasarela se mezcla con otros cambios en el mismo commit, la medición se 
 git show --stat <commit> -- prototypes/checkout-sin-solucion/src/payments prototypes/checkout-sin-solucion/test/payments
 ```
 
-Hasta el commit `d3ada47`, las carpetas de A y B se llamaban `checkout-directo` y `checkout-con-sdk` (punto 119). En un commit anterior, el filtro usa el nombre de entonces; si no, `git show --stat` sale vacío.
+Hasta el commit `d3ada47`, las carpetas de D y B se llamaban `checkout-directo` y `checkout-con-sdk` (punto 119). En un commit anterior, el filtro usa el nombre de entonces; si no, `git show --stat` sale vacío.
 
 Si un commit de pasarela toca algo fuera de `src/payments/` y `test/payments/` (el esqueleto o la vitrina), eso también se registra: es un costo de la pasarela que la hipótesis dice que B no debería pagar.
 
@@ -127,9 +127,9 @@ La tabla de la variable 2 —el costo de agregar cada pasarela— es la que conv
 El plan las declara, y conviene tenerlas presentes al recolectar:
 
 - **Somos autores e intérpretes.** La defensa es que cinco de las seis variables son contables por script y auditables por terceros.
-- **El prototipo A puede quedar mal hecho sin querer.** La defensa es seguir la documentación oficial de cada pasarela y que lo revise alguien que no lo escribió.
-- **Un solo autor escribió las pasarelas nuevas en A y en B** (punto 117). La mitigación de asignación del plan no se cumple, y el informe lo declara.
-- **Nada se cobró en producción.** Desde los puntos 111 y 117, A y B cobran por omisión en el sandbox oficial de cada pasarela, y las pruebas automáticas corren contra el simulador. Que no haya cobros en producción es una limitación del alcance que va escrita en el informe.
+- **El prototipo D puede quedar mal hecho sin querer.** La defensa es seguir la documentación oficial de cada pasarela y que lo revise alguien que no lo escribió.
+- **Un solo autor escribió las pasarelas nuevas en B y en D** (punto 117). La mitigación de asignación del plan no se cumple, y el informe lo declara.
+- **Nada se cobró en producción.** Desde los puntos 111 y 117, B y D cobran por omisión en el sandbox oficial de cada pasarela, y las pruebas automáticas corren contra el simulador. Que no haya cobros en producción es una limitación del alcance que va escrita en el informe.
 - **Dos prototipos no son una muestra.** Es un estudio de caso comparativo, que es lo que el marco metodológico admite para evaluar un artefacto, y así se presenta.
 
 Y una que no está en la lista de amenazas pero condiciona la recolección: **el tiempo de implementación queda fuera como evidencia principal**, porque quien implementa el segundo prototipo ya aprendió el dominio en el primero. Ese efecto de orden no se puede eliminar con cuatro personas y dos prototipos. Se puede registrar como dato secundario declarando el sesgo; presentarlo como evidencia principal sería indefendible ante un jurado.

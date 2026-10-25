@@ -66,7 +66,7 @@ function expectedSignature(toSign: string, secret = "secret-key"): string {
   return Buffer.from(createHmac("sha256", secret).update(toSign).digest("hex")).toString("base64");
 }
 
-describe("Rapyd payments module (prototype A, direct integration)", () => {
+describe("Rapyd payments module (prototype D, direct integration)", () => {
   const originalFetch = globalThis.fetch;
   afterEach(() => {
     globalThis.fetch = originalFetch;
