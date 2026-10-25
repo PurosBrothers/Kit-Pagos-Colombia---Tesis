@@ -328,6 +328,39 @@ function setUpStore() {
   // Los bancos de PSE son de cada pasarela: se piden una vez por pasarela.
   const banksByGateway = new Map();
 
+  const TEST_CARDS = {
+    MERCADOPAGO: {
+      number: "4013 5406 8274 6260",
+      expMonth: "11",
+      expYear: "30",
+      cvc: "123",
+      holder: "APRO Ruiz",
+    },
+    WOMPI: {
+      number: "4242 4242 4242 4242",
+      expMonth: "12",
+      expYear: "30",
+      cvc: "123",
+      holder: "MATEO GOMEZ",
+    },
+    KUSHKI: {
+      number: "4242 4242 4242 4242",
+      expMonth: "12",
+      expYear: "30",
+      cvc: "123",
+      holder: "MATEO GOMEZ",
+    },
+  };
+
+  function updateCardFieldsForGateway(gatewayId) {
+    const card = TEST_CARDS[gatewayId] || TEST_CARDS.WOMPI;
+    if (byId("cardNumber")) byId("cardNumber").value = card.number;
+    if (byId("expMonth")) byId("expMonth").value = card.expMonth;
+    if (byId("expYear")) byId("expYear").value = card.expYear;
+    if (byId("cvc")) byId("cvc").value = card.cvc;
+    if (byId("cardHolder")) byId("cardHolder").value = card.holder;
+  }
+
   function selectedMethod() {
     return form.querySelector("input[name=method]:checked").value;
   }
@@ -358,17 +391,25 @@ function setUpStore() {
   function showMethod() {
     show("");
     const isPse = selectedMethod() === "PSE";
-    const hosted = selectedGateway().hosted;
+    const currentGateway = selectedGateway();
+    const hosted = currentGateway.hosted;
     byId("card-fields").hidden = isPse || hosted;
     byId("hosted-card").hidden = isPse || !hosted;
     byId("pse-fields").hidden = !isPse;
-    if (isPse) loadPseBanks(gatewaySelect.value);
-    else payButton.disabled = false;
+    if (isPse) {
+      loadPseBanks(gatewaySelect.value);
+    } else {
+      payButton.disabled = false;
+      if (!hosted) {
+        updateCardFieldsForGateway(currentGateway.id);
+      }
+    }
   }
 
   form.addEventListener("change", (event) => {
     if (event.target.name === "method" || event.target.name === "gateway") showMethod();
   });
+  gatewaySelect.addEventListener("change", showMethod);
 
   form.addEventListener("input", () => {
     byId("buyer-summary").textContent = `${value("fullName")} · ${value("email")}`;
