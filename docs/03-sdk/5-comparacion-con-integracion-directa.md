@@ -127,15 +127,26 @@ El caso de Kushki es el más elocuente. Un comercio que integre a mano tiene que
 
 ---
 
-## 5. El experimento que de verdad importa: migrar
+## 5. El experimento que de verdad importa: agregar pasarelas
 
-El plan de evaluación identifica la medición más valiosa, y no es el conteo de líneas de la integración inicial: es **el costo de cambiar de pasarela**, porque ese es el problema de negocio que motiva la tesis.
+El plan de evaluación identifica la medición más valiosa, y no es el conteo de líneas de la integración inicial: es **el costo de no depender de una sola pasarela**, porque ese es el problema de negocio que motiva la tesis.
 
-El procedimiento: los dos prototipos se implementan con Wompi, se hace un commit que cierre ese estado, y después se les pide migrar a Mercado Pago. Se mide el diff con `git diff --stat`, así que cualquiera lo puede auditar.
+El procedimiento (desde el 20 de octubre de 2026, punto 117 del `architecture-log.md`):
 
-**Wompi a Mercado Pago no es una pareja elegida al azar:** son las dos que más se diferencian en los tres ejes que importan. Wompi pide centavos enteros y Mercado Pago decimales; Wompi usa estados en mayúsculas y Mercado Pago en minúsculas; el webhook de Wompi trae el pago completo y el de Mercado Pago solo un identificador que obliga a una segunda petición. Migrar entre dos pasarelas parecidas subestimaría el costo real.
+1. Los dos prototipos parten de un commit base con Wompi.
+2. Mercado Pago, Kushki y Rapyd se agregan en ese orden, cada una en un commit propio.
+3. Se mide el diff de cada commit con `git show --stat`, así que cualquiera lo puede auditar.
 
-**La hipótesis, escrita antes de medir:** en el prototipo con SDK la migración es un cambio de configuración de una línea, sin tocar el modelo de datos; en el de integración directa obliga a reescribir el mapeo de monto, la traducción de estados, la verificación de firma y el flujo de consulta.
+Antes, el experimento era migrar de Wompi a Mercado Pago. Agregar las tres mide el mismo costo tres veces, con pasarelas que se diferencian en ejes distintos:
+
+- **Mercado Pago:** pesos y estados en minúsculas, y un webhook que solo trae un identificador.
+- **Kushki:** un token atado al monto.
+- **Rapyd:** la tarjeta en su página alojada, y la firma HMAC de cada petición.
+
+**La hipótesis, escrita antes de medir:**
+
+- **En el prototipo con SDK, agregar una pasarela es configuración:** sus credenciales y su registro, sin tocar el esqueleto ni el modelo de datos.
+- **En el de integración directa, cada pasarela obliga a escribir** su mapeo de monto, su traducción de estados, su verificación de firma, su flujo de consulta y, en dos de ellas, su tokenización en el navegador.
 
 Y una regla del plan que conviene subrayar: **si el resultado contradice la hipótesis, eso también es un hallazgo válido y hay que reportarlo**, no ajustar el experimento hasta que salga el número esperado.
 

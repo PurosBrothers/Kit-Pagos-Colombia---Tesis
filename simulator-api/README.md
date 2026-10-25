@@ -97,7 +97,7 @@ El servidor provee 33 rutas organizadas por pasarela que emulan el comportamient
   - `GET /v1/sim/mercadopago/payments/:paymentId/bank_transfer` — Página de banco del PSE (ver abajo).
 - **Kushki (`/v1/sim/kushki`)** — 8:
   - `POST /v1/sim/kushki/card/v1/tokens` — Tokenización de tarjeta desde el navegador, con CORS; el token queda atado al monto (punto 106).
-  - `POST /v1/sim/kushki/card/v1/charges` — Cobro directo con tarjeta; con un token de otro monto, `400 K220`.
+  - `POST /v1/sim/kushki/card/v1/charges` — Cobro directo con tarjeta; con un token de otro monto, `400 K220`. Un rechazo responde `400` con el código del banco en `details`, como el UAT; las tarjetas de rechazo de `docs/testing-data/kushki.md` §1 dan cada una su código (punto 122).
   - `GET /v1/sim/kushki/charges/:ticketNumber` — Consulta de cargo con tarjeta.
   - `GET /v1/sim/kushki/transfer/v1/bankList` — Lista de bancos PSE.
   - `POST /v1/sim/kushki/transfer/v1/tokens` — Token de la transferencia, con el banco y la URL de retorno.

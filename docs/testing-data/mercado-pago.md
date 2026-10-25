@@ -602,6 +602,22 @@ Es una sola comparación, pero coincide con la documentación: el comprobante es
 termina en el banco simulado**, aprobándolo o eligiendo «USUARIO ABANDONÓ TRANSACCION EN BANCO», en vez
 de dejarlo abierto.
 
+**El corte es por ventanas y la aplicación se recupera sola** (19 de octubre de 2026, punto 113 del
+`architecture-log.md`). Con la tercera aplicación (`integration_data.application_id` 7248347369100415,
+la misma en el `.env` y en Render), siete PSE nacieron `processing` sin URL y terminaron
+`failed / processing_error` entre las 14:09 y las 14:17: seis desde la tienda del prototipo C y uno por
+Render. Desde las 14:25, ocho PSE recibieron la URL: directo a la Orders API con la IP y la `callback_url`
+del 15 de octubre, con la `callback_url` del túnel, con la IP de la máquina (98.98.186.204), con el
+banco 1001, dos por Render con el cuerpo de la tienda que había fallado a las 14:16, y dos alrededor de
+una tarjeta. Una tarjeta `APRO Ruiz` aprobada a las 14:33:03, con el mismo pagador, fue seguida a las
+14:33:52 por un PSE con URL, así que **una tarjeta aprobada no corta el PSE**. En ese momento los 15 pagos
+PSE del vendedor estaban cerrados (`GET /v1/payments/search?payment_type_id=bank_transfer`), y la
+búsqueda de órdenes (`GET /v1/orders?begin_date=…&end_date=…`, que exige las dos fechas) mostró las
+órdenes fallidas, que no dejan pago. La tercera aplicación, que había fallado el 18 de octubre entre las
+22:08 y las 22:19, no estaba muerta. **Si el PSE falla, hay que esperar entre 10 y 15 minutos y reintentar**,
+sin crear otra aplicación. Sin medir: si una tarjeta rechazada influye. Hubo una con fondos insuficientes a
+las 13:55, antes de la ventana.
+
 Para el comercio, una orden sin URL no tiene adónde mandar al pagador, pero existe y tiene
 identificador. Desde la versión 0.6.0-rc.2, `createPayment()` la devuelve como una transacción
 `PENDING` con `rawStatus` `processing`, y la consulta posterior da `DECLINED` con `rejectionCode`
@@ -761,3 +777,51 @@ llave derivada de la referencia, un rechazo no se podría reintentar con otra ta
 `423` llega como `RESOURCE_LOCKED`, un error transitorio, desde la 0.6.0-rc.2. La API de Simulación
 imita la idempotencia medida en `POST /v1/sim/mercadopago/orders` y, con el monto 10 409, crea las dos
 órdenes (`docs/02-arquitectura/3-api-de-simulacion.md`).
+
+---
+
+## 5. La clave de los webhooks en el modo de pruebas (21 y 22 de octubre de 2026)
+
+> **La notificación de una orden la firma la aplicación del vendedor de prueba, no la de la cuenta del
+> comercio.** Para validarla en sandbox, `MERCADOPAGO_WEBHOOK_SECRET` tiene que ser la clave de esa
+> aplicación.
+
+**Lo que se vio.** El 21 de octubre llegaron 25 notificaciones reales de órdenes (`type: "order"`,
+`live_mode: false`, `data.id` del tipo `ORDTST…`), y ninguna validó con la clave del panel. Tampoco
+validaron con `WebhookSignatureValidator` del SDK oficial `mercadopago` 3.6.1. La notificación de
+«Simular notificación» (`live_mode: true`, `data.id` numérico) sí validó.
+
+Se descartaron la lectura del `data.id` y el manifiesto: el `data.id` se toma del query crudo, tal
+cual y en minúsculas, con `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`. También se descartó la
+clave de la pestaña «Modo de prueba» de la misma aplicación: dio 0 de 25.
+
+**La causa, medida el 22 de octubre.**
+
+| | `application_id` | `user_id` |
+| --- | --- | --- |
+| Las 25 notificaciones reales | terminada en 0415 | el vendedor de prueba |
+| El token `APP_USR-` del `.env` | terminada en 0415 | el vendedor de prueba |
+| La notificación simulada | terminada en 8689, la aplicación de la cuenta del proyecto | la cuenta del proyecto |
+
+Las credenciales `APP_USR-` que acepta la Orders API en sandbox son de una aplicación de la cuenta
+del vendedor de prueba, y esa aplicación firma sus notificaciones con su propia clave.
+
+El MCP de Mercado Pago, conectado por OAuth con la cuenta del proyecto, lo confirma:
+`application_list` no lista esa aplicación, `notifications_history` de la terminada en 8689 no tiene
+notificaciones, y el de la terminada en 0415 responde «The target application does not belong to the
+same owner as the OAuth app».
+
+Con la clave revelada en la sesión del vendedor de prueba validaron las 25. Ese mismo día, por un
+túnel, las notificaciones reales de tarjetas aprobadas verificaron y actualizaron la orden en los dos
+prototipos, A y B.
+
+**Cómo dejarlo bien:**
+
+1. En la aplicación de la cuenta, «Pruebas > Cuentas de prueba» muestra el usuario, la contraseña y
+   el código de verificación de 6 dígitos del vendedor de prueba. El código se usa si Mercado Pago pide
+   validar por correo al iniciar sesión.
+2. Iniciar sesión con ese vendedor, en una ventana privada, y abrir en «Tus integraciones» la
+   aplicación cuyo id va en el token (`APP_USR-<id>-…`).
+3. En Webhooks > Configurar notificaciones, registrar la URL de pruebas con los eventos de órdenes y
+   revelar la clave secreta. Esa es la de `MERCADOPAGO_WEBHOOK_SECRET`. «Restablecer» la cambia.
+4. Para comprobarlo, el `application_id` de cada notificación tiene que coincidir con ese id.

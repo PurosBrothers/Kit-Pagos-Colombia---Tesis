@@ -151,7 +151,7 @@ Desde el issue #130 el script acepta un proyecto externo (punto 87 del `architec
 
 ```bash
 cd sdk
-npm run metrics -- --root ../prototypes/checkout-directo/src --tsconfig ../prototypes/checkout-directo/tsconfig.json --json ../docs/evaluation/ck-checkout-directo.json
+npm run metrics -- --root ../prototypes/checkout-sin-solucion/src --tsconfig ../prototypes/checkout-sin-solucion/tsconfig.json --json ../docs/evaluation/ck-checkout-sin-solucion.json
 ```
 
 | Opción | Qué hace |

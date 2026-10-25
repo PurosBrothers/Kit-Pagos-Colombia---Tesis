@@ -53,10 +53,10 @@ describe("Kushki mock", () => {
       await app.close();
     });
 
-    it("returns DECLINED in the body, with the same HTTP status as an approval", async () => {
-      // Kushki comunica el rechazo de negocio en el estado dentro del cuerpo, no con un
-      // código HTTP distinto. Este caso protege ese detalle del contrato: un adaptador que
-      // decidiera mirando `response.ok` reportaría este rechazo como aprobado.
+    it("answers a declined charge with the measured 400, the generic code and the reason in details", async () => {
+      // Medido contra UAT el 24 de octubre de 2026 (punto 122): el rechazo no viaja con el 201
+      // de un aprobado. `message` es genérico, el motivo va en `details`, y `ticketNumber`
+      // llega vacío. Sin tarjeta de la tabla, el código es el `017` de «Rechazada en Cobro».
       const app = buildApp();
 
       const response = await app.inject({
@@ -66,8 +66,15 @@ describe("Kushki mock", () => {
         payload: validRequestBody,
       });
 
-      expect(response.statusCode).toBe(201);
-      expect(response.json().details.transactionStatus).toBe("DECLINED");
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body.code).toBe("017");
+      expect(body.message).toBe("Transacción declinada.");
+      expect(body.details.responseCode).toBe("017");
+      expect(body.details.responseText).toBe("Tarjeta no válida");
+      expect(body.details.ticketNumber).toBe("");
+      expect(body.details.transactionId).toEqual(expect.any(String));
+      expect(body.transactionReference).toEqual(expect.any(String));
 
       await app.close();
     });
@@ -318,15 +325,16 @@ describe("Kushki mock", () => {
         payload: validRequestBody,
       });
 
-      const { ticketNumber } = created.json();
+      const ticketNumber = created.json().details.transactionId;
 
       const response = await app.inject({
         method: "GET",
         url: `/v1/sim/kushki/charges/${ticketNumber}`,
       });
 
-      // 201 al crear y 200 al consultar: el rechazo viaja en el estado del cuerpo, igual
-      // que contra Kushki.
+      // 400 al crear y 200 al consultar: la consulta es una facilidad del simulador, sin
+      // equivalente en Kushki, y encuentra el registro por el identificador del rechazo.
+      expect(created.statusCode).toBe(400);
       expect(response.statusCode).toBe(200);
       expect(response.json().details.transactionStatus).toBe("DECLINED");
 
@@ -346,7 +354,7 @@ describe("Kushki mock", () => {
         payload: validRequestBody,
       });
 
-      const { ticketNumber } = created.json();
+      const ticketNumber = created.json().details.transactionId;
 
       const withApproved = await app.inject({
         method: "GET",

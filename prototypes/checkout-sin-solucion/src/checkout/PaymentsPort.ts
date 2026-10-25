@@ -4,14 +4,19 @@ import { IncomingHttpHeaders } from "node:http";
  * El contrato entre el esqueleto común y el módulo de pagos de cada prototipo.
  *
  * Es lo único que el esqueleto sabe de los pagos. El prototipo A lo implementa con `fetch`
- * contra la API nativa de la pasarela y el B con `kit-pagos-colombia`, cada uno en su
- * `src/payments/`. Las seis funciones del plan de evaluación (§2) quedan repartidas así:
+ * contra la API nativa de cada pasarela y el B con `kit-pagos-colombia`, cada uno en su
+ * `src/payments/`. Desde el punto 117 los dos cubren las cuatro pasarelas, y el comprador elige
+ * una en la tienda: cada operación recibe la pasarela con el `id` que dio `listGateways()`. El
+ * esqueleto no conoce esos `id`, solo los pasa.
+ *
+ * Las seis funciones del plan de evaluación (§2) quedan repartidas así:
  *
  * 1. Crear el pago: `createPayment`.
  * 2. Traducir el resultado a un estado del comercio: el `status` de cada respuesta.
  * 3. Distinguir un rechazo de negocio de un fallo técnico, y reintentar solo el segundo:
- *    un rechazo vuelve como `DECLINED`; un fallo técnico se reintenta dentro del módulo y,
- *    si persiste, sale como `PaymentTechnicalError`.
+ *    un rechazo vuelve como `DECLINED`, con su `declineReason` si la pasarela da el código; un
+ *    fallo técnico se reintenta dentro del módulo y, si persiste, sale como
+ *    `PaymentTechnicalError`.
  * 4. Verificar la firma de un webhook: `verifyWebhook`. El esqueleto actualiza la orden.
  * 5. Consultar el estado por el identificador: `getPaymentStatus`.
  * 6. Registrar el estado nativo para auditoría: el `nativeStatus` de cada respuesta, que el
@@ -24,22 +29,73 @@ import { IncomingHttpHeaders } from "node:http";
 /** El estado de un pago visto por el comercio. */
 export type MerchantPaymentStatus = "APPROVED" | "DECLINED" | "PENDING";
 
+/**
+ * Por qué se rechazó un pago, en una categoría que el comprador puede entender sin conocer la
+ * pasarela. Son las de `RejectionCategory` del SDK, para que A y B muestren lo mismo (punto 122).
+ * `UNKNOWN` es un rechazo cuyo motivo la pasarela no informa, o cuyo código no corresponde a
+ * ninguna categoría sin interpretarlo.
+ */
+export type DeclineCategory =
+  | "INSUFFICIENT_FUNDS"
+  | "INVALID_CARD_DATA"
+  | "CARD_RESTRICTED"
+  | "FRAUD_SUSPICION"
+  | "NETWORK_ERROR"
+  | "AUTHENTICATION_FAILED"
+  | "DUPLICATED_PAYMENT"
+  | "UNKNOWN";
+
+/** El motivo de un rechazo: el código de la pasarela, para auditoría, y su categoría. */
+export interface DeclineReason {
+  code: string;
+  category: DeclineCategory;
+}
+
 export type DocumentType = "CC" | "CE" | "NIT" | "PP";
+
+/**
+ * Cómo recibe la tarjeta una pasarela, como el `cardCapture` de `/v1/api` (punto 106):
+ * - `BROWSER_TOKEN`: la página la tokeniza con `tokenizeCard()` y al servidor llega el token;
+ * - `HOSTED_PAGE`: el pago con tarjeta se crea sin token y devuelve la URL de la página de la
+ *   pasarela, donde el pagador la escribe.
+ */
+export type CardCapture = "BROWSER_TOKEN" | "HOSTED_PAGE";
+
+/** Una pasarela que el módulo de pagos puede usar, con el nombre que ve el comprador. */
+export interface GatewayOption {
+  id: string;
+  name: string;
+  cardCapture: CardCapture;
+}
+
+/** La dirección del pagador. Hay pasarelas que la exigen para PSE. */
+export interface PayerAddress {
+  streetName: string;
+  streetNumber: string;
+  neighborhood: string;
+  city: string;
+  zipCode: string;
+}
 
 export interface Payer {
   fullName: string;
   email: string;
   documentType: DocumentType;
   documentNumber: string;
+  /** El celular colombiano, sin indicativo. */
   phone: string;
+  address: PayerAddress;
 }
 
 /** El medio de pago que eligió el pagador en la página. */
 export type PaymentMethodRequest =
   | {
       type: "CARD";
-      /** Lo produce `tokenizeCard()` de `src/payments/browser/client.js`, en el navegador. */
-      cardToken: string;
+      /**
+       * Lo produce `tokenizeCard()` de `src/payments/browser/client.js`, en el navegador. Falta
+       * solo con una pasarela `HOSTED_PAGE`, que recibe la tarjeta en su propia página.
+       */
+      cardToken?: string;
       installments: number;
     }
   | {
@@ -50,6 +106,8 @@ export type PaymentMethodRequest =
     };
 
 export interface CreatePaymentRequest {
+  /** El `id` de una de las pasarelas de `listGateways()`. */
+  gateway: string;
   /** El identificador de la orden del comercio. */
   orderReference: string;
   /** En pesos enteros: el esqueleto no conoce la unidad de ninguna pasarela. */
@@ -59,6 +117,8 @@ export interface CreatePaymentRequest {
   method: PaymentMethodRequest;
   /** La página de la orden, a la que vuelve el pagador después del banco. */
   returnUrl: string;
+  /** La IP del pagador, tal como la vio el checkout. Hay pasarelas que la exigen para PSE. */
+  payerIp: string;
 }
 
 export interface PaymentSnapshot {
@@ -67,14 +127,24 @@ export interface PaymentSnapshot {
   status: MerchantPaymentStatus;
   /** El estado tal como lo dijo la pasarela, sin traducir. */
   nativeStatus: string;
-  /** Si el pago exige ir a otra página (el banco en PSE), su URL. */
+  /** Si el pago exige ir a otra página (el banco en PSE, o la de la pasarela), su URL. */
   redirectUrl?: string;
+  /**
+   * Solo en un `DECLINED` cuya pasarela manda el código del rechazo. Llega al crear y al
+   * consultar; un webhook no lo trae, porque el evento del SDK no lo tiene.
+   */
+  declineReason?: DeclineReason;
 }
 
 export interface WebhookNotification {
   transactionId: string;
   status: MerchantPaymentStatus;
   nativeStatus: string;
+  /**
+   * La orden, cuando la pasarela la devuelve firmada. El checkout la busca así si no la encuentra
+   * por `transactionId`: la tarjeta de Rapyd se crea como checkout y su webhook trae el id del pago.
+   */
+  orderReference?: string;
 }
 
 /** Un webhook tal como llegó al checkout. */
@@ -103,15 +173,17 @@ export class PaymentTechnicalError extends Error {
 }
 
 export interface PaymentsPort {
+  /** Las pasarelas que el módulo puede usar con la configuración que tiene, en el orden en que se ofrecen. */
+  listGateways(): GatewayOption[];
   /** Los valores públicos que necesita `tokenizeCard()` en el navegador, como la llave pública. */
-  publicConfig(): Record<string, string>;
-  listPseBanks(): Promise<PseBankOption[]>;
+  publicConfig(gateway: string): Record<string, string>;
+  listPseBanks(gateway: string): Promise<PseBankOption[]>;
   createPayment(request: CreatePaymentRequest): Promise<PaymentSnapshot>;
-  getPaymentStatus(transactionId: string): Promise<PaymentSnapshot>;
+  getPaymentStatus(gateway: string, transactionId: string): Promise<PaymentSnapshot>;
   /**
    * Verifica la firma y dice qué transacción cambió. Devuelve `null` si la firma no es válida.
    * Es asíncrona porque el webhook de Mercado Pago solo trae el identificador, y el estado
    * exige una segunda petición (plan de evaluación, §3).
    */
-  verifyWebhook(webhook: IncomingWebhook): Promise<WebhookNotification | null>;
+  verifyWebhook(gateway: string, webhook: IncomingWebhook): Promise<WebhookNotification | null>;
 }

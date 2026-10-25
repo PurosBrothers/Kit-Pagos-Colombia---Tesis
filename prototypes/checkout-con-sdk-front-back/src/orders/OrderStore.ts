@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { MerchantPaymentStatus, Payer, PaymentMethodRequest } from "../checkout/PaymentsPort";
+import { OrderLine } from "../catalog";
+import { DeclineReason, MerchantPaymentStatus, Payer, PaymentMethodRequest } from "../checkout/PaymentsPort";
+import { trace } from "../trace";
 
 /** `ERROR`: un fallo técnico que siguió después de reintentar; el pago no se decidió. */
 export type OrderStatus = MerchantPaymentStatus | "ERROR";
 
 export type StatusSource = "creation" | "query" | "webhook";
+
+const SOURCE_WORDS: Record<StatusSource, string> = { creation: "creación", query: "consulta", webhook: "webhook" };
 
 /** Una entrada del historial: guarda el estado nativo para auditoría (función 6). */
 export interface StatusRecord {
@@ -13,21 +17,27 @@ export interface StatusRecord {
   status: OrderStatus;
   nativeStatus?: string;
   detail?: string;
+  declineReason?: DeclineReason;
 }
 
 export interface Order {
   id: string;
-  productId: string;
+  /** El `id` de la pasarela que eligió el comprador, tal como lo dio `listGateways()`. */
+  gateway: string;
+  lines: OrderLine[];
   amountInPesos: number;
   payer: Payer;
   method: PaymentMethodRequest["type"];
   transactionId?: string;
   status: OrderStatus;
+  /** El motivo del rechazo, mientras la orden esté rechazada y alguna respuesta lo haya traído. */
+  declineReason?: DeclineReason;
   history: StatusRecord[];
 }
 
 export interface NewOrder {
-  productId: string;
+  gateway: string;
+  lines: OrderLine[];
   amountInPesos: number;
   payer: Payer;
   method: PaymentMethodRequest["type"];
@@ -54,13 +64,28 @@ export class OrderStore {
     return this.orders.get(id);
   }
 
-  findByTransactionId(transactionId: string): Order | undefined {
-    return [...this.orders.values()].find((order) => order.transactionId === transactionId);
+  /** El identificador de la transacción es de la pasarela: dos pasarelas podrían repetirlo. */
+  findByTransactionId(gateway: string, transactionId: string): Order | undefined {
+    return [...this.orders.values()].find(
+      (order) => order.gateway === gateway && order.transactionId === transactionId,
+    );
+  }
+
+  /** La referencia que el checkout manda a la pasarela es el id de la orden, y la pasarela tiene que ser la suya. */
+  findByReference(gateway: string, reference: string): Order | undefined {
+    const order = this.orders.get(reference);
+    return order?.gateway === gateway ? order : undefined;
   }
 
   /**
    * Cambia el estado y deja la entrada en el historial. Una consulta que repite el estado y el
    * estado nativo anteriores no agrega nada, para que el historial muestre solo cambios.
+   *
+   * Un `PENDING` que llega cuando la orden ya está aprobada o rechazada queda en el historial sin
+   * cambiar el estado: las pasarelas no garantizan el orden de sus avisos, y hay una que manda dos
+   * en el mismo segundo, uno todavía pendiente y otro con el desenlace.
+   *
+   * Un rechazo sin motivo, como el de un webhook, no borra el que trajo la creación o la consulta.
    */
   record(order: Order, entry: Omit<StatusRecord, "at">, transactionId?: string): void {
     if (transactionId) order.transactionId = transactionId;
@@ -70,7 +95,24 @@ export class OrderStore {
       last !== undefined &&
       last.status === entry.status &&
       last.nativeStatus === entry.nativeStatus;
-    order.status = entry.status;
+    const late = entry.status === "PENDING" && (order.status === "APPROVED" || order.status === "DECLINED");
+    if (!late) {
+      order.status = entry.status;
+      order.declineReason = entry.status === "DECLINED" ? (entry.declineReason ?? order.declineReason) : undefined;
+    }
     if (!repeated) order.history.push({ at: this.now().toISOString(), ...entry });
+    trace(
+      `  orden ${order.id} ← ${SOURCE_WORDS[entry.source]}: ${entry.status}` +
+        `${entry.nativeStatus ? ` (nativo ${entry.nativeStatus})` : ""}` +
+        `${entry.declineReason ? `, rechazo ${describeDecline(entry.declineReason)}` : ""}` +
+        `${transactionId ? `, transacción ${transactionId}` : ""}` +
+        `${entry.detail ? ` · ${entry.detail}` : ""}${repeated ? " (sin cambios)" : ""}` +
+        `${late ? ` (llegó después del desenlace; la orden sigue ${order.status})` : ""}`,
+    );
   }
+}
+
+/** El motivo como lo leen la traza y el historial: el código de la pasarela y su categoría. */
+export function describeDecline(reason: DeclineReason): string {
+  return `${reason.code} (${reason.category})`;
 }
