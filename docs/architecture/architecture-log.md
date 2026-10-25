@@ -4355,13 +4355,13 @@ D, que integra a mano, tampoco lo trataba como rechazo: su `kushki.ts` lanzaba e
 
 **Estado:** Resuelto en código y medido en B y en D. `kit-pagos-colombia@0.7.0-rc.2` se publicó el 24 de octubre de 2026 con la etiqueta `next`, y el #162 entró a `devops` ese día (`ee56fec`).
 
-**Render no desplegó el merge.** Un cobro de Kushki con `x-simulate-scenario: DECLINED` en `kit-pagos-colombia.onrender.com` respondió `201` antes del merge, 3 minutos después y 2 horas después (00:57Z del 25 de octubre, tras 33 s de arranque en frío); el simulador de `devops` responde `400 017`. Sin el panel no se sabe la causa:
+**Render desplegaba `main`, no `devops`.** Un cobro de Kushki con `x-simulate-scenario: DECLINED` en `kit-pagos-colombia.onrender.com` respondió `201` antes del merge, 3 minutos después y 2 horas después (00:57Z del 25 de octubre); el simulador de `devops` responde `400 017`. GitHub no registra los despliegues de Render, y `render.yaml` no fija la rama.
 
-- GitHub no registra los despliegues de Render;
-- `render.yaml` no fija la rama, y la del repositorio por omisión es `main`;
-- `docs/02-arquitectura/4-despliegue-en-render-y-coleccion-postman.md` dice `devops`.
+El 25 de octubre de 2026, Joshua revisó el panel: el servicio desplegaba `main`. `docs/02-arquitectura/4-despliegue-en-render-y-coleccion-postman.md` dice `devops`, y el punto 109 también lo afirmaba. Joshua cambió la rama a `devops` y desplegó. A las 21:11Z el mismo cobro respondió `400`, con `code` `017` y «Tarjeta no válida».
 
-No es una dependencia que exija una versión reciente: el repositorio no tiene `.npmrc`, y la CI construye el simulador con Node 20, el mismo de `render.yaml`. Queda confirmarlo en el panel.
+- **No se pasó `devops` a `main` para arreglarlo.** `devops` lleva la 0.7.0-rc.2, y llega a `main` cuando salga la 0.7.0 final.
+- **El cambio no le pide nada nuevo a Render:** el simulador de `devops` no lee ninguna variable que no leyera el de `main`.
+- **La colección de Postman pasa contra Render** con `devops`: 42 peticiones y 47 comprobaciones, sin fallas, con los secretos de Render pasados al correr, como dice su README. Sin ellos fallan 12, porque las firmas de Wompi y Rapyd no verifican.
 
 ### 123. El prototipo A toma el aspecto y el comportamiento de pagos de B y D, y conserva su estructura (PR #163, issue #164)
 
