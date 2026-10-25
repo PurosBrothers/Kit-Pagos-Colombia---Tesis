@@ -4432,6 +4432,8 @@ Los webhooks reales del sandbox no se midieron en A; en B y D sí (punto 121). S
 - usa la tokenización simple de Wompi (punto 81);
 - no manda el identificador de dispositivo de Mercado Pago (punto 78).
 
+**Lo que agregó Joshua el 25 de octubre de 2026** (`3d48f31`): al elegir la pasarela, la página precarga su tarjeta aprobada, y en Mercado Pago, el titular `APRO Ruiz`, que es el que aprueba. La revisión le quitó un segundo `listener` del selector, que duplicaba el del formulario y pedía dos veces los bancos de PSE.
+
 **Estado:** Resuelto en la rama del #163 y medido. A entra en la matriz de prototipos de `.github/workflows/ci.yml` en el mismo PR, y lo aprueba Henao. Los webhooks reales de A quedan para el #165.
 
 ### 124. Las letras de los prototipos: A es el del SDK solo en el servidor, y D el que no usa la solución (PR #163)

@@ -91,6 +91,8 @@ Contra los sandboxes oficiales, en el navegador, el 24 y el 25 de octubre de 202
 | Kushki | 4242 4242 4242 4242: `APPROVED (APPROVAL)`. 4349 0012 1084 6432: rechazo `021 (INSUFFICIENT_FUNDS)`, «La tarjeta no tiene fondos suficientes» | Llega a «Kushki Bank» y vuelve, pero queda `initializedTransaction`: UAT no cierra las transferencias |
 | Rapyd | En su página: 4111 1111 1111 1111, 12/30, CVV 123 y el código `123456` de su 3DS. Vuelve y la consulta deja `APPROVED (CLO)` | Solo cobra con 9 de sus bancos, los que lista la tienda; «Rapyd Bank Payment Simulation» con Success: `APPROVED (CLO)` |
 
+Al elegir la pasarela, la página precarga su tarjeta aprobada de esta tabla; la de Rapyd se escribe en su página. Las de rechazo se escriben a mano.
+
 Los webhooks de las cuatro, firmados por el simulador local, verifican y actualizan la orden. La tarjeta de Rapyd manda tres avisos y los tres encuentran la orden por su referencia. Los webhooks reales del sandbox no se midieron en A; en B y D sí, por un túnel (punto 121). Se miden en el ensayo con ngrok del issue #165.
 
 ## Límites

@@ -328,6 +328,7 @@ function setUpStore() {
   // Los bancos de PSE son de cada pasarela: se piden una vez por pasarela.
   const banksByGateway = new Map();
 
+  // La tarjeta aprobada de cada pasarela. En Mercado Pago el desenlace lo decide el titular: «APRO» aprueba.
   const TEST_CARDS = {
     MERCADOPAGO: {
       number: "4013 5406 8274 6260",
@@ -354,11 +355,11 @@ function setUpStore() {
 
   function updateCardFieldsForGateway(gatewayId) {
     const card = TEST_CARDS[gatewayId] || TEST_CARDS.WOMPI;
-    if (byId("cardNumber")) byId("cardNumber").value = card.number;
-    if (byId("expMonth")) byId("expMonth").value = card.expMonth;
-    if (byId("expYear")) byId("expYear").value = card.expYear;
-    if (byId("cvc")) byId("cvc").value = card.cvc;
-    if (byId("cardHolder")) byId("cardHolder").value = card.holder;
+    byId("cardNumber").value = card.number;
+    byId("expMonth").value = card.expMonth;
+    byId("expYear").value = card.expYear;
+    byId("cvc").value = card.cvc;
+    byId("cardHolder").value = card.holder;
   }
 
   function selectedMethod() {
@@ -409,7 +410,6 @@ function setUpStore() {
   form.addEventListener("change", (event) => {
     if (event.target.name === "method" || event.target.name === "gateway") showMethod();
   });
-  gatewaySelect.addEventListener("change", showMethod);
 
   form.addEventListener("input", () => {
     byId("buyer-summary").textContent = `${value("fullName")} · ${value("email")}`;
