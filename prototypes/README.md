@@ -7,13 +7,24 @@ Dos implementaciones del mismo checkout mínimo de comercio electrónico: mostra
 | `checkout-sin-solucion/` | A, control | `fetch` contra la API nativa de cada una de las cuatro pasarelas (Wompi, Mercado Pago, Kushki y Rapyd), siguiendo su documentación oficial. Se presenta como «La Candelaria Cómics», una tienda de cómics con catálogo y carrito |
 | `checkout-con-sdk-front-back/` | B, tratamiento | Las mismas cuatro con `kit-pagos-colombia` (0.7.0-rc.2) en el servidor y `kit-pagos-colombia/browser` en la página. Se presenta como «La Bodega de Chapinero», una tienda de vinos con catálogo y carrito |
 | `checkout-frontend-rest/` | C, fuera del experimento A/B | Desde el navegador contra `/v1/api`, sin servidor de pagos propio. Se documenta en [`docs/05-ejemplos/checkout-frontend-rest.md`](../docs/05-ejemplos/checkout-frontend-rest.md) |
-| `checkout-con-sdk-solo-back/` | Prototipo de Backend | `kit-pagos-colombia` exclusivamente en el servidor (Fastify) y tokenización nativa en frontend sin SDK de navegador (tienda de Hierbas de Mate con las 4 pasarelas) |
+| `checkout-con-sdk-solo-back/` | D, fuera del experimento A/B | Las mismas cuatro con `kit-pagos-colombia` (0.7.0-rc.2) solo en el servidor. La página tokeniza la tarjeta con `fetch` contra la API de cada pasarela, sin `kit-pagos-colombia/browser`. Se presenta como «Austral Mate», una tienda de yerba mate con catálogo y carrito. Se documenta en su [`README.md`](checkout-con-sdk-solo-back/README.md) |
 
 C no comparte el esqueleto de A y B, y `check-skeleton-parity.sh` no lo compara: es una página estática con Vite, servida por `server.mjs`, que demuestra el patrón de integración 2 (punto 91 del `architecture-log.md`).
 
+D tampoco lo comparte, y tampoco se compara. Responde si el SDK le sirve a un comercio que no quiere adoptar su módulo de navegador (issue #164).
+
+- **Conserva su estructura:** `PaymentService.ts` y su HTML estático.
+- **Toma de A y B:**
+  - el aspecto;
+  - `localtest.me`;
+  - `/webhooks/<pasarela>`;
+  - el monto que pone el servidor;
+  - el estado nativo en el historial;
+  - el texto de cada rechazo (punto 123).
+
 > **Límite declarado: los prototipos no son plantillas para producción.**
 >
-> - **Ninguno de los tres manda Content-Security-Policy** en la página donde se escribe la tarjeta. Un script malicioso en esa página podría leer el número y mandarlo a otro dominio.
+> - **Ninguno de los cuatro manda Content-Security-Policy** en la página donde se escribe la tarjeta. Un script malicioso en esa página podría leer el número y mandarlo a otro dominio.
 > - **En C, el monto lo decide el navegador.**
 >
 > Se dejaron así a propósito: Joan lo decidió el 19 de octubre de 2026 (punto 114). El experimento mide el código de pagos, y una cabecera no cambia esa medición. Antes de copiar una de estas páginas a un comercio, lea [«Lo que un comercio real agrega»](#lo-que-un-comercio-real-agrega).
@@ -206,12 +217,12 @@ Un PSE de A contra el sandbox de Wompi se ve así (abreviado):
 
 ## Lo que un comercio real agrega
 
-Los tres prototipos cobran de verdad en los sandboxes, pero no son comercios completos. Hay dos cosas que un comercio necesita y que el SDK no puede hacer por él (punto 114). Están, con lo medido, en la [guía de implementación](../docs/03-sdk/4-guia-de-implementacion.md) §9.
+Los cuatro prototipos cobran de verdad en los sandboxes, pero no son comercios completos. Hay dos cosas que un comercio necesita y que el SDK no puede hacer por él (punto 114). Están, con lo medido, en la [guía de implementación](../docs/03-sdk/4-guia-de-implementacion.md) §9.
 
 - **El monto lo decide el servidor.**
-  - En A y en B, el servidor cobra con los precios de su catálogo. Una prueba de A manda un precio desde el navegador y comprueba que se ignora.
+  - En A, B y D, el servidor cobra con los precios de su catálogo. Una prueba de A y otra de D mandan un precio desde el navegador y comprueban que se ignora.
   - C no tiene servidor del comercio, así que el monto lo decide la página.
-- **La página de la tarjeta lleva Content-Security-Policy.** Ninguno de los tres servidores la manda, por decisión de Joan del 19 de octubre de 2026.
+- **La página de la tarjeta lleva Content-Security-Policy.** Ninguno de los cuatro servidores la manda, por decisión de Joan del 19 de octubre de 2026.
 
 Lo que costaría ponérsela a cada uno. El detalle está en el punto 114.
 
@@ -220,6 +231,7 @@ Lo que costaría ponérsela a cada uno. El detalle está en el punto 114.
 | A | En el esqueleto (`server.ts` o `app.ts`), igual en A y B por la paridad | Pasar a un archivo el `<style>` en línea de `src/views/pages.ts`, o permitirlo con su hash. Los hosts de tokenización de Wompi, Mercado Pago y Kushki salen del `publicConfig().baseUrl` de cada módulo, sin nombrarlos |
 | B | La misma cabecera del esqueleto | Su propio `<style>` en línea. El host de tokenización lo decide el SDK y no está en `publicConfig()`: habría que exponerlo desde el módulo de Andrés, y eso cuenta en las variables del experimento |
 | C | En `server.mjs`, al servir el HTML | El hash del import map, calculado al arrancar desde `dist/index.html`. Los hosts de tokenización no se pueden escribir en `server.mjs`, porque `no-gateway-names.test.ts` lo prohíbe: tendría que darlos la API o un argumento |
+| D | En `src/app.ts`, al servir `index.html` | Nada en línea: el script y los estilos son archivos. Los hosts de `connect-src` son los `tokenizationUrl` de `src/config.ts` |
 
 ## Pruebas
 
