@@ -54,6 +54,17 @@ import {
   nextFlappingAttempt,
   rememberQueryFailure,
 } from "../store/ScenarioMarks";
+import {
+  getMpCardTokenSchema,
+  getMpOrderSchema,
+  getMpPaymentMethodSearchSchema,
+  getMpPaymentMethodsSchema,
+  getMpPaymentSchema,
+  postMpOrdersSchema,
+  postMpPaymentsSchema,
+  postMpTokenCardSchema,
+} from "./schemas/mercadopago.schemas";
+import { compileSchemasAsIs } from "./schemas/compileSchemasAsIs";
 
 export const DEFAULT_SCENARIO = "APPROVED";
 
@@ -314,6 +325,7 @@ const ORDER_SCENARIOS: ReadonlySet<string> = new Set([
  *   usa `/v1/api`, así que el simulador atiende los dos caminos.
  */
 export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
+  compileSchemasAsIs(app);
   const paymentMocks = new MercadoPagoPaymentMockFactory();
   const orderMocks = new MercadoPagoOrderMockFactory();
   const cardMocks = new MercadoPagoCardMockFactory();
@@ -488,45 +500,52 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   // 1. Creación de pago (POST /v1/sim/mercadopago/payments)
   app.post(
     "/v1/sim/mercadopago/payments",
+    {
+      schema: postMpPaymentsSchema,
+      // Antes que el schema, que marca obligatorios la llave, el token y las cuotas: así cada
+      // falta recibe la respuesta medida de Mercado Pago y no el 400 genérico de Fastify.
+      preValidation: async (request, reply) => {
+        if (rejectsWithoutIdempotencyKey(request, reply, "payments")) {
+          return reply;
+        }
+
+        if (invalidCredentialRequested(request, ["authorization"])) {
+          return reply.code(401).send(INVALID_TOKEN_ON_PAYMENT);
+        }
+
+        const body = request.body as MercadoPagoCreatePaymentRequestBody | undefined;
+
+        /*
+         * Mercado Pago no cobra sin token ni sin cuotas, y responde distinto a cada falta.
+         * Las dos formas están medidas contra la API real:
+         *
+         * - sin `token`: `400 "payment_method_id attribute can't be null"`, porque el método
+         *   de pago lo deduce del token y sin token no hay nada que deducir.
+         * - sin `installments`: `400 "Invalid installments"`. Es la única de las cuatro
+         *   pasarelas que exige las cuotas siempre, incluso cuando son una, y es la razón de
+         *   que `installments` sea parte del dominio y no un extra de cada adaptador.
+         */
+        if (!body?.token) {
+          return reply.code(400).send({
+            message: "payment_method_id attribute can't be null",
+            error: "bad_request",
+            status: 400,
+            cause: [],
+          });
+        }
+
+        if (body.installments === undefined) {
+          return reply.code(400).send({
+            message: "Invalid installments",
+            error: "bad_request",
+            status: 400,
+            cause: [],
+          });
+        }
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      if (rejectsWithoutIdempotencyKey(request, reply, "payments")) {
-        return reply;
-      }
-
-      if (invalidCredentialRequested(request, ["authorization"])) {
-        return reply.code(401).send(INVALID_TOKEN_ON_PAYMENT);
-      }
-
       const requestBody = request.body as MercadoPagoCreatePaymentRequestBody;
-
-      /*
-       * Mercado Pago no cobra sin token ni sin cuotas, y responde distinto a cada falta.
-       * Las dos formas están medidas contra la API real:
-       *
-       * - sin `token`: `400 "payment_method_id attribute can't be null"`, porque el método
-       *   de pago lo deduce del token y sin token no hay nada que deducir.
-       * - sin `installments`: `400 "Invalid installments"`. Es la única de las cuatro
-       *   pasarelas que exige las cuotas siempre, incluso cuando son una, y es la razón de
-       *   que `installments` sea parte del dominio y no un extra de cada adaptador.
-       * Validaciones de cuerpo de petición
-       */
-      if (!requestBody?.token) {
-        return reply.code(400).send({
-          message: "payment_method_id attribute can't be null",
-          error: "bad_request",
-          status: 400,
-          cause: [],
-        });
-      }
-
-      if (requestBody.installments === undefined) {
-        return reply.code(400).send({
-          message: "Invalid installments",
-          error: "bad_request",
-          status: 400,
-          cause: [],
-        });
-      }
 
       // El nombre del titular, recordado al tokenizar, decide antes que el monto.
       const fromToken = cardTokenOutcomeFor("mercadopago", requestBody.token);
@@ -624,6 +643,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   // 2. Consulta de pago (GET /v1/sim/mercadopago/payments/:id)
   app.get(
     "/v1/sim/mercadopago/payments/:id",
+    { schema: getMpPaymentSchema },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply,
@@ -699,6 +719,13 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   // devuelve 424 pase lo que pase. Ver `mercadopago-pse.ts` en el SDK.
   app.post(
     "/v1/sim/mercadopago/orders",
+    {
+      schema: postMpOrdersSchema,
+      // Aquí el schema documenta y no rechaza: Mercado Pago revisa la llave, después la
+      // credencial y la reserva de la llave, y el cuerpo al final, y la reserva no puede
+      // pasar a un hook porque se libera al terminar el cobro (`IdempotencyKeys.ts`).
+      attachValidation: true,
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       if (rejectsWithoutIdempotencyKey(request, reply, "orders")) {
         return reply;
@@ -871,6 +898,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   // entre al banco.
   app.get(
     "/v1/sim/mercadopago/orders/:id",
+    { schema: getMpOrderSchema },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply,
@@ -968,6 +996,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/mercadopago/payment_methods",
+    { schema: getMpPaymentMethodsSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       if (invalidCredentialRequested(request, ["authorization"])) {
         return reply.code(401).send(INVALID_TOKEN_ON_PAYMENT_METHODS);
@@ -1008,49 +1037,58 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
   registerTokenizationPreflight(app, "/v1/sim/mercadopago/card_tokens", MERCADOPAGO_TOKENIZATION_PREFLIGHT_HEADERS);
   app.post(
     "/v1/sim/mercadopago/card_tokens",
-    { onSend: allowAnyOrigin },
+    {
+      schema: postMpTokenCardSchema,
+      onSend: allowAnyOrigin,
+      // Antes que el schema, que marca obligatoria `public_key`: así su falta recibe la
+      // respuesta medida de Mercado Pago y no el 400 genérico de Fastify.
+      preValidation: async (request, reply) => {
+        const query = request.query as { public_key?: string } | undefined;
+        const publicKey = query?.public_key;
+        const authHeader = request.headers.authorization;
+
+        /*
+         * Nivel de evidencia 1 (medido contra api.mercadopago.com el 4 de octubre de 2026):
+         * Si se envía Authorization: Bearer en vez del parámetro en query, Mercado Pago rechaza
+         * con 400 unexpected_processing (causa G001).
+         */
+        if (authHeader && authHeader.startsWith("Bearer ")) {
+          return reply.code(400).send({
+            message: "unexpected_processing",
+            error: "bad_request",
+            status: 400,
+            cause: [
+              {
+                code: "G001",
+                description: "unexpected_processing",
+              },
+            ],
+          });
+        }
+
+        /*
+         * Nivel de evidencia 1 (medido contra api.mercadopago.com el 4 de octubre de 2026):
+         * Sin public_key en la query, Mercado Pago responde 401 con error: "unauthorized"
+         * y causa "access_parameters is required" (E212).
+         */
+        if (!publicKey || !publicKey.trim()) {
+          return reply.code(401).send({
+            message: "access is unauthorized",
+            error: "unauthorized",
+            code: "unauthorized_access",
+            cause: [
+              {
+                code: "E212",
+                description: "access_parameters is required",
+              },
+            ],
+          });
+        }
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const query = request.query as { public_key?: string } | undefined;
-      const publicKey = query?.public_key;
-      const authHeader = request.headers.authorization;
-
-      /*
-       * Nivel de evidencia 1 (medido contra api.mercadopago.com el 4 de octubre de 2026):
-       * Si se envía Authorization: Bearer en vez del parámetro en query, Mercado Pago rechaza
-       * con 400 unexpected_processing (causa G001).
-       */
-      if (authHeader && authHeader.startsWith("Bearer ")) {
-        return reply.code(400).send({
-          message: "unexpected_processing",
-          error: "bad_request",
-          status: 400,
-          cause: [
-            {
-              code: "G001",
-              description: "unexpected_processing",
-            },
-          ],
-        });
-      }
-
-      /*
-       * Nivel de evidencia 1 (medido contra api.mercadopago.com el 4 de octubre de 2026):
-       * Sin public_key en la query, Mercado Pago responde 401 con error: "unauthorized"
-       * y causa "access_parameters is required" (E212).
-       */
-      if (!publicKey || !publicKey.trim()) {
-        return reply.code(401).send({
-          message: "access is unauthorized",
-          error: "unauthorized",
-          code: "unauthorized_access",
-          cause: [
-            {
-              code: "E212",
-              description: "access_parameters is required",
-            },
-          ],
-        });
-      }
+      // `preValidation` ya respondió si faltaba `public_key`.
+      const publicKey = (request.query as { public_key: string }).public_key;
 
       /*
        * Nivel de evidencia 1 (medido contra api.mercadopago.com el 4 de octubre de 2026):
@@ -1120,6 +1158,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/mercadopago/card_tokens/:id",
+    { schema: getMpCardTokenSchema },
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       if (!request.headers.authorization) {
         return reply.code(401).send(CARD_TOKEN_WITHOUT_ACCESS);
@@ -1153,6 +1192,7 @@ export async function mercadopagoRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/mercadopago/payment_methods/search",
+    { schema: getMpPaymentMethodSearchSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const query = request.query as { public_key?: string; bins?: string } | undefined;
       const publicKey = query?.public_key?.trim();
