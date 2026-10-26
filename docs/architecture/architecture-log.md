@@ -4478,6 +4478,32 @@ Las listas de letras quedaron en orden («B y D»), salvo las que se emparejan c
 
 **Estado:** Resuelto en el #163.
 
+### 125. La API de Simulación tiene dos superficies REST y tres patrones de integración (issue #108)
+
+**Responsable:** David (issue #108; PR de esta implementación pendiente de asociar).
+
+**Contexto.** La iteración de la API REST agregó al proceso existente de `simulator-api` una segunda responsabilidad: además de imitar las APIs de las cuatro pasarelas bajo `/v1/sim`, expone las operaciones propias de Kit Pagos bajo `/v1/api`. Ambas superficies comparten Fastify, puerto y despliegue. La descripción anterior del SAD solo presentaba el simulador de pasarelas, y la sección 3.6 de `layers-and-components.md` todavía afirmaba que RF-13 y OpenAPI estaban pendientes.
+
+**Decisión 1: extender `simulator-api` y conservar una frontera de módulos explícita.** La alternativa era crear un paquete o servicio separado (por ejemplo, `rest-api/`) que dependiera del SDK y dejar al simulador dedicado exclusivamente a imitar pasarelas. Se descartó porque el requerimiento era extender el simulador existente como parte natural de la solución, no crear un sistema paralelo. La contrapartida —un proceso con dos responsabilidades distintas— se contiene en `simulator-api/src/kit-pagos-api/`: el módulo traduce HTTP a llamadas de `KitPagos`, mientras `simulator-api/src/routes/` mantiene las rutas de simulación. CORS también se registra en el plugin REST para no cambiar las respuestas de `/v1/sim`.
+
+**Decisión 2: la llamada de regreso a `/v1/sim` es HTTP, no un ciclo de dependencias.** El SDK, si no recibe `baseUrl`, dirige sus adaptadores al simulador local en `http://localhost:3000/v1/sim/<pasarela>`. Por ello, una solicitud a `/v1/api` puede entrar al SDK y volver por HTTP a `/v1/sim` en el mismo proceso. No existe un ciclo de dependencias entre paquetes: el SDK no depende de `simulator-api`; solo realiza una solicitud HTTP al destino configurado. Este recorrido permite probar Kit Pagos completo por HTTP sin instalar el SDK en el frontend ni disponer de credenciales de una pasarela.
+
+**Decisión 3: registrar los tres patrones de integración, sin confundir lo implementado con lo futuro.**
+
+| Patrón | Flujo | Estado |
+|---|---|---|
+| P1 | Backend del comercio → SDK → pasarela | Existente; no cambia con esta iteración. |
+| P2 | Frontend → REST `/v1/api` → SDK → pasarela | Implementado en esta iteración; el SDK puede llamar por HTTP a `/v1/sim` para las pruebas locales. |
+| P3 | Frontend → SDK unificado de pasarelas | El flujo integral no está implementado. `KitPagosBrowser` tokeniza con Wompi, Mercado Pago y Kushki, pero no sustituye la integración de pagos del backend; Rapyd requiere checkout alojado. El issue #110 investigó su viabilidad. |
+
+**Decisión 4: registrar el estado parcial del beneficio de DA-02.** DA-02 justificó Fastify, entre otros motivos, porque `@fastify/swagger` permitiría generar OpenAPI automáticamente. Ese supuesto no se verificó durante dos iteraciones: ninguna de las 23 rutas existentes entonces declaraba `schema`, por lo que Swagger no tenía metadatos de ruta que publicar. El PR #146 (issue #105) implementó el registro de `@fastify/swagger` y `@fastify/swagger-ui`, y las rutas de `/v1/api` declaran sus schemas en `kit-pagos-api/openapi/schemas.ts`; la documentación se sirve en `/docs`, `/docs/json` y `/docs/yaml`. Sin embargo, las rutas de `/v1/sim` siguen sin declarar schemas: #106 y #107 permanecen abiertos para completar esa cobertura, así que RF-13 no debe marcarse como completamente implementado. El nombre concreto del componente en el código es `registerOpenApi` dentro de `kit-pagos-api/openapi/register.ts`, no una clase `OpenAPIProvider`.
+
+**Decisión 5: modelo de credenciales.** Se conserva el modelo híbrido del punto 63: credenciales del servidor como perfil predeterminado y credenciales del cliente por cabeceras `x-gateway-*` como opción; el cliente nunca puede proporcionar `webhookSecret`. No se exige repetir secretos por petición cuando puede utilizarse el perfil del servidor.
+
+**Lo medido.** La implementación registra `/v1/api` como plugin con prefijo y registra la documentación OpenAPI al construir la aplicación Fastify. Las rutas REST publican schemas para validación y generación de OpenAPI. No se afirman cifras de comparación entre patrones: las cifras de comparación formal corresponden al experimento de la Fase 5 y aún no existen.
+
+**Estado:** Resuelto en `layers-and-components.md`, la matriz de trazabilidad, los objetivos y las fuentes PlantUML de contexto, contenedores y componentes. Los tres PNG del repositorio se regeneraron desde esas fuentes y reemplazaron las figuras anteriores. OpenAPI y los schemas de `/v1/api` están implementados; la cobertura de `/v1/sim` sigue pendiente en #106 y #107. El SAD original es externo al repositorio; las instrucciones y el texto propuesto para actualizarlo están en [`sad-update-rest-api.md`](sad-update-rest-api.md). Las figuras embebidas en ese documento externo deben reemplazarse al aplicar el texto propuesto. El punto 14 duplicado ya fue renumerado a 76 en el punto 75. Una búsqueda de `punto 14` en `sdk/src`, `simulator-api/src` y `examples/` no encontró citas de código dependientes de la numeración.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
@@ -4856,6 +4882,18 @@ con la que se dibujaron.
 (ver el mapeo de reemplazo completo entregado por chat, con la sección exacta del `.docx` para
 cada figura). Cada responsable de sección (ver tabla de la Sección A) debe reemplazar la imagen
 correspondiente por el PNG regenerado.
+
+### Issue #108 — Figuras de contexto, contenedores y componentes de la API de Simulación
+
+**Encontrado:** los diagramas existentes mostraban la API de Simulación únicamente como simulador de pasarelas y no distinguían la nueva superficie `/v1/api` de las rutas `/v1/sim`. Las figuras del SAD externo también necesitan esa actualización.
+
+**Estado:** Resuelto. Las fuentes `context-diagram.puml`, `container-diagram.puml` y `component-diagram.puml` de `docs/architecture/Simulador API/diagrams-source/` muestran las dos superficies, la llamada local a `KitPagos`, el retorno HTTP del SDK a `/v1/sim` y los patrones de integración implementados y futuro. Los PNG correspondientes se regeneraron localmente con PlantUML y reemplazaron los diagramas del repositorio:
+
+- `Context Diagram - C4.png`
+- `Container Diagram - C4.png`
+- `Component Diagram - C4.png`
+
+El SAD original sigue siendo externo al repositorio; al trasladar la propuesta de [`sad-update-rest-api.md`](sad-update-rest-api.md), se deben reemplazar allí las tres figuras embebidas por estas versiones regeneradas.
 
 ---
 
