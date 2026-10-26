@@ -156,7 +156,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        prototype: [checkout-directo, checkout-con-sdk]
+        prototype: [checkout-sin-solucion, checkout-con-sdk-front-back, checkout-con-sdk-solo-back]
     defaults:
       run:
         working-directory: ./prototypes/${{ matrix.prototype }}
@@ -216,5 +216,5 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check that only the payments module differs and that A does not use the SDK
+      - name: Check that only the payments module differs and that D does not use the SDK
         run: ./prototypes/check-skeleton-parity.sh

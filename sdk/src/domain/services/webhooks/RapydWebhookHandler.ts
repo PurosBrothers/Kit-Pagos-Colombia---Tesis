@@ -15,13 +15,7 @@ import {
   normalizeTimestamp,
   isTimestampWithinTolerance,
 } from "./signature-utils";
-
-/**
- * Prefijo de `failure_code` que identifica un rechazo del procesador de tarjeta.
- * Catalogo completo en docs.rapyd.net/en/card-network-errors.html; por ejemplo
- * "ERROR_PROCESSING_CARD - [51]" es fondos insuficientes.
- */
-const CARD_DECLINE_PREFIX = "ERROR_PROCESSING_CARD";
+import { RAPYD_CARD_DECLINE_PREFIX, rapydPaymentStatus } from "../native-status";
 
 /**
  * Manejador de webhooks de Rapyd (adquirida por PayU GPO el 14 mar 2025).
@@ -73,20 +67,27 @@ export class RapydWebhookHandler implements GatewayWebhookHandler {
     return safeCompare(receivedSignature, hmacSha256HexAsBase64(context.secret, toSign));
   }
 
+  /**
+   * El webhook notifica el **pago**, y su `data.id` es el del pago. Con PSE es el mismo id que
+   * devolvió `createPayment()`; con tarjeta no, porque el cobro se creó como checkout
+   * (`rapyd-checkout.ts`). Se midió el 21 de octubre de 2026 contra el sandbox: el pago que nace
+   * del checkout no trae ningún campo que apunte al checkout, y lo único que los relaciona es
+   * `merchant_reference_id`, la referencia de la orden que mandó el comercio. Por eso sale en
+   * `orderReference` (punto 118). La firma cubre el cuerpo entero, así que ese campo y
+   * `data.status`, que sale en `rawStatus`, son tan confiables como el tipo de evento.
+   */
   parse(webhook: IncomingWebhook): WebhookEvent {
     const body = JSON.parse(webhook.payload);
     const eventType: string = body.type ?? "";
-
-    // Rapyd nombra el campo `failure_code` en unos eventos y `error_code` en
-    // otros para el mismo dato.
-    const failureCode: string =
-      body.data?.failure_code ?? body.data?.error_code ?? "";
+    const payment: Record<string, unknown> = body.data ?? {};
 
     return new WebhookEvent({
       eventType,
       gatewayTransactionId: body.data?.id ?? "",
-      newStatus: mapStatus(eventType, failureCode),
+      newStatus: mapStatus(eventType, payment),
       gateway: Gateway.RAPYD,
+      rawStatus: body.data?.status || undefined,
+      orderReference: body.data?.merchant_reference_id || undefined,
     });
   }
 }
@@ -128,10 +129,20 @@ function requireWebhookUrl(webhookUrl: string | undefined): string {
  * cita que asumia el formato x-www-form-urlencoded de PayU (architecture-log.md,
  * punto 16).
  */
-function mapStatus(eventType: string, failureCode: string): TransactionStatus {
+function mapStatus(eventType: string, payment: Record<string, unknown>): TransactionStatus {
+  // Rapyd nombra el campo `failure_code` en unos eventos y `error_code` en
+  // otros para el mismo dato.
+  const failureCode = String(payment.failure_code ?? payment.error_code ?? "");
+
   switch (eventType) {
     case "PAYMENT_COMPLETED":
       return "APPROVED";
+    case "PAYMENT_UPDATED":
+      // Avisa que el pago cambió, sin decir hacia dónde: el resultado es el estado del
+      // pago. Con 3DS llega en el mismo segundo que `PAYMENT_COMPLETED`, todavía en
+      // `ACT` (medido el 21 de octubre de 2026), y reportarlo como ERROR le decía al
+      // comercio que un pago aprobado había fallado.
+      return rapydPaymentStatus(String(payment.status ?? ""), { ...payment, failure_code: failureCode });
     case "PAYMENT_SUCCEEDED":
       // data.status "ACT": la solicitud fue recibida pero puede seguir pendiente
       // de un paso adicional (ej. 3DS).
@@ -147,7 +158,7 @@ function mapStatus(eventType: string, failureCode: string): TransactionStatus {
       // un rechazo del procesador de tarjeta; cualquier otro codigo (ej.
       // MISSING_AUTHENTICATION_HEADERS) es un fallo de validacion o
       // infraestructura previo al intento de cobro.
-      return failureCode.startsWith(CARD_DECLINE_PREFIX) ? "DECLINED" : "ERROR";
+      return failureCode.startsWith(RAPYD_CARD_DECLINE_PREFIX) ? "DECLINED" : "ERROR";
     default:
       return "ERROR";
   }

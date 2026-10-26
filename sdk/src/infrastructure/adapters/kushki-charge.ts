@@ -81,6 +81,86 @@ export function reclassifyKushkiCredentialError(error: KitPagosError): KitPagosE
 }
 
 /**
+ * El estado nativo de un cobro rechazado. El `400` del rechazo no trae
+ * `details.transactionStatus`, así que se usa el valor del vocabulario de tarjeta de Kushki
+ * para un rechazo, el mismo que traen sus webhooks y que mapea `KUSHKI_NATIVE_STATUS`. El
+ * código del banco no se pierde: va en el `rejectionReason`.
+ */
+const DECLINED_CHARGE_STATUS = "DECLINED";
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/** El primer identificador no vacío, como texto; Kushki deja `details.ticketNumber` vacío al rechazar. */
+function firstIdentifier(values: readonly unknown[]): string {
+  const found = values.find(
+    (value) => (typeof value === "string" && value.trim() !== "") || typeof value === "number",
+  );
+  return found === undefined ? "" : String(found);
+}
+
+/**
+ * Los códigos de respuesta del procesador son numéricos (`000` aprobado, `017` a `023`
+ * rechazos); los errores de Kushki llevan `K` (`K001`, `K004`, `K220`).
+ */
+const PROCESSOR_RESPONSE_CODE = /^\d+$/;
+
+/**
+ * Si el cuerpo de un error es el de un cobro que el banco rechazó.
+ *
+ * Medido el 24 de octubre de 2026 con las cinco tarjetas de rechazo de
+ * `docs/testing-data/kushki.md` §1: `POST /card/v1/charges` responde `400` con `code` y un
+ * `message` genérico («Transacción declinada.»), y el motivo en `details.responseCode` y
+ * `details.responseText` («Tarjeta sin fondos»). La presencia de `details` no alcanza para
+ * distinguirlo: el mismo día, el `400 K220` de un token cobrado por otro monto trajo `details`
+ * con `responseCode: "K220"`, y el `K001` de un token mal formado, `details` con `field` y
+ * `errors`. Esos son errores de la petición, y lo que los separa de un rechazo es el código:
+ * numérico el del procesador, con `K` el de Kushki. Ver el punto 122 del `architecture-log.md`.
+ */
+export function isDeclinedChargeBody(body: unknown): boolean {
+  const responseCode = asRecord(asRecord(body)?.details)?.responseCode;
+  return typeof responseCode === "string" && PROCESSOR_RESPONSE_CODE.test(responseCode);
+}
+
+/**
+ * Devuelve el rechazo que llegó en un `400` como un cobro en la forma plana del normalizador,
+ * y lanza cualquier otro error.
+ *
+ * Antes ese `400` salía como `INVALID_REQUEST`, un fallo técnico, y el comercio no podía
+ * distinguir una tarjeta sin fondos de una petición mal armada. Es el mismo caso del `402` de
+ * Mercado Pago (`acceptFailedOrder()`): un rechazo que la pasarela entrega con un status de
+ * error. El cuerpo no trae ni el monto ni la referencia del comercio, así que salen de la
+ * petición, que es lo que se cobró. El identificador es `details.transactionId`, porque
+ * `details.ticketNumber` llega vacío, y `transactionReference` queda de respaldo. El cuerpo se
+ * toma del `originalPayload`, que ya pasó por la limpieza de credenciales de `httpFailure()`.
+ */
+export function acceptDeclinedCharge(
+  error: unknown,
+  request: CreatePaymentRequest,
+): Record<string, unknown> {
+  if (
+    !(error instanceof KitPagosError) ||
+    error.code !== KitPagosErrorCode.INVALID_REQUEST ||
+    !isDeclinedChargeBody(error.originalPayload)
+  ) {
+    throw error;
+  }
+  const body = error.originalPayload as Record<string, unknown>;
+  const details = body.details as Record<string, unknown>;
+  return {
+    ticketNumber: firstIdentifier([details.ticketNumber, details.transactionId, body.transactionReference]),
+    transaction_status: DECLINED_CHARGE_STATUS,
+    trackingCode: request.orderReference.getValue(),
+    contactDetails: { email: request.payer.email },
+    responseCode: details.responseCode,
+    amount: buildKushkiAmount(request, resolveTaxBreakdown(request)),
+  };
+}
+
+/**
  * Arma el cuerpo de `POST /card/v1/charges`.
  *
  * `months` solo viaja cuando hay más de una cuota, porque es como Kushki llama a las

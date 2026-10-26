@@ -8,10 +8,10 @@ El experimento de la Fase 5 compara dos prototipos funcionalmente idénticos: un
 
 ## 1. Los dos prototipos y la regla que hace válida la comparación
 
-| | Prototipo A — control | Prototipo B — tratamiento |
+| | Prototipo D — control | Prototipo B — tratamiento |
 |---|---|---|
-| Carpeta | `prototypes/checkout-directo/` | `prototypes/checkout-con-sdk/` |
-| Cómo cobra | Integración directa contra las APIs nativas | A través de `kit-pagos-colombia` |
+| Carpeta | `prototypes/checkout-sin-solucion/` | `prototypes/checkout-con-sdk-front-back/` |
+| Cómo cobra | Integración directa contra la API nativa de cada una de las cuatro pasarelas | Las cuatro a través de `kit-pagos-colombia` |
 | Qué representa | Lo que hace hoy un desarrollador colombiano | Lo que propone la tesis |
 
 **La regla dura: todo lo que no sea integración de pagos tiene que ser idéntico en los dos.** Misma interfaz, mismo servidor, misma estructura, mismas dependencias, mismo estilo. Si el prototipo B tuviera una interfaz más simple o menos validaciones, la diferencia medida no sería atribuible al framework.
@@ -21,11 +21,14 @@ La forma práctica de garantizarlo: construir un **esqueleto común**, copiarlo 
 El esqueleto está en `prototypes/` desde el issue #130 (punto 90 del `architecture-log.md`, y [`prototypes/README.md`](../../prototypes/README.md)):
 
 - **El módulo de pagos de cada prototipo** es `src/payments/` y `test/payments/`. Incluye `src/payments/browser/client.js`, que tokeniza la tarjeta en el navegador.
-- **Lo demás es el esqueleto**, incluido el contrato `src/checkout/PaymentsPort.ts`. `prototypes/check-skeleton-parity.sh` comprueba en la CI que sea idéntico en los dos.
-- **Los dos `package.json` traen `kit-pagos-colombia`**, para que también las dependencias sean idénticas. El mismo script falla si el módulo de pagos de A menciona el SDK.
+- **Lo demás es el esqueleto**, incluido el contrato `src/checkout/PaymentsPort.ts`. `prototypes/check-skeleton-parity.sh` comprueba en la CI que sea idéntico en los dos, salvo las vitrinas, «La Candelaria Cómics» en D y «La Bodega de Chapinero» en B (páginas, catálogo, órdenes y sus pruebas). Son una excepción declarada desde el 19 de octubre de 2026 (puntos 110 y 116 del `architecture-log.md`), y no están en `src/payments/`, así que no entran en el conteo.
+- **Cambios en los módulos de pagos que no hizo su autor, y que hay que declarar al medir:**
+  - **para cobrar en el ambiente del esqueleto:** en el de David (D), 23 líneas agregadas y 2 quitadas en `src/payments/index.ts` (punto 111); en el de Andrés (B), 29 agregadas y 9 quitadas, más sus pruebas (punto 116);
+  - **para las cuatro pasarelas** (punto 117): el contrato para varias pasarelas en el commit base, y Mercado Pago, Kushki y Rapyd, que escribe Orduz en B y en D.
+- **Los dos `package.json` traen `kit-pagos-colombia`**, para que también las dependencias sean idénticas. El mismo script falla si el módulo de pagos de D menciona el SDK.
 - **La línea base del conteo** es el commit que agrega el esqueleto.
 
-Y la otra mitad de la regla, la que es fácil de olvidar: los dos tienen que cubrir la misma funcionalidad, incluidos los tres puntos que un prototipo apurado omitiría —distinguir rechazo de fallo técnico, verificar la firma del webhook, y registrar el estado nativo para auditoría—. Un prototipo A que solo llame al endpoint de cobro no es una integración real: es la mitad de una, y compararla contra el framework completo **infla artificialmente la diferencia** a favor de la tesis.
+Y la otra mitad de la regla, la que es fácil de olvidar: los dos tienen que cubrir la misma funcionalidad, incluidos los tres puntos que un prototipo apurado omitiría —distinguir rechazo de fallo técnico, verificar la firma del webhook, y registrar el estado nativo para auditoría—. Un prototipo D que solo llame al endpoint de cobro no es una integración real: es la mitad de una, y compararla contra el framework completo **infla artificialmente la diferencia** a favor de la tesis.
 
 ---
 
@@ -34,17 +37,33 @@ Y la otra mitad de la regla, la que es fácil de olvidar: los dos tienen que cub
 | # | Variable | Cómo |
 |---|---|---|
 | 1 | Líneas de integración | Conteo sobre el módulo de pagos de cada prototipo (`src/payments/`), excluyendo el esqueleto común |
-| 2 | Diff de migración | `git diff --stat` entre el commit de Wompi y el de Mercado Pago |
+| 2 | Costo de agregar cada pasarela | `git show --stat` de cada commit de pasarela, sobre `src/payments/` y `test/payments/` |
 | 3 | **Métricas CK** | `npm run metrics -- --root <prototipo>/src --tsconfig <prototipo>/tsconfig.json --json <archivo>` sobre las clases de pago de cada prototipo — ver §3 |
 | 4 | Conceptos nativos expuestos | Conteo de identificadores propios de pasarela en el código del prototipo |
-| 5 | Pasarelas alcanzables | Cuántas de las cuatro puede usar sin escribir código nuevo |
+| 5 | Pasarelas alcanzables | Cuántas de las cuatro cobran de punta a punta, con tarjeta y con PSE, en el sandbox oficial y, donde el sandbox no deja, en el simulador |
 | 6 | Cobertura de pruebas | Jest, con el mismo esfuerzo de pruebas en ambos |
 
 ### La variable 2 es la que más vale, y es la más fácil de recolectar
 
-`git diff --stat` entre dos commits. Es **auditable por cualquiera** y no depende de quién lo cuente, que es exactamente lo que se quiere en un experimento donde los autores también son los evaluadores.
+`git show --stat` de un commit. Es **auditable por cualquiera** y no depende de quién lo cuente, que es exactamente lo que se quiere en un experimento donde los autores también son los evaluadores.
 
-El procedimiento exige disciplina de commits: los dos prototipos se implementan con Wompi, se cierra ese estado con un commit en cada uno, y **solo después** se migran a Mercado Pago. Si la migración se mezcla con otros cambios en el mismo commit, la medición se contamina y no hay forma de limpiarla después.
+El procedimiento exige disciplina de commits (punto 117):
+
+1. Un **commit base** en los dos prototipos, con el contrato para varias pasarelas y Wompi como única pasarela registrada.
+2. **Un commit por pasarela, en el mismo orden en los dos**: Mercado Pago, Kushki y Rapyd. Cada uno contiene solo esa pasarela.
+
+Si una pasarela se mezcla con otros cambios en el mismo commit, la medición se contamina y no hay forma de limpiarla después.
+
+```bash
+# Por cada commit de pasarela, en cada prototipo
+git show --stat <commit> -- prototypes/checkout-sin-solucion/src/payments prototypes/checkout-sin-solucion/test/payments
+```
+
+Hasta el commit `d3ada47`, las carpetas de D y B se llamaban `checkout-directo` y `checkout-con-sdk` (punto 119). En un commit anterior, el filtro usa el nombre de entonces; si no, `git show --stat` sale vacío.
+
+Si un commit de pasarela toca algo fuera de `src/payments/` y `test/payments/` (el esqueleto o la vitrina), eso también se registra: es un costo de la pasarela que la hipótesis dice que B no debería pagar.
+
+Hasta el 20 de octubre de 2026, la variable 2 era el diff de migrar de Wompi a Mercado Pago (#133, cerrado).
 
 ### La variable 4 se puede automatizar, y conviene
 
@@ -52,9 +71,11 @@ Es un conteo de identificadores nativos en el código del prototipo:
 
 ```bash
 # Sobre el módulo de pagos de cada prototipo
-grep -rcoE "amount_in_cents|transaction_amount|acceptance_token|integrity|APPROVAL|CLO|x-signature|x-event-checksum|Private-Merchant-Id|access_key" \
-  prototypes/checkout-directo/src/payments/
+grep -rcoE "amount_in_cents|transaction_amount|total_amount|acceptance_token|integrity|APPROVAL|CLO|x-signature|x-event-checksum|x-kushki-signature|Private-Merchant-Id|Public-Merchant-Id|access_key|salt" \
+  prototypes/checkout-sin-solucion/src/payments/
 ```
+
+La lista cubre las cuatro pasarelas y se fija antes de medir (#134). Wompi aporta `amount_in_cents`, `acceptance_token`, `integrity` y `x-event-checksum`; Mercado Pago, `transaction_amount`, `total_amount` y `x-signature`; Kushki, `x-kushki-signature`, `Private-Merchant-Id` y `Public-Merchant-Id`; Rapyd, `access_key`, `salt` y `CLO`.
 
 **En el prototipo B ese conteo debería ser cero**, y si no lo es, la abstracción tiene una fuga. El plan de evaluación es explícito: eso sería un hallazgo negativo y hay que reportarlo igual.
 
@@ -62,13 +83,13 @@ grep -rcoE "amount_in_cents|transaction_amount|acceptance_token|integrity|APPROV
 
 ## 3. Cómo se corre `ck-metrics.ts` sobre un prototipo
 
-La variable 3 es la que el Hito H5 exige literalmente. Hasta el issue #130 no se podía recolectar: el script resolvía de forma fija contra `sdk/` la raíz de las fuentes, el `tsconfig.json` y los patrones de exclusión, y correrlo sobre `prototypes/checkout-directo/` analizaba el SDK otra vez. El plan de evaluación lo lista como prerrequisito 3 de la Fase 5 y dice, textualmente, que es **"el más fácil de pasar por alto y el que puede costar más caro, porque es el que sostiene el Hito H5"**. El cambio está registrado en el punto 87 del `architecture-log.md`.
+La variable 3 es la que el Hito H5 exige literalmente. Hasta el issue #130 no se podía recolectar: el script resolvía de forma fija contra `sdk/` la raíz de las fuentes, el `tsconfig.json` y los patrones de exclusión, y correrlo sobre la carpeta de un prototipo analizaba el SDK otra vez. El plan de evaluación lo lista como prerrequisito 3 de la Fase 5 y dice, textualmente, que es **"el más fácil de pasar por alto y el que puede costar más caro, porque es el que sostiene el Hito H5"**. El cambio está registrado en el punto 87 del `architecture-log.md`.
 
 Desde `sdk/`, para cada prototipo:
 
 ```bash
-npm run metrics -- --root ../prototypes/checkout-directo/src --tsconfig ../prototypes/checkout-directo/tsconfig.json --json ../docs/evaluation/ck-checkout-directo.json
-npm run metrics -- --root ../prototypes/checkout-con-sdk/src --tsconfig ../prototypes/checkout-con-sdk/tsconfig.json --json ../docs/evaluation/ck-checkout-con-sdk.json
+npm run metrics -- --root ../prototypes/checkout-sin-solucion/src --tsconfig ../prototypes/checkout-sin-solucion/tsconfig.json --json ../docs/evaluation/ck-checkout-sin-solucion.json
+npm run metrics -- --root ../prototypes/checkout-con-sdk-front-back/src --tsconfig ../prototypes/checkout-con-sdk-front-back/tsconfig.json --json ../docs/evaluation/ck-checkout-con-sdk-front-back.json
 ```
 
 Las rutas de los prototipos son las de la sección 1; ajústelas si la estructura final es otra. Qué resuelve cada opción:
@@ -95,9 +116,9 @@ De ahí sale el orden forzado de la Iteración 3: **escenarios del simulador →
 
 ## 5. Dónde va el resultado
 
-En `docs/evaluation/`, que está reservada para eso. El informe tiene que contener, según el plan de evaluación: el diseño resumido, la tabla con las seis variables para ambos prototipos, el diff de migración citado textualmente, las métricas CK de cada uno, la discusión de amenazas a la validez, y la conclusión **tal como salió, incluso si contradice la hipótesis**.
+En `docs/evaluation/`, que está reservada para eso. El informe tiene que contener, según el plan de evaluación: el diseño resumido, la tabla con las seis variables para ambos prototipos, el costo de agregar cada pasarela citado textualmente, las métricas CK de cada uno, la discusión de amenazas a la validez, y la conclusión **tal como salió, incluso si contradice la hipótesis**.
 
-La tabla de la variable 2 —el costo de migrar— es la que conviene proyectar primero en la sustentación.
+La tabla de la variable 2 —el costo de agregar cada pasarela— es la que conviene proyectar primero en la sustentación.
 
 ---
 
@@ -106,8 +127,9 @@ La tabla de la variable 2 —el costo de migrar— es la que conviene proyectar 
 El plan las declara, y conviene tenerlas presentes al recolectar:
 
 - **Somos autores e intérpretes.** La defensa es que cinco de las seis variables son contables por script y auditables por terceros.
-- **El prototipo A puede quedar mal hecho sin querer.** La defensa es seguir la documentación oficial de cada pasarela y que lo revise alguien que no lo escribió.
-- **Nada se probó contra pasarelas reales.** Los prototipos corren contra el simulador, y eso es una limitación del alcance que va escrita en el informe. Aunque conviene notar algo que cambió después de que ese plan se escribiera: `baseUrl` admite un mapa por pasarela, así que **si se quiere que los prototipos corran contra los sandboxes reales, técnicamente se puede** (punto 57). Sería una decisión de alcance, no un impedimento.
+- **El prototipo D puede quedar mal hecho sin querer.** La defensa es seguir la documentación oficial de cada pasarela y que lo revise alguien que no lo escribió.
+- **Un solo autor escribió las pasarelas nuevas en B y en D** (punto 117). La mitigación de asignación del plan no se cumple, y el informe lo declara.
+- **Nada se cobró en producción.** Desde los puntos 111 y 117, B y D cobran por omisión en el sandbox oficial de cada pasarela, y las pruebas automáticas corren contra el simulador. Que no haya cobros en producción es una limitación del alcance que va escrita en el informe.
 - **Dos prototipos no son una muestra.** Es un estudio de caso comparativo, que es lo que el marco metodológico admite para evaluar un artefacto, y así se presenta.
 
 Y una que no está en la lista de amenazas pero condiciona la recolección: **el tiempo de implementación queda fuera como evidencia principal**, porque quien implementa el segundo prototipo ya aprendió el dominio en el primero. Ese efecto de orden no se puede eliminar con cuatro personas y dos prototipos. Se puede registrar como dato secundario declarando el sesgo; presentarlo como evidencia principal sería indefendible ante un jurado.

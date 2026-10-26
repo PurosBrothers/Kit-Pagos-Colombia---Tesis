@@ -14,6 +14,13 @@ import {
   KushkiTransferTokenRequestBody,
 } from "../gateways/kushki/types";
 import {
+  chargeDeclineFor,
+  chargeDeclineForCode,
+  isDeclinedAtTokenization,
+  TOKEN_DECLINE_BODY,
+} from "../gateways/kushki/testCards";
+import { cardTokenOutcomeFor, rememberCardTokenOutcome } from "../store/CardTokenOutcomes";
+import {
   centsFromKushkiAmount,
   headerScenario,
   resolveScenario,
@@ -104,11 +111,12 @@ const DOCUMENT_OUTCOMES: ReadonlyMap<string, string> = new Map([
  * 7. POST /v1/sim/kushki/card/v1/tokens: la tokenización de tarjeta desde el navegador, con
  *    CORS (punto 106).
  *
- * Punto crítico del cobro con tarjeta, explícito en el issue: un **rechazo** viaja con el
- * mismo código HTTP que una aprobación, y la decisión de éxito o fallo vive únicamente en
- * el estado dentro del cuerpo. Es justo el comportamiento que rompe un adaptador que decide
- * mirando `response.ok`. Lo que cambió es el código: `201` y no `200`, porque es el que
- * responde Kushki al crear.
+ * El cobro con tarjeta responde `201` si se aprueba y `400` si el banco lo rechaza, con el
+ * código y el motivo en `details` (medido el 24 de octubre de 2026, punto 122). Antes el mock
+ * respondía el rechazo con `201` y `DECLINED` en el cuerpo, porque el issue decía que Kushki
+ * nunca usa el status HTTP para un rechazo de negocio; la cuenta UAT aprobaba todo y no se
+ * podía comprobar. La tarjeta decide el rechazo como en el sandbox (`testCards.ts`), y la
+ * cabecera y el monto reservado siguen funcionando, con el código genérico `017`.
  *
  * ## Los estados están en tablas, no en esta ruta
  *
@@ -224,9 +232,18 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       if (!body.currency) {
         return reply.code(400).send({ code: "K055", message: "Tipo de moneda no permitido" });
       }
+      const cardNumber = String(card?.number);
+      if (isDeclinedAtTokenization(cardNumber)) {
+        return reply.code(400).send(TOKEN_DECLINE_BODY);
+      }
 
       const { token } = chargeMocks.buildCardToken();
       kushkiCardTokens.save(token, { totalAmountCents: Math.round(body.totalAmount * 100) });
+      // Se guarda el rechazo que da la tarjeta, nunca su número (`CardTokenOutcomes.ts`).
+      const decline = chargeDeclineFor(cardNumber);
+      if (decline) {
+        rememberCardTokenOutcome("kushki", token, { scenario: "DECLINED", statusDetail: decline.responseCode });
+      }
       return reply.code(201).send({ token });
     },
   );
@@ -239,8 +256,10 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const requestBody = request.body as KushkiCreateChargeRequestBody;
-      // Kushki.js tokeniza en el navegador y el simulador no ve la tarjeta: solo hay monto.
+      // La tarjeta decide si se tokenizó aquí; un token de otro lado solo trae el monto.
+      const fromToken = cardTokenOutcomeFor("kushki", requestBody?.token);
       const resolved = resolveScenario(request, {
+        gatewayData: fromToken?.scenario,
         wholePesos: wholePesosFromKushkiAmount(requestBody?.amount),
       });
       let scenario = resolved.scenario;
@@ -309,10 +328,15 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       let charge: KushkiChargeResponse;
 
       if (scenario === "DECLINED" || scenario === "REJECTED") {
-        // HTTP 201 y no 4xx: Kushki nunca usa el status HTTP para señalar
-        // un rechazo de negocio.
-        charge = chargeMocks.buildDeclinedResponse(requestBody);
-      } else if (scenario === "EXPIRED") {
+        // El registro se guarda para la consulta, y la creación responde el 400 medido.
+        const decline = chargeDeclineForCode(fromToken?.statusDetail);
+        const record = chargeMocks.buildDeclinedResponse(requestBody);
+        record.details.responseText = decline.responseText;
+        kushkiCharges.save(record.ticketNumber, record);
+        return reply.code(400).send(chargeMocks.buildDeclinedChargeError(record, decline));
+      }
+
+      if (scenario === "EXPIRED") {
         charge = chargeMocks.buildExpiredResponse(requestBody);
       } else if (scenario === "INITIALIZED" || scenario === "PENDING") {
         charge = chargeMocks.buildInitializedResponse(requestBody);

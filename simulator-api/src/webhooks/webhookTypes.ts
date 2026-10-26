@@ -59,3 +59,9 @@ export type WebhookBuilder<G extends Gateway> = (
   subject: Extract<WebhookSubject, { gateway: G }>,
   context: WebhookContext,
 ) => OutgoingWebhook;
+
+/** Los avisos, en orden, que la pasarela manda por un solo cambio de estado. */
+export type WebhookSequenceBuilder<G extends Gateway> = (
+  subject: Extract<WebhookSubject, { gateway: G }>,
+  context: WebhookContext,
+) => OutgoingWebhook[];
