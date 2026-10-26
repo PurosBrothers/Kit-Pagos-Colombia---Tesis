@@ -1,6 +1,21 @@
 # Prototipos del experimento de la Fase 5
 
-Dos implementaciones del mismo checkout mínimo de comercio electrónico: mostrar un producto, cobrarlo con tarjeta o PSE, informar el resultado, recibir la notificación asíncrona y consultar el estado. El diseño del experimento está en [`docs/project-management/prototypes-evaluation-plan.md`](../docs/project-management/prototypes-evaluation-plan.md), y cómo se mide, en [`docs/04-metricas-y-pruebas/4-medir-los-prototipos.md`](../docs/04-metricas-y-pruebas/4-medir-los-prototipos.md).
+Cuatro implementaciones del mismo checkout mínimo de comercio electrónico: mostrar un producto, cobrarlo con tarjeta o PSE, informar el resultado, recibir la notificación asíncrona y consultar el estado. El diseño del experimento está en [`docs/project-management/prototypes-evaluation-plan.md`](../docs/project-management/prototypes-evaluation-plan.md), y cómo se mide, en [`docs/04-metricas-y-pruebas/4-medir-los-prototipos.md`](../docs/04-metricas-y-pruebas/4-medir-los-prototipos.md).
+
+## Los cuatro de un vistazo
+
+Todos cobran con Wompi, Mercado Pago, Kushki y Rapyd, con tarjeta y con PSE. Cambia **cómo integran los pagos**:
+
+| | Prototipo | Qué demuestra | En el experimento |
+|---|---|---|---|
+| **A** | SDK solo en el servidor (`checkout-con-sdk-solo-back`) | Es nuestro prototipo original. Responde si el SDK le sirve a un comercio que no quiere adoptar su módulo de navegador: la página tokeniza la tarjeta con `fetch` y solo el servidor usa `kit-pagos-colombia` | No, es una demostración de alcance |
+| **B** | SDK en servidor y navegador (`checkout-con-sdk-front-back`) | Nuestro primer valor agregado: `KitPagos` en el servidor y `KitPagosBrowser` en la página | **Sí, es el tratamiento** |
+| **C** | Frontend contra la API REST (`checkout-frontend-rest`) | Otro valor agregado: el navegador cobra contra `/v1/api`, sin servidor de pagos propio | No, es una demostración de alcance |
+| **D** | Sin solución (`checkout-sin-solucion`) | Integración a mano, con `fetch` contra la API nativa de cada pasarela, como lo haría un comercio sin Kit Pagos | **Sí, es el control** |
+
+Las métricas (líneas, métodos, conceptos nativos expuestos y demás) se comparan **D contra B**. A y C se documentan, pero no entran en esa comparación.
+
+La tabla de abajo da el detalle de cada carpeta.
 
 | Carpeta | Prototipo | Cómo cobra |
 |---|---|---|
