@@ -71,7 +71,7 @@ const CARD_LOOKUPS = {
   "GET /payment_methods/search": () => json(200, { results: [{ id: "visa", payment_type_id: "credit_card" }] }),
 };
 
-describe("Mercado Pago payments module (prototype A, direct integration)", () => {
+describe("Mercado Pago payments module (prototype D, direct integration)", () => {
   const originalFetch = globalThis.fetch;
   afterEach(() => {
     globalThis.fetch = originalFetch;

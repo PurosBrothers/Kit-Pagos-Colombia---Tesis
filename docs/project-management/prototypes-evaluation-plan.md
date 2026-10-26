@@ -26,7 +26,7 @@ Un mismo caso de uso, implementado dos veces. El caso de uso es un **checkout m�
 
 Desde el 20 de octubre de 2026 (punto 117 del `architecture-log.md`), **los dos cubren las cuatro pasarelas**: Wompi, Mercado Pago, Kushki y Rapyd. El comprador elige la pasarela con un selector en la tienda, como en el prototipo C.
 
-| | Prototipo A — control | Prototipo B — tratamiento |
+| | Prototipo D — control | Prototipo B — tratamiento |
 |---|---|---|
 | **Carpeta** | `prototypes/checkout-sin-solucion/` | `prototypes/checkout-con-sdk-front-back/` |
 | **Cómo cobra** | Integración directa contra la API nativa de cada una de las cuatro pasarelas, con `fetch` y los formatos de cada una | Las cuatro a través de `kit-pagos-colombia` |
@@ -38,9 +38,9 @@ Desde el 20 de octubre de 2026 (punto 117 del `architecture-log.md`), **los dos 
 
 La forma práctica de garantizarlo: construir primero un esqueleto común, copiarlo a las dos carpetas, y a partir de ahí tocar **únicamente** el módulo de pagos en cada uno. Ese esqueleto compartido queda fuera del conteo de líneas.
 
-> **Excepción declarada (19 de octubre de 2026, puntos 110 y 116 del `architecture-log.md`).** Por decisión de Joan, los prototipos A y B son tiendas con catálogo y carrito, «La Candelaria Cómics» (cómics) y «La Bodega de Chapinero» (vinos).
+> **Excepción declarada (19 de octubre de 2026, puntos 110 y 116 del `architecture-log.md`).** Por decisión de Joan, los prototipos D y B son tiendas con catálogo y carrito, «La Candelaria Cómics» (cómics) y «La Bodega de Chapinero» (vinos).
 >
-> - **Lo que es igual en los dos:** la vitrina de B copia la estructura de la de A, con los mismos archivos, rutas y flujo. El servidor, el contrato `PaymentsPort`, los webhooks y las dependencias siguen idénticos, y la comprobación de paridad los sigue exigiendo.
+> - **Lo que es igual en los dos:** la vitrina de B copia la estructura de la de D, con los mismos archivos, rutas y flujo. El servidor, el contrato `PaymentsPort`, los webhooks y las dependencias siguen idénticos, y la comprobación de paridad los sigue exigiendo.
 > - **Lo que difiere:** el catálogo, la marca, los estilos, y en B la casilla de mayoría de edad y las leyendas de ley de una tienda de licores.
 > - **Cómo se mide:** las variables 1 y 2 se cuentan solo sobre el módulo de pagos, que la excepción no toca.
 >
@@ -48,7 +48,7 @@ La forma práctica de garantizarlo: construir primero un esqueleto común, copia
 
 ### Qué debe hacer cada prototipo, exactamente igual
 
-Para que la comparación sea justa, los dos tienen que cubrir la misma funcionalidad. Si el prototipo A omite algo que el B trae gratis por el framework, hay que implementarlo en A también; de lo contrario el conteo premia al B por hacer menos.
+Para que la comparación sea justa, los dos tienen que cubrir la misma funcionalidad. Si el prototipo D omite algo que el B trae gratis por el framework, hay que implementarlo en D también; de lo contrario el conteo premia al B por hacer menos.
 
 1. Crear un pago por un monto en pesos con referencia de orden y datos del pagador.
 2. Traducir el resultado a un estado propio del comercio (aprobado, rechazado, pendiente).
@@ -57,7 +57,7 @@ Para que la comparación sea justa, los dos tienen que cubrir la misma funcional
 5. Consultar el estado de una transacción por su identificador.
 6. Registrar el estado nativo original de la pasarela para auditoría.
 
-Los puntos 3, 4 y 6 son los que hacen honesta la comparación. Un prototipo A que solo llame al endpoint de cobro y muestre el resultado no es una integración real: es la mitad de una, y compararla contra el framework completo infla artificialmente la diferencia.
+Los puntos 3, 4 y 6 son los que hacen honesta la comparación. Un prototipo D que solo llame al endpoint de cobro y muestre el resultado no es una integración real: es la mitad de una, y compararla contra el framework completo infla artificialmente la diferencia.
 
 ---
 
@@ -82,7 +82,7 @@ Es la medición más valiosa del proyecto y conviene diseñarla primero, porque 
 **La hipótesis, escrita antes de medir** (20 de octubre de 2026, antes del primer commit de pasarela):
 
 - **En el prototipo B, agregar una pasarela es configuración:** leer sus credenciales y registrarla, sin escribir su mapeo de monto, su traducción de estados, su verificación de firma ni su flujo de consulta, y sin tocar el esqueleto ni el modelo de datos.
-- **En el prototipo A, cada pasarela obliga a escribir todo eso,** y además su tokenización en el navegador en Mercado Pago y Kushki.
+- **En el prototipo D, cada pasarela obliga a escribir todo eso,** y además su tokenización en el navegador en Mercado Pago y Kushki.
 
 Escribir la hipótesis antes de medir importa: si el resultado la contradice, eso también es un hallazgo válido de la tesis y hay que reportarlo, no ajustar el experimento hasta que salga el número esperado.
 
@@ -103,7 +103,7 @@ Todas contables por script, ninguna por apreciación.
 
 La variable 4 es más interesante de lo que parece. En el prototipo B el conteo debería ser **cero**: si aparece un solo `amount_in_cents` en el código del comercio, significa que la abstracción tiene una fuga, y eso sería un hallazgo negativo que hay que reportar igual.
 
-La variable 3 depende de que la fórmula de WMC sea la canónica, y no es un detalle menor para la validez de esta comparación. Mientras el script calculó WMC como conteo de métodos, un método único de 360 líneas con un `switch` de cuatro ramas puntuaba WMC 1 (ver `architecture-log.md`, punto 34). Ese es precisamente el patrón que se espera encontrar en el prototipo A, donde la integración directa concentra el mapeo de cada pasarela en el código del comercio: con la fórmula vieja, el prototipo más complejo habría reportado el mejor WMC, y la comparación habría dicho lo contrario de lo que ocurre en el código. La corrección de la fórmula es lo que vuelve interpretable esta variable, y `MAX_CC` es la que hace visible ese patrón concreto.
+La variable 3 depende de que la fórmula de WMC sea la canónica, y no es un detalle menor para la validez de esta comparación. Mientras el script calculó WMC como conteo de métodos, un método único de 360 líneas con un `switch` de cuatro ramas puntuaba WMC 1 (ver `architecture-log.md`, punto 34). Ese es precisamente el patrón que se espera encontrar en el prototipo D, donde la integración directa concentra el mapeo de cada pasarela en el código del comercio: con la fórmula vieja, el prototipo más complejo habría reportado el mejor WMC, y la comparación habría dicho lo contrario de lo que ocurre en el código. La corrección de la fórmula es lo que vuelve interpretable esta variable, y `MAX_CC` es la que hace visible ese patrón concreto.
 
 ### Lo que no se va a medir como evidencia principal
 
@@ -111,9 +111,9 @@ La variable 3 depende de que la fórmula de WMC sea la canónica, y no es un det
 
 Se puede registrar como dato secundario, declarando el sesgo de forma explícita. Presentarlo como evidencia principal sería metodológicamente indefendible, y es exactamente el tipo de cosa que un jurado pregunta.
 
-**Mitigación parcial:** que el prototipo A (integración directa) lo construya una persona distinta de quien construye el B, y que ninguna de las dos sea quien escribió el adaptador de la pasarela en cuestión. No elimina el sesgo, pero lo reduce y deja constancia de que se consideró.
+**Mitigación parcial:** que el prototipo D (integración directa) lo construya una persona distinta de quien construye el B, y que ninguna de las dos sea quien escribió el adaptador de la pasarela en cuestión. No elimina el sesgo, pero lo reduce y deja constancia de que se consideró.
 
-**Revisado el 20 de octubre de 2026 (punto 117).** Con el cambio de alcance, Orduz escribe Mercado Pago, Kushki y Rapyd en A y en B, y es autor de buena parte de los adaptadores del SDK. La mitigación no se cumple, y se declara en la §5.
+**Revisado el 20 de octubre de 2026 (punto 117).** Con el cambio de alcance, Orduz escribe Mercado Pago, Kushki y Rapyd en B y en D, y es autor de buena parte de los adaptadores del SDK. La mitigación no se cumple, y se declara en la §5.
 
 ---
 
@@ -123,16 +123,16 @@ Un informe comparativo que no discute sus propias debilidades es más fácil de 
 
 **Somos autores e intérpretes.** El mismo equipo que construyó el framework mide si el framework sirve. El sesgo es inevitable; la defensa es que las variables 1 a 5 son contables por script y auditables por terceros, no juicios nuestros.
 
-**El prototipo A puede estar mal hecho a propósito.** Sin querer, es fácil escribir la integración directa de forma más torpe de lo que la escribiría alguien experto. La defensa es seguir la documentación oficial de cada pasarela y sus ejemplos, y dejar el código de A revisado por alguien que no lo escribió, igual que exige el DoD.
+**El prototipo D puede estar mal hecho a propósito.** Sin querer, es fácil escribir la integración directa de forma más torpe de lo que la escribiría alguien experto. La defensa es seguir la documentación oficial de cada pasarela y sus ejemplos, y dejar el código de D revisado por alguien que no lo escribió, igual que exige el DoD.
 
-**Las vitrinas no son idénticas** (puntos 110 y 116). A vende cómics y B vinos. Tienen la misma estructura, las mismas rutas y el mismo flujo, pero no el mismo contenido. Las variables 1 y 2 no las tocan, porque se cuentan sobre `src/payments/`. Una sesión con usuarios (variable 3, si se hace) tendría que tener en cuenta que el comprador no ve la misma tienda.
+**Las vitrinas no son idénticas** (puntos 110 y 116). D vende cómics y B vinos. Tienen la misma estructura, las mismas rutas y el mismo flujo, pero no el mismo contenido. Las variables 1 y 2 no las tocan, porque se cuentan sobre `src/payments/`. Una sesión con usuarios (variable 3, si se hace) tendría que tener en cuenta que el comprador no ve la misma tienda.
 
-**Un solo autor escribió las pasarelas nuevas en A y en B** (punto 117). Orduz escribe Mercado Pago, Kushki y Rapyd en los dos prototipos, y es autor de buena parte de los adaptadores del SDK. La mitigación de la §4 no se cumple. Hay dos riesgos:
+**Un solo autor escribió las pasarelas nuevas en B y en D** (punto 117). Orduz escribe Mercado Pago, Kushki y Rapyd en los dos prototipos, y es autor de buena parte de los adaptadores del SDK. La mitigación de la §4 no se cumple. Hay dos riesgos:
 
-- **A puede heredar lo que el SDK ya resolvió**, y quedar más simple de lo que lo escribiría alguien que lee la documentación de cero. Eso achicaría la diferencia en contra de la tesis.
+- **D puede heredar lo que el SDK ya resolvió**, y quedar más simple de lo que lo escribiría alguien que lee la documentación de cero. Eso achicaría la diferencia en contra de la tesis.
 - **El orden de construcción favorece al segundo prototipo** en el tiempo, que por eso no es evidencia principal (§4).
 
-La defensa es la misma de A: seguir y citar la documentación oficial, y que David y Andrés revisen sus módulos.
+La defensa es la misma de D: seguir y citar la documentación oficial, y que David y Andrés revisen sus módulos.
 
 **Los dos módulos de pagos tienen cambios que no hizo su autor** (puntos 111, 116 y 117):
 
@@ -141,7 +141,7 @@ La defensa es la misma de A: seguir y citar la documentación oficial, y que Dav
 
 Se declaran al medir, y cada autor los revisa.
 
-**Nada se probó contra producción.** Desde el punto 111, A y B cobran por omisión en el sandbox oficial, que desde el punto 117 es el de cada una de las cuatro pasarelas. Con Wompi, los dos se midieron ahí el 19 de octubre de 2026. Las pruebas automáticas y los escenarios de fallo corren contra la API de Simulación, cuyas respuestas se derivaron de la documentación oficial y están registradas campo por campo en `ubiquitous-language.md`. Que no se haya cobrado en producción es una limitación honesta del alcance, y debe quedar escrita en el informe.
+**Nada se probó contra producción.** Desde el punto 111, B y D cobran por omisión en el sandbox oficial, que desde el punto 117 es el de cada una de las cuatro pasarelas. Con Wompi, los dos se midieron ahí el 19 de octubre de 2026. Las pruebas automáticas y los escenarios de fallo corren contra la API de Simulación, cuyas respuestas se derivaron de la documentación oficial y están registradas campo por campo en `ubiquitous-language.md`. Que no se haya cobrado en producción es una limitación honesta del alcance, y debe quedar escrita en el informe.
 
 **Dos prototipos no son una muestra.** No hay significancia estadística ni pretensión de tenerla. Es un estudio de caso comparativo, que es lo que DSR admite para evaluar un artefacto, y así debe presentarse.
 
@@ -191,4 +191,4 @@ Al cerrar la Iteración 3 (Hito H4, ~5 de octubre), crear el milestone `Fase 5 �
 
 La distinción importa por el cronograma: la Fase 5 está comprimida de tres semanas a dos, y solo cabe si lo que se mide ya existe. Un issue de "construir el prototipo B" dentro del milestone de la Fase 5 es la forma más directa de que la compresión falle.
 
-Responsable primario de la fase: Joan, por rol de líder de evaluación y documentación. Pero la regla de `methodology.md` de que *"todos los integrantes deben aportar a todos los entregables durante la Fase 4"* aplica con más razón acá: el prototipo A y el prototipo B deben construirlos personas distintas, por la mitigación de sesgo de la sección 4.
+Responsable primario de la fase: Joan, por rol de líder de evaluación y documentación. Pero la regla de `methodology.md` de que *"todos los integrantes deben aportar a todos los entregables durante la Fase 4"* aplica con más razón acá: el prototipo D y el prototipo B deben construirlos personas distintas, por la mitigación de sesgo de la sección 4.

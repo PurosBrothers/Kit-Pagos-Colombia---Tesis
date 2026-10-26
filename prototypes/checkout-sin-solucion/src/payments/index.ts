@@ -7,14 +7,14 @@ import { rapydModule } from "./rapyd";
 import { wompiModule } from "./wompi";
 
 /**
- * Las pasarelas del prototipo A, en el orden en que se ofrecen al comprador. Cada una es un
+ * Las pasarelas del prototipo D, en el orden en que se ofrecen al comprador. Cada una es un
  * archivo que integra su API nativa a mano, con `fetch` y siguiendo su documentación oficial
  * (punto 117 del `architecture-log.md`).
  */
 const GATEWAY_MODULES: readonly GatewayModule[] = [wompiModule, mercadoPagoModule, kushkiModule, rapydModule];
 
 /**
- * El módulo de pagos del prototipo A: reúne las pasarelas en el `PaymentsPort` del esqueleto.
+ * El módulo de pagos del prototipo D: reúne las pasarelas en el `PaymentsPort` del esqueleto.
  *
  * En el sandbox oficial, una pasarela queda activa solo si están sus llaves en el `.env` de la
  * raíz, o la variable que la apunta a otra URL. Si no queda ninguna, el checkout no arranca y

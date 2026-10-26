@@ -23,7 +23,7 @@ import {
 } from "./gateway";
 
 /**
- * Integración directa con Mercado Pago (prototipo A): `fetch` contra su API, siguiendo la
+ * Integración directa con Mercado Pago (prototipo D): `fetch` contra su API, siguiendo la
  * documentación oficial de Colombia. Tarjeta y PSE van por la Orders API.
  *
  * - Crear una orden: https://www.mercadopago.com.co/developers/es/reference/online-payments/checkout-api/create-order/post
@@ -347,7 +347,7 @@ export function createMercadoPagoPayments(config: MercadoPagoPaymentsConfig): Ga
   return new MercadoPagoPayments(config);
 }
 
-/** Mercado Pago en el registro de pasarelas del prototipo A (`index.ts`). */
+/** Mercado Pago en el registro de pasarelas del prototipo D (`index.ts`). */
 export const mercadoPagoModule: GatewayModule = {
   option: { id: "mercadopago", name: "Mercado Pago", cardCapture: "BROWSER_TOKEN" },
   sandboxKeys: SANDBOX_KEYS,

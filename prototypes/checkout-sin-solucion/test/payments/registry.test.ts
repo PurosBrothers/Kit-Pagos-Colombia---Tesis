@@ -3,7 +3,7 @@ import { createPayments } from "../../src/payments";
 /** Las llaves de sandbox de cada pasarela, con valores de mentira. */
 const WOMPI_KEYS = { WOMPI_PUBLIC_KEY: "pub_test_x", WOMPI_PRIVATE_KEY: "prv_test_x", WOMPI_INTEGRITY_SECRET: "integrity_x" };
 
-describe("the gateway registry of prototype A", () => {
+describe("the gateway registry of prototype D", () => {
   it("should offer, in the sandbox, only the gateways whose keys are in the environment", () => {
     const payments = createPayments(WOMPI_KEYS);
 

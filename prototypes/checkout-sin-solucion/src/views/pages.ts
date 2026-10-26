@@ -116,7 +116,7 @@ ${COVER_SPRITE}
 ${main}
 <footer class="footer">
   <p>La Candelaria Cómics · Bogotá · tienda de ejemplo</p>
-  <p class="footer__small">Prototipo A de Kit Pagos Colombia: integración directa con las cuatro pasarelas, sin el SDK.</p>
+  <p class="footer__small">Prototipo D de Kit Pagos Colombia: integración directa con las cuatro pasarelas, sin el SDK.</p>
 </footer>
 <script type="module" src="/assets/checkout.js"></script>
 </body>
@@ -165,7 +165,7 @@ export function storePage(
     <aside class="about" aria-label="Sobre este prototipo">
       <p class="about__title">Este prototipo es</p>
       <p>
-        El <strong>prototipo A de Kit Pagos Colombia</strong>, el grupo de control del experimento: una tienda que
+        El <strong>prototipo D de Kit Pagos Colombia</strong>, el grupo de control del experimento: una tienda que
         integra a mano las cuatro pasarelas, con <code>fetch</code> contra la API de cada una y siguiendo su
         documentación oficial, sin el SDK del framework.
       </p>

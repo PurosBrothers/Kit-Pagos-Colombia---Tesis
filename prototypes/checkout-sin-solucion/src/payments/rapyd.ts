@@ -14,7 +14,7 @@ import { paymentsEnvironment } from "../checkout/environment";
 import { GatewayModule, GatewayPayments, declineReasonOf, defaultSleep, fetchWithRetry, readEnv } from "./gateway";
 
 /**
- * Integración directa con Rapyd (prototipo A): `fetch` contra su API, siguiendo la documentación
+ * Integración directa con Rapyd (prototipo D): `fetch` contra su API, siguiendo la documentación
  * oficial. La tarjeta va por la página de pago de Rapyd y PSE es un método por banco.
  *
  * - Firma de las peticiones: https://docs.rapyd.net/en/request-signatures.html
@@ -335,7 +335,7 @@ export function createRapydPayments(config: RapydPaymentsConfig): GatewayPayment
   return new RapydPayments(config);
 }
 
-/** Rapyd en el registro de pasarelas del prototipo A (`index.ts`). */
+/** Rapyd en el registro de pasarelas del prototipo D (`index.ts`). */
 export const rapydModule: GatewayModule = {
   option: { id: "rapyd", name: "Rapyd", cardCapture: "HOSTED_PAGE" },
   sandboxKeys: SANDBOX_KEYS,

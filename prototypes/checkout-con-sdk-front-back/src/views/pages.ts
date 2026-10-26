@@ -167,11 +167,11 @@ export function storePage(
       <p class="about__title">Este prototipo es</p>
       <p>
         El <strong>prototipo B de Kit Pagos Colombia</strong>, el grupo de tratamiento del experimento: una tienda
-        con el mismo esqueleto que el prototipo A, cuyo módulo de pagos cobra las cuatro pasarelas con
+        con el mismo esqueleto que el prototipo D, cuyo módulo de pagos cobra las cuatro pasarelas con
         <code>kit-pagos-colombia</code>, el SDK del framework, en vez de integrarlas a mano.
       </p>
       <p>
-        El prototipo A integra cada pasarela con <code>fetch</code>, siguiendo su documentación oficial. El
+        El prototipo D integra cada pasarela con <code>fetch</code>, siguiendo su documentación oficial. El
         experimento compara el código de pagos de los dos y lo que cuesta agregarle a cada uno una pasarela más. Los
         pagos van al sandbox oficial o al simulador, sin dinero real.
       </p>

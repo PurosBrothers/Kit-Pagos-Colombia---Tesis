@@ -22,7 +22,7 @@ import {
 } from "./gateway";
 
 /**
- * Integración directa con Kushki (prototipo A): `fetch` contra su API, siguiendo la referencia
+ * Integración directa con Kushki (prototipo D): `fetch` contra su API, siguiendo la referencia
  * oficial de Colombia. Kushki llama Transfer In a su PSE.
  *
  * - Tarjetas: https://api-docs.kushkipagos.com/colombia/online-payments/card-payments
@@ -324,7 +324,7 @@ export function createKushkiPayments(config: KushkiPaymentsConfig): GatewayPayme
   return new KushkiPayments(config);
 }
 
-/** Kushki en el registro de pasarelas del prototipo A (`index.ts`). */
+/** Kushki en el registro de pasarelas del prototipo D (`index.ts`). */
 export const kushkiModule: GatewayModule = {
   option: { id: "kushki", name: "Kushki", cardCapture: "BROWSER_TOKEN" },
   sandboxKeys: SANDBOX_KEYS,

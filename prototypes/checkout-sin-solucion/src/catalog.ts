@@ -1,5 +1,5 @@
 /**
- * El catálogo de «La Candelaria Cómics», la tienda del prototipo A (punto 110 del
+ * El catálogo de «La Candelaria Cómics», la tienda del prototipo D (punto 110 del
  * `architecture-log.md`). Los precios están en pesos enteros, y ningún pedido posible cae entre
  * 10 001 y 10 604, los montos que la API de Simulación reserva para escenarios de fallo
  * (`docs/02-arquitectura/3-api-de-simulacion.md`, sección 4): un pedido nunca dispara uno sin

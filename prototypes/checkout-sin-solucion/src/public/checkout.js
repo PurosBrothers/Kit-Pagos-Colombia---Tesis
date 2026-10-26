@@ -13,7 +13,7 @@ function show(text) {
   if (message) message.textContent = text;
 }
 
-// La traza del navegador, en la consola (F12) con [tienda A]: cada llamada de la página a la tienda
+// La traza del navegador, en la consola (F12) con [tienda D]: cada llamada de la página a la tienda
 // y la tokenización, que sale del navegador directo a la pasarela. Nunca registra el cuerpo de la
 // petición, que lleva la tarjeta, ni una llave completa.
 const KEY_PATTERNS = [
@@ -22,7 +22,7 @@ const KEY_PATTERNS = [
 ];
 
 function traceLine(...parts) {
-  console.info("[tienda A]", ...parts);
+  console.info("[tienda D]", ...parts);
 }
 
 /** El sentido de la llamada y su ruta, sin la query y con las llaves tapadas. */
