@@ -22,8 +22,10 @@ async function registerOpenApiPlugin(app: FastifyInstance): Promise<void> {
           "API REST que expone el SDK Kit Pagos Colombia y simula las cuatro pasarelas de pago " +
           "(Wompi, Mercado Pago, Kushki y Rapyd) en un único servidor determinista.\n\n" +
           "## Autenticación\n\n" +
-          "Todos los endpoints requieren `Authorization: Bearer <token>` donde el token es el " +
-          "configurado en la variable de entorno `API_KEY` del servidor.\n\n" +
+          "Las operaciones protegidas requieren `Authorization: Bearer <token>` cuando el token " +
+          "está configurado en `API_AUTH_TOKEN` o `SIMULATOR_API_AUTH_TOKEN`. Sin token, el servicio " +
+          "opera abierto en desarrollo local. `/v1/sim` y `/health` son rutas públicas, salvo " +
+          "`/v1/sim/webhooks/trigger`, que también requiere el token cuando está configurado.\n\n" +
           "## Credenciales de pasarela\n\n" +
           "Los endpoints bajo `/v1/api` aceptan credenciales de pasarela opcionales mediante " +
           "cabeceras `x-gateway-*`. Si se omiten, el servidor usa las suyas propias, lo que " +
@@ -68,12 +70,11 @@ async function registerOpenApiPlugin(app: FastifyInstance): Promise<void> {
             type: "http",
             scheme: "bearer",
             description:
-              "Token de API del servidor. Configúralo en la variable de entorno `API_KEY`. " +
-              "No corresponde a ninguna clave de pasarela.",
+              "Token de API del servidor. Configúralo en `API_AUTH_TOKEN` o " +
+              "`SIMULATOR_API_AUTH_TOKEN`. No corresponde a ninguna clave de pasarela.",
           },
         },
       },
-      security: [{ bearerAuth: [] }],
     },
     hideUntagged: false,
   });
@@ -92,4 +93,3 @@ async function registerOpenApiPlugin(app: FastifyInstance): Promise<void> {
 }
 
 export const registerOpenApi = fp(registerOpenApiPlugin);
-

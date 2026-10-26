@@ -75,6 +75,22 @@ describe("GET /docs/json — especificación OpenAPI", () => {
     expect(bearer.scheme).toBe("bearer");
   });
 
+  it("documenta las variables reales de autenticación y no acepta webhookSecret desde el cliente", async () => {
+    const app = buildApp({ logger: false });
+    const response = await app.inject({ method: "GET", url: "/docs/json" });
+    const spec = response.json<Record<string, unknown>>();
+    const info = spec.info as Record<string, unknown>;
+    const paths = spec.paths as Record<string, unknown>;
+    const post = (paths["/v1/api/payments"] as Record<string, unknown>)["post"] as Record<string, unknown>;
+    const parameters = post.parameters as Array<Record<string, unknown>>;
+
+    expect(info.description).toContain("API_AUTH_TOKEN");
+    expect(info.description).toContain("SIMULATOR_API_AUTH_TOKEN");
+    expect(info.description).not.toContain("API_KEY");
+    expect(spec.security).toBeUndefined();
+    expect(parameters.some((parameter) => parameter.name === "x-gateway-webhook-secret")).toBe(false);
+  });
+
   it("define las etiquetas Kit Pagos y Simulación", async () => {
     const app = buildApp({ logger: false });
     const response = await app.inject({ method: "GET", url: "/docs/json" });
@@ -191,4 +207,3 @@ describe("GET /docs/json — especificación OpenAPI", () => {
     expect(response.json().message).toContain("gateway");
   });
 });
-
