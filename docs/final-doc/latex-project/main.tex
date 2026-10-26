@@ -1,0 +1,105 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage[spanish, es-lcroman]{babel}  
+\usepackage{color}
+\usepackage{ifthen}
+\usepackage{xcolor}
+\usepackage{titling}
+\usepackage{fancyhdr}
+\usepackage{geometry}
+\usepackage{titlesec}
+\usepackage{remreset}
+\usepackage{titletoc}
+\usepackage{graphicx}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{setspace}
+\usepackage[hidelinks]{hyperref}
+
+\setstretch{1.15}
+
+\pagenumbering{roman}
+\pagestyle{fancy}
+
+\fancyhead[R]{Memoria de Trabajo de Grado}
+\fancyhead[LO]{\ifthenelse{\isodd{\value{page}}}{\textbf{Pontificia Universidad Javeriana}}{\textbf{Ingeniería de Sistemas}}}
+\fancyfoot[R]{Página \thepage }
+\fancyfoot[C]{}
+\renewcommand{\footrulewidth}{1pt}
+
+\definecolor{azul_oscuro}{HTML}{003770}
+
+% Título de trabajo basado en el objetivo general; confirmar el título aprobado antes de entregar.
+\title{Kit Pagos Colombia: desarrollo de un framework para simplificar la integración de múltiples pasarelas de pago en el contexto colombiano}
+\author{
+\begin{tabular}{c}
+    Autor 1 \\ 
+    Autor 2 \\
+    Autor 3 \\
+    Autor 4
+\end{tabular}
+}
+
+\geometry{textwidth=15.5cm,left=3cm}
+
+\titlecontents{section}[0em]{\bfseries\large}{\thecontentslabel. }{}{\titlerule*[1pc]{.}\contentspage}
+
+\titleformat{\section}
+  {\centering\normalfont\Large}
+  {\thesection}{1em}{}
+
+\titleformat{\subsection}
+  {\bfseries\large}{\hspace{2em}\thesubsection}{1em}{}
+
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries}
+  {\hspace{2em}\thesubsubsection}{1em}{}
+
+\makeatletter
+\@removefromreset{subsection}{section}
+\makeatother
+
+\renewcommand\thesection{\Roman{section}}
+\renewcommand\thesubsection{\arabic{subsection}}
+
+\begin{document}
+
+    \renewcommand{\contentsname}{TABLA DE CONTENIDO}
+    \renewcommand{\listfigurename}{LISTA DE FIGURAS}
+    \renewcommand{\listtablename}{LISTA DE TABLAS}
+    \def\tablename{Tabla}
+    
+    \include{sections/covers/cover.tex}
+    
+    \newpage
+    \thispagestyle{empty}
+    \mbox{}
+    \newpage
+    
+    \include{sections/covers/secondCover.tex}
+    \include{sections/covers/thirdCover.tex}
+    \include{sections/covers/resolucion.tex}
+    \include{sections/covers/agradecimientos.tex}
+    
+    \tableofcontents
+    \newpage
+    \listoffigures
+    \newpage
+    \listoftables
+
+    \include{sections/covers/abstract_resumen.tex}
+    
+    \include{sections/introduccion.tex}
+    \include{sections/descripcionGeneral.tex}
+    \include{sections/contextoProyecto.tex}
+    \include{sections/analisisProblema.tex}
+    \include{sections/diseñoSolucion.tex}
+    \include{sections/desarrolloSolucion.tex}
+    \include{sections/resultados.tex}
+    \include{sections/conclusiones.tex}
+    \include{sections/referencias.tex}
+    \include{sections/anexos.tex}
+
+
+\end{document}
