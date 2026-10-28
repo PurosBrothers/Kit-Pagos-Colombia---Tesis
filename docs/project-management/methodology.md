@@ -165,6 +165,28 @@ Tres consecuencias de estas definiciones que conviene tener presentes al leer un
 
 **Umbrales:** el WMC subió de 15 a 20 al pasar de conteo de métodos a suma de complejidad ciclomática. No es un relajamiento del criterio: son escalas distintas y el 15 original no era comparable, y el cambio viene acompañado de `MAX_CC ≤ 10`, una restricción nueva que antes no existía y que es más estricta en lo que importa. El 20 es el valor que reporta el SATC de NASA para WMC canónico; el 10 de MAX_CC es el umbral clásico de McCabe.
 
+#### 6.1.1. Adaptación de métricas CK a unidades de archivo (Fase 5, issue #134)
+
+La suite de métricas CK (Chidamber & Kemerer) fue formulada originalmente para programación orientada a objetos basada en clases. En la evaluación de la Fase 5, esa definición estricta por clase presenta un obstáculo metodológico directo:
+
+- En el **Prototipo B (tratamiento, `checkout-con-sdk-front-back`)**, el módulo de pagos `src/payments/` no contiene ninguna clase: está compuesto por funciones puras de módulo (`index.ts`) y configuración declarativa tipada (`gateways.ts`). Medido solo por clases, el reporte arrojaba cero clases y ninguna métrica.
+- En el **Prototipo D (control, `checkout-sin-solucion`)**, cada pasarela declara una clase y entre 6 y 12 funciones auxiliares de módulo (cálculo de firmas, mapeo de payloads, utilidades de cabeceras) que la métrica por clase ignoraba por completo.
+
+Medir únicamente clases habría dado un reporte vacío en B y parcial en D, invalidando la comparación experimental. Por ello, el script `ck-metrics.ts` se extiende con `--unit file` (o `--unit all`), adaptando las cuatro métricas a nivel de archivo:
+
+| Métrica por archivo | Fórmula adaptada | Interpretación |
+|---|---|---|
+| **WMC (Weighted Methods per File)** | Suma de la complejidad ciclomática de todas las funciones y métodos declarados en el archivo (funciones de módulo, métodos de clase y lambdas/funciones flecha asignadas a constantes). En funciones anidadas, cada bifurcación pertenece al llamable inmediatamente contenedor. | Complejidad ciclomática total acumulada en el archivo. |
+| **MAX_CC** | La CC más alta entre todas las funciones y métodos declarados en el archivo, identificando la función de peor caso (`worstFunction`). | Complejidad máxima puntual dentro del archivo. |
+| **CBO (Coupling Between Objects por archivo)** | Conteo de tipos externos distintos importados en el archivo que aparecen en las firmas (parámetros y retorno) de todas sus funciones y métodos. | Dependencia estructural del archivo hacia tipos externos. |
+| **RFC (Response For a File)** | Número total de funciones y métodos declarados en el archivo, más el número de métodos externos invocados (con notación de punto cuyo receptor no empieza por `this.`) y llamadas directas a funciones no declaradas en el archivo. | Tamaño del conjunto de respuesta del archivo ante mensajes. |
+
+Esta adaptación preserva la semántica de Chidamber & Kemerer trasladando la frontera de encapsulamiento de la clase al módulo/archivo (`.ts`), lo que permite una medición simétrica y reproducible entre el código funcional de B y el código híbrido de D.
+
+**Lo que la medición por archivo de CK no mide (declarado):**
+- `browser/client.js` queda fuera del análisis estático de CK porque es código JavaScript del cliente web (no TypeScript analizable con el `tsconfig` del backend): son 117 líneas en D y 12 en B (medidas y reportadas en la variable 1 con `cloc`).
+- Una bifurcación a nivel de módulo que ocurra directamente en el cuerpo superior del archivo fuera de toda función o método (por ejemplo, una inicialización condicional en el arranque del módulo) no se cuenta dentro de la complejidad ciclomática de ninguna función, ya que las métricas CK evalúan unidades invocables (`callables`).
+
 ### 6.2. Excepciones documentadas
 
 Una violación de umbral puede ser consecuencia directa de una decisión arquitectónica ya registrada y no un defecto de diseño. Para esos casos el script mantiene un registro de excepciones (`KNOWN_EXCEPTIONS` en `ck-metrics.ts`), y cada entrada debe enlazar al punto del `architecture-log.md` que la justifica. **Agregar una clase a ese registro sin ese registro previo no es una resolución válida:** deja el umbral verde en el reporte y rojo en la realidad.

@@ -36,12 +36,23 @@ Y la otra mitad de la regla, la que es fácil de olvidar: los dos tienen que cub
 
 | # | Variable | Cómo |
 |---|---|---|
-| 1 | Líneas de integración | Conteo sobre el módulo de pagos de cada prototipo (`src/payments/`), excluyendo el esqueleto común |
+| 1 | Líneas de integración | `npx cloc@2.10.0` sobre el módulo de pagos de cada prototipo (`src/payments/`), contando solo líneas de código (`code`), excluyendo el esqueleto común |
 | 2 | Costo de agregar cada pasarela | `git show --stat` de cada commit de pasarela, sobre `src/payments/` y `test/payments/` |
-| 3 | **Métricas CK** | `npm run metrics -- --root <prototipo>/src --tsconfig <prototipo>/tsconfig.json --json <archivo>` sobre las clases de pago de cada prototipo — ver §3 |
-| 4 | Conceptos nativos expuestos | Conteo de identificadores propios de pasarela en el código del prototipo |
+| 3 | **Métricas CK** | `npm run metrics -- --root <prototipo>/src/payments --tsconfig <prototipo>/tsconfig.json --unit file --json <archivo>` sobre los archivos de pago de cada prototipo — ver §3 |
+| 4 | Conceptos nativos expuestos | Script versionado `sdk/scripts/native-concepts.ts` con catálogo de identificadores propios de pasarela y fronteras de palabra |
 | 5 | Pasarelas alcanzables | Cuántas de las cuatro cobran de punta a punta, con tarjeta y con PSE, en el sandbox oficial y, donde el sandbox no deja, en el simulador |
-| 6 | Cobertura de pruebas | Jest, con el mismo esfuerzo de pruebas en ambos |
+| 6 | Cobertura de pruebas | Jest con `collectCoverageFrom: ["src/payments/**"]`, con el mismo esfuerzo de pruebas en ambos |
+
+### La variable 1 cuenta líneas de código sin ruido
+
+Se recolecta con `cloc` (versión 2.10.0) sobre `src/payments/` de cada prototipo:
+
+```bash
+npx cloc@2.10.0 prototypes/checkout-sin-solucion/src/payments
+npx cloc@2.10.0 prototypes/checkout-con-sdk-front-back/src/payments
+```
+
+Se toma únicamente la columna `code` del resumen total (excluyendo líneas en blanco y comentarios). De este modo, commits que solo ajusten comentarios, documentación o formatos (como `44a897d`) no mueven la cifra de integración.
 
 ### La variable 2 es la que más vale, y es la más fácil de recolectar
 
@@ -65,19 +76,24 @@ Si un commit de pasarela toca algo fuera de `src/payments/` y `test/payments/` (
 
 Hasta el 20 de octubre de 2026, la variable 2 era el diff de migrar de Wompi a Mercado Pago (#133, cerrado).
 
-### La variable 4 se puede automatizar, y conviene
+### La variable 4 se automatiza con script versionado
 
-Es un conteo de identificadores nativos en el código del prototipo:
+El conteo se realiza con `sdk/scripts/native-concepts.ts` (ejecutable con `npm run metrics:concepts` desde `sdk/`), el cual implementa búsqueda con fronteras de palabra (`\b<identificador>\b`) sobre el catálogo formal de identificadores nativos de las cuatro pasarelas:
 
 ```bash
-# Sobre el módulo de pagos de cada prototipo
-grep -rcoE "amount_in_cents|transaction_amount|total_amount|acceptance_token|integrity|APPROVAL|CLO|x-signature|x-event-checksum|x-kushki-signature|Private-Merchant-Id|Public-Merchant-Id|access_key|salt" \
-  prototypes/checkout-sin-solucion/src/payments/
+npm run metrics:concepts -- --target ../prototypes/checkout-sin-solucion/src/payments
+npm run metrics:concepts -- --target ../prototypes/checkout-con-sdk-front-back/src/payments --assert-zero
 ```
 
-La lista cubre las cuatro pasarelas y se fija antes de medir (#134). Wompi aporta `amount_in_cents`, `acceptance_token`, `integrity` y `x-event-checksum`; Mercado Pago, `transaction_amount`, `total_amount` y `x-signature`; Kushki, `x-kushki-signature`, `Private-Merchant-Id` y `Public-Merchant-Id`; Rapyd, `access_key`, `salt` y `CLO`.
+La lista catalogada cubre las cuatro pasarelas y se fija antes de medir (#134):
+- **Wompi**: `amount_in_cents`, `acceptance_token`, `integrity` y `x-event-checksum`.
+- **Mercado Pago**: `transaction_amount`, `total_amount` y `x-signature`.
+- **Kushki**: `x-kushki-signature`, `Private-Merchant-Id`, `Public-Merchant-Id` y `APPROVAL`.
+- **Rapyd**: `access_key`, `salt` y `CLO`.
 
-**En el prototipo B ese conteo debería ser cero**, y si no lo es, la abstracción tiene una fuga. El plan de evaluación es explícito: eso sería un hallazgo negativo y hay que reportarlo igual.
+El uso de fronteras de palabra es crucial: evita falsos positivos por subcadenas presentes en nombres de variables de entorno o tipos propios del SDK (como `integritySecret` o `RAPYD_API_ACCESS_KEY`).
+
+**En el prototipo B ese conteo debe ser estrictamente cero**; si no lo es, la abstracción tiene una fuga. El plan de evaluación es explícito: eso sería un hallazgo negativo y hay que reportarlo igual.
 
 ---
 
@@ -85,20 +101,31 @@ La lista cubre las cuatro pasarelas y se fija antes de medir (#134). Wompi aport
 
 La variable 3 es la que el Hito H5 exige literalmente. Hasta el issue #130 no se podía recolectar: el script resolvía de forma fija contra `sdk/` la raíz de las fuentes, el `tsconfig.json` y los patrones de exclusión, y correrlo sobre la carpeta de un prototipo analizaba el SDK otra vez. El plan de evaluación lo lista como prerrequisito 3 de la Fase 5 y dice, textualmente, que es **"el más fácil de pasar por alto y el que puede costar más caro, porque es el que sostiene el Hito H5"**. El cambio está registrado en el punto 87 del `architecture-log.md`.
 
+### Adaptación a unidad de archivo (`--unit file`, issue #134)
+
+El módulo de pagos de B (`src/payments/`) no tiene ninguna clase: se compone de funciones de módulo en `src/payments/index.ts` y configuración en `src/payments/gateways.ts`. En D, cada pasarela tiene una clase y entre 6 y 12 funciones de módulo auxiliares que el script clásico de clases no veía.
+
+Medir únicamente clases reportaba cero clases en B y dejaba fuera más del 40% de la lógica de D. Por tanto, `ck-metrics.ts` se adaptó para medir cada archivo como unidad (`--unit file` o `--unit all`):
+- **WMC por archivo**: suma de la complejidad ciclomática de todas las funciones y métodos declarados en el archivo.
+- **MAX_CC por archivo**: la complejidad ciclomática más alta entre las funciones y métodos del archivo.
+- **CBO por archivo**: número de tipos externos distintos importados en el archivo que aparecen en las firmas de sus funciones y métodos.
+- **RFC por archivo**: suma, sin duplicados en el archivo, de las funciones y métodos declarados localmente más las llamadas a métodos externos (con punto, salvo métodos sobre `this`) y las llamadas directas a funciones no declaradas en el archivo.
+
 Desde `sdk/`, para cada prototipo:
 
 ```bash
-npm run metrics -- --root ../prototypes/checkout-sin-solucion/src --tsconfig ../prototypes/checkout-sin-solucion/tsconfig.json --json ../docs/evaluation/ck-checkout-sin-solucion.json
-npm run metrics -- --root ../prototypes/checkout-con-sdk-front-back/src --tsconfig ../prototypes/checkout-con-sdk-front-back/tsconfig.json --json ../docs/evaluation/ck-checkout-con-sdk-front-back.json
+npm run metrics -- --root ../prototypes/checkout-sin-solucion/src/payments --tsconfig ../prototypes/checkout-sin-solucion/tsconfig.json --unit file --json ../docs/evaluation/ck-checkout-sin-solucion.json
+npm run metrics -- --root ../prototypes/checkout-con-sdk-front-back/src/payments --tsconfig ../prototypes/checkout-con-sdk-front-back/tsconfig.json --unit file --json ../docs/evaluation/ck-checkout-con-sdk-front-back.json
 ```
 
 Las rutas de los prototipos son las de la sección 1; ajústelas si la estructura final es otra. Qué resuelve cada opción:
 
 1. **La raíz de fuentes es un argumento** (`--root`, repetible). Sin argumentos, `npm run metrics` analiza `sdk/src` y `sdk/src-browser` y produce el mismo reporte que antes del cambio.
 2. **El `tsconfig.json` del proyecto analizado es un argumento** (`--tsconfig`), porque un prototipo con otro `target` u otras rutas de módulos no se resuelve con el del SDK. Solo se admite junto con `--root`.
-3. **Las exclusiones de pruebas** (`*.test.ts`, `*.spec.ts`) se aplican dentro de cada raíz recibida.
-4. **Las excepciones documentadas no se aplican a un proyecto externo.** `KNOWN_EXCEPTIONS` está indexado por nombre de clase, y una clase del prototipo que se llamara igual que una del SDK habría heredado su excepción: un umbral verde en el reporte y rojo en la realidad. Con `--root` el script no las aplica, y lo indica al final del reporte. Una prueba con un proyecto de muestra cuya clase se llama `Amount` lo comprueba (`sdk/test/scripts/ck-metrics.test.ts`). Desde el issue #153, un proyecto externo puede traer las suyas con `--exceptions <archivo>`, indexadas por archivo, clase y métrica. Lo usa el simulador; los prototipos no lo necesitan, porque se miden en modo medición y ahí no se exceptúa nada.
-5. **El modo guarda y el modo medición están separados** (`--mode guard|measure`). En modo guarda, una violación sale con código 1: es la condición 4 de la Definition of Done y es el modo por omisión del SDK. En modo medición, **el valor alto es el dato**: el script reporta las violaciones y sale con 0. Es el modo por omisión con `--root`. Un argumento inválido sale con código 2.
+3. **La unidad de análisis** (`--unit class|file|all`). `--unit file` activa la medición por archivo para los prototipos. Por omisión es `class`.
+4. **Las exclusiones de pruebas** (`*.test.ts`, `*.spec.ts`) se aplican dentro de cada raíz recibida.
+5. **Las excepciones documentadas no se aplican a un proyecto externo.** `KNOWN_EXCEPTIONS` está indexado por nombre de clase, y una clase del prototipo que se llamara igual que una del SDK habría heredado su excepción: un umbral verde en el reporte y rojo en la realidad. Con `--root` el script no las aplica, y lo indica al final del reporte. Una prueba con un proyecto de muestra cuya clase se llama `Amount` lo comprueba (`sdk/test/scripts/ck-metrics.test.ts`). Desde el issue #153, un proyecto externo puede traer las suyas con `--exceptions <archivo>`, indexadas por archivo, clase y métrica. Lo usa el simulador; los prototipos no lo necesitan, porque se miden en modo medición y ahí no se exceptúa nada.
+6. **El modo guarda y el modo medición están separados** (`--mode guard|measure`). En modo guarda, una violación sale con código 1: es la condición 4 de la Definition of Done y es el modo por omisión del SDK. En modo medición, **el valor alto es el dato**: el script reporta las violaciones y sale con 0. Es el modo por omisión con `--root`. Un argumento inválido sale con código 2.
 
 Con `--json <archivo>`, el script escribe además la tabla completa con la fecha, el modo, las raíces, el `tsconfig`, los umbrales y si se aplicaron las excepciones. Ese archivo es el insumo de la recolección: la tabla de la consola tiene colores ANSI y no conviene copiarla al informe.
 

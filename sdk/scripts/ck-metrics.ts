@@ -59,7 +59,7 @@ import {
   SyntaxKind,
   Node,
 } from 'ts-morph';
-import { readFileSync, writeFileSync } from 'fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import * as path from 'path';
 
 // ── Thresholds (methodology.md §6, Definition of Done condition 4) ────────────
@@ -172,7 +172,19 @@ export interface ClassMetrics {
   violations: string[];
 }
 
+export interface FileMetrics {
+  file: string;
+  WMC: number;
+  CBO: number;
+  RFC: number;
+  maxCC: number;
+  worstFunction: string;
+  functionCount: number;
+  violations: string[];
+}
+
 type Callable = MethodDeclaration | ConstructorDeclaration;
+
 
 /** Nodos que introducen una rama en el flujo de control. */
 const BRANCH_KINDS = [
@@ -451,6 +463,7 @@ function printReport(metrics: ClassMetrics[], title: string): void {
  * que se recolecta, no un error.
  */
 export type MetricsMode = 'guard' | 'measure';
+export type MetricsUnit = 'class' | 'file' | 'all';
 
 export interface MetricsOptions {
   /** Raíces de fuentes. La primera da las rutas relativas; las demás se prefijan con su nombre. */
@@ -458,6 +471,8 @@ export interface MetricsOptions {
   /** `tsconfig.json` del proyecto analizado. Sin él, ts-morph usa sus opciones por omisión. */
   tsconfig?: string;
   mode: MetricsMode;
+  /** Unidad analizada: clase, archivo completo, o ambos. Por omisión 'class'. */
+  unit: MetricsUnit;
   /** Solo es `true` al analizar el SDK. Ver `analyzeProject()`. */
   applyKnownExceptions: boolean;
   /** Si está, se escribe ahí el resultado en JSON para la recolección de la Fase 5. */
@@ -488,13 +503,18 @@ export function parseArgs(argv: readonly string[], cwd: string = process.cwd()):
   const roots: string[] = [];
   let tsconfig: string | undefined;
   let mode: MetricsMode | undefined;
+  let unit: MetricsUnit | undefined;
   let json: string | undefined;
   let exceptions: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
+    if (flag === '--files') {
+      unit = 'file';
+      continue;
+    }
     const value = argv[i + 1];
-    if (!['--root', '--tsconfig', '--mode', '--json', '--exceptions'].includes(flag)) {
+    if (!['--root', '--tsconfig', '--mode', '--json', '--exceptions', '--unit'].includes(flag)) {
       throw new UsageError(`Unknown argument: ${flag}`);
     }
     if (value === undefined || value.startsWith('--')) {
@@ -511,6 +531,12 @@ export function parseArgs(argv: readonly string[], cwd: string = process.cwd()):
       }
       mode = value;
     }
+    if (flag === '--unit') {
+      if (value !== 'class' && value !== 'file' && value !== 'all') {
+        throw new UsageError(`--unit must be class, file or all, got: ${value}`);
+      }
+      unit = value;
+    }
   }
 
   if (roots.length === 0) {
@@ -520,13 +546,26 @@ export function parseArgs(argv: readonly string[], cwd: string = process.cwd()):
     if (exceptions !== undefined) {
       throw new UsageError('--exceptions requires --root: the SDK keeps its exceptions in KNOWN_EXCEPTIONS');
     }
-    return { roots: SDK_ROOTS, tsconfig: SDK_TSCONFIG, mode: mode ?? 'guard', applyKnownExceptions: true, json };
+    return {
+      roots: SDK_ROOTS,
+      tsconfig: SDK_TSCONFIG,
+      mode: mode ?? 'guard',
+      unit: unit ?? 'class',
+      applyKnownExceptions: true,
+      json,
+    };
   }
   return {
-    roots, tsconfig, mode: mode ?? 'measure', applyKnownExceptions: false, json,
+    roots,
+    tsconfig,
+    mode: mode ?? 'measure',
+    unit: unit ?? 'class',
+    applyKnownExceptions: false,
+    json,
     ...(exceptions ? { exceptions } : {}),
   };
 }
+
 
 /**
  * Una excepción del registro de un proyecto externo: admite que `metric` de la clase
@@ -719,27 +758,277 @@ export function analyzeProject(options: Pick<MetricsOptions, 'roots' | 'tsconfig
   return allMetrics;
 }
 
+interface FileCallable {
+  name: string;
+  node: Node;
+}
+
+function getFileCallables(sourceFile: SourceFile): FileCallable[] {
+  const callables: FileCallable[] = [];
+
+  sourceFile.forEachDescendant(node => {
+    if (Node.isFunctionDeclaration(node)) {
+      callables.push({ name: node.getName() ?? '(anonymous function)', node });
+    } else if (Node.isMethodDeclaration(node)) {
+      callables.push({ name: node.getName(), node });
+    } else if (Node.isConstructorDeclaration(node)) {
+      callables.push({ name: 'constructor', node });
+    } else if (Node.isArrowFunction(node) || Node.isFunctionExpression(node)) {
+      const parent = node.getParent();
+      if (Node.isVariableDeclaration(parent)) {
+        callables.push({ name: parent.getName(), node });
+      } else if (Node.isPropertyAssignment(parent)) {
+        callables.push({ name: parent.getName(), node });
+      }
+    }
+  });
+
+  return callables;
+}
+
+function getEnclosingCallableInSet(node: Node, callablesSet: Set<Node>): Node | null {
+  let curr = node.getParent();
+  while (curr) {
+    if (callablesSet.has(curr)) return curr;
+    curr = curr.getParent();
+  }
+  return null;
+}
+
+function calcCallableComplexity(callableNode: Node, callablesSet: Set<Node>): number {
+  let complexity = 1;
+  callableNode.forEachDescendant(descendant => {
+    if (BRANCH_KINDS.includes(descendant.getKind() as never)) {
+      if (getEnclosingCallableInSet(descendant, callablesSet) === callableNode) {
+        complexity += 1;
+      }
+    } else if (Node.isBinaryExpression(descendant)) {
+      if (BRANCH_OPERATORS.includes(descendant.getOperatorToken().getKind() as never)) {
+        if (getEnclosingCallableInSet(descendant, callablesSet) === callableNode) {
+          complexity += 1;
+        }
+      }
+    }
+  });
+  return complexity;
+}
+
+function calcFileCBO(sourceFile: SourceFile, callables: FileCallable[]): number {
+  const importedNames = importedNamesOf(sourceFile);
+  const typeNodes: Node[] = [];
+
+  for (const { node } of callables) {
+    if (Node.isFunctionDeclaration(node) || Node.isMethodDeclaration(node) || Node.isConstructorDeclaration(node)) {
+      for (const param of node.getParameters()) {
+        const typeNode = param.getTypeNode();
+        if (typeNode) typeNodes.push(typeNode);
+      }
+      if (Node.isMethodDeclaration(node) || Node.isFunctionDeclaration(node)) {
+        const returnType = node.getReturnTypeNode();
+        if (returnType) typeNodes.push(returnType);
+      }
+    } else if (Node.isArrowFunction(node) || Node.isFunctionExpression(node)) {
+      for (const param of node.getParameters()) {
+        const typeNode = param.getTypeNode();
+        if (typeNode) typeNodes.push(typeNode);
+      }
+      const returnType = node.getReturnTypeNode();
+      if (returnType) typeNodes.push(returnType);
+    }
+  }
+
+  const externalTypes = new Set(
+    typeNodes.flatMap(referencedTypeNames).filter(name => importedNames.has(name)),
+  );
+  return externalTypes.size;
+}
+
+function toRepoRelative(targetPath: string): string {
+  const repoRoot = path.resolve(__dirname, '..', '..');
+  const abs = path.resolve(targetPath);
+  const rel = path.relative(repoRoot, abs);
+  if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
+    return rel.replace(/\\/g, '/');
+  }
+  return abs.replace(/\\/g, '/');
+}
+
+function calcFileRFC(sourceFile: SourceFile, callables: FileCallable[]): number {
+  const localNames = new Set(callables.map(c => c.name).filter(Boolean));
+  const externalCalls = new Set<string>();
+
+  for (const call of sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const expr = call.getExpression();
+    const text = expr.getText();
+    if (text.includes('.') && !text.startsWith('this.')) {
+      const methodName = text.match(/\.([A-Za-z_$][\w$]*)$/)?.[1] ?? text;
+      externalCalls.add(methodName);
+    } else if (Node.isIdentifier(expr)) {
+      const funcName = expr.getText();
+      if (!localNames.has(funcName)) {
+        externalCalls.add(funcName);
+      }
+    }
+  }
+
+  return callables.length + externalCalls.size;
+}
+
+/**
+ * Calcula las métricas CK considerando cada archivo como unidad (adaptación para prototipos,
+ * issue #134).
+ */
+export function analyzeProjectFiles(
+  options: Pick<MetricsOptions, 'roots' | 'tsconfig'>,
+): FileMetrics[] {
+  const roots = options.roots.map(root => path.normalize(root));
+
+  const project = new Project({
+    ...(options.tsconfig ? { tsConfigFilePath: options.tsconfig } : {}),
+    skipAddingFilesFromTsConfig: true,
+  });
+
+  project.addSourceFilesAtPaths(
+    roots.flatMap(root => [`${root}/**/*.ts`, `!${root}/**/*.test.ts`, `!${root}/**/*.spec.ts`]),
+  );
+
+  const allFileMetrics: FileMetrics[] = [];
+
+  for (const sourceFile of project.getSourceFiles()) {
+    const relPath = relativeTo(roots, path.normalize(sourceFile.getFilePath()));
+    const callables = getFileCallables(sourceFile);
+    const callablesSet = new Set(callables.map(c => c.node));
+
+    let WMC = 0;
+    let maxCC = 0;
+    let worstFunction = '—';
+
+    for (const c of callables) {
+      const cc = calcCallableComplexity(c.node, callablesSet);
+      WMC += cc;
+      if (cc > maxCC) {
+        maxCC = cc;
+        worstFunction = `${c.name}()`;
+      }
+    }
+
+    const CBO = calcFileCBO(sourceFile, callables);
+    const RFC = calcFileRFC(sourceFile, callables);
+
+    const violations: string[] = [];
+    if (WMC > THRESHOLDS.WMC) {
+      violations.push(`WMC ${WMC} exceeds threshold (≤ ${THRESHOLDS.WMC})`);
+    }
+    if (CBO > THRESHOLDS.CBO) {
+      violations.push(`CBO ${CBO} exceeds threshold (≤ ${THRESHOLDS.CBO})`);
+    }
+    if (RFC > THRESHOLDS.RFC) {
+      violations.push(`RFC ${RFC} exceeds threshold (≤ ${THRESHOLDS.RFC})`);
+    }
+    if (maxCC > THRESHOLDS.MAX_CC) {
+      violations.push(`MAX_CC ${maxCC} in ${worstFunction} exceeds threshold (≤ ${THRESHOLDS.MAX_CC})`);
+    }
+
+    allFileMetrics.push({
+      file: relPath,
+      WMC,
+      CBO,
+      RFC,
+      maxCC,
+      worstFunction,
+      functionCount: callables.length,
+      violations,
+    });
+  }
+
+  return allFileMetrics;
+}
+
+function printFileReport(metrics: FileMetrics[], title: string): void {
+  const fileW = Math.max('File'.length, ...metrics.map(m => m.file.length)) + 2;
+  const numW = 7;
+  const fnW = Math.max('Worst Function'.length, ...metrics.map(m => m.worstFunction.length)) + 2;
+
+  const totalW = fileW + numW * 4 + fnW + '  Status'.length;
+  const hr = '─'.repeat(totalW);
+
+  console.log(`\n${BOLD}${YELLOW}CK Metrics Report (Files as Units)${RESET} — ${title}\n`);
+  console.log(`${YELLOW}Thresholds${RESET} (methodology.md §6): WMC ≤ ${THRESHOLDS.WMC}  CBO ≤ ${THRESHOLDS.CBO}  RFC ≤ ${THRESHOLDS.RFC}  MAX_CC ≤ ${THRESHOLDS.MAX_CC}\n`);
+  console.log(hr);
+
+  const headerRow =
+    'File'.padEnd(fileW) +
+    'WMC'.padStart(numW) +
+    'CBO'.padStart(numW) +
+    'RFC'.padStart(numW) +
+    'MaxCC'.padStart(numW) +
+    '  ' + 'Worst Function'.padEnd(fnW) +
+    '  Status';
+  console.log(`${BOLD}${headerRow}${RESET}`);
+  console.log(hr);
+
+  for (const m of metrics) {
+    const hasViolation = m.violations.length > 0;
+    const status = hasViolation ? `${RED}FAIL${RESET}` : `${GREEN}✓ OK${RESET}`;
+
+    const wmcPad = String(m.WMC).padStart(numW);
+    const cboPad = String(m.CBO).padStart(numW);
+    const rfcPad = String(m.RFC).padStart(numW);
+    const ccPad  = String(m.maxCC).padStart(numW);
+    const wmcCol = m.WMC > THRESHOLDS.WMC ? `${RED}${wmcPad}${RESET}` : wmcPad;
+    const cboCol = m.CBO > THRESHOLDS.CBO ? `${RED}${cboPad}${RESET}` : cboPad;
+    const rfcCol = m.RFC > THRESHOLDS.RFC ? `${RED}${rfcPad}${RESET}` : rfcPad;
+    const ccCol  = m.maxCC > THRESHOLDS.MAX_CC ? `${RED}${ccPad}${RESET}` : ccPad;
+
+    const row =
+      m.file.padEnd(fileW) +
+      wmcCol +
+      cboCol +
+      rfcCol +
+      ccCol +
+      '  ' + m.worstFunction.padEnd(fnW) +
+      `  ${status}`;
+    console.log(row);
+
+    if (hasViolation) {
+      for (const v of m.violations) {
+        console.log(`  ${RED}↓ ${v}${RESET}`);
+      }
+    }
+  }
+
+  console.log(hr);
+}
+
 /** Lo que se escribe con `--json`: la tabla completa y con qué se produjo. */
 function writeJson(
   file: string,
   options: MetricsOptions,
   metrics: ClassMetrics[],
+  fileMetrics: FileMetrics[] | undefined,
   registry: RegistryOutcome | undefined,
 ): void {
   const report = {
     generatedAt: new Date().toISOString(),
     mode: options.mode,
-    roots: options.roots,
-    tsconfig: options.tsconfig ?? null,
+    roots: options.roots.map(toRepoRelative),
+    tsconfig: options.tsconfig ? toRepoRelative(options.tsconfig) : null,
+    unit: options.unit,
     knownExceptionsApplied: options.applyKnownExceptions,
     ...(registry
-      ? { exceptionsRegistry: options.exceptions, registeredExceptions: registry.applied, staleExceptions: registry.stale }
+      ? { exceptionsRegistry: options.exceptions ? toRepoRelative(options.exceptions) : undefined, registeredExceptions: registry.applied, staleExceptions: registry.stale }
       : {}),
     thresholds: THRESHOLDS,
     totalClasses: metrics.length,
     violatingClasses: metrics.filter(m => m.violations.length > 0).length,
     classes: metrics,
+    ...(fileMetrics ? {
+      totalFiles: fileMetrics.length,
+      violatingFiles: fileMetrics.filter(m => m.violations.length > 0).length,
+      files: fileMetrics,
+    } : {}),
   };
+  mkdirSync(path.dirname(file), { recursive: true });
   writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`);
 }
 
@@ -776,25 +1065,71 @@ export function run(argv: readonly string[]): number {
     return 2;
   }
 
-  const allMetrics = analyzeProject(options);
-  const outcome = registry ? applyExceptionRegistry(allMetrics, registry) : undefined;
+  const unit = options.unit;
+  let allMetrics: ClassMetrics[] = [];
+  let allFileMetrics: FileMetrics[] | undefined;
+
+  if (unit === 'class' || unit === 'all') {
+    allMetrics = analyzeProject(options);
+  }
+  if (unit === 'file' || unit === 'all') {
+    allFileMetrics = analyzeProjectFiles(options);
+  }
+
+  const outcome = registry && allMetrics.length > 0 ? applyExceptionRegistry(allMetrics, registry) : undefined;
   const isSdk = options.applyKnownExceptions;
   const title = isSdk
     ? 'Kit Pagos Colombia SDK'
     : options.roots.map(root => path.relative(process.cwd(), root) || '.').join(', ');
 
-  if (options.json) writeJson(options.json, options, allMetrics, outcome);
+  if (options.json) writeJson(options.json, options, allMetrics, allFileMetrics, outcome);
 
-  // Handle case where no classes are found
+  // If unit is purely files
+  if (unit === 'file') {
+    if (!allFileMetrics || allFileMetrics.length === 0) {
+      console.log(`\nNo files found in ${title}. Nothing to report.\n`);
+      return 0;
+    }
+
+    printFileReport(allFileMetrics, title);
+
+    const totalFiles = allFileMetrics.length;
+    const violatingFiles = allFileMetrics.filter(m => m.violations.length > 0).length;
+
+    if (violatingFiles === 0) {
+      console.log(`\n${GREEN}✓ All ${totalFiles} file(s) within thresholds.${RESET}\n`);
+    } else {
+      console.log(`\n${RED}✗ ${violatingFiles}/${totalFiles} file(s) exceed one or more thresholds.${RESET}\n`);
+    }
+
+    if (!isSdk) {
+      console.log('KNOWN_EXCEPTIONS not applied: they document SDK decisions, not this project.');
+    }
+    if (options.json) console.log(`JSON written to ${options.json}`);
+
+    if (options.mode === 'measure') {
+      if (violatingFiles > 0) {
+        console.log('Measure mode: violations are reported and do not change the exit code.\n');
+      }
+      return 0;
+    }
+    return violatingFiles > 0 ? 1 : 0;
+  }
+
+  // Handle case where classes are analyzed (unit is 'class' or 'all')
   if (allMetrics.length === 0) {
     console.log(`\nNo classes found in ${isSdk ? 'sdk/src/' : title}. Nothing to report.\n`);
+    if (unit === 'all' && allFileMetrics && allFileMetrics.length > 0) {
+      printFileReport(allFileMetrics, title);
+    }
     return 0;
   }
 
-  // Print results
   printReport(allMetrics, title);
+  if (unit === 'all' && allFileMetrics && allFileMetrics.length > 0) {
+    printFileReport(allFileMetrics, title);
+  }
 
-  // Summary
   const totalClasses = allMetrics.length;
   const violatingClasses = allMetrics.filter(m => m.violations.length > 0).length;
 
@@ -822,10 +1157,9 @@ export function run(argv: readonly string[]): number {
     return 0;
   }
 
-  // Non-zero exit code for CI integration (issue #15, condition 4 of DoD)
   return violatingClasses > 0 || staleExceptions > 0 ? 1 : 0;
 }
 
 if (require.main === module) {
   process.exit(run(process.argv.slice(2)));
-}
+}
