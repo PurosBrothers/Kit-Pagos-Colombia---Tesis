@@ -4504,6 +4504,33 @@ Las listas de letras quedaron en orden («B y D»), salvo las que se emparejan c
 
 **Estado:** Resuelto en `layers-and-components.md`, la matriz de trazabilidad, los objetivos y las fuentes PlantUML de contexto, contenedores y componentes. Los tres PNG del repositorio se regeneraron desde esas fuentes y reemplazaron las figuras anteriores. OpenAPI y los schemas de `/v1/api` están implementados; la cobertura de `/v1/sim` sigue pendiente en #106 y #107. El SAD original es externo al repositorio; las instrucciones y el texto propuesto para actualizarlo están en [`sad-update-rest-api.md`](sad-update-rest-api.md). Las figuras embebidas en ese documento externo deben reemplazarse al aplicar el texto propuesto. El punto 14 duplicado ya fue renumerado a 76 en el punto 75. Una búsqueda de `punto 14` en `sdk/src`, `simulator-api/src` y `examples/` no encontró citas de código dependientes de la numeración.
 
+### 126. El SRS, el SAD y el plan de pruebas comparten un estilo LaTeX, y la memoria no compilaba sin errores (issue #167)
+
+**Responsable:** Orduz.
+
+**Contexto.** El SRS y el SAD existían como PDF fuera del repositorio (sus metadatos dicen «Google Docs Renderer»), y el plan de pruebas parte de la plantilla PTP, que pide en la portada la versión y un logo, y una tabla de historial de cambios. El issue #167 pide llevar los tres a LaTeX con el formato de esos originales, una carpeta por documento en `docs/final-doc/`, renombrar `latex-project/` a `memoria/` y compilar los cuatro PDF en la CI. El estilo quedó en `docs/final-doc/comun/estilo.tex`; cómo se usa y cómo se compila está en `docs/final-doc/README.md`.
+
+**Decisión 1: pdfLaTeX con `tgtermes` y `tgheros`, no `fontspec`.** El issue pedía TeX Gyre Termes y Heros en lugar de Times New Roman y Arial. Cargarlas con `fontspec` obliga a XeLaTeX o LuaLaTeX, y la memoria se compila con pdfLaTeX. Joan decidió el 28 de octubre de 2026 usar pdfLaTeX en los cuatro documentos, para que la CI tenga una sola cadena. En los originales, Arial solo aparece en las viñetas del SAD y en espacios al final de las líneas del índice del SRS; el texto visible es Times. Por eso Heros queda como la familia sin serifas y no aparece en los PDF mientras ningún texto la use.
+
+**Decisión 2: el logo sale del vector que publica la universidad, no de la imagen de los originales.** Los PDF originales traen el logo como un PNG de 300 × 412 píxeles en escala de grises. El manual de identidad visual pide el azul institucional siempre que sea posible, admite el negro al 100 % y no permite tonos de gris. Se recortó en vector la versión vertical de `lPUJ Colombia.ai` y se dejó en azul, como decidió Joan el 28 de octubre de 2026.
+
+**Decisión 3: la memoria carga `babel` una sola vez.** `main.tex` traía `\usepackage[spanish]{babel}` y, en la línea siguiente, `\usepackage[spanish, es-lcroman]{babel}`. LaTeX se detiene en la segunda con «Option clash for package babel»: con `-halt-on-error`, que es lo que corre la CI, no hay PDF y `latexmk` sale con código 12. Sin esa opción, pdfLaTeX sigue después del error, ignora la segunda línea y produce el documento. Se quitó la segunda línea porque deja la memoria idéntica a lo que producía hasta ahora. Quitar la primera habría activado `es-lcroman` y cambiado once páginas de los preliminares.
+
+**Decisión 4: la compilación va en un workflow propio, `final-doc.yml`.** La [sintaxis de workflows](https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions) solo admite `paths` bajo `on.<push|pull_request>`, para el workflow entero. Dentro de `ci.yml`, no compilar LaTeX en cada PR exigía un job previo que comparara la base del PR con `HEAD` en `docs/final-doc`. En un workflow aparte basta con `paths`: corre cuando un PR hacia `devops` o `main`, o un push a esas ramas, cambia `docs/final-doc/**` o el propio workflow. Joan eligió el workflow aparte el 28 de octubre de 2026. Usa `texlive/texlive:latest` y las acciones en `@v4`, como `ci.yml`, que no cambia.
+
+**Decisión 5: versión 0.1 hasta la entrega.** Las portadas y el historial llevan la 0.1 y «octubre de 2026» mientras los documentos se escriben, y pasan a 1.0, con la fecha de entrega, cuando se entreguen. Lo decidió Joan el 28 de octubre de 2026.
+
+**Lo medido**, el 28 de octubre de 2026, con TinyTeX v2026.10 (TeX Live 2026, `latexmk` 4.88) y los comandos del job:
+
+| Documento | Resultado |
+|---|---|
+| `srs`, `sad`, `pruebas` | 4 páginas cada uno, sin avisos en el log. Solo incrustan TeX Gyre Termes, normal y negrita. Las líneas de la portada quedan a menos de 1 punto de su altura en el SRS original. |
+| `memoria` | 23 páginas. Comparada con la de `latex-project/` en `devops` (`e569dee`), compilada sin `-halt-on-error`: ninguna diferencia de píxel a 150 ppp. |
+
+TinyTeX necesitó diez paquetes además de los que trae (la lista está en el README). La imagen de la CI trae TeX Live completo y no los necesita. El workflow no se ha ejecutado en GitHub Actions: su YAML pasó `actionlint` 1.7.12.
+
+**Estado:** Implementado en el PR del #167. Faltan la primera ejecución de `final-doc.yml` en GitHub Actions y el visto bueno de David al cambio de `babel` en la memoria.
+
 ---
 
 ## Sección C — Decisiones técnicas: migración PayU → Rapyd
