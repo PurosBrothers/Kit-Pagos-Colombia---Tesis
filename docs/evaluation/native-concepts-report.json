@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-28T19:02:12.465Z",
+  "generatedAt": "2026-10-29T02:21:04.145Z",
   "catalog": [
     {
       "identifier": "amount_in_cents",
@@ -127,8 +127,8 @@
           "matches": [
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/browser/client.js",
-              "line": 85,
-              "column": 57,
+              "line": 147,
+              "column": 53,
               "identifier": "Public-Merchant-Id",
               "gateway": "kushki",
               "lineContent": "headers: { \"Content-Type\": \"application/json\", \"Public-Merchant-Id\": config.publicKey.trim() },"
@@ -176,24 +176,24 @@
           "matches": [
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/kushki.ts",
-              "line": 91,
-              "column": 26,
+              "line": 169,
+              "column": 16,
               "identifier": "Public-Merchant-Id",
               "gateway": "kushki",
               "lineContent": "? { \"Public-Merchant-Id\": this.config.publicMerchantId }"
             },
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/kushki.ts",
-              "line": 92,
-              "column": 26,
+              "line": 170,
+              "column": 16,
               "identifier": "Private-Merchant-Id",
               "gateway": "kushki",
               "lineContent": ": { \"Private-Merchant-Id\": this.config.privateMerchantId }),"
             },
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/kushki.ts",
-              "line": 204,
-              "column": 57,
+              "line": 304,
+              "column": 53,
               "identifier": "x-kushki-signature",
               "gateway": "kushki",
               "lineContent": "const signature = headerValue(webhook.headers, \"x-kushki-signature\");"
@@ -219,16 +219,16 @@
           "matches": [
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/mercadopago.ts",
-              "line": 130,
-              "column": 72,
+              "line": 210,
+              "column": 68,
               "identifier": "total_amount",
               "gateway": "mercadopago",
               "lineContent": "const common = { type: \"online\", processing_mode: \"automatic\", total_amount: total, external_reference: request.orderReference };"
             },
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/mercadopago.ts",
-              "line": 211,
-              "column": 57,
+              "line": 314,
+              "column": 53,
               "identifier": "x-signature",
               "gateway": "mercadopago",
               "lineContent": "const signature = headerValue(webhook.headers, \"x-signature\");"
@@ -256,67 +256,67 @@
           "matches": [
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
-              "line": 44,
-              "column": 15,
+              "line": 103,
+              "column": 11,
               "identifier": "CLO",
               "gateway": "rapyd",
               "lineContent": "case \"CLO\":"
             },
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
-              "line": 104,
-              "column": 15,
+              "line": 179,
+              "column": 11,
               "identifier": "salt",
               "gateway": "rapyd",
               "lineContent": "const salt = randomBytes(8).toString(\"hex\");"
             },
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
-              "line": 107,
-              "column": 97,
+              "line": 184,
+              "column": 39,
               "identifier": "salt",
               "gateway": "rapyd",
-              "lineContent": "const signature = rapydSignature(this.config.secretKey, `${method}${pathname}${search}${salt}${timestamp}${this.config.accessKey}${this.config.secretKey}${body}`);"
+              "lineContent": "`${method}${pathname}${search}${salt}${timestamp}${this.config.accessKey}${this.config.secretKey}${body}`,"
             },
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
-              "line": 112,
-              "column": 17,
+              "line": 190,
+              "column": 9,
               "identifier": "access_key",
               "gateway": "rapyd",
               "lineContent": "access_key: this.config.accessKey,"
             },
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
-              "line": 113,
-              "column": 17,
+              "line": 191,
+              "column": 9,
               "identifier": "salt",
               "gateway": "rapyd",
               "lineContent": "salt,"
             },
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
-              "line": 205,
-              "column": 15,
+              "line": 307,
+              "column": 11,
               "identifier": "salt",
               "gateway": "rapyd",
               "lineContent": "const salt = headerValue(webhook.headers, \"salt\") ?? \"\";"
             },
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
-              "line": 205,
-              "column": 52,
+              "line": 307,
+              "column": 48,
               "identifier": "salt",
               "gateway": "rapyd",
               "lineContent": "const salt = headerValue(webhook.headers, \"salt\") ?? \"\";"
             },
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
-              "line": 209,
-              "column": 92,
+              "line": 312,
+              "column": 35,
               "identifier": "salt",
               "gateway": "rapyd",
-              "lineContent": "const expected = rapydSignature(this.config.secretKey, `${this.config.webhookUrl}${salt}${timestamp}${this.config.accessKey}${this.config.secretKey}${webhook.rawBody}`);"
+              "lineContent": "`${this.config.webhookUrl}${salt}${timestamp}${this.config.accessKey}${this.config.secretKey}${webhook.rawBody}`,"
             }
           ]
         },
@@ -339,32 +339,32 @@
           "matches": [
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/wompi.ts",
-              "line": 137,
-              "column": 57,
+              "line": 203,
+              "column": 53,
               "identifier": "acceptance_token",
               "gateway": "wompi",
               "lineContent": "const token = json?.data?.presigned_acceptance?.acceptance_token;"
             },
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/wompi.ts",
-              "line": 139,
-              "column": 69,
+              "line": 205,
+              "column": 63,
               "identifier": "acceptance_token",
               "gateway": "wompi",
               "lineContent": "throw new PaymentTechnicalError(\"Respuesta de Wompi sin acceptance_token válido\");"
             },
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/wompi.ts",
-              "line": 151,
-              "column": 13,
+              "line": 234,
+              "column": 7,
               "identifier": "amount_in_cents",
               "gateway": "wompi",
               "lineContent": "amount_in_cents: amountInCents,"
             },
             {
               "file": "prototypes/checkout-sin-solucion/src/payments/wompi.ts",
-              "line": 155,
-              "column": 13,
+              "line": 238,
+              "column": 7,
               "identifier": "acceptance_token",
               "gateway": "wompi",
               "lineContent": "acceptance_token: acceptanceToken,"

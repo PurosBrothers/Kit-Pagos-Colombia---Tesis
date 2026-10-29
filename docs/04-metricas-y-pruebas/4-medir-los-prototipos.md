@@ -93,6 +93,8 @@ La lista catalogada cubre las cuatro pasarelas y se fija antes de medir (#134):
 
 El uso de fronteras de palabra es crucial: evita falsos positivos por subcadenas presentes en nombres de variables de entorno o tipos propios del SDK (como `integritySecret` o `RAPYD_API_ACCESS_KEY`).
 
+**Solo se cuenta el código, no los comentarios**, igual que en la variable 1. El script lee cada archivo con el parser de TypeScript (`ts.createSourceFile`, que también lee el `.js` del cliente) y reemplaza por espacios los rangos de comentario antes de buscar. Así cada coincidencia conserva la línea y la columna del archivo original. Se reportan dos cifras: los **identificadores distintos** del catálogo que aparecen y sus **ocurrencias**.
+
 **En el prototipo B ese conteo debe ser estrictamente cero**; si no lo es, la abstracción tiene una fuga. El plan de evaluación es explícito: eso sería un hallazgo negativo y hay que reportarlo igual.
 
 ---
