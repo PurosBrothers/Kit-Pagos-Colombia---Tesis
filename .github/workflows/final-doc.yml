@@ -1,0 +1,38 @@
+# Final documents
+name: Final documents
+
+on:
+  pull_request:
+    branches: [devops,main]
+    paths:
+      - 'docs/final-doc/**'
+      - '.github/workflows/final-doc.yml'
+  push:
+    branches: [devops,main]
+    paths:
+      - 'docs/final-doc/**'
+      - '.github/workflows/final-doc.yml'
+
+jobs:
+  final-doc:
+    name: Final documents (latexmk build of SRS, SAD, test plan and thesis)
+    runs-on: ubuntu-latest
+    container: texlive/texlive:latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build the four PDFs with latexmk
+        run: |
+          mkdir -p final-doc-pdf
+          for doc in srs sad pruebas memoria; do
+            latexmk -pdf -interaction=nonstopmode -halt-on-error -cd "docs/final-doc/$doc/main.tex"
+            cp "docs/final-doc/$doc/main.pdf" "final-doc-pdf/$doc.pdf"
+          done
+
+      - name: Upload the PDFs as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-doc-pdf
+          path: final-doc-pdf/
+          if-no-files-found: error
