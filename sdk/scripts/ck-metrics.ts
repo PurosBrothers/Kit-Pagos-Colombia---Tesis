@@ -1162,4 +1162,4 @@ export function run(argv: readonly string[]): number {
 
 if (require.main === module) {
   process.exit(run(process.argv.slice(2)));
-}
+}

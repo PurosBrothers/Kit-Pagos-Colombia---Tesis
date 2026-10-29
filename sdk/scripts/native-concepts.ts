@@ -164,6 +164,12 @@ function toRepoRelative(targetPath: string): string {
   return abs.replace(/\\/g, '/');
 }
 
+/**
+ * Reemplaza por espacios cada comentario del código, sin mover nada: los saltos de línea y
+ * las posiciones quedan iguales, así que la línea y la columna de cada coincidencia son las
+ * del archivo original. Imprimir el archivo sin comentarios (`ts.createPrinter`) lo
+ * reformatea y cambia la numeración.
+ */
 export function stripComments(code: string, filePath: string): string {
   const isJs = filePath.endsWith('.js') || filePath.endsWith('.jsx');
   const scriptKind = isJs ? ts.ScriptKind.JS : ts.ScriptKind.TS;
@@ -174,8 +180,26 @@ export function stripComments(code: string, filePath: string): string {
     true,
     scriptKind,
   );
-  const printer = ts.createPrinter({ removeComments: true });
-  return printer.printFile(sourceFile);
+
+  const ranges = new Map<number, number>();
+  const collect = (node: ts.Node): void => {
+    for (const range of ts.getLeadingCommentRanges(code, node.getFullStart()) ?? []) {
+      ranges.set(range.pos, range.end);
+    }
+    for (const range of ts.getTrailingCommentRanges(code, node.getEnd()) ?? []) {
+      ranges.set(range.pos, range.end);
+    }
+    node.getChildren(sourceFile).forEach(collect);
+  };
+  collect(sourceFile);
+
+  const chars = code.split('');
+  for (const [start, end] of ranges) {
+    for (let i = start; i < end; i++) {
+      if (chars[i] !== '\n' && chars[i] !== '\r') chars[i] = ' ';
+    }
+  }
+  return chars.join('');
 }
 
 function escapeRegex(text: string): string {
@@ -193,24 +217,24 @@ export function scanSource(
   filePath: string,
   catalog: ConceptDefinition[] = CATALOG,
 ): MatchOccurrence[] {
-  const cleanSource = stripComments(source, filePath);
-  const lines = cleanSource.split(/\r?\n/);
+  const lines = stripComments(source, filePath).split(/\r?\n/);
+  const originalLines = source.split(/\r?\n/);
   const matches: MatchOccurrence[] = [];
   const normalizedFile = path.isAbsolute(filePath) ? toRepoRelative(filePath) : filePath;
 
   for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-    const lineContent = lines[lineIdx];
+    const code = lines[lineIdx];
     for (const concept of catalog) {
       const rx = buildRegex(concept.identifier);
       let match: RegExpExecArray | null;
-      while ((match = rx.exec(lineContent)) !== null) {
+      while ((match = rx.exec(code)) !== null) {
         matches.push({
           file: normalizedFile,
           line: lineIdx + 1,
           column: match.index + 1,
           identifier: concept.identifier,
           gateway: concept.gateway,
-          lineContent: lineContent.trim(),
+          lineContent: originalLines[lineIdx].trim(),
         });
       }
     }

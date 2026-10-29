@@ -103,6 +103,27 @@ describe('native-concepts script (Variable 4)', () => {
       expect(matches[0].identifier).toBe('total_amount');
     });
 
+    it('should report the line and column of the original file when comments come before the match', () => {
+      const sample = [
+        '/**',
+        ' * Wompi firma con amount_in_cents.',
+        ' */',
+        'export function build(total: number) {',
+        '  // Mercado Pago pide total_amount en pesos',
+        '  return {   total_amount: total }; // sin x-signature',
+        '}',
+      ].join('\n');
+
+      const matches = scanSource(sample, 'sample.ts');
+      expect(matches).toHaveLength(1);
+      expect(matches[0]).toMatchObject({
+        line: 6,
+        column: 14,
+        identifier: 'total_amount',
+        lineContent: 'return {   total_amount: total }; // sin x-signature',
+      });
+    });
+
     it('should track distinct identifiers separate from total occurrences', () => {
       const sample = [
         'const a = { total_amount: 100 };',

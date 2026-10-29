@@ -329,7 +329,7 @@ describe("ck-metrics", () => {
       expect(sample?.worstFunction).toBe("processOrder()");
       // CBO: OrderPayload from ./types used in signature of processOrder
       expect(sample?.CBO).toBe(1);
-      // RFC: 4 callables + 4 external calls (externalHelper direct call + map + compute + trim) = 8
+      // RFC: 4 callables + 4 external calls (externalHelper direct call + map + round + trim) = 8
       expect(sample?.RFC).toBe(8);
       expect(sample?.violations).toEqual([]);
     });
