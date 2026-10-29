@@ -2,20 +2,20 @@
 
 Este documento convierte la plantilla LaTeX existente en un mapa de escritura para la memoria de grado. Define qué debe argumentar cada capítulo, qué evidencia ya existe en el repositorio, qué falta producir y qué partes dependen de la evaluación de la Fase 5. No es todavía la memoria terminada: no reemplaza el SPMP ni el SAD, no inventa resultados y no cambia los objetivos aprobados.
 
-La estructura se basa en la plantilla [`latex-project/main.tex`](latex-project/main.tex), los objetivos transcritos en [`docs/project-management/thesis-objectives.md`](../project-management/thesis-objectives.md), la metodología DSR de [`docs/project-management/methodology.md`](../project-management/methodology.md) y el inventario documental y técnico del repositorio.
+La estructura se basa en la plantilla [`memoria/main.tex`](memoria/main.tex), los objetivos transcritos en [`docs/project-management/thesis-objectives.md`](../project-management/thesis-objectives.md), la metodología DSR de [`docs/project-management/methodology.md`](../project-management/methodology.md) y el inventario documental y técnico del repositorio.
 
 ## 1. Decisiones de alcance y formato
 
 ### Plantilla
 
-- **Confirmado:** existe una plantilla LaTeX en [`latex-project/`](latex-project/) con portadas, preliminares, capítulos, referencias y anexos.
+- **Confirmado:** existe una plantilla LaTeX en [`memoria/`](memoria/) con portadas, preliminares, capítulos, referencias y anexos.
 - **Pendiente de confirmar con el director o la coordinación:** que esta sea la versión institucional vigente y obligatoria. Que esté en el repositorio no demuestra por sí solo su autoridad.
 - La plantilla contiene indicaciones que no coinciden sobre la extensión: la introducción menciona un máximo de 60 páginas y referencias menciona 80 páginas sin incluirlas. No se debe fijar ni recortar el documento con base en una de esas cifras hasta confirmar el límite aplicable.
 - Los nombres de capítulos se especializan para Kit Pagos Colombia, conservando el orden y los componentes académicos que ya exige la plantilla. Si el director confirma títulos institucionales inmodificables, se conserva el título oficial y se usan los subtítulos propuestos.
 
 ### Ubicación y formato elegidos
 
-La fuente de la memoria vivirá versionada en `docs/final-doc/latex-project/`, en LaTeX. Es una decisión adecuada para este proyecto porque permite revisar cambios por Git, mantener el documento junto a la evidencia técnica, enlazar rutas del repositorio y compilar una versión reproducible. Google Docs no será la fuente maestra mientras se mantenga esta decisión; si el director exige una copia colaborativa, se tratará como copia derivada y se sincronizará con la fuente versionada.
+La fuente de la memoria vivirá versionada en `docs/final-doc/memoria/`, en LaTeX. Es una decisión adecuada para este proyecto porque permite revisar cambios por Git, mantener el documento junto a la evidencia técnica, enlazar rutas del repositorio y compilar una versión reproducible. Google Docs no será la fuente maestra mientras se mantenga esta decisión; si el director exige una copia colaborativa, se tratará como copia derivada y se sincronizará con la fuente versionada.
 
 El SPMP y el SAD se citan como fuentes externas porque sus versiones aprobadas están fuera del repositorio. Antes de la entrega final se debe registrar su referencia bibliográfica verificable y la versión consultada; no se debe presentar una ruta local de Google Drive como si fuera una fuente pública.
 
@@ -41,7 +41,7 @@ El issue [#115](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/issu
 
 | Parte de la memoria | Contenido y función | Material existente que la alimenta | Pendientes y dependencias |
 |---|---|---|---|
-| Preliminares | Portadas, autoría, director, jurados, resolución, agradecimientos, resumen y abstract | [`latex-project/sections/covers/`](latex-project/sections/covers/) | Confirmar título oficial, código, nombres y cargos. Abstract y resumen deben redactarse al final y respetar el límite indicado por la plantilla. |
+| Preliminares | Portadas, autoría, director, jurados, resolución, agradecimientos, resumen y abstract | [`memoria/sections/covers/`](memoria/sections/covers/) | Confirmar título oficial, código, nombres y cargos. Abstract y resumen deben redactarse al final y respetar el límite indicado por la plantilla. |
 | I. Introducción | Presentar problema, propósito, alcance, método, contribución y recorrido del documento | [`docs/01-producto/4-por-que-kit-pagos.md`](../01-producto/4-por-que-kit-pagos.md), [`docs/project-management/methodology.md`](../project-management/methodology.md), objetivos del SPMP | Escribir como memoria del trabajo realizado; separar motivación de resultados y no anticipar conclusiones experimentales. |
 | II. Descripción del proyecto y formulación del problema | Contexto colombiano, problema de integrar varias pasarelas, solución, justificación, objetivos, alcance, metodología y entregables | [`docs/01-producto/`](../01-producto/), [`docs/project-management/thesis-objectives.md`](../project-management/thesis-objectives.md), [`docs/project-management/methodology.md`](../project-management/methodology.md), SPMP externo | Transcribir los objetivos aprobados literalmente. Validar con el director las ampliaciones de alcance y los entregables efectivamente cerrados. |
 | III. Contexto: marco conceptual y estado del arte | Conceptos de pagos, seguridad y pasarelas; antecedentes y soluciones relacionadas | [`docs/01-producto/1-que-es-una-pasarela-de-pago.md`](../01-producto/1-que-es-una-pasarela-de-pago.md), [`2-conceptos-tecnicos.md`](../01-producto/2-conceptos-tecnicos.md), [`3-las-cuatro-pasarelas.md`](../01-producto/3-las-cuatro-pasarelas.md), fuentes oficiales citadas allí | Completar comparación académica de soluciones relacionadas; verificar y normalizar referencias bibliográficas y fecha de consulta. Evitar que el capítulo sea un glosario. |
@@ -181,7 +181,7 @@ Las discrepancias del proyecto frente al SPMP deben discutirse, no resolverse ed
 
 ### Pendientes que bloquean una versión final
 
-1. Confirmar con el director si la plantilla de `latex-project` es la institucional vigente y si sus encabezados pueden especializarse.
+1. Confirmar con el director si la plantilla de `memoria/` es la institucional vigente y si sus encabezados pueden especializarse.
 2. Resolver la extensión autorizada del documento (la plantilla contiene indicaciones de 60 y 80 páginas) y seleccionar un estilo bibliográfico.
 3. Confirmar título oficial, autores, código, director, jurados y autoridades de portada.
 4. Revisar con el director las divergencias entre SPMP y alcance ejecutado, en particular `/v1/api` y P2; registrar la decisión aprobada.
