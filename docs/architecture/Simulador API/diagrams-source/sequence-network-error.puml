@@ -11,26 +11,26 @@ participant "Simulator API\n(Fastify)" as SimAPI
 participant "Scenario Engine" as Engine
 
 Comercio -> SDK : createPayment(CreatePaymentRequest)
-SDK -> SimAPI : POST /simulate/{gateway}/payments
-SimAPI -> Engine : resolveScenario(orderReference) -> "network_error"
+SDK -> SimAPI : POST /v1/sim/{gateway}/payments\n(Header x-simulate-scenario: NETWORK_ERROR)
+SimAPI -> Engine : resolveScenario(headers, body) -> "NETWORK_ERROR"
 
 alt Timeout (SDK no responde dentro del umbral)
   Engine -->x SDK : sin respuesta\n(latencia inyectada > timeout)
   SDK -->x SDK : socket hang up / AbortError
-  SDK -> SDK : mapear a SdkError(GATEWAY_TIMEOUT\no CONNECTION_FAILED)
+  SDK -> SDK : mapear a KitPagosError(GATEWAY_TIMEOUT\no CONNECTION_FAILED)
 else Error de servidor simulado
   Engine --> SimAPI : 5xx (Wompi/MP/Rapyd) o 200 con\ncode="ERROR" (Kushki)
   SimAPI --> SDK : respuesta de error nativa
-  SDK -> SDK : mapear codigo HTTP o body.code\n-> SdkErrorCode
+  SDK -> SDK : mapear codigo HTTP o body.code\n-> KitPagosErrorCode
 end
 
-SDK -->x Comercio : throw SdkError{code, friendlyMessage,\ngateway, httpStatus, originalError}
+SDK -->x Comercio : throw KitPagosError{code, gateway, originalPayload}
 
 note bottom
   Kushki SIEMPRE devuelve HTTP 200: el adaptador debe leer
   body.code/body.error, NO el status HTTP, para decidir
   GATEWAY_SERVER_ERROR. Rapyd SI usa codigos HTTP
-  diferenciados (200/400/401), a diferencia de PayU/Kushki
+  diferenciados (200/400/401), a diferencia de Kushki
   (docs.rapyd.net/en/list-payments.html) — leer tambien
   body.status.error_code para el detalle.
 end note

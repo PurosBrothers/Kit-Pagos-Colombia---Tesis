@@ -22,6 +22,7 @@ rectangle "API de Simulacion (Fastify / Node.js 18+)\n[container]" as System #FF
   rectangle "**OpenAPI Provider**\n<i>[@fastify/swagger + UI]</i>\n\nGenera OpenAPI 3.0.3 y\nsirve Swagger UI en /docs" as OpenAPI #2E75B6
   rectangle "**Gateway Mock Factory**\n<i>[Factory Pattern\nTypeScript]</i>\n\nConstruye payloads JSON\nemulando Wompi, Rapyd,\nMercado Pago y Kushki" as MockFactory #2E75B6
   rectangle "**Signature Generator**\n<i>[Security Utility\nNode.js Crypto]</i>\n\nCalcula firmas\ncriptograficas\n(SHA-256, HMAC)" as SignatureGen #2E75B6
+  rectangle "**Transaction Store**\n<i>[In-Memory Store / TypeScript]\nstore/TransactionStore.ts</i>\n\nAlmacena transacciones\nsimuladas indexadas por ID\nnativo para consultas\nposteriores de estado" as Store #FFE0B2
 }
 
 Frontend --> RestApi : Patron 2\n[HTTPS /v1/api]
@@ -37,6 +38,8 @@ Dev --> OpenAPI : Explora /docs\n[HTTPS]
 Router --> MockFactory : Construye respuesta
 MockFactory --> SignatureGen : Solicita firma
 WebhookEndpoint --> SignatureGen : Solicita firma
+MockFactory --> Store : Guarda transaccion simulada
+Router --> Store : Consulta estado
 
 note bottom of RestApi
   Frontera intencional: /v1/api vive en

@@ -48,11 +48,12 @@ else Respuesta Exitosa (200 / 201)
   GatewayAPI --> Adapter : JSON nativo
   Adapter -> Normalizer : normalize(rawResponse, gateway)
   activate Normalizer
-  Normalizer --> Adapter : Transaction (entidad inmutable)
+  Normalizer --> Adapter : Transaction
   deactivate Normalizer
-  Adapter --> Facade : Transaction
+  Adapter -> Adapter : transactionResult(transaction)
+  Adapter --> Facade : PaymentResult
   deactivate Adapter
-  Facade --> Comercio : Transaction
+  Facade --> Comercio : PaymentResult
   deactivate Facade
 end
 
@@ -60,7 +61,7 @@ end
 GatewayAPI -> Comercio : POST /webhook (payload, headers)
 activate Comercio
 
-Comercio -> Facade : validateWebhook(payload, headers)
+Comercio -> Facade : validateWebhook(payload, headers, options?)
 activate Facade
 
 Facade -> Config : getActiveGateway()

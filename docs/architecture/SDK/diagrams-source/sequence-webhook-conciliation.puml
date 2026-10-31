@@ -1,4 +1,4 @@
-@startuml Sequence Diagram - Webhook Conciliation
+﻿@startuml Sequence Diagram - Webhook Conciliation
 title C - Conciliacion por Webhook (asincrono)
 skinparam backgroundColor white
 skinparam sequenceMessageAlign center
@@ -11,7 +11,7 @@ participant "KitPagos\n(Facade)" as Facade
 participant "WebhookVerifier" as Verifier
 
 Pasarela -> Comercio : POST /webhook(payload, headers)
-Comercio -> Facade : validateWebhook(payload, headers)
+Comercio -> Facade : validateWebhook(payload, headers, options?)
 Facade -> Verifier : verify(payload, headers, secret, gateway)
 
 alt Firma valida
@@ -23,15 +23,20 @@ alt Firma valida
   Facade --> Comercio : Transaction (reconstruido con el nuevo estado)
 else Firma invalida
   Verifier --> Facade : false
-  Facade --> Comercio : throw SdkError(WEBHOOK_SIGNATURE_INVALID)
+  Facade --> Comercio : throw KitPagosError(WEBHOOK_SIGNATURE_INVALID)
 end
 
 note over Facade, Verifier
   Transaction es inmutable: la conciliacion no muta
   la instancia previa, getPaymentStatus() reconstruye
   una instancia nueva a partir del estado actualizado.
-  Kushki no publica su algoritmo de firma: el
-  KushkiAdapter debe informar esta limitacion.
+  El Paso 2 (getPaymentStatus) es MANDATORIO para
+  pasarelas con webhooks livianos (Mercado Pago, que
+  solo envia el ID sin estado final), y OPCIONAL para
+  pasarelas con webhooks completos (Wompi, que incluye
+  el estado final en el payload del webhook).
+  Kushki no publica su algoritmo de firma: el SDK
+  informa esta limitacion al intentar verificar.
 end note
 
 @enduml
