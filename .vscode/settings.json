@@ -12,7 +12,7 @@
   "latex-workshop.latex.tools": [
     {
       "name": "latexmk",
-      "command": "C:/Users/david/AppData/Local/Programs/MiKTeX/miktex/bin/x64/latexmk.exe",
+      "command": "latexmk",
       "args": [
         "-synctex=1",
         "-interaction=nonstopmode",
