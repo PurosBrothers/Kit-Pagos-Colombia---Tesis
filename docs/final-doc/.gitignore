@@ -1,0 +1,11 @@
+# Productos de latexmk. Los PDF no se versionan: los compila la CI.
+*.aux
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.synctex.gz
+*.toc
+/*/main.pdf
