@@ -1,3 +1,4 @@
+import SwaggerParser from "@apidevtools/swagger-parser";
 import { KitPagosErrorCode } from "kit-pagos-colombia";
 import { buildApp } from "../src/app";
 
@@ -205,5 +206,80 @@ describe("GET /docs/json — especificación OpenAPI", () => {
       code: "INVALID_REQUEST",
     });
     expect(response.json().message).toContain("gateway");
+  });
+
+  it("pasa la validación de OpenAPI 3.0 con SwaggerParser (issue #107)", async () => {
+    const app = buildApp({ logger: false });
+    const response = await app.inject({ method: "GET", url: "/docs/json" });
+
+    expect(response.statusCode).toBe(200);
+    const spec = response.json();
+    await expect(SwaggerParser.validate(spec)).resolves.toBeDefined();
+  });
+
+  it("documenta las 6 rutas de simulación de Kushki con sus schemas (issue #107)", async () => {
+    const app = buildApp({ logger: false });
+    const response = await app.inject({ method: "GET", url: "/docs/json" });
+    const spec = response.json<Record<string, unknown>>();
+    const paths = spec.paths as Record<string, Record<string, unknown>>;
+
+    const kushkiRoutes: Record<string, string> = {
+      "/v1/sim/kushki/card/v1/charges": "post",
+      "/v1/sim/kushki/charges/{ticketNumber}": "get",
+      "/v1/sim/kushki/transfer/v1/bankList": "get",
+      "/v1/sim/kushki/transfer/v1/tokens": "post",
+      "/v1/sim/kushki/transfer/v1/init": "post",
+      "/v1/sim/kushki/transfer/v1/status/{token}": "get",
+    };
+
+    for (const [path, method] of Object.entries(kushkiRoutes)) {
+      const operation = paths[path]?.[method] as Record<string, unknown> | undefined;
+      expect(operation).toBeDefined();
+      expect(operation?.tags).toContain("Kushki Simulación");
+    }
+
+    // Valida que el cobro documenta x-simulate-scenario y la respuesta 501
+    const chargePost = paths["/v1/sim/kushki/card/v1/charges"]["post"] as Record<string, unknown>;
+    expect(chargePost.responses).toHaveProperty("501");
+    expect(chargePost.responses).toHaveProperty("400");
+    expect(chargePost.responses).toHaveProperty("201");
+
+    // Valida que transfer init y transfer tokens documentan el flujo PSE
+    const initPost = paths["/v1/sim/kushki/transfer/v1/init"]["post"] as Record<string, unknown>;
+    expect(initPost.summary).toContain("Iniciar transferencia");
+    expect(initPost.responses).toHaveProperty("201");
+  });
+
+  it("documenta las rutas de simulación de Rapyd incluyendo checkout y pagos (issue #107)", async () => {
+    const app = buildApp({ logger: false });
+    const response = await app.inject({ method: "GET", url: "/docs/json" });
+    const spec = response.json<Record<string, unknown>>();
+    const paths = spec.paths as Record<string, Record<string, unknown>>;
+
+    const rapydRoutes: Record<string, string> = {
+      "/v1/sim/rapyd/payments": "post",
+      "/v1/sim/rapyd/payments/{paymentId}": "get",
+      "/v1/sim/rapyd/checkout": "post",
+      "/v1/sim/rapyd/checkout/{checkoutId}": "get",
+      "/v1/sim/rapyd/checkout/{checkoutId}/pagar": "get",
+      "/v1/sim/rapyd/checkout/{checkoutId}/pay": "get",
+      "/v1/sim/rapyd/customers": "post",
+      "/v1/sim/rapyd/payment_methods/country": "get",
+    };
+
+    for (const [path, method] of Object.entries(rapydRoutes)) {
+      const operation = paths[path]?.[method] as Record<string, unknown> | undefined;
+      expect(operation).toBeDefined();
+      expect(operation?.tags).toContain("Rapyd Simulación");
+    }
+
+    // Valida que /checkout/:checkoutId/pagar y /pay están marcadas como facilidad del simulador
+    const payOperation = paths["/v1/sim/rapyd/checkout/{checkoutId}/pay"]["get"] as Record<string, unknown>;
+    expect(payOperation.description).toContain("facilidad exclusiva del simulador");
+
+    // Valida que POST /checkout responde 200 y documenta 501
+    const checkoutPost = paths["/v1/sim/rapyd/checkout"]["post"] as Record<string, unknown>;
+    expect(checkoutPost.responses).toHaveProperty("200");
+    expect(checkoutPost.responses).toHaveProperty("501");
   });
 });
