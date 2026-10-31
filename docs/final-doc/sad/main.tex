@@ -1,125 +1,14 @@
 \documentclass[10pt]{article}
-
-\usepackage[T1]{fontenc}
-\usepackage[utf8]{inputenc}
-\usepackage[spanish,es-tabla,es-noshorthands,es-lcroman]{babel}
-\usepackage{tgtermes}
-\usepackage{tgheros}
-\usepackage[letterpaper,margin=1in]{geometry}
-\usepackage{graphicx}
-\usepackage{array}
-\usepackage{tabularx}
-\usepackage{setspace}
-\usepackage{titlesec}
-\usepackage{titletoc}
-\usepackage{caption}
-\usepackage[hidelinks]{hyperref}
-
-\setstretch{1.15}
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{6pt plus 2pt}
-
-\addto\captionsspanish{%
-  \renewcommand{\contentsname}{Tabla de Contenidos}%
-  \renewcommand{\listtablename}{Lista de Tablas}%
-  \renewcommand{\listfigurename}{Lista de Figuras}%
-}
-
-\titleformat{\section}{\normalfont\bfseries\fontsize{12}{14}\selectfont}{\thesection.}{0.3em}{}
-\titleformat{\subsection}{\normalfont\bfseries\fontsize{11}{13}\selectfont}{\thesubsection}{0.3em}{}
-\titleformat{\subsubsection}{\normalfont\bfseries\normalsize}{\thesubsubsection}{0.3em}{}
-\titlespacing*{\section}{0pt}{14pt}{8pt}
-\titlespacing*{\subsection}{0pt}{12pt}{6pt}
-\titlespacing*{\subsubsection}{0pt}{10pt}{4pt}
-
-\titlecontents{section}[0pt]{\addvspace{2pt}\bfseries}
-  {\thecontentslabel.\ }{}{\titlerule*[0.3em]{.}\contentspage}
-\titlecontents{subsection}[1.5em]{}
-  {\thecontentslabel\ }{}{\titlerule*[0.3em]{.}\contentspage}
-\titlecontents{subsubsection}[3em]{}
-  {\thecontentslabel\ }{}{\titlerule*[0.3em]{.}\contentspage}
-\titlecontents{table}[0.75in]{}
-  {\tablename~\thecontentslabel.\ }{}{\titlerule*[0.3em]{.}\contentspage}
-\titlecontents{figure}[0.75in]{}
-  {\figurename~\thecontentslabel.\ }{}{\titlerule*[0.3em]{.}\contentspage}
-
-\captionsetup{labelsep=period,font=it,justification=centering}
-
-\newcommand{\kpNombre}{}
-\newcommand{\kpVersion}{}
-\newcommand{\kpFecha}{}
-\newcommand{\NombreDocumento}[1]{\renewcommand{\kpNombre}{#1}}
-\newcommand{\VersionDocumento}[1]{\renewcommand{\kpVersion}{#1}}
-\newcommand{\FechaDocumento}[1]{\renewcommand{\kpFecha}{#1}}
-
-\newcommand{\Portada}{%
-  \hypersetup{
-    pdftitle={\kpNombre\ - Kit Pagos Colombia},
-    pdfauthor={Andres Henao Niño, Joan Emmanuel Orduz Chia, Joshua Prieto Zambrano, David Estevan Rodriguez Jurado}
-  }%
-  \begin{titlepage}
-    \centering
-    \setstretch{1}%
-    \setlength{\parskip}{0pt}%
-    \fontsize{12}{16}\selectfont
-    \framebox{\parbox[c][6.96cm][c]{6.96cm}{\centering Logo Javeriana}}\par
-    \vspace{46pt}
-    {\fontsize{14}{16}\selectfont\bfseries\kpNombre\par}
-    \vspace{16pt}
-    Presentan\par
-    \vspace{16pt}
-    Andres Henao Niño\par
-    Joan Emmanuel Orduz Chia\par
-    Joshua Prieto Zambrano\par
-    David Estevan Rodriguez Jurado\par
-    \vspace{31pt}
-    Director\par
-    Jaime Andrés Pavlich Mariscal\par
-    \vspace{21pt}
-    Pontificia Universidad Javeriana\par
-    Facultad de Ingeniería\par
-    Trabajo de Grado\par
-    \vspace{16pt}
-    Bogotá D.C.\par
-    \kpFecha\par
-    Versión \kpVersion\par
-  \end{titlepage}%
-  \pagenumbering{roman}%
-}
-
-\newenvironment{HistorialDeCambios}{%
-  \section*{Historial de Cambios}%
-  \renewcommand{\arraystretch}{1.3}%
-  \tabularx{\textwidth}{|c|c|X|>{\raggedright\arraybackslash}p{4.2cm}|}
-  \hline
-  \textbf{Versión} & \textbf{Fecha} & \textbf{Descripción del cambio} & \textbf{Autor(es)} \\
-  \hline
-}{%
-  \endtabularx
-  \clearpage
-}
-\newcommand{\Cambio}[4]{#1 & #2 & #3 & #4 \\ \hline}
-
-\newcommand{\Indices}{%
-  \tableofcontents
-  \clearpage
-  \listoftables
-  \listoffigures
-  \clearpage
-  \pagenumbering{arabic}%
-}
-
-\begin{document}
+\input{../comun/estilo}
+\usepackage[space]{grffile}
 
 \NombreDocumento{Descripción de la Arquitectura del Software (SAD)}
 \VersionDocumento{1.0}
 \FechaDocumento{mayo de 2026}
 
-\Portada
+\begin{document}
 
-\begin{HistorialDeCambios}
-  \Cambio{1.0}{01/05/2026}{Generación inicial del documento Arquitectónico SAD.}{Autores del proyecto}
-\end{HistorialDeCambios}
+\Portada
 
 \Indices
 
@@ -190,7 +79,7 @@ RF-15 & El sistema debe indicar el comportamiento esperado de cada dato de prueb
 
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de clases del dominio no soportado en modo offline] \vspace{1cm}}}
+\includegraphics[width=\textwidth]{"../../architecture/SDK/Domain Class Diagram.png"}
 \caption{Diagrama de clases del dominio}
 \label{fig:domain_classes}
 \end{figure}
@@ -224,7 +113,7 @@ MockPaymentResult (Objeto de Valor) & Representación interna normalizada que Sc
 
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de despliegue de la API de simulación no soportado en modo offline] \vspace{1cm}}}
+\includegraphics[width=0.6\textwidth]{"../../architecture/Simulador API/Deploy Diagram - C4.png"}
 \caption{Diagrama de despliegue de la API de simulación (Conceptos Adicionales)}
 \label{fig:domain_sim_concepts}
 \end{figure}
@@ -296,7 +185,7 @@ Términos de uso de las APIs de los proveedores & Convencional & El uso en produ
 \subsection{Diagrama de Contexto del Sistema — Kit Pagos Colombia (Nivel 1)}
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de Contexto de Kit Pagos Colombia no soportado] \vspace{1cm}}}
+\includegraphics[width=\textwidth]{"../../architecture/SDK/Context Diagram - C4.png"}
 \caption{Diagrama de Contexto de Kit Pagos Colombia}
 \label{fig:context_system}
 \end{figure}
@@ -322,7 +211,7 @@ En todos los casos, la relación bidireccional refleja dos flujos distintos: las
 \subsection{Diagrama de Contexto de la API de Simulación — Kit Pagos Colombia (Nivel 1)}
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de Contexto de la API de Simulación no soportado] \vspace{1cm}}}
+\includegraphics[width=\textwidth]{"../../architecture/Simulador API/Context Diagram - C4.png"}
 \caption{Diagrama de Contexto específico de la API de Simulación}
 \label{fig:context_sim}
 \end{figure}
@@ -350,7 +239,7 @@ El sistema abarca exclusivamente la capa de integración entre la aplicación de
 \subsection{Diagrama de Contenedores — Kit Pagos Colombia (Nivel 2)}
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de Contenedores de Kit Pagos Colombia no soportado] \vspace{1cm}}}
+\includegraphics[width=\textwidth]{"../../architecture/SDK/Container Diagram - C4.png"}
 \caption{Diagrama de Contenedores de Kit Pagos Colombia}
 \label{fig:container_system}
 \end{figure}
@@ -374,7 +263,7 @@ En producción, el SDK se comunica directamente con las pasarelas de pago median
 \subsection{Diagrama de Contenedores — API de Simulación (Nivel 2)}
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de Contenedores de la API de Simulación no soportado] \vspace{1cm}}}
+\includegraphics[width=0.65\textwidth]{"../../architecture/Simulador API/Container Diagram - C4.png"}
 \caption{Diagrama de Contenedores de la API de Simulación}
 \label{fig:container_sim}
 \end{figure}
@@ -398,7 +287,7 @@ Cuando se requiere probar el flujo de notificaciones, el Tester puede solicitar 
 \subsection{Diagrama de Componentes — SDK Kit Pagos Colombia (Nivel 3)}
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de Componentes del SDK no soportado] \vspace{1cm}}}
+\includegraphics[width=\textwidth]{"../../architecture/SDK/Component Diagram - C4.png"}
 \caption{Diagrama de Componentes del SDK}
 \label{fig:component_sdk}
 \end{figure}
@@ -438,7 +327,7 @@ Convierte cualquier error en una excepción SdkError tipada con código normaliz
 \subsection{Diagrama de Componentes — API de Simulación (Nivel 3)}
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de Componentes de la API de Simulación no soportado] \vspace{1cm}}}
+\includegraphics[width=0.85\textwidth]{"../../architecture/Simulador API/Component Diagram - C4.png"}
 \caption{Diagrama de Componentes de la API de Simulación}
 \label{fig:component_sim}
 \end{figure}
@@ -471,7 +360,7 @@ Esta sección describe el comportamiento dinámico de los flujos más críticos 
 \subsubsection{Creación de Pago (pendiente + webhook)}
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de Secuencia del SDK de creación de pago no soportado] \vspace{1cm}}}
+\includegraphics[width=0.85\textwidth]{"../../architecture/SDK/Sequence Diagram - Payment Creation.png"}
 \caption{Diagrama de Secuencia del SDK de creación de pago}
 \label{fig:seq_create_payment}
 \end{figure}
@@ -483,7 +372,7 @@ El diagrama deja explícito, mediante una nota, que este flujo no entrega el res
 \subsubsection{Pago Síncrono (Kushki — Tarjeta)}
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de Secuencia de Kushki no soportado] \vspace{1cm}}}
+\includegraphics[width=0.75\textwidth]{"../../architecture/SDK/Sequence Diagram - Synchronous Payment.png"}
 \caption{Diagrama de Secuencia del SDK de creación de pago síncrona}
 \label{fig:seq_create_payment_sync}
 \end{figure}
@@ -493,7 +382,7 @@ Este diagrama documenta la excepción al flujo anterior: para operaciones con ta
 \subsubsection{Conciliación por Webhook (asíncrono)}
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de Secuencia webhook SDK no soportado] \vspace{1cm}}}
+\includegraphics[width=0.75\textwidth]{"../../architecture/SDK/Sequence Diagram - Webhook Conciliation.png"}
 \caption{Diagrama de Secuencia del SDK de conciliación por webhook}
 \label{fig:seq_webhook_sdk}
 \end{figure}
@@ -505,7 +394,7 @@ Este diagrama complementa al de Creación de Pago (10.1.1) mostrando cómo se re
 \subsubsection{Pago Exitoso (Escenario 1)}
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de Secuencia Sim Pago Exitoso no soportado] \vspace{1cm}}}
+\includegraphics[width=0.9\textwidth]{"../../architecture/Simulador API/Sequence Diagram - Successful Payment.png"}
 \caption{Diagrama de Secuencia de la API de Simulación de pago exitoso}
 \label{fig:seq_sim_success}
 \end{figure}
@@ -515,7 +404,7 @@ Muestra el flujo base de la API de Simulación: el Comercio invoca createPayment
 \subsubsection{Pago Rechazado (Escenario 2)}
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de Secuencia Sim Pago Rechazado no soportado] \vspace{1cm}}}
+\includegraphics[width=0.9\textwidth]{"../../architecture/Simulador API/Sequence Diagram - Denied Payment.png"}
 \caption{Diagrama de Secuencia de la API de Simulación de pago rechazado}
 \label{fig:seq_sim_declined}
 \end{figure}
@@ -525,7 +414,7 @@ Extiende el flujo anterior mostrando dos operaciones en secuencia: la creación 
 \subsubsection{Error de Red (Escenario 3)}
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de Secuencia Sim Error de Red no soportado] \vspace{1cm}}}
+\includegraphics[width=0.9\textwidth]{"../../architecture/Simulador API/Sequence Diagram - Network Error.png"}
 \caption{Diagrama de Secuencia de la API de Simulación de error de red}
 \label{fig:seq_sim_error}
 \end{figure}
@@ -535,7 +424,7 @@ Documenta el escenario más complejo de los cuatro, mediante un bloque alt con d
 \subsubsection{Notificación Webhook (Escenario 4)}
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de Secuencia Sim Webhook no soportado] \vspace{1cm}}}
+\includegraphics[width=0.85\textwidth]{"../../architecture/Simulador API/Sequence Diagram - Webhook Notification.png"}
 \caption{Diagrama de Secuencia de la API de Simulación de Notificación webhook}
 \label{fig:seq_sim_webhook}
 \end{figure}
@@ -549,7 +438,7 @@ La Figura 15 presenta el Diagrama de Despliegue construido bajo la notación C4 
 
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de despliegue de la API de simulación no soportado] \vspace{1cm}}}
+\includegraphics[width=0.6\textwidth]{"../../architecture/Simulador API/Deploy Diagram - C4.png"}
 \caption{Diagrama de despliegue de la API de simulación}
 \label{fig:deployment}
 \end{figure}
@@ -579,7 +468,7 @@ La API de Simulación tampoco necesita persistencia. Sus seis componentes (secci
 
 \begin{figure}[htbp]
 \centering
-\framebox{\parbox{0.8\textwidth}{\centering \vspace{1cm} [Diagrama de la arquitectura hexagonal no soportado] \vspace{1cm}}}
+\includegraphics[width=\textwidth]{"../../architecture/SDK/Hexagonal architecture class diagram.png"}
 \caption{Diagrama de la arquitectura hexagonal}
 \label{fig:hexagonal}
 \end{figure}
