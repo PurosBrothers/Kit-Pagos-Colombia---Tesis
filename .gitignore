@@ -8,3 +8,6 @@
 
 # Dependencies
 node_modules/
+
+# Local tools
+.concord/
