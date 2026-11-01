@@ -1,0 +1,608 @@
+\documentclass[10pt]{article}
+\input{../comun/estilo}
+\usepackage{longtable}
+
+\NombreDocumento{SRS}
+\VersionDocumento{1.1}
+\FechaDocumento{octubre de 2026}
+
+\begin{document}
+
+\Portada
+
+\begin{HistorialDeCambios}
+  \Cambio{1.0}{mayo de 2026}{Versión inicial en procesador de texto (Word).}{Andres Henao Niño, Joan Emmanuel Orduz Chia, Joshua Prieto Zambrano, David Estevan Rodriguez Jurado}
+  \Cambio{1.1}{octubre de 2026}{Paso a LaTeX con el estilo común, sin cambios de contenido (issue \#168).}{Andres Henao Niño}
+\end{HistorialDeCambios}
+
+\Indices
+
+
+% ==========================================
+% SECCIÓN: 01-introduccion
+% ==========================================
+
+\section{Introducción}
+
+Este documento corresponde a la Especificación de Requisitos de Software (SRS) del proyecto Kit Pagos Colombia, un framework de código abierto orientado a simplificar el proceso de integración de múltiples pasarelas de pago en aplicaciones de software desarrolladas en el contexto colombiano.
+
+El documento está organizado en las siguientes secciones principales:
+
+\begin{itemize}
+  \item \textbf{Visión del producto:} describe el propósito central del framework, su alcance y el problema que busca resolver.
+  \item \textbf{Restricciones del producto:} enumera las limitaciones técnicas, regulatorias y de alcance que condicionan las decisiones de diseño e implementación.
+  \item \textbf{Modelo de dominio:} presenta los conceptos centrales del dominio de pagos digitales y sus relaciones, con independencia de cualquier implementación específica.
+  \item \textbf{Características de los usuarios:} identifica los perfiles de usuario que interactuarán con el framework y describe sus características relevantes.
+  \item \textbf{Funciones del producto:} especifica los requisitos funcionales del sistema mediante historias de usuario y una descripción detallada de las funcionalidades esperadas por componente.
+  \item \textbf{Requisitos no funcionales:} describe los atributos de calidad que el framework debe satisfacer, siguiendo la clasificación FURPS+.
+\end{itemize}
+
+El documento se apoya en el estándar IEEE 830-1998 (IEEE Recommended Practice for Software Requirements Specifications) como referencia para la estructura y el nivel de detalle de la especificación. Su audiencia principal son los miembros del equipo de desarrollo, el director del proyecto y los evaluadores académicos del trabajo de grado.
+
+
+% ==========================================
+% SECCIÓN: 02-vision-producto
+% ==========================================
+
+\section{Visión del Producto}
+
+\subsection{Descripción del producto}
+
+Kit Pagos Colombia es un framework de desarrollo de software de código abierto,cuyo propósito es unificar la integración de las principales pasarelas de pago utilizadas en el mercado colombiano bajo una interfaz común, extensible y reutilizable.
+
+El framework está compuesto por tres componentes complementarios:
+
+\begin{itemize}
+  \item \textbf{SDK con interfaz unificada:} biblioteca que abstrae las diferencias técnicas entre Wompi, PayU, Mercado Pago y Kushki, exponiendo una API normalizada para operaciones de creación de pagos, consulta de estado y gestión de notificaciones asíncronas (webhooks).
+  \item \textbf{API web de simulación desplegada:} servicio REST accesible públicamente que replica el comportamiento de las pasarelas de pago para los escenarios de prueba más frecuentes, sin requerir credenciales reales ni configuración local adicional.
+  \item \textbf{Documentación centralizada de datos de prueba:} repositorio estructurado que consolida los datos de prueba provistos por cada pasarela (tarjetas de prueba, credenciales de sandbox, referencias de pago), organizados por proveedor y tipo de dato para facilitar su acceso durante el desarrollo.
+\end{itemize}
+
+\subsection{Alcance}
+
+El framework cubre las siguientes operaciones sobre las pasarelas integradas: creación de intenciones de pago, consulta del estado de una transacción, recepción y validación de notificaciones webhook, y normalización de respuestas de error. Las pasarelas soportadas en la versión inicial son Wompi, PayU Latam, Mercado Pago Colombia y Kushki.
+
+El framework NO cubre: procesamiento directo de datos de tarjeta de crédito, modificación de los mecanismos de seguridad internos de cada pasarela, gestión de cuentas de comercio, conciliación financiera, ni operaciones administrativas sobre las cuentas de los proveedores.
+
+\subsection{Objetivo del producto}
+
+Reducir la complejidad técnica y el tiempo requerido para integrar múltiples pasarelas de pago en aplicaciones de software colombianas, ofreciendo una capa de abstracción reutilizable, un entorno de simulación accesible y una fuente centralizada de datos de prueba válidos para el contexto local.
+
+
+% ==========================================
+% SECCIÓN: 03-restricciones
+% ==========================================
+
+\section{Restricciones del Producto}
+
+\subsection{Restricciones técnicas}
+
+\begin{itemize}
+  \item El SDK se implementa exclusivamente en TypeScript/Node.js. No se desarrollarán versiones para otros lenguajes o entornos de ejecución en el alcance de este proyecto. VER CUAL PUEDE SER EL ALCANCE DE ESTO
+  \item La API de simulación se distribuye como servicio web desplegado. No se ofrece una versión ejecutable localmente mediante contenedores Docker en esta versión.
+  \item El framework no almacena ni procesa datos de tarjeta de crédito directamente. Toda operación sensible es delegada a los mecanismos de seguridad certificados de cada pasarela.
+  \item La comunicación entre el cliente y el framework debe realizarse a través de HTTP. No se soportan conexiones sin cifrado.
+  \item El framework depende de la disponibilidad de los ambientes sandbox de cada pasarela para su validación. Cambios en las APIs de los proveedores pueden requerir actualizaciones en los adaptadores.
+\end{itemize}
+
+\subsection{Restricciones regulatorias}
+
+\begin{itemize}
+  \item El framework debe operar dentro de los límites establecidos por el estándar PCI DSS para el manejo de datos sensibles, delegando el procesamiento de información de pago a los mecanismos certificados de cada proveedor.
+  \item El uso del framework en entornos de producción está sujeto al cumplimiento de los términos y condiciones de uso de las APIs de cada pasarela (Wompi, PayU, Mercado Pago, Kushki).
+  \item El framework no modifica ni intercepta los flujos de autenticación internos de las pasarelas, en cumplimiento de las políticas de seguridad de cada proveedor.
+\end{itemize}
+
+\subsection{Restricciones de alcance del proyecto}
+
+\begin{itemize}
+  \item El proyecto se desarrolla en un período de cinco meses (julio a noviembre de 2026), lo que limita la cantidad de pasarelas integradas y la profundidad de cobertura funcional por proveedor.
+  \item La evaluación del framework se realizará sobre proyectos prototípicos definidos, no sobre sistemas en producción con volúmenes reales de transacciones.
+  \item El mantenimiento y evolución del framework más allá del período académico no están garantizados por el equipo de desarrollo.
+\end{itemize}
+
+
+% ==========================================
+% SECCIÓN: 04-modelo-dominio
+% ==========================================
+
+\section{Modelo de Dominio}
+
+El dominio del problema se organiza alrededor del concepto de transacción de pago como entidad central, la cual es procesada por una pasarela de pago a través de métodos de pago específicos y genera notificaciones asíncronas hacia la aplicación del comercio. A continuación se describen los conceptos principales del dominio y sus relaciones.
+
+\subsection{Entidades del dominio}
+
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Entidad} & \textbf{Descripción} \\
+    \hline
+    Transacción & Unidad atómica de intercambio económico entre un comprador y un comercio, procesada a través de una pasarela de pago. Tiene un identificador único, un monto, una moneda, un estado y una marca temporal de creación. \\
+    \hline
+    Estado de transacción & Representa la condición actual de una transacción en el ciclo de vida del pago. Los estados normalizados del framework son: PENDIENTE, APROBADO, RECHAZADO, EXPIRADO y ERROR. \\
+    \hline
+    Pasarela de pago & Proveedor externo que procesa las transacciones de pago. Cada pasarela define sus propias convenciones de API, autenticación, formatos de respuesta y mecanismos de notificación. Las pasarelas soportadas son Wompi, PayU, Mercado Pago y Kushki. \\
+    \hline
+    Adaptador & Componente del framework que traduce el contrato normalizado del puerto hacia las convenciones específicas de una pasarela determinada. Existe un adaptador por cada pasarela soportada. \\
+    \hline
+    Puerto & Interfaz abstracta del framework que define el contrato que cada adaptador debe cumplir. El puerto especifica las operaciones disponibles (crear pago, consultar estado, validar webhook) sin conocimiento de ningún proveedor específico. \\
+    \hline
+    Método de pago & Mecanismo a través del cual el comprador efectúa el pago. Puede ser tarjeta de crédito/débito, transferencia bancaria (PSE), billetera digital u otros métodos soportados por cada pasarela. \\
+    \hline
+    Webhook & Notificación asíncrona que una pasarela envía hacia una URL registrada por el comercio para informar sobre cambios en el estado de una transacción. Cada pasarela define su propio formato y mecanismo de firma. \\
+    \hline
+    Error normalizado & Representación unificada de una condición de fallo durante el procesamiento de una operación, independiente del formato de error específico de cada pasarela. Incluye un código de error, un mensaje descriptivo y el proveedor que originó el fallo. \\
+    \hline
+    Comercio & Entidad que ofrece bienes o servicios e integra el framework para aceptar pagos digitales. Posee credenciales de autenticación para cada pasarela que desea utilizar. \\
+    \hline
+    Desarrollador & Persona técnica que consume el framework para integrar capacidades de pago en la aplicación del comercio. Es el usuario principal del SDK y de la API de simulación. \\
+    \hline
+  \end{tabularx}
+  \caption{Entidades del modelo de dominio de Kit Pagos Colombia.}
+  \label{tab:entidades-dominio}
+\end{table}
+
+\subsection{Relaciones entre entidades}
+
+\begin{itemize}
+  \item Un Comercio se autentica ante una o varias Pasarelas de pago mediante credenciales específicas por proveedor.
+  \item Una Transacción es creada por un Comercio y procesada por exactamente una Pasarela de pago a través de un Método de pago.
+  \item Una Transacción tiene exactamente un Estado de transacción en cada momento de su ciclo de vida.
+  \item Una Pasarela de pago envía cero o más Webhooks hacia el Comercio a lo largo del ciclo de vida de una Transacción.
+  \item El framework expone un Puerto que es implementado por uno o más Adaptadores, uno por cada Pasarela soportada.
+  \item Cada operación fallida genera un Error normalizado que abstrae el error original de la Pasarela.
+\end{itemize}
+
+
+% ==========================================
+% SECCIÓN: 05-caracteristicas-usuarios
+% ==========================================
+
+\section{Características de los Usuarios}
+
+Se identifican tres perfiles de usuario que interactúan con el framework Kit Pagos Colombia, diferenciados por su nivel de experiencia técnica, su frecuencia de uso y su relación con los componentes del sistema.
+
+\subsection{Desarrollador de software junior}
+
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Característica} & \textbf{Descripción} \\
+    \hline
+    Descripción & Desarrollador con menos de dos años de experiencia profesional que se enfrenta por primera vez a la integración de una pasarela de pago. Puede ser estudiante universitario, freelancer o parte de un equipo de una startup en etapa temprana. \\
+    \hline
+    Experiencia técnica & Conocimiento básico de REST APIs y JavaScript/TypeScript. Poca o nula experiencia previa con pasarelas de pago colombianas. \\
+    \hline
+    Frecuencia de uso & Esporádica. Utiliza el framework durante el desarrollo inicial de un proyecto y ocasionalmente para agregar nuevas pasarelas. \\
+    \hline
+    Necesidades principales & Documentación clara, ejemplos de código funcionales, datos de prueba accesibles y un entorno de simulación que no requiera configuración compleja. \\
+    \hline
+    Interacción con el framework & Principalmente con el SDK (operaciones básicas de pago) y la documentación de datos de prueba. Hace uso intensivo de la API de simulación para pruebas locales. \\
+    \hline
+  \end{tabularx}
+  \caption{Perfil del desarrollador junior.}
+  \label{tab:perfil-junior}
+\end{table}
+
+\subsection{Desarrollador de software senior}
+
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Característica} & \textbf{Descripción} \\
+    \hline
+    Descripción & Desarrollador con experiencia en integraciones de sistemas y arquitecturas de software. Ha trabajado previamente con APIs de pago o servicios externos. Puede ser parte de un equipo de producto o consultora tecnológica. \\
+    \hline
+    Experiencia técnica & Dominio avanzado de TypeScript, Node.js, patrones de diseño y arquitecturas de integración. Familiaridad con los conceptos de autenticación, webhooks y manejo de errores en APIs externas. \\
+    \hline
+    Frecuencia de uso & Regular. Utiliza el framework como parte de proyectos activos y puede contribuir a su extensión con nuevos adaptadores. \\
+    \hline
+    Necesidades principales & Flexibilidad arquitectónica, capacidad de extensión para agregar nuevas pasarelas, control sobre el comportamiento de reintentos y manejo avanzado de errores. \\
+    \hline
+    Interacción con el framework & Con todos los componentes del framework, incluyendo la implementación de adaptadores personalizados y la configuración avanzada del SDK. \\
+    \hline
+  \end{tabularx}
+  \caption{Perfil del desarrollador senior.}
+  \label{tab:perfil-senior}
+\end{table}
+
+\subsection{Evaluador / Tester de software}
+
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Característica} & \textbf{Descripción} \\
+    \hline
+    Descripción & Persona responsable de verificar el correcto funcionamiento de la integración de pagos en una aplicación. Puede ser un QA engineer, un desarrollador en fase de pruebas o un integrante del equipo de proyecto encargado de validar los flujos de pago antes de salir a producción. \\
+    \hline
+    Experiencia técnica & Conocimiento funcional de los flujos de pago. Experiencia con herramientas de prueba de APIs (Postman, curl). No necesariamente escribe código de integración. \\
+    \hline
+    Frecuencia de uso & Intensiva durante los ciclos de prueba del proyecto. Uso principalmente de la API de simulación y la documentación de datos de prueba. \\
+    \hline
+    Necesidades principales & Acceso a escenarios de prueba predefinidos (éxito, rechazo, error de red, timeout), datos de prueba válidos por pasarela y una API de simulación estable y predecible. \\
+    \hline
+    Interacción con el framework & Principalmente con la API de simulación a través de herramientas REST y con la documentación centralizada de datos de prueba. \\
+    \hline
+  \end{tabularx}
+  \caption{Perfil del evaluador/tester.}
+  \label{tab:perfil-tester}
+\end{table}
+
+
+% ==========================================
+% SECCIÓN: 06-funciones-producto
+% ==========================================
+
+\section{Funciones del Producto}
+
+Esta sección especifica los requisitos funcionales del framework Kit Pagos Colombia. La sección 5.1 presenta los requisitos funcionales en formato tabular con identificador, descripción, componente y prioridad. La sección 5.2 en adelante complementa esta especificación mediante historias de usuario que expresan cada requisito desde la perspectiva del usuario, acompañadas de criterios de aceptación verificables.
+
+\subsection{Requisitos Funcionales}
+
+La Tabla 5 presenta el listado consolidado de requisitos funcionales del framework, organizados por componente. Las prioridades se clasifican en Alta (esencial para el MVP), Media (importante pero no bloqueante) y Baja (deseable en versiones futuras).
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{|c|p{8.5cm}|c|c|}
+  \hline
+  \textbf{ID} & \textbf{Descripción del requisito} & \textbf{Componente} & \textbf{Prioridad} \\
+  \hline
+  \endfirsthead
+  \hline
+  \textbf{ID} & \textbf{Descripción del requisito} & \textbf{Componente} & \textbf{Prioridad} \\
+  \hline
+  \endhead
+  \hline
+  \endfoot
+  \hline
+  \caption{Requisitos funcionales del framework Kit Pagos Colombia.}
+  \label{tab:requisitos-funcionales}\\
+  \endlastfoot
+  RF-01 & El sistema debe permitir crear una intención de pago especificando pasarela, monto, moneda, referencia de orden y datos del pagador mediante una interfaz unificada. & SDK & Alta \\
+  \hline
+  RF-02 & El sistema debe retornar una respuesta normalizada ante la creación de un pago, incluyendo el identificador de transacción, el estado inicial y la URL o token de pago según la pasarela. & SDK & Alta \\
+  \hline
+  RF-03 & El sistema debe permitir consultar el estado de una transacción por identificador y retornarlo mapeado a los estados normalizados: PENDIENTE, APROBADO, RECHAZADO, EXPIRADO o ERROR. & SDK & Alta \\
+  \hline
+  RF-04 & El sistema debe validar la firma criptográfica de un webhook entrante utilizando el algoritmo correspondiente a cada pasarela y retornar un evento normalizado si la firma es válida. & SDK & Alta \\
+  \hline
+  RF-05 & El sistema debe lanzar excepciones tipadas con código de error normalizado y mensaje descriptivo ante cualquier condición de fallo esperada (timeout, credenciales inválidas, recurso no encontrado). & SDK & Alta \\
+  \hline
+  RF-06 & El sistema debe permitir cambiar la pasarela activa modificando únicamente el parámetro de configuración en la inicialización del framework, sin modificar el código de negocio del llamador. & SDK & Alta \\
+  \hline
+  RF-07 & El sistema debe reintentar automáticamente una operación ante errores transitorios (timeout, respuestas 5xx) siguiendo una estrategia de backoff exponencial configurable, hasta un número máximo de intentos definido por el usuario. & SDK & Media \\
+  \hline
+  RF-08 & El sistema debe garantizar que las credenciales de cada pasarela no sean expuestas en logs, mensajes de error ni en las respuestas del SDK. & SDK & Alta \\
+  \hline
+  RF-09 & El sistema debe exponer endpoints REST que repliquen el comportamiento de creación de pago de cada pasarela soportada, accesibles sin credenciales reales. & API Simulación & Alta \\
+  \hline
+  RF-10 & El sistema debe permitir configurar el escenario de respuesta de cada endpoint mediante un parámetro de la solicitud, soportando al menos: APROBADO, RECHAZADO, FONDOS\_INSUFICIENTES, TIMEOUT y ERROR\_RED. & API Simulación & Alta \\
+  \hline
+  RF-11 & El sistema debe replicar la estructura exacta de las respuestas de error de cada pasarela en los escenarios de fallo configurados. & API Simulación & Alta \\
+  \hline
+  RF-12 & El sistema debe permitir solicitar el envío de un webhook simulado hacia una URL destino, con el formato y firma correspondientes a la pasarela indicada. & API Simulación & Media \\
+  \hline
+  RF-13 & El sistema debe exponer la especificación OpenAPI 3.0 de la API de simulación en un endpoint público (/docs), accesible a través de un navegador web. & API Simulación & Media \\
+  \hline
+  RF-14 & El sistema debe proveer documentación de datos de prueba organizada por pasarela, incluyendo tarjetas de prueba, credenciales de sandbox y referencias de pago válidas para cada proveedor. & Documentación & Alta \\
+  \hline
+  RF-15 & El sistema debe indicar el comportamiento esperado de cada dato de prueba (tarjeta aprobada, tarjeta rechazada, fondos insuficientes) junto con la fuente oficial del proveedor. & Documentación & Media \\
+  \hline
+\end{longtable}
+\end{center}
+
+\subsection{Historias de Usuario}
+
+Las siguientes historias de usuario complementan los requisitos funcionales de la Tabla 5, expresando cada necesidad desde la perspectiva del usuario y acompañándola de criterios de aceptación verificables. Cada historia referencia el requisito funcional que desarrolla.
+
+\subsection{SDK — Interfaz unificada de integración}
+
+\subsubsection{HU-01: Crear una intención de pago con una pasarela específica}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & crear una intención de pago especificando únicamente la pasarela deseada, el monto y los datos del pagador mediante una sola llamada al SDK \\
+    \hline
+    \textbf{Para} & no tener que conocer los detalles de autenticación y formato de solicitud propios de cada proveedor \\
+    \hline
+  \end{tabularx}
+  \caption{HU-01}
+  \label{tab:hu-01}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El SDK acepta una solicitud de creación de pago con los parámetros: pasarela, monto, moneda, referencia de orden y datos del pagador.
+  \item El SDK retorna una respuesta normalizada con el identificador de la transacción, el estado inicial y la URL de redirección o token de pago según corresponda.
+  \item Si la pasarela retorna un error, el SDK lanza una excepción tipada con código de error normalizado y mensaje descriptivo.
+  \item El SDK soporta las pasarelas Wompi, PayU, Mercado Pago y Kushki sin que el código del llamador deba cambiar entre ellas.
+\end{itemize}
+
+\subsubsection{HU-02: Consultar el estado de una transacción}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & consultar el estado actual de una transacción utilizando su identificador, independientemente de la pasarela que la procesó \\
+    \hline
+    \textbf{Para} & obtener siempre un estado normalizado sin tener que interpretar los estados específicos de cada proveedor \\
+    \hline
+  \end{tabularx}
+  \caption{HU-02}
+  \label{tab:hu-02}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El SDK retorna el estado de la transacción mapeado a uno de los estados normalizados: PENDIENTE, APROBADO, RECHAZADO, EXPIRADO o ERROR.
+  \item La respuesta incluye el estado original de la pasarela como campo adicional para referencia.
+  \item Si el identificador no existe en la pasarela indicada, el SDK lanza una excepción tipada con código NOT\_FOUND.
+\end{itemize}
+
+\subsubsection{HU-03: Validar y procesar un webhook entrante}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & validar la firma de un webhook recibido y extraer el evento normalizado que contiene, con una sola llamada al SDK \\
+    \hline
+    \textbf{Para} & no tener que implementar la lógica de validación de firma de cada pasarela por separado \\
+    \hline
+  \end{tabularx}
+  \caption{HU-03}
+  \label{tab:hu-03}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El SDK valida la firma del webhook utilizando el algoritmo correspondiente a cada pasarela (HMAC-SHA256 para Wompi y Kushki, firma propia de PayU y Mercado Pago).
+  \item Si la firma es inválida, el SDK retorna un error tipado con código INVALID\_SIGNATURE.
+  \item Si la firma es válida, el SDK retorna un objeto de evento normalizado con el tipo de evento, el identificador de transacción y el nuevo estado.
+\end{itemize}
+
+\subsubsection{HU-04: Cambiar de pasarela sin modificar la lógica de negocio}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software senior \\
+    \hline
+    \textbf{Quiero} & cambiar la pasarela activa de mi aplicación modificando únicamente la configuración del framework, sin tocar el código de negocio \\
+    \hline
+    \textbf{Para} & reducir el riesgo y el esfuerzo de migración entre proveedores \\
+    \hline
+  \end{tabularx}
+  \caption{HU-04}
+  \label{tab:hu-04}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El framework permite especificar la pasarela activa mediante un parámetro de configuración en la inicialización.
+  \item Al cambiar la pasarela en la configuración, todas las operaciones de pago se redirigen al nuevo proveedor sin modificar el código del llamador.
+  \item El cambio de pasarela no afecta la estructura ni el tipo de las respuestas retornadas por el SDK.
+\end{itemize}
+
+\subsubsection{HU-05: Manejo automático de reintentos ante fallos transitorios}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & que el SDK reintente automáticamente una operación cuando la pasarela devuelve un error transitorio (timeout, error 500) \\
+    \hline
+    \textbf{Para} & mejorar la resiliencia de la integración sin implementar lógica de reintento manualmente \\
+    \hline
+  \end{tabularx}
+  \caption{HU-05}
+  \label{tab:hu-05}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El SDK reintenta la operación hasta un máximo configurable de veces ante errores de red o respuestas 5xx de la pasarela.
+  \item Si se supera el número máximo de reintentos, el SDK lanza una excepción tipada con código MAX\_RETRIES\_EXCEEDED.
+\end{itemize}
+
+\subsection{API web de simulación}
+
+\subsubsection{HU-06: Simular una transacción aprobada}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador o tester \\
+    \hline
+    \textbf{Quiero} & enviar una solicitud de pago a la API de simulación y recibir una respuesta que replica el comportamiento de una transacción aprobada por cada pasarela \\
+    \hline
+    \textbf{Para} & probar el flujo de éxito de mi integración sin depender del sandbox real de la pasarela \\
+    \hline
+  \end{tabularx}
+  \caption{HU-06}
+  \label{tab:hu-06}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item La API de simulación expone un endpoint por pasarela que acepta los mismos parámetros que la API real del proveedor.
+  \item La respuesta del endpoint de éxito replica la estructura exacta de una respuesta aprobada de la pasarela correspondiente.
+  \item La API de simulación es accesible públicamente sin requerir credenciales reales ni configuración local.
+\end{itemize}
+
+\subsubsection{HU-07: Simular escenarios de error controlados}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & tester de software \\
+    \hline
+    \textbf{Quiero} & provocar escenarios de rechazo, timeout y error de red en la API de simulación mediante parámetros de la solicitud \\
+    \hline
+    \textbf{Para} & verificar que mi integración maneja correctamente los casos de fallo sin tener que reproducirlos en el sandbox real \\
+    \hline
+  \end{tabularx}
+  \caption{HU-07}
+  \label{tab:hu-07}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item La API de simulación soporta al menos los siguientes escenarios configurables por parámetro: APROBADO, RECHAZADO, FONDOS\_INSUFICIENTES, TIMEOUT, ERROR\_RED.
+  \item La respuesta de cada escenario replica la estructura de error real de la pasarela correspondiente.
+  \item El escenario TIMEOUT introduce un retardo configurable antes de responder, simulando latencia real.
+\end{itemize}
+
+\subsubsection{HU-08: Recibir una notificación webhook simulada}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & solicitar a la API de simulación que envíe un webhook a una URL de mi aplicación, replicando el formato y firma de la pasarela correspondiente \\
+    \hline
+    \textbf{Para} & probar el endpoint receptor de webhooks de mi aplicación sin esperar eventos reales del sandbox \\
+    \hline
+  \end{tabularx}
+  \caption{HU-08}
+  \label{tab:hu-08}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item La API de simulación acepta una URL destino y un tipo de evento, y envía un webhook firmado replicando el formato de la pasarela indicada.
+  \item La firma del webhook simulado es válida y puede ser verificada con el mecanismo de validación del SDK.
+  \item La API de simulación retorna el resultado del intento de envío (éxito o fallo de la entrega).
+\end{itemize}
+
+\subsection{Documentación de datos de prueba}
+
+\subsubsection{HU-09: Acceder a datos de prueba por pasarela}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador o tester \\
+    \hline
+    \textbf{Quiero} & encontrar en un único lugar los datos de prueba disponibles para cada pasarela: tarjetas, credenciales de sandbox, referencias y parámetros especiales \\
+    \hline
+    \textbf{Para} & no tener que buscar en múltiples fuentes de documentación de cada proveedor durante el desarrollo \\
+    \hline
+  \end{tabularx}
+  \caption{HU-09}
+  \label{tab:hu-09}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El repositorio del framework incluye una sección de documentación de datos de prueba organizada por pasarela.
+  \item Para cada pasarela se documentan: tarjetas de prueba con sus comportamientos esperados, credenciales de acceso al sandbox, y referencias de pago válidas.
+  \item La documentación indica claramente la fuente oficial de cada dato (enlace a la documentación del proveedor).
+  \item La documentación se mantiene actualizada con los datos de prueba vigentes de cada proveedor al momento de la entrega del proyecto.
+\end{itemize}
+
+% ==========================================
+% SECCIÓN: 07-requisitos-no-funcionales
+% ==========================================
+
+\section{Requisitos No Funcionales}
+
+Los requisitos no funcionales del framework se especifican siguiendo la clasificación FURPS+ (Functionality, Usability, Reliability, Performance, Supportability y restricciones adicionales), adaptada al contexto de una librería de software para desarrolladores.
+
+\subsection{Funcionalidad (Functionality)}
+
+\begin{itemize}
+  \item El framework debe soportar las operaciones de creación de pago, consulta de estado y validación de webhooks para las cuatro pasarelas integradas (Wompi, PayU, Mercado Pago, Kushki).
+  \item El manejo de credenciales debe garantizar que las claves de API de cada pasarela no sean expuestas en logs, mensajes de error ni en las respuestas del SDK.
+  \item La comunicación entre el SDK y las APIs de las pasarelas debe realizarse exclusivamente a través de HTTPS.
+  \item La validación de webhooks debe verificar la firma criptográfica utilizando el algoritmo definido por cada proveedor antes de procesar el evento.
+\end{itemize}
+
+\subsection{Usabilidad (Usability)}
+
+\begin{itemize}
+  \item El framework debe poder instalarse mediante un único comando npm sin dependencias de configuración adicionales del sistema operativo. En caso de que el paquete no se encuentre publicado en el registro oficial de npm al momento de la evaluación, la instalación debe ser igualmente posible mediante un único comando apuntando directamente al repositorio público de GitHub del proyecto.
+  \item La documentación del framework debe permitir que un desarrollador con conocimientos básicos de Node.js complete su primera integración siguiendo la guía de inicio rápido en un tiempo máximo de 2 horas, verificado mediante una sesión de prueba de usabilidad con un participante externo al equipo de desarrollo durante la fase de evaluación del proyecto.
+  \item Los mensajes de error del SDK deben ser descriptivos, en español e inglés, e incluir el código de error, la pasarela involucrada y una sugerencia de resolución cuando sea posible.
+  \item La API de simulación debe incluir documentación OpenAPI 3.0 accesible públicamente para facilitar su exploración con herramientas como Postman o Swagger UI.
+\end{itemize}
+
+\subsection{Confiabilidad (Reliability)}
+
+\begin{itemize}
+  \item El mecanismo de reintentos del SDK debe implementar backoff exponencial con un máximo configurable de intentos (valor por defecto: 3 reintentos con intervalos de 1s, 2s y 4s).
+  \item El SDK no debe lanzar excepciones no manejadas bajo ninguna condición de error esperada (respuesta inválida de la pasarela, timeout de red, credenciales incorrectas).
+  \item La API de simulación debe permanecer desplegada y accesible de forma continua durante todo el período de evaluación del proyecto, sin interrupciones planificadas. No se establece un porcentaje formal de disponibilidad dado que el proyecto no cuenta con infraestructura de monitoreo activo ni acuerdos de nivel de servicio, sin embargo cualquier interrupción no planificada debe ser resuelta en un plazo máximo de 24 horas por el equipo de desarrollo.
+\end{itemize}
+
+\subsection{Rendimiento (Performance)}
+
+\begin{itemize}
+  \item El overhead introducido por el framework frente a una llamada directa a la API de cada pasarela no debe superar los 100 milisegundos en condiciones de red normales, medido mediante pruebas automatizadas ejecutadas en un entorno local controlado utilizando Jest con soporte de mocks de red.
+  \item La API de simulación debe responder en menos de 500 milisegundos para los escenarios que no simulan latencia intencionada, medido desde el envío de la solicitud hasta la recepción de la respuesta completa utilizando Postman o k6 desde una conexión de red estándar. Este umbral se establece considerando que el despliegue se realizará sobre infraestructura de nivel gratuito, donde los tiempos de respuesta están sujetos a las condiciones del proveedor de hospedaje.
+  \item El SDK no debe mantener conexiones persistentes hacia las pasarelas entre operaciones para evitar el consumo innecesario de recursos del proceso huésped.
+\end{itemize}
+
+\subsection{Soporte y mantenibilidad (Supportability)}
+
+\begin{itemize}
+  \item El framework debe seguir la arquitectura hexagonal (Ports \& Adapters), de modo que la incorporación de una nueva pasarela requiera únicamente implementar una nueva clase adaptador sin modificar el núcleo.
+  \item El repositorio público del framework debe incluir instrucciones de contribución (\texttt{CONTRIBUTING.md}) que describan cómo implementar un nuevo adaptador.
+  \item Cada adaptador debe estar acompañado de pruebas de integración que verifiquen su funcionamiento contra la API de simulación.
+\end{itemize}
+
+\subsection{Restricciones adicionales (+)}
+
+\begin{itemize}
+  \item Restricción de diseño: el framework se implementa en TypeScript con target ES2020. El código compilado debe ser compatible con Node.js versión 18 LTS en adelante, por ser la versión con soporte activo de largo plazo más ampliamente adoptada al momento del desarrollo del proyecto.
+  \item Restricción de distribución: el framework se distribuye como paquete npm bajo la licencia Apache 2.0. El código fuente se publica en un repositorio público de GitHub.
+  \item Restricción de seguridad: el framework no debe almacenar datos de tarjeta de crédito en memoria más tiempo del estrictamente necesario para realizar la operación, y no debe registrar (log) ningún dato sensible del pagador.
+  \item Restricción regulatoria: el framework actúa exclusivamente como intermediario que delega las operaciones hacia cada pasarela sin modificar, interceptar ni almacenar los datos sensibles del proceso de pago. La responsabilidad sobre el cumplimiento de PCI DSS recae en las pasarelas integradas y en las aplicaciones que consumen el framework, no en el framework mismo.
+\end{itemize}
+
+
+% ==========================================
+% SECCIÓN: 08-referencias
+% ==========================================
+
+\section{Referencias}
+
+\begin{itemize}
+  \item IEEE. (1998). \textit{IEEE recommended practice for software requirements specifications} (IEEE Std 830-1998). \url{https://doi.org/10.1109/IEEESTD.1998.88286}
+  \item Peffers, K., Tuunanen, T., Rothenberger, M., \& Chatterjee, S. (2007). A design science research methodology for information systems research. \textit{Journal of Management Information Systems}, 24(3), 45-77.
+  \item Cockburn, A. (2024). \textit{Hexagonal architecture explained}. \url{https://alistair.cockburn.us/hexagonal-architecture/}
+  \item Gamma, E., Helm, R., Johnson, R., \& Vlissides, J. (1994). \textit{Design patterns: Elements of reusable object-oriented software}. Addison-Wesley.
+  \item Chidamber, S. R., \& Kemerer, C. F. (1994). A metrics suite for object-oriented design. \textit{IEEE Transactions on Software Engineering}, 20(6), 476-493. \url{https://doi.org/10.1109/32.295895}
+  \item Hohpe, G., \& Woolf, B. (2003). \textit{Enterprise integration patterns: Designing, building, and deploying messaging solutions}. Addison-Wesley.
+  \item Hisyam, M., \& Manuaba, I. B. K. (2022). Integration model of multiple payment gateways for online split payment scenario. \textit{2022 International Conference on Information Management and Technology (ICIMTech)}, 122-126. \url{https://doi.org/10.1109/ICIMTech55957.2022.9915168}
+  \item Fielding, R. T. (2000). \textit{Architectural styles and the design of network-based software architectures} (Tesis doctoral, University of California, Irvine).
+  \item Ammann, P., \& Offutt, J. (2016). \textit{Introduction to software testing}. Cambridge University Press. \url{https://doi.org/10.1017/9781316771273}
+\end{itemize}
+
+
+\end{document}
