@@ -1,0 +1,27 @@
+\section{Restricciones del Producto}
+
+\subsection{Restricciones técnicas}
+
+\begin{itemize}
+  \item El SDK se implementa exclusivamente en TypeScript/Node.js. No se desarrollarán versiones para otros lenguajes o entornos de ejecución en el alcance de este proyecto. VER CUAL PUEDE SER EL ALCANCE DE ESTO
+  \item La API de simulación se distribuye como servicio web desplegado. No se ofrece una versión ejecutable localmente mediante contenedores Docker en esta versión.
+  \item El framework no almacena ni procesa datos de tarjeta de crédito directamente. Toda operación sensible es delegada a los mecanismos de seguridad certificados de cada pasarela.
+  \item La comunicación entre el cliente y el framework debe realizarse a través de HTTP. No se soportan conexiones sin cifrado.
+  \item El framework depende de la disponibilidad de los ambientes sandbox de cada pasarela para su validación. Cambios en las APIs de los proveedores pueden requerir actualizaciones en los adaptadores.
+\end{itemize}
+
+\subsection{Restricciones regulatorias}
+
+\begin{itemize}
+  \item El framework debe operar dentro de los límites establecidos por el estándar PCI DSS para el manejo de datos sensibles, delegando el procesamiento de información de pago a los mecanismos certificados de cada proveedor.
+  \item El uso del framework en entornos de producción está sujeto al cumplimiento de los términos y condiciones de uso de las APIs de cada pasarela (Wompi, PayU, Mercado Pago, Kushki).
+  \item El framework no modifica ni intercepta los flujos de autenticación internos de las pasarelas, en cumplimiento de las políticas de seguridad de cada proveedor.
+\end{itemize}
+
+\subsection{Restricciones de alcance del proyecto}
+
+\begin{itemize}
+  \item El proyecto se desarrolla en un período de cinco meses (julio a noviembre de 2026), lo que limita la cantidad de pasarelas integradas y la profundidad de cobertura funcional por proveedor.
+  \item La evaluación del framework se realizará sobre proyectos prototípicos definidos, no sobre sistemas en producción con volúmenes reales de transacciones.
+  \item El mantenimiento y evolución del framework más allá del período académico no están garantizados por el equipo de desarrollo.
+\end{itemize}

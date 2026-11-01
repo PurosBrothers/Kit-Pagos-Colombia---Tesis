@@ -1,8 +1,9 @@
 \documentclass[10pt]{article}
 \input{../comun/estilo}
+\usepackage{longtable}
 
 \NombreDocumento{SRS}
-\VersionDocumento{0.1}
+\VersionDocumento{1.1}
 \FechaDocumento{octubre de 2026}
 
 \begin{document}
@@ -11,8 +12,19 @@
 
 \begin{HistorialDeCambios}
   \Cambio{0.1}{28/10/2026}{Portada, historial de cambios e índices con el estilo común (issue \#167).}{Joan Emmanuel Orduz Chia}
+  \Cambio{1.0}{mayo de 2026}{Versión inicial en procesador de texto (Word).}{Andres Henao Niño, Joan Emmanuel Orduz Chia, Joshua Prieto Zambrano, David Estevan Rodriguez Jurado}
+  \Cambio{1.1}{octubre de 2026}{Paso a LaTeX con el estilo común, sin cambios de contenido (issue \#168).}{Andres Henao Niño}
 \end{HistorialDeCambios}
 
 \Indices
+
+\input{sections/01-introduccion}
+\input{sections/02-vision-producto}
+\input{sections/03-restricciones}
+\input{sections/04-modelo-dominio}
+\input{sections/05-caracteristicas-usuarios}
+\input{sections/06-funciones-producto}
+\input{sections/07-requisitos-no-funcionales}
+\input{sections/08-referencias}
 
 \end{document}
