@@ -201,7 +201,7 @@ export const postPaymentsSchema = {
         example: "cus_12345",
       },
     },
-    required: ["amount", "currency", "merchant_reference_id"],
+    required: ["amount", "currency"],
   },
   response: {
     201: {
