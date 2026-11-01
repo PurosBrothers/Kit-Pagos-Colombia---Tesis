@@ -1,0 +1,284 @@
+\section{Funciones del Producto}
+
+Esta sección especifica los requisitos funcionales del framework Kit Pagos Colombia. La sección 5.1 presenta los requisitos funcionales en formato tabular con identificador, descripción, componente y prioridad. La sección 5.2 en adelante complementa esta especificación mediante historias de usuario que expresan cada requisito desde la perspectiva del usuario, acompañadas de criterios de aceptación verificables.
+
+\subsection{Requisitos Funcionales}
+
+La Tabla 5 presenta el listado consolidado de requisitos funcionales del framework, organizados por componente. Las prioridades se clasifican en Alta (esencial para el MVP), Media (importante pero no bloqueante) y Baja (deseable en versiones futuras).
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{|c|p{8.5cm}|c|c|}
+  \hline
+  \textbf{ID} & \textbf{Descripción del requisito} & \textbf{Componente} & \textbf{Prioridad} \\
+  \hline
+  \endfirsthead
+  \hline
+  \textbf{ID} & \textbf{Descripción del requisito} & \textbf{Componente} & \textbf{Prioridad} \\
+  \hline
+  \endhead
+  \hline
+  \endfoot
+  \hline
+  \caption{Requisitos funcionales del framework Kit Pagos Colombia.}
+  \label{tab:requisitos-funcionales}\\
+  \endlastfoot
+  RF-01 & El sistema debe permitir crear una intención de pago especificando pasarela, monto, moneda, referencia de orden y datos del pagador mediante una interfaz unificada. & SDK & Alta \\
+  \hline
+  RF-02 & El sistema debe retornar una respuesta normalizada ante la creación de un pago, incluyendo el identificador de transacción, el estado inicial y la URL o token de pago según la pasarela. & SDK & Alta \\
+  \hline
+  RF-03 & El sistema debe permitir consultar el estado de una transacción por identificador y retornarlo mapeado a los estados normalizados: PENDIENTE, APROBADO, RECHAZADO, EXPIRADO o ERROR. & SDK & Alta \\
+  \hline
+  RF-04 & El sistema debe validar la firma criptográfica de un webhook entrante utilizando el algoritmo correspondiente a cada pasarela y retornar un evento normalizado si la firma es válida. & SDK & Alta \\
+  \hline
+  RF-05 & El sistema debe lanzar excepciones tipadas con código de error normalizado y mensaje descriptivo ante cualquier condición de fallo esperada (timeout, credenciales inválidas, recurso no encontrado). & SDK & Alta \\
+  \hline
+  RF-06 & El sistema debe permitir cambiar la pasarela activa modificando únicamente el parámetro de configuración en la inicialización del framework, sin modificar el código de negocio del llamador. & SDK & Alta \\
+  \hline
+  RF-07 & El sistema debe reintentar automáticamente una operación ante errores transitorios (timeout, respuestas 5xx) siguiendo una estrategia de backoff exponencial configurable, hasta un número máximo de intentos definido por el usuario. & SDK & Media \\
+  \hline
+  RF-08 & El sistema debe garantizar que las credenciales de cada pasarela no sean expuestas en logs, mensajes de error ni en las respuestas del SDK. & SDK & Alta \\
+  \hline
+  RF-09 & El sistema debe exponer endpoints REST que repliquen el comportamiento de creación de pago de cada pasarela soportada, accesibles sin credenciales reales. & API Simulación & Alta \\
+  \hline
+  RF-10 & El sistema debe permitir configurar el escenario de respuesta de cada endpoint mediante un parámetro de la solicitud, soportando al menos: APROBADO, RECHAZADO, FONDOS\_INSUFICIENTES, TIMEOUT y ERROR\_RED. & API Simulación & Alta \\
+  \hline
+  RF-11 & El sistema debe replicar la estructura exacta de las respuestas de error de cada pasarela en los escenarios de fallo configurados. & API Simulación & Alta \\
+  \hline
+  RF-12 & El sistema debe permitir solicitar el envío de un webhook simulado hacia una URL destino, con el formato y firma correspondientes a la pasarela indicada. & API Simulación & Media \\
+  \hline
+  RF-13 & El sistema debe exponer la especificación OpenAPI 3.0 de la API de simulación en un endpoint público (/docs), accesible a través de un navegador web. & API Simulación & Media \\
+  \hline
+  RF-14 & El sistema debe proveer documentación de datos de prueba organizada por pasarela, incluyendo tarjetas de prueba, credenciales de sandbox y referencias de pago válidas para cada proveedor. & Documentación & Alta \\
+  \hline
+  RF-15 & El sistema debe indicar el comportamiento esperado de cada dato de prueba (tarjeta aprobada, tarjeta rechazada, fondos insuficientes) junto con la fuente oficial del proveedor. & Documentación & Media \\
+  \hline
+\end{longtable}
+\end{center}
+
+\subsection{Historias de Usuario}
+
+Las siguientes historias de usuario complementan los requisitos funcionales de la Tabla 5, expresando cada necesidad desde la perspectiva del usuario y acompañándola de criterios de aceptación verificables. Cada historia referencia el requisito funcional que desarrolla.
+
+\subsection{SDK — Interfaz unificada de integración}
+
+\subsubsection{HU-01: Crear una intención de pago con una pasarela específica}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & crear una intención de pago especificando únicamente la pasarela deseada, el monto y los datos del pagador mediante una sola llamada al SDK \\
+    \hline
+    \textbf{Para} & no tener que conocer los detalles de autenticación y formato de solicitud propios de cada proveedor \\
+    \hline
+  \end{tabularx}
+  \caption{HU-01}
+  \label{tab:hu-01}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El SDK acepta una solicitud de creación de pago con los parámetros: pasarela, monto, moneda, referencia de orden y datos del pagador.
+  \item El SDK retorna una respuesta normalizada con el identificador de la transacción, el estado inicial y la URL de redirección o token de pago según corresponda.
+  \item Si la pasarela retorna un error, el SDK lanza una excepción tipada con código de error normalizado y mensaje descriptivo.
+  \item El SDK soporta las pasarelas Wompi, PayU, Mercado Pago y Kushki sin que el código del llamador deba cambiar entre ellas.
+\end{itemize}
+
+\subsubsection{HU-02: Consultar el estado de una transacción}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & consultar el estado actual de una transacción utilizando su identificador, independientemente de la pasarela que la procesó \\
+    \hline
+    \textbf{Para} & obtener siempre un estado normalizado sin tener que interpretar los estados específicos de cada proveedor \\
+    \hline
+  \end{tabularx}
+  \caption{HU-02}
+  \label{tab:hu-02}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El SDK retorna el estado de la transacción mapeado a uno de los estados normalizados: PENDIENTE, APROBADO, RECHAZADO, EXPIRADO o ERROR.
+  \item La respuesta incluye el estado original de la pasarela como campo adicional para referencia.
+  \item Si el identificador no existe en la pasarela indicada, el SDK lanza una excepción tipada con código NOT\_FOUND.
+\end{itemize}
+
+\subsubsection{HU-03: Validar y procesar un webhook entrante}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & validar la firma de un webhook recibido y extraer el evento normalizado que contiene, con una sola llamada al SDK \\
+    \hline
+    \textbf{Para} & no tener que implementar la lógica de validación de firma de cada pasarela por separado \\
+    \hline
+  \end{tabularx}
+  \caption{HU-03}
+  \label{tab:hu-03}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El SDK valida la firma del webhook utilizando el algoritmo correspondiente a cada pasarela (HMAC-SHA256 para Wompi y Kushki, firma propia de PayU y Mercado Pago).
+  \item Si la firma es inválida, el SDK retorna un error tipado con código INVALID\_SIGNATURE.
+  \item Si la firma es válida, el SDK retorna un objeto de evento normalizado con el tipo de evento, el identificador de transacción y el nuevo estado.
+\end{itemize}
+
+\subsubsection{HU-04: Cambiar de pasarela sin modificar la lógica de negocio}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software senior \\
+    \hline
+    \textbf{Quiero} & cambiar la pasarela activa de mi aplicación modificando únicamente la configuración del framework, sin tocar el código de negocio \\
+    \hline
+    \textbf{Para} & reducir el riesgo y el esfuerzo de migración entre proveedores \\
+    \hline
+  \end{tabularx}
+  \caption{HU-04}
+  \label{tab:hu-04}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El framework permite especificar la pasarela activa mediante un parámetro de configuración en la inicialización.
+  \item Al cambiar la pasarela en la configuración, todas las operaciones de pago se redirigen al nuevo proveedor sin modificar el código del llamador.
+  \item El cambio de pasarela no afecta la estructura ni el tipo de las respuestas retornadas por el SDK.
+\end{itemize}
+
+\subsubsection{HU-05: Manejo automático de reintentos ante fallos transitorios}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & que el SDK reintente automáticamente una operación cuando la pasarela devuelve un error transitorio (timeout, error 500) \\
+    \hline
+    \textbf{Para} & mejorar la resiliencia de la integración sin implementar lógica de reintento manualmente \\
+    \hline
+  \end{tabularx}
+  \caption{HU-05}
+  \label{tab:hu-05}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El SDK reintenta la operación hasta un máximo configurable de veces ante errores de red o respuestas 5xx de la pasarela.
+  \item Si se supera el número máximo de reintentos, el SDK lanza una excepción tipada con código MAX\_RETRIES\_EXCEEDED.
+\end{itemize}
+
+\subsection{API web de simulación}
+
+\subsubsection{HU-06: Simular una transacción aprobada}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador o tester \\
+    \hline
+    \textbf{Quiero} & enviar una solicitud de pago a la API de simulación y recibir una respuesta que replica el comportamiento de una transacción aprobada por cada pasarela \\
+    \hline
+    \textbf{Para} & probar el flujo de éxito de mi integración sin depender del sandbox real de la pasarela \\
+    \hline
+  \end{tabularx}
+  \caption{HU-06}
+  \label{tab:hu-06}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item La API de simulación expone un endpoint por pasarela que acepta los mismos parámetros que la API real del proveedor.
+  \item La respuesta del endpoint de éxito replica la estructura exacta de una respuesta aprobada de la pasarela correspondiente.
+  \item La API de simulación es accesible públicamente sin requerir credenciales reales ni configuración local.
+\end{itemize}
+
+\subsubsection{HU-07: Simular escenarios de error controlados}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & tester de software \\
+    \hline
+    \textbf{Quiero} & provocar escenarios de rechazo, timeout y error de red en la API de simulación mediante parámetros de la solicitud \\
+    \hline
+    \textbf{Para} & verificar que mi integración maneja correctamente los casos de fallo sin tener que reproducirlos en el sandbox real \\
+    \hline
+  \end{tabularx}
+  \caption{HU-07}
+  \label{tab:hu-07}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item La API de simulación soporta al menos los siguientes escenarios configurables por parámetro: APROBADO, RECHAZADO, FONDOS\_INSUFICIENTES, TIMEOUT, ERROR\_RED.
+  \item La respuesta de cada escenario replica la estructura de error real de la pasarela correspondiente.
+  \item El escenario TIMEOUT introduce un retardo configurable antes de responder, simulando latencia real.
+\end{itemize}
+
+\subsubsection{HU-08: Recibir una notificación webhook simulada}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & solicitar a la API de simulación que envíe un webhook a una URL de mi aplicación, replicando el formato y firma de la pasarela correspondiente \\
+    \hline
+    \textbf{Para} & probar el endpoint receptor de webhooks de mi aplicación sin esperar eventos reales del sandbox \\
+    \hline
+  \end{tabularx}
+  \caption{HU-08}
+  \label{tab:hu-08}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item La API de simulación acepta una URL destino y un tipo de evento, y envía un webhook firmado replicando el formato de la pasarela indicada.
+  \item La firma del webhook simulado es válida y puede ser verificada con el mecanismo de validación del SDK.
+  \item La API de simulación retorna el resultado del intento de envío (éxito o fallo de la entrega).
+\end{itemize}
+
+\subsection{Documentación de datos de prueba}
+
+\subsubsection{HU-09: Acceder a datos de prueba por pasarela}
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador o tester \\
+    \hline
+    \textbf{Quiero} & encontrar en un único lugar los datos de prueba disponibles para cada pasarela: tarjetas, credenciales de sandbox, referencias y parámetros especiales \\
+    \hline
+    \textbf{Para} & no tener que buscar en múltiples fuentes de documentación de cada proveedor durante el desarrollo \\
+    \hline
+  \end{tabularx}
+  \caption{HU-09}
+  \label{tab:hu-09}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El repositorio del framework incluye una sección de documentación de datos de prueba organizada por pasarela.
+  \item Para cada pasarela se documentan: tarjetas de prueba con sus comportamientos esperados, credenciales de acceso al sandbox, y referencias de pago válidas.
+  \item La documentación indica claramente la fuente oficial de cada dato (enlace a la documentación del proveedor).
+  \item La documentación se mantiene actualizada con los datos de prueba vigentes de cada proveedor al momento de la entrega del proyecto.
+\end{itemize}

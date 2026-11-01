@@ -1,0 +1,54 @@
+\section{Requisitos No Funcionales}
+
+Los requisitos no funcionales del framework se especifican siguiendo la clasificación FURPS+ (Functionality, Usability, Reliability, Performance, Supportability y restricciones adicionales), adaptada al contexto de una librería de software para desarrolladores.
+
+\subsection{Funcionalidad (Functionality)}
+
+\begin{itemize}
+  \item El framework debe soportar las operaciones de creación de pago, consulta de estado y validación de webhooks para las cuatro pasarelas integradas (Wompi, PayU, Mercado Pago, Kushki).
+  \item El manejo de credenciales debe garantizar que las claves de API de cada pasarela no sean expuestas en logs, mensajes de error ni en las respuestas del SDK.
+  \item La comunicación entre el SDK y las APIs de las pasarelas debe realizarse exclusivamente a través de HTTPS.
+  \item La validación de webhooks debe verificar la firma criptográfica utilizando el algoritmo definido por cada proveedor antes de procesar el evento.
+\end{itemize}
+
+\subsection{Usabilidad (Usability)}
+
+\begin{itemize}
+  \item El framework debe poder instalarse mediante un único comando npm sin dependencias de configuración adicionales del sistema operativo. En caso de que el paquete no se encuentre publicado en el registro oficial de npm al momento de la evaluación, la instalación debe ser igualmente posible mediante un único comando apuntando directamente al repositorio público de GitHub del proyecto.
+  \item La documentación del framework debe permitir que un desarrollador con conocimientos básicos de Node.js complete su primera integración siguiendo la guía de inicio rápido en un tiempo máximo de 2 horas, verificado mediante una sesión de prueba de usabilidad con un participante externo al equipo de desarrollo durante la fase de evaluación del proyecto.
+  \item Los mensajes de error del SDK deben ser descriptivos, en español e inglés, e incluir el código de error, la pasarela involucrada y una sugerencia de resolución cuando sea posible.
+  \item La API de simulación debe incluir documentación OpenAPI 3.0 accesible públicamente para facilitar su exploración con herramientas como Postman o Swagger UI.
+\end{itemize}
+
+\subsection{Confiabilidad (Reliability)}
+
+\begin{itemize}
+  \item El mecanismo de reintentos del SDK debe implementar backoff exponencial con un máximo configurable de intentos (valor por defecto: 3 reintentos con intervalos de 1s, 2s y 4s).
+  \item El SDK no debe lanzar excepciones no manejadas bajo ninguna condición de error esperada (respuesta inválida de la pasarela, timeout de red, credenciales incorrectas).
+  \item La API de simulación debe permanecer desplegada y accesible de forma continua durante todo el período de evaluación del proyecto, sin interrupciones planificadas. No se establece un porcentaje formal de disponibilidad dado que el proyecto no cuenta con infraestructura de monitoreo activo ni acuerdos de nivel de servicio, sin embargo cualquier interrupción no planificada debe ser resuelta en un plazo máximo de 24 horas por el equipo de desarrollo.
+\end{itemize}
+
+\subsection{Rendimiento (Performance)}
+
+\begin{itemize}
+  \item El overhead introducido por el framework frente a una llamada directa a la API de cada pasarela no debe superar los 100 milisegundos en condiciones de red normales, medido mediante pruebas automatizadas ejecutadas en un entorno local controlado utilizando Jest con soporte de mocks de red.
+  \item La API de simulación debe responder en menos de 500 milisegundos para los escenarios que no simulan latencia intencionada, medido desde el envío de la solicitud hasta la recepción de la respuesta completa utilizando Postman o k6 desde una conexión de red estándar. Este umbral se establece considerando que el despliegue se realizará sobre infraestructura de nivel gratuito, donde los tiempos de respuesta están sujetos a las condiciones del proveedor de hospedaje.
+  \item El SDK no debe mantener conexiones persistentes hacia las pasarelas entre operaciones para evitar el consumo innecesario de recursos del proceso huésped.
+\end{itemize}
+
+\subsection{Soporte y mantenibilidad (Supportability)}
+
+\begin{itemize}
+  \item El framework debe seguir la arquitectura hexagonal (Ports \& Adapters), de modo que la incorporación de una nueva pasarela requiera únicamente implementar una nueva clase adaptador sin modificar el núcleo.
+  \item El repositorio público del framework debe incluir instrucciones de contribución (\texttt{CONTRIBUTING.md}) que describan cómo implementar un nuevo adaptador.
+  \item Cada adaptador debe estar acompañado de pruebas de integración que verifiquen su funcionamiento contra la API de simulación.
+\end{itemize}
+
+\subsection{Restricciones adicionales (+)}
+
+\begin{itemize}
+  \item Restricción de diseño: el framework se implementa en TypeScript con target ES2020. El código compilado debe ser compatible con Node.js versión 18 LTS en adelante, por ser la versión con soporte activo de largo plazo más ampliamente adoptada al momento del desarrollo del proyecto.
+  \item Restricción de distribución: el framework se distribuye como paquete npm bajo la licencia Apache 2.0. El código fuente se publica en un repositorio público de GitHub.
+  \item Restricción de seguridad: el framework no debe almacenar datos de tarjeta de crédito en memoria más tiempo del estrictamente necesario para realizar la operación, y no debe registrar (log) ningún dato sensible del pagador.
+  \item Restricción regulatoria: el framework actúa exclusivamente como intermediario que delega las operaciones hacia cada pasarela sin modificar, interceptar ni almacenar los datos sensibles del proceso de pago. La responsabilidad sobre el cumplimiento de PCI DSS recae en las pasarelas integradas y en las aplicaciones que consumen el framework, no en el framework mismo.
+\end{itemize}
