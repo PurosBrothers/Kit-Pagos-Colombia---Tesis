@@ -63,6 +63,16 @@ async function registerOpenApiPlugin(app: FastifyInstance): Promise<void> {
           name: "Diagnóstico",
           description: "Endpoints de infraestructura: health check y estado del servidor.",
         },
+        {
+          name: "Kushki Simulación",
+          description:
+            "Endpoints que replican la API nativa de Kushki para cobro con tarjeta y transferencias PSE.",
+        },
+        {
+          name: "Rapyd Simulación",
+          description:
+            "Endpoints que replican la API nativa de Rapyd para cobros directos, checkout alojado y PSE.",
+        },
       ],
       components: {
         securitySchemes: {
