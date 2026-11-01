@@ -1,0 +1,48 @@
+\section{Modelo de Dominio}
+
+El dominio del problema se organiza alrededor del concepto de transacción de pago como entidad central, la cual es procesada por una pasarela de pago a través de métodos de pago específicos y genera notificaciones asíncronas hacia la aplicación del comercio. A continuación se describen los conceptos principales del dominio y sus relaciones.
+
+\subsection{Entidades del dominio}
+
+\begin{table}[htbp]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Entidad} & \textbf{Descripción} \\
+    \hline
+    Transacción & Unidad atómica de intercambio económico entre un comprador y un comercio, procesada a través de una pasarela de pago. Tiene un identificador único, un monto, una moneda, un estado y una marca temporal de creación. \\
+    \hline
+    Estado de transacción & Representa la condición actual de una transacción en el ciclo de vida del pago. Los estados normalizados del framework son: PENDIENTE, APROBADO, RECHAZADO, EXPIRADO y ERROR. \\
+    \hline
+    Pasarela de pago & Proveedor externo que procesa las transacciones de pago. Cada pasarela define sus propias convenciones de API, autenticación, formatos de respuesta y mecanismos de notificación. Las pasarelas soportadas son Wompi, PayU, Mercado Pago y Kushki. \\
+    \hline
+    Adaptador & Componente del framework que traduce el contrato normalizado del puerto hacia las convenciones específicas de una pasarela determinada. Existe un adaptador por cada pasarela soportada. \\
+    \hline
+    Puerto & Interfaz abstracta del framework que define el contrato que cada adaptador debe cumplir. El puerto especifica las operaciones disponibles (crear pago, consultar estado, validar webhook) sin conocimiento de ningún proveedor específico. \\
+    \hline
+    Método de pago & Mecanismo a través del cual el comprador efectúa el pago. Puede ser tarjeta de crédito/débito, transferencia bancaria (PSE), billetera digital u otros métodos soportados por cada pasarela. \\
+    \hline
+    Webhook & Notificación asíncrona que una pasarela envía hacia una URL registrada por el comercio para informar sobre cambios en el estado de una transacción. Cada pasarela define su propio formato y mecanismo de firma. \\
+    \hline
+    Error normalizado & Representación unificada de una condición de fallo durante el procesamiento de una operación, independiente del formato de error específico de cada pasarela. Incluye un código de error, un mensaje descriptivo y el proveedor que originó el fallo. \\
+    \hline
+    Comercio & Entidad que ofrece bienes o servicios e integra el framework para aceptar pagos digitales. Posee credenciales de autenticación para cada pasarela que desea utilizar. \\
+    \hline
+    Desarrollador & Persona técnica que consume el framework para integrar capacidades de pago en la aplicación del comercio. Es el usuario principal del SDK y de la API de simulación. \\
+    \hline
+  \end{tabularx}
+  \caption{Entidades del modelo de dominio de Kit Pagos Colombia.}
+  \label{tab:entidades-dominio}
+\end{table}
+
+\subsection{Relaciones entre entidades}
+
+\begin{itemize}
+  \item Un Comercio se autentica ante una o varias Pasarelas de pago mediante credenciales específicas por proveedor.
+  \item Una Transacción es creada por un Comercio y procesada por exactamente una Pasarela de pago a través de un Método de pago.
+  \item Una Transacción tiene exactamente un Estado de transacción en cada momento de su ciclo de vida.
+  \item Una Pasarela de pago envía cero o más Webhooks hacia el Comercio a lo largo del ciclo de vida de una Transacción.
+  \item El framework expone un Puerto que es implementado por uno o más Adaptadores, uno por cada Pasarela soportada.
+  \item Cada operación fallida genera un Error normalizado que abstrae el error original de la Pasarela.
+\end{itemize}

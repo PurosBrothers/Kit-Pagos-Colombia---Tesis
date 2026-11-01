@@ -1,0 +1,23 @@
+\section{Visión del Producto}
+
+\subsection{Descripción del producto}
+
+Kit Pagos Colombia es un framework de desarrollo de software de código abierto,cuyo propósito es unificar la integración de las principales pasarelas de pago utilizadas en el mercado colombiano bajo una interfaz común, extensible y reutilizable.
+
+El framework está compuesto por tres componentes complementarios:
+
+\begin{itemize}
+  \item \textbf{SDK con interfaz unificada:} biblioteca que abstrae las diferencias técnicas entre Wompi, PayU, Mercado Pago y Kushki, exponiendo una API normalizada para operaciones de creación de pagos, consulta de estado y gestión de notificaciones asíncronas (webhooks).
+  \item \textbf{API web de simulación desplegada:} servicio REST accesible públicamente que replica el comportamiento de las pasarelas de pago para los escenarios de prueba más frecuentes, sin requerir credenciales reales ni configuración local adicional.
+  \item \textbf{Documentación centralizada de datos de prueba:} repositorio estructurado que consolida los datos de prueba provistos por cada pasarela (tarjetas de prueba, credenciales de sandbox, referencias de pago), organizados por proveedor y tipo de dato para facilitar su acceso durante el desarrollo.
+\end{itemize}
+
+\subsection{Alcance}
+
+El framework cubre las siguientes operaciones sobre las pasarelas integradas: creación de intenciones de pago, consulta del estado de una transacción, recepción y validación de notificaciones webhook, y normalización de respuestas de error. Las pasarelas soportadas en la versión inicial son Wompi, PayU Latam, Mercado Pago Colombia y Kushki.
+
+El framework NO cubre: procesamiento directo de datos de tarjeta de crédito, modificación de los mecanismos de seguridad internos de cada pasarela, gestión de cuentas de comercio, conciliación financiera, ni operaciones administrativas sobre las cuentas de los proveedores.
+
+\subsection{Objetivo del producto}
+
+Reducir la complejidad técnica y el tiempo requerido para integrar múltiples pasarelas de pago en aplicaciones de software colombianas, ofreciendo una capa de abstracción reutilizable, un entorno de simulación accesible y una fuente centralizada de datos de prueba válidos para el contexto local.
