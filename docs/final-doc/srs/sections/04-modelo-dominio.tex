@@ -4,37 +4,50 @@ El dominio del problema se organiza alrededor del concepto de transacción de pa
 
 \subsection{Entidades del dominio}
 
-\begin{table}[htbp]
-  \centering
-  \renewcommand{\arraystretch}{1.2}
-  \begin{tabularx}{\textwidth}{|l|X|}
-    \hline
-    \textbf{Entidad} & \textbf{Descripción} \\
-    \hline
-    Transacción & Unidad atómica de intercambio económico entre un comprador y un comercio, procesada a través de una pasarela de pago. Tiene un identificador único, un monto, una moneda, un estado y una marca temporal de creación. \\
-    \hline
-    Estado de transacción & Representa la condición actual de una transacción en el ciclo de vida del pago. Los estados normalizados del framework son: PENDIENTE, APROBADO, RECHAZADO, EXPIRADO y ERROR. \\
-    \hline
-    Pasarela de pago & Proveedor externo que procesa las transacciones de pago. Cada pasarela define sus propias convenciones de API, autenticación, formatos de respuesta y mecanismos de notificación. Las pasarelas soportadas son Wompi, PayU, Mercado Pago y Kushki. \\
-    \hline
-    Adaptador & Componente del framework que traduce el contrato normalizado del puerto hacia las convenciones específicas de una pasarela determinada. Existe un adaptador por cada pasarela soportada. \\
-    \hline
-    Puerto & Interfaz abstracta del framework que define el contrato que cada adaptador debe cumplir. El puerto especifica las operaciones disponibles (crear pago, consultar estado, validar webhook) sin conocimiento de ningún proveedor específico. \\
-    \hline
-    Método de pago & Mecanismo a través del cual el comprador efectúa el pago. Puede ser tarjeta de crédito/débito, transferencia bancaria (PSE), billetera digital u otros métodos soportados por cada pasarela. \\
-    \hline
-    Webhook & Notificación asíncrona que una pasarela envía hacia una URL registrada por el comercio para informar sobre cambios en el estado de una transacción. Cada pasarela define su propio formato y mecanismo de firma. \\
-    \hline
-    Error normalizado & Representación unificada de una condición de fallo durante el procesamiento de una operación, independiente del formato de error específico de cada pasarela. Incluye un código de error, un mensaje descriptivo y el proveedor que originó el fallo. \\
-    \hline
-    Comercio & Entidad que ofrece bienes o servicios e integra el framework para aceptar pagos digitales. Posee credenciales de autenticación para cada pasarela que desea utilizar. \\
-    \hline
-    Desarrollador & Persona técnica que consume el framework para integrar capacidades de pago en la aplicación del comercio. Es el usuario principal del SDK y de la API de simulación. \\
-    \hline
-  \end{tabularx}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{|l|p{0.76\textwidth}|}
+  \hline
+  \textbf{Entidad} & \textbf{Descripción} \\
+  \hline
+  \endfirsthead
+  \hline
+  \textbf{Entidad} & \textbf{Descripción} \\
+  \hline
+  \endhead
+  \hline
+  \endfoot
   \caption{Entidades del modelo de dominio de Kit Pagos Colombia.}
-  \label{tab:entidades-dominio}
-\end{table}
+  \label{tab:entidades-dominio}\\
+  \endlastfoot
+  Transacción & Unidad atómica de intercambio económico entre un comprador y un comercio, procesada a través de una pasarela de pago. Tiene un identificador único, un monto, una moneda, un estado, una marca temporal de creación, el estado nativo de la pasarela y, cuando existe, un motivo de rechazo. \\
+  \hline
+  Estado de transacción & Representa la condición actual de una transacción en el ciclo de vida del pago. Los estados normalizados del framework son: \texttt{APPROVED}, \texttt{DECLINED}, \texttt{PENDING}, \texttt{EXPIRED}, \texttt{VOIDED} y \texttt{ERROR}. \\
+  \hline
+  Resultado de pago & Unión que distingue dos desenlaces de la creación de un pago: una transacción resuelta (\texttt{TRANSACTION}) o una redirección requerida (\texttt{REDIRECT\_REQUIRED}) con la URL a la que hay que enviar al pagador, el identificador de la pasarela y el estado nativo. \\
+  \hline
+  Pasarela de pago & Proveedor externo que procesa las transacciones de pago. Cada pasarela define sus propias convenciones de API, autenticación, formatos de respuesta y mecanismos de notificación. Las pasarelas soportadas son Wompi, Rapyd (PayU GPO), Mercado Pago y Kushki. \\
+  \hline
+  Adaptador & Componente del framework que traduce el contrato normalizado del puerto hacia las convenciones específicas de una pasarela determinada. Existe un adaptador por cada pasarela soportada. \\
+  \hline
+  Puerto & Interfaz abstracta del framework que define el contrato que cada adaptador debe cumplir. El puerto especifica las operaciones disponibles (crear pago, consultar estado, listar bancos PSE y validar webhook) sin conocimiento de ningún proveedor específico. \\
+  \hline
+  Método de pago & Mecanismo a través del cual el comprador efectúa el pago. El framework soporta tarjeta de crédito o débito, a partir de un token emitido por la pasarela, y transferencia bancaria PSE. \\
+  \hline
+  Banco PSE & Entidad financiera habilitada para cobrar por PSE. Se identifica con el código que exige cada pasarela y, cuando está en el catálogo, con el código de compensación de ACH Colombia. \\
+  \hline
+  Webhook & Notificación asíncrona que una pasarela envía hacia una URL registrada por el comercio para informar sobre cambios en el estado de una transacción. Cada pasarela define su propio formato y mecanismo de firma. \\
+  \hline
+  Evento de webhook & Representación normalizada de una notificación válida. Incluye el tipo de evento, la pasarela, el identificador de la transacción, el nuevo estado y, cuando la firma lo cubre, la referencia de la orden. \\
+  \hline
+  Motivo de rechazo & Explicación de un pago \texttt{DECLINED}. Incluye el código nativo de la pasarela y una categoría normalizada: \texttt{INSUFFICIENT\_FUNDS}, \texttt{INVALID\_CARD\_DATA}, \texttt{CARD\_RESTRICTED}, \texttt{FRAUD\_SUSPICION}, \texttt{NETWORK\_ERROR}, \texttt{AUTHENTICATION\_FAILED}, \texttt{DUPLICATED\_PAYMENT} o \texttt{UNKNOWN}. \\
+  \hline
+  Error normalizado & Representación unificada de una condición de fallo durante el procesamiento de una operación, independiente del formato de error específico de cada pasarela. Incluye un código de error, un mensaje descriptivo y la pasarela que originó el fallo. \\
+  \hline
+  Comercio & Entidad que ofrece bienes o servicios e integra el framework para aceptar pagos digitales. Posee credenciales de autenticación para cada pasarela que desea utilizar. \\
+  \hline
+  Desarrollador & Persona técnica que consume el framework para integrar capacidades de pago en la aplicación del comercio. Es el usuario principal del SDK, del módulo de navegador y de la API de Simulación. \\
+  \hline
+\end{longtable}
 
 \subsection{Relaciones entre entidades}
 
@@ -42,7 +55,10 @@ El dominio del problema se organiza alrededor del concepto de transacción de pa
   \item Un Comercio se autentica ante una o varias Pasarelas de pago mediante credenciales específicas por proveedor.
   \item Una Transacción es creada por un Comercio y procesada por exactamente una Pasarela de pago a través de un Método de pago.
   \item Una Transacción tiene exactamente un Estado de transacción en cada momento de su ciclo de vida.
-  \item Una Pasarela de pago envía cero o más Webhooks hacia el Comercio a lo largo del ciclo de vida de una Transacción.
+  \item Una Transacción \texttt{DECLINED} puede tener un Motivo de rechazo. Un estado \texttt{ERROR} representa una falla técnica y no un rechazo del banco.
+  \item Un pago con PSE referencia un Banco PSE cuyo código es válido en la pasarela que procesa la transacción.
+  \item Una Pasarela de pago envía cero o más Webhooks hacia el Comercio a lo largo del ciclo de vida de una Transacción; el SDK los valida y los convierte en un Evento de webhook.
   \item El framework expone un Puerto que es implementado por uno o más Adaptadores, uno por cada Pasarela soportada.
+  \item La creación de un pago produce un Resultado de pago: una Transacción resuelta o una redirección pendiente.
   \item Cada operación fallida genera un Error normalizado que abstrae el error original de la Pasarela.
 \end{itemize}

@@ -1,10 +1,10 @@
 \section{Características de los Usuarios}
 
-Se identifican tres perfiles de usuario que interactúan con el framework Kit Pagos Colombia, diferenciados por su nivel de experiencia técnica, su frecuencia de uso y su relación con los componentes del sistema.
+Se identifican cuatro perfiles de usuario que interactúan con el framework Kit Pagos Colombia, diferenciados por su nivel de experiencia técnica, su frecuencia de uso y su relación con los componentes del sistema.
 
 \subsection{Desarrollador de software junior}
 
-\begin{table}[htbp]
+\begin{table}[H]
   \centering
   \renewcommand{\arraystretch}{1.2}
   \begin{tabularx}{\textwidth}{|l|X|}
@@ -19,7 +19,7 @@ Se identifican tres perfiles de usuario que interactúan con el framework Kit Pa
     \hline
     Necesidades principales & Documentación clara, ejemplos de código funcionales, datos de prueba accesibles y un entorno de simulación que no requiera configuración compleja. \\
     \hline
-    Interacción con el framework & Principalmente con el SDK (operaciones básicas de pago) y la documentación de datos de prueba. Hace uso intensivo de la API de simulación para pruebas locales. \\
+    Interacción con el framework & Principalmente con el SDK de servidor, el módulo de navegador para tokenizar la tarjeta, la documentación de datos de prueba y la API de Simulación en local. \\
     \hline
   \end{tabularx}
   \caption{Perfil del desarrollador junior.}
@@ -28,7 +28,7 @@ Se identifican tres perfiles de usuario que interactúan con el framework Kit Pa
 
 \subsection{Desarrollador de software senior}
 
-\begin{table}[htbp]
+\begin{table}[H]
   \centering
   \renewcommand{\arraystretch}{1.2}
   \begin{tabularx}{\textwidth}{|l|X|}
@@ -43,16 +43,40 @@ Se identifican tres perfiles de usuario que interactúan con el framework Kit Pa
     \hline
     Necesidades principales & Flexibilidad arquitectónica, capacidad de extensión para agregar nuevas pasarelas, control sobre el comportamiento de reintentos y manejo avanzado de errores. \\
     \hline
-    Interacción con el framework & Con todos los componentes del framework, incluyendo la implementación de adaptadores personalizados y la configuración avanzada del SDK. \\
+    Interacción con el framework & Con todos los componentes del framework, incluyendo la implementación de adaptadores personalizados, la configuración avanzada del SDK y la capa REST \texttt{/v1/api}. \\
     \hline
   \end{tabularx}
   \caption{Perfil del desarrollador senior.}
   \label{tab:perfil-senior}
 \end{table}
 
+\subsection{Desarrollador frontend}
+
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Característica} & \textbf{Descripción} \\
+    \hline
+    Descripción & Desarrollador que construye la página de pago del comercio. Trabaja en el navegador y puede no conocer los detalles de autenticación de cada pasarela. \\
+    \hline
+    Experiencia técnica & Dominio de JavaScript/TypeScript, del DOM y de peticiones HTTP desde el navegador. Familiaridad con formularios de tarjeta y con Content-Security-Policy. \\
+    \hline
+    Frecuencia de uso & Durante la implementación del checkout y cada vez que se agrega una pasarela o se ajusta la página de pago. \\
+    \hline
+    Necesidades principales & Un módulo de tokenización que no exponga el número de tarjeta al servidor del comercio, una API REST para cobrar sin instalar el SDK, y ejemplos de protección de la página. \\
+    \hline
+    Interacción con el framework & Principalmente con \texttt{kit-pagos-colombia/browser} y con \texttt{/v1/api}; consulta la documentación de datos de prueba y la guía de implementación para la Content-Security-Policy. \\
+    \hline
+  \end{tabularx}
+  \caption{Perfil del desarrollador frontend.}
+  \label{tab:perfil-frontend}
+\end{table}
+
 \subsection{Evaluador / Tester de software}
 
-\begin{table}[htbp]
+\begin{table}[H]
   \centering
   \renewcommand{\arraystretch}{1.2}
   \begin{tabularx}{\textwidth}{|l|X|}
@@ -63,11 +87,11 @@ Se identifican tres perfiles de usuario que interactúan con el framework Kit Pa
     \hline
     Experiencia técnica & Conocimiento funcional de los flujos de pago. Experiencia con herramientas de prueba de APIs (Postman, curl). No necesariamente escribe código de integración. \\
     \hline
-    Frecuencia de uso & Intensiva durante los ciclos de prueba del proyecto. Uso principalmente de la API de simulación y la documentación de datos de prueba. \\
+    Frecuencia de uso & Intensiva durante los ciclos de prueba del proyecto. Uso principalmente de la API de Simulación y la documentación de datos de prueba. \\
     \hline
     Necesidades principales & Acceso a escenarios de prueba predefinidos (éxito, rechazo, error de red, timeout), datos de prueba válidos por pasarela y una API de simulación estable y predecible. \\
     \hline
-    Interacción con el framework & Principalmente con la API de simulación a través de herramientas REST y con la documentación centralizada de datos de prueba. \\
+    Interacción con el framework & Principalmente con \texttt{/v1/sim} y \texttt{/v1/api} a través de herramientas REST, con la colección de Postman y con la documentación centralizada de datos de prueba. \\
     \hline
   \end{tabularx}
   \caption{Perfil del evaluador/tester.}
