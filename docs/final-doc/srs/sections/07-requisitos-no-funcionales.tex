@@ -5,50 +5,61 @@ Los requisitos no funcionales del framework se especifican siguiendo la clasific
 \subsection{Funcionalidad (Functionality)}
 
 \begin{itemize}
-  \item El framework debe soportar las operaciones de creación de pago, consulta de estado y validación de webhooks para las cuatro pasarelas integradas (Wompi, PayU, Mercado Pago, Kushki).
+  \item El framework debe soportar las operaciones de creación de pago, consulta de estado, listado de bancos PSE y validación de webhooks para las cuatro pasarelas integradas (Wompi, Rapyd, Mercado Pago y Kushki).
+  \item Debe soportar pagos con tarjeta tokenizada y con PSE en las cuatro pasarelas.
+  \item El módulo de navegador debe tokenizar la tarjeta contra Wompi, Mercado Pago y Kushki; Rapyd cobra la tarjeta en su página alojada.
   \item El manejo de credenciales debe garantizar que las claves de API de cada pasarela no sean expuestas en logs, mensajes de error ni en las respuestas del SDK.
-  \item La comunicación entre el SDK y las APIs de las pasarelas debe realizarse exclusivamente a través de HTTPS.
-  \item La validación de webhooks debe verificar la firma criptográfica utilizando el algoritmo definido por cada proveedor antes de procesar el evento.
+  \item La comunicación entre el SDK y las APIs de las pasarelas debe realizarse a través de HTTPS. El simulador local puede usar HTTP porque no transporta datos reales.
+  \item La validación de webhooks debe verificar la firma criptográfica con el algoritmo de cada proveedor antes de procesar el evento y aplicar una ventana de tolerancia contra la repetición de notificaciones viejas.
+  \item El SDK debe exponer el motivo de un rechazo con su código nativo y su categoría normalizada.
 \end{itemize}
 
 \subsection{Usabilidad (Usability)}
 
 \begin{itemize}
-  \item El framework debe poder instalarse mediante un único comando npm sin dependencias de configuración adicionales del sistema operativo. En caso de que el paquete no se encuentre publicado en el registro oficial de npm al momento de la evaluación, la instalación debe ser igualmente posible mediante un único comando apuntando directamente al repositorio público de GitHub del proyecto.
-  \item La documentación del framework debe permitir que un desarrollador con conocimientos básicos de Node.js complete su primera integración siguiendo la guía de inicio rápido en un tiempo máximo de 2 horas, verificado mediante una sesión de prueba de usabilidad con un participante externo al equipo de desarrollo durante la fase de evaluación del proyecto.
-  \item Los mensajes de error del SDK deben ser descriptivos, en español e inglés, e incluir el código de error, la pasarela involucrada y una sugerencia de resolución cuando sea posible.
-  \item La API de simulación debe incluir documentación OpenAPI 3.0 accesible públicamente para facilitar su exploración con herramientas como Postman o Swagger UI.
+  \item El framework se instala con \texttt{npm install kit-pagos-colombia} desde el registro oficial de npm.
+  \item El README del paquete y la guía de implementación incluyen ejemplos de creación de pago con tarjeta y PSE, consulta de estado, validación de webhooks y manejo de errores. El repositorio incluye \texttt{npm run check:readme} para compilar los fragmentos del README contra la superficie pública del SDK.
+  \item La API de Simulación publica documentación OpenAPI 3.0 en \texttt{/docs}, \texttt{/docs/json} y \texttt{/docs/yaml} para las rutas que declaran esquema.
+  \item Los mensajes de error del SDK son descriptivos e incluyen el código de error, la pasarela involucrada y el contexto de la operación.
+  \item La API de Simulación corre en local con \texttt{npm run dev} o \texttt{npm start} en \texttt{simulator-api/}, sin credenciales reales.
+  \item El módulo de navegador se importa desde \texttt{kit-pagos-colombia/browser} y no depende de APIs de Node.js.
 \end{itemize}
 
 \subsection{Confiabilidad (Reliability)}
 
 \begin{itemize}
-  \item El mecanismo de reintentos del SDK debe implementar backoff exponencial con un máximo configurable de intentos (valor por defecto: 3 reintentos con intervalos de 1s, 2s y 4s).
-  \item El SDK no debe lanzar excepciones no manejadas bajo ninguna condición de error esperada (respuesta inválida de la pasarela, timeout de red, credenciales incorrectas).
-  \item La API de simulación debe permanecer desplegada y accesible de forma continua durante todo el período de evaluación del proyecto, sin interrupciones planificadas. No se establece un porcentaje formal de disponibilidad dado que el proyecto no cuenta con infraestructura de monitoreo activo ni acuerdos de nivel de servicio, sin embargo cualquier interrupción no planificada debe ser resuelta en un plazo máximo de 24 horas por el equipo de desarrollo.
+  \item El mecanismo de reintentos del SDK implementa retroceso exponencial con fluctuación para las operaciones idempotentes (\texttt{getPaymentStatus()} y \texttt{getPseBanks()}), con un máximo configurable de intentos (valor por omisión: 3), una espera base de 1 segundo y un tope de 4 segundos.
+  \item \texttt{createPayment()} no se reintenta, para no duplicar un cobro.
+  \item Cada petición a una pasarela respeta un límite \texttt{timeoutMs} configurable, de 30 segundos por omisión.
+  \item Las condiciones de error esperadas se convierten en \texttt{KitPagosError} con un código de \texttt{KitPagosErrorCode}; las pruebas unitarias y de contrato cubren los caminos de error de los cuatro adaptadores.
+  \item La API de Simulación se despliega en Render desde la rama \texttt{devops}. No se declara un acuerdo de nivel de servicio ni monitoreo activo; el servicio corre en infraestructura de nivel gratuito y puede experimentar interrupciones del proveedor.
 \end{itemize}
 
 \subsection{Rendimiento (Performance)}
 
 \begin{itemize}
-  \item El overhead introducido por el framework frente a una llamada directa a la API de cada pasarela no debe superar los 100 milisegundos en condiciones de red normales, medido mediante pruebas automatizadas ejecutadas en un entorno local controlado utilizando Jest con soporte de mocks de red.
-  \item La API de simulación debe responder en menos de 500 milisegundos para los escenarios que no simulan latencia intencionada, medido desde el envío de la solicitud hasta la recepción de la respuesta completa utilizando Postman o k6 desde una conexión de red estándar. Este umbral se establece considerando que el despliegue se realizará sobre infraestructura de nivel gratuito, donde los tiempos de respuesta están sujetos a las condiciones del proveedor de hospedaje.
-  \item El SDK no debe mantener conexiones persistentes hacia las pasarelas entre operaciones para evitar el consumo innecesario de recursos del proceso huésped.
+  \item El SDK aplica un límite de tiempo configurable por petición; no se declaran umbrales de latencia porque no se midieron en un entorno controlado.
+  \item El módulo de navegador se publica sin dependencias de Node.js y con un tamaño de 5,3 KB comprimido con gzip, medido en la versión 0.6.0.
+  \item La API de Simulación no declara un umbral de respuesta para los escenarios sin latencia intencionada; el escenario \texttt{TIMEOUT} introduce el retardo que el tester configure.
 \end{itemize}
 
 \subsection{Soporte y mantenibilidad (Supportability)}
 
 \begin{itemize}
-  \item El framework debe seguir la arquitectura hexagonal (Ports \& Adapters), de modo que la incorporación de una nueva pasarela requiera únicamente implementar una nueva clase adaptador sin modificar el núcleo.
-  \item El repositorio público del framework debe incluir instrucciones de contribución (\texttt{CONTRIBUTING.md}) que describan cómo implementar un nuevo adaptador.
-  \item Cada adaptador debe estar acompañado de pruebas de integración que verifiquen su funcionamiento contra la API de simulación.
+  \item El framework sigue la arquitectura hexagonal (Ports \& Adapters), de modo que la incorporación de una nueva pasarela requiere implementar un nuevo adaptador sin modificar el núcleo.
+  \item El repositorio incluye \texttt{CONTRIBUTING.md} con la política de ramas, el formato de commits y las instrucciones para contribuir.
+  \item El paquete se distribuye como \texttt{kit-pagos-colombia} bajo la licencia Apache 2.0, con el código fuente en un repositorio público de GitHub.
+  \item El repositorio incluye pruebas unitarias del SDK y de la API de Simulación, pruebas de contrato contra los sandboxes reales (\texttt{npm run test:sandbox}) y la compilación de los ejemplos contra la superficie pública del SDK.
+  \item La CI ejecuta lint, pruebas con cobertura, verificación de métricas CK, compilación del SDK, empaquetado, typecheck de los ejemplos, pruebas de la API de Simulación y de los prototipos, y la compilación de los documentos finales en LaTeX.
 \end{itemize}
 
 \subsection{Restricciones adicionales (+)}
 
 \begin{itemize}
-  \item Restricción de diseño: el framework se implementa en TypeScript con target ES2020. El código compilado debe ser compatible con Node.js versión 18 LTS en adelante, por ser la versión con soporte activo de largo plazo más ampliamente adoptada al momento del desarrollo del proyecto.
+  \item Restricción de diseño: el framework se implementa en TypeScript con target ES2020. El paquete declara \texttt{engines.node >= 20.19.0}; la versión 20.18 o anterior no carga el módulo de navegador.
   \item Restricción de distribución: el framework se distribuye como paquete npm bajo la licencia Apache 2.0. El código fuente se publica en un repositorio público de GitHub.
-  \item Restricción de seguridad: el framework no debe almacenar datos de tarjeta de crédito en memoria más tiempo del estrictamente necesario para realizar la operación, y no debe registrar (log) ningún dato sensible del pagador.
-  \item Restricción regulatoria: el framework actúa exclusivamente como intermediario que delega las operaciones hacia cada pasarela sin modificar, interceptar ni almacenar los datos sensibles del proceso de pago. La responsabilidad sobre el cumplimiento de PCI DSS recae en las pasarelas integradas y en las aplicaciones que consumen el framework, no en el framework mismo.
+  \item Restricción de seguridad: el SDK de servidor no recibe el número de tarjeta ni almacena datos sensibles del pagador. El módulo de navegador envía los datos de la tarjeta directamente a la pasarela y el servidor del comercio recibe un token opaco.
+  \item Restricción regulatoria: el SDK de servidor queda fuera del alcance de PCI DSS para los datos de la tarjeta porque no los recibe. La página donde se escribe la tarjeta sigue en el alcance del comercio (SAQ A-EP), y la Content-Security-Policy la debe enviar su servidor. La responsabilidad sobre el cumplimiento de PCI DSS recae en las pasarelas integradas y en las aplicaciones que consumen el framework.
+  \item Restricción de despliegue: la API de Simulación corre en local y se despliega en Render desde la rama \texttt{devops}. No se incluye una imagen Docker en esta versión.
+  \item Restricción de alcance: el framework solo cubre tarjeta y PSE. No incluye efectivo, Nequi, Daviplata, suscripciones ni reembolsos.
 \end{itemize}

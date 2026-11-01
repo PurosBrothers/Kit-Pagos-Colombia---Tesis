@@ -3,18 +3,19 @@
 \subsection{Restricciones técnicas}
 
 \begin{itemize}
-  \item El SDK se implementa exclusivamente en TypeScript/Node.js. No se desarrollarán versiones para otros lenguajes o entornos de ejecución en el alcance de este proyecto. VER CUAL PUEDE SER EL ALCANCE DE ESTO
-  \item La API de simulación se distribuye como servicio web desplegado. No se ofrece una versión ejecutable localmente mediante contenedores Docker en esta versión.
-  \item El framework no almacena ni procesa datos de tarjeta de crédito directamente. Toda operación sensible es delegada a los mecanismos de seguridad certificados de cada pasarela.
-  \item La comunicación entre el cliente y el framework debe realizarse a través de HTTP. No se soportan conexiones sin cifrado.
+  \item El SDK de servidor y la API de Simulación se implementan en TypeScript sobre Node.js. El módulo de navegador se distribuye como módulo ES y no depende de APIs de Node.js. No se desarrollan versiones para otros lenguajes o entornos de ejecución.
+  \item El paquete declara \texttt{engines.node >= 20.19.0}. La versión 20.18 o anterior no carga el módulo de navegador y queda fuera del soporte declarado.
+  \item La API de Simulación corre en local con \texttt{npm run dev} o \texttt{npm start} en \texttt{simulator-api/} y se despliega en Render desde la rama \texttt{devops}. No se incluye una imagen Docker en esta versión.
+  \item El SDK de servidor no recibe el número de tarjeta: solo acepta un token emitido por la pasarela. El módulo de navegador tokeniza contra la pasarela y el servidor del comercio recibe el token opaco.
+  \item Las llamadas a las pasarelas usan HTTPS. El simulador local puede usar HTTP porque no transporta datos reales; el servicio desplegado en Render usa HTTPS.
   \item El framework depende de la disponibilidad de los ambientes sandbox de cada pasarela para su validación. Cambios en las APIs de los proveedores pueden requerir actualizaciones en los adaptadores.
 \end{itemize}
 
 \subsection{Restricciones regulatorias}
 
 \begin{itemize}
-  \item El framework debe operar dentro de los límites establecidos por el estándar PCI DSS para el manejo de datos sensibles, delegando el procesamiento de información de pago a los mecanismos certificados de cada proveedor.
-  \item El uso del framework en entornos de producción está sujeto al cumplimiento de los términos y condiciones de uso de las APIs de cada pasarela (Wompi, PayU, Mercado Pago, Kushki).
+  \item El SDK de servidor queda fuera del alcance de PCI DSS para los datos de la tarjeta porque no los recibe. El módulo de navegador los envía del navegador a la pasarela. La página donde se escribe la tarjeta sigue en el alcance del comercio (SAQ A-EP), y la Content-Security-Policy la debe enviar su servidor.
+  \item El uso del framework en entornos de producción está sujeto a los términos y condiciones de las APIs de cada pasarela (Wompi, Rapyd, Mercado Pago, Kushki).
   \item El framework no modifica ni intercepta los flujos de autenticación internos de las pasarelas, en cumplimiento de las políticas de seguridad de cada proveedor.
 \end{itemize}
 
@@ -22,6 +23,6 @@
 
 \begin{itemize}
   \item El proyecto se desarrolla en un período de cinco meses (julio a noviembre de 2026), lo que limita la cantidad de pasarelas integradas y la profundidad de cobertura funcional por proveedor.
-  \item La evaluación del framework se realizará sobre proyectos prototípicos definidos, no sobre sistemas en producción con volúmenes reales de transacciones.
+  \item La evaluación del framework se realiza sobre proyectos prototípicos definidos, no sobre sistemas en producción con volúmenes reales de transacciones.
   \item El mantenimiento y evolución del framework más allá del período académico no están garantizados por el equipo de desarrollo.
 \end{itemize}
