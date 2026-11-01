@@ -2,19 +2,146 @@
 \section{CONTEXTO: MARCO CONCEPTUAL Y ESTADO DEL ARTE}
 
 \subsection{Antecedentes y conceptos}
-% Explicar conceptos en una secuencia argumental, no como glosario: pasarelas, tokenización,
-% autenticación, firmas, webhooks, idempotencia, estados y unidades monetarias.
-% Fuentes iniciales: docs/01-producto/1-que-es-una-pasarela-de-pago.md y 2-conceptos-tecnicos.md.
+El procesamiento de pagos en entornos digitales se sustenta en una infraestructura técnica y financiera altamente especializada. Comprender los fundamentos de esta disciplina exige examinar la secuencia transaccional desde los roles institucionales que participan en ella hasta las restricciones criptográficas y matemáticas que gobiernan su seguridad y exactitud.
 
+\subsubsection{Roles y cadena transaccional en un pago digital}
+La ejecución de un pago en línea no constituye una simple comunicación punto a punto entre un usuario y un vendedor, sino un proceso multipartito y distribuido. En este flujo intervienen cinco actores fundamentales:
+\begin{enumerate}
+    \item \textbf{Pagador:} El usuario final que suministra sus instrumentos financieros (tarjeta débito/crédito o credenciales bancarias) para adquirir un bien o servicio.
+    \item \textbf{Comercio (\textit{Merchant}):} La aplicación o plataforma receptora que vende el producto y consume las interfaces de pago.
+    \item \textbf{Pasarela de pago (\textit{Payment Gateway}):} El intermediario tecnológico autorizado que recibe la instrucción de cobro, normaliza los datos transaccionales, efectúa controles de fraude primarios y enruta la solicitud hacia las redes financieras.
+    \item \textbf{Adquirente (\textit{Acquirer}):} La entidad financiera afiliada a las redes de procesamiento que liquida y acredita los fondos recaudados en la cuenta bancaria del comercio. En Colombia, varios proveedores operan simultáneamente bajo el modelo de agregador de recaudo, actuando como pasarela y adquirente consolidado.
+    \item \textbf{Franquicia y Banco Emisor:} La franquicia financiera internacional (Visa, Mastercard, American Express) que gestiona la red de autorización global, y el banco emisor de la tarjeta, que valida la disponibilidad de fondos o cupo de crédito, autoriza o rechaza el débito y emite el código de aprobación final.
+\end{enumerate}
+
+\subsubsection{Tokenización y fronteras de seguridad PCI DSS}
+El tratamiento de datos de tarjetas de pago se encuentra estrictamente regulado por el Estándar de Seguridad de Datos para la Industria de Tarjetas de Pago (\textit{Payment Card Industry Data Security Standard}, PCI DSS). Almacenar, procesar o transmitir números de tarjeta (\textit{Primary Account Number}, PAN) o códigos de seguridad (CVV/CVC) en los servidores del comercio sujeta a la organización a rigurosas auditorías de infraestructura (cuestionarios SAQ D).
+
+Para mitigar este riesgo operativo, la industria adoptó el mecanismo de \textbf{tokenización en el cliente}: los datos sensibles de la tarjeta se capturan directamente desde el navegador o la aplicación móvil del usuario y se transmiten de manera aislada hacia la pasarela mediante campos protegidos o llamadas directas a sus APIs de tokenización. La pasarela almacena los datos de tarjeta en una bóveda segura (\textit{vault}) y devuelve un identificador efímero y no reversible denominado \textbf{token de tarjeta}. El comercio recibe únicamente dicho token y es este valor el que viaja hacia su servidor de backend para efectuar el cobro, reduciendo el alcance regulatorio del comercio al nivel más simple de cumplimiento (SAQ A).
+
+\subsubsection{Autenticación, llaves y modelos de credenciales}
+Para interactuar con una pasarela, el comercio debe autenticarse ante sus servidores mediante esquemas de credenciales de API. Las pasarelas estructuran típicamente este control en dos niveles:
+\begin{itemize}
+    \item \textbf{Llave pública (\textit{Public Key}):} Diseñada para ser expuesta en interfaces de cliente (navegador o aplicaciones móviles); posee privilegios restringidos exclusivamente a la generación de tokens de tarjeta o consulta de listas de bancos.
+    \item \textbf{Llave privada o secreta (\textit{Secret/Private Key}):} Diseñada exclusivamente para entornos de servidor protegidos; cuenta con facultades para autorizar débitos, realizar reversiones o consultar historiales de clientes.
+\end{itemize}
+A pesar de esta aparente dicotomía, cada pasarela implementa protocolos de transporte divergentes: algunas exigen la llave en cabeceras estándar (\texttt{Authorization: Bearer}), otras mediante cabeceras propietarias (\texttt{x-client-id}, \texttt{x-private-api-key}), y otras más demandan que cada petición HTTP individual sea firmada criptográficamente con parámetros variables en el tiempo.
+
+\subsubsection{Integridad criptográfica y firmas digitales (HMAC)}
+La comunicación en transacciones de pago requiere mecanismos de protección contra la alteración de datos durante el tránsito (\textit{anti-tampering}). Si un atacante interceptara una solicitud y modificara el monto del cobro o la divisa, el comercio podría despachar mercancía por un valor inferior al pactado.
+
+Para asegurar la integridad, las pasarelas recurren a códigos de autenticación de mensajes basados en \textit{hash} (HMAC) o firmas con secreto compartido. El emisor serializa un conjunto ordenado de campos del pago (como la referencia, el monto, la moneda y un valor aleatorio o \textit{timestamp}), concatena una clave secreta y calcula una función criptográfica unidireccional (como SHA-256). El receptor recalcula la firma bajo los mismos parámetros exactos; cualquier discordancia en el cuerpo de la petición invalida la operación.
+
+\subsubsection{Notificaciones asíncronas (Webhooks) y mitigación de vectores de ataque}
+En operaciones financieras, los desenlaces transaccionales son inherentemente asíncronos. Procesos como la autorización bancaria en PSE, revisiones de riesgo antifraude o confirmaciones de cobro fuera de línea impiden resolver el estado de la transacción en una sola respuesta síncrona HTTP. Por ello, las pasarelas emplean el patrón de \textbf{webhooks}: notificaciones HTTP POST enviadas desde los servidores de la pasarela hacia un endpoint público expuesto por el comercio.
+
+El procesamiento seguro de webhooks plantea dos desafíos criptográficos y de concurrencia:
+\begin{enumerate}
+    \item \textbf{Ataques de temporización (\textit{Timing Attacks}):} Si la verificación de la firma del webhook se realiza con una comparación tradicional de cadenas (como el operador de igualdad estándar en JavaScript), el intérprete interrumpe la evaluación en el primer byte no coincidente. Un atacante puede medir con alta precisión estadística las fluctuaciones de tiempo de respuesta y reconstruir progresivamente la firma válida byte por byte. La mitigación rigurosa exige comparaciones criptográficas en tiempo constante (\texttt{crypto.timingSafeEqual}), asegurando que la evaluación insuma exactamente el mismo número de ciclos de reloj sin importar en qué posición difieran las firmas.
+    \item \textbf{Ataques de repetición (\textit{Replay Attacks}) e idempotencia:} Un atacante que capture una notificación legítima de un pago aprobado podría reenviarla múltiples veces para inducir al comercio a acreditar doblemente un saldo o despachar productos repetidos. Para neutralizar este riesgo, el sistema debe imponer ventanas de tolerancia temporal sobre la marca de tiempo del mensaje (típicamente $\le 5$ minutos) y mantener un registro de identificadores transaccionales únicos para procesar la notificación exactamente una vez.
+\end{enumerate}
+
+\subsubsection{Representación monetaria y exactitud numérica}
+En ingeniería de software financiero, la representación del dinero constituye una fuente crítica de defectos sistemáticos. Los lenguajes modernos como JavaScript implementan todos los números bajo la especificación IEEE 754 de coma flotante de doble precisión binaria (64 bits). Dado que las fracciones decimales en base 10 no pueden representarse de manera exacta en base 2, se introducen inevitables imprecisiones de redondeo:
+\[
+0.1 + 0.2 = 0.30000000000000004
+\]
+En un sistema de cobro, validar reglas de negocio (por ejemplo, comprobar si un monto posee dos decimales mediante operaciones de multiplicación por 100 y módulo) deriva en el rechazo espurio de montos legítimos (como 1.15 o 19.99). Asimismo, cuando las pasarelas calculan firmas HMAC sobre cuerpos JSON serializados, la conversión de tipos numéricos altera los caracteres textuales (por ejemplo, omitiendo ceros finales en decimales, transformando \texttt{"19.90"} en \texttt{"19.9"}), destruyendo la validez matemática de la firma. Por tal motivo, los sistemas robustos de pagos deben encapsular el dinero en objetos de valor inmutables, modelando el monto como cadenas textuales normalizadas o enteros en la unidad menor de la divisa (centavos según ISO 4217).
 
 \subsection{Ecosistema de pasarelas seleccionado}
-% Analizar Wompi, Mercado Pago, Kushki y Rapyd con fuentes oficiales y evidencia de sandbox.
-% Separar explícitamente lo medido de lo inferido de documentación.
+Para la construcción y validación del Kit Pagos Colombia se seleccionaron cuatro pasarelas representativas del mercado colombiano: \textbf{Wompi}, \textbf{Mercado Pago}, \textbf{Kushki} y \textbf{Rapyd} (esta última en sustitución de PayU tras su adquisición corporativa regional).
+
+A continuación se detalla el comportamiento técnico observado experimentalmente en los sandboxes de cada proveedor, distinguiendo la especificación oficial de las particularidades medidas en la implementación.
+
+\subsubsection{Wompi}
+Wompi (desarrollada por Bancolombia) es la pasarela nativa más extendida en el ecosistema bancario local.
+\begin{itemize}
+    \item \textbf{Autenticación y llaves:} Utiliza cuatro secretos independientes: llave pública, llave privada, secreto de integridad (para firmar solicitudes del comercio) y secreto de eventos (para firmar webhooks). De manera particular, el adaptador del SDK comprueba que todas las peticiones a la API se autentican enviando la llave pública en la cabecera \texttt{Authorization: Bearer}, sin que la llave privada deba viajar por la red en los flujos estándar de cobro.
+    \item \textbf{Manejo del monto:} Exige de forma estricta el monto expresado en su unidad menor como un entero (\texttt{amount\_in\_cents}), multiplicando el valor en pesos por 100.
+    \item \textbf{Flujo transaccional:} Para tarjeta de crédito, requiere solicitar previamente un token de aceptación de términos legales (\textit{acceptance token}) antes de radicar la transacción. El cobro con tarjeta es asíncrono y la respuesta inicial se emite siempre en estado \texttt{PENDING}.
+    \item \textbf{PSE:} Requiere crear la transacción bancaria y, en la primera consulta del estado del pago, devuelve la URL de redirección hacia la entidad financiera (\texttt{async\_payment\_url}).
+    \item \textbf{Firma y Webhooks:} La firma de integridad se genera concatenando la referencia, el monto en centavos, la moneda y el secreto de integridad, aplicando SHA-256. El webhook remite la transacción completa estructurada.
+\end{itemize}
+
+\subsubsection{Mercado Pago}
+Mercado Pago (división financiera de Mercado Libre) es uno de los procesadores con mayor presencia regional en América Latina.
+\begin{itemize}
+    \item \textbf{Autenticación:} Utiliza una clave privada o \textit{Access Token} transmitida como \texttt{Authorization: Bearer}. En transacciones de creación de cobros (\texttt{POST /v1/payments}) exige obligatoriamente la cabecera de control de concurrencia \texttt{X-Idempotency-Key}.
+    \item \textbf{Manejo del monto:} Recibe el monto en la unidad mayor (pesos colombianos con coma flotante).
+    \item \textbf{Flujo transaccional:} El cobro con tarjeta se radica en una sola llamada síncrona mediante el token generado en el frontend, retornando un estado inmediato (\texttt{approved}, \texttt{rejected} o \texttt{in\_process}).
+    \item \textbf{PSE:} Se procesa a través del endpoint de órdenes (\texttt{POST /v1/orders}) o pagos directos con el método \texttt{pse}, requiriendo datos detallados del pagador (dirección, tipo de documento y teléfono con desglose de código de área).
+    \item \textbf{Firma y Webhooks:} Los webhooks de Mercado Pago no remiten los datos del pago, sino un identificador del recurso modificado (\texttt{data.id}). La verificación de autenticidad involucra un manifiesto firmado con HMAC-SHA256 presente en las cabeceras \texttt{x-signature} y \texttt{x-request-id}.
+\end{itemize}
+
+\subsubsection{Kushki}
+Kushki es una plataforma de pagos regional con enfoque en procesamiento omnicanal y cumplimiento PCI DSS estricto.
+\begin{itemize}
+    \item \textbf{Autenticación:} Utiliza cabeceras personalizadas: \texttt{Public-Merchant-Id} para llamadas públicas desde cliente y \texttt{Private-Merchant-Id} para invocaciones protegidas de servidor.
+    \item \textbf{Manejo del monto:} Requiere un desglose estructurado de montos (\texttt{subtotalIva}, \texttt{subtotalIva0}, \texttt{iva}), expresados en pesos.
+    \item \textbf{Flujo transaccional:} Permite la captura de tarjeta mediante tokenización. En PSE, cuenta con rutas específicas para listar entidades bancarias y crear la transferencia, devolviendo una URL de redirección bancaria.
+    \item \textbf{Firma y Webhooks:} Notifica el evento completo serializado. La verificación de la firma del webhook se calcula mediante HMAC-SHA256 sobre la concatenación del identificador de la transacción y el cuerpo del mensaje.
+\end{itemize}
+
+\subsubsection{Rapyd}
+Rapyd es una plataforma de servicios financieros globales (\textit{Fintech-as-a-Service}) que asumió las operaciones comerciales tras adquirir la infraestructura de PayU en la región.
+\begin{itemize}
+    \item \textbf{Autenticación por firma de petición:} A diferencia de las demás pasarelas, Rapyd no admite llaves estáticas en cabeceras simples. Cada petición HTTP enviada por el comercio debe firmarse criptográficamente calculando un HMAC-SHA256 en Base64 sobre la tupla: método HTTP, ruta relativa, \textit{salt} aleatorio, \textit{timestamp} Unix, llave de acceso pública, llave secreta y cuerpo JSON serializado.
+    \item \textbf{Manejo del monto:} Recibe el monto en pesos colombianos, pero la serialización exacta de decimales es crítica para que la firma calculada por el comercio coincida con la evaluada por los servidores de Rapyd.
+    \item \textbf{Flujo transaccional:} No ofrece tokenización de tarjeta integrada en el navegador del cliente; el cobro con tarjeta se canaliza mediante una página de recaudo alojada (\textit{hosted checkout page}) provista por Rapyd.
+    \item \textbf{Firma y Webhooks:} Las notificaciones entrantes de webhook incluyen cabeceras de firma que demandan la misma verificación criptográfica de cuatro componentes utilizada en las peticiones salientes.
+\end{itemize}
+
+La Tabla~\ref{tab:comparativa-pasarelas} resume las discrepancias técnicas identificadas entre las cuatro pasarelas, evidenciando la marcada divergencia que justifica el desarrollo de una capa unificadora.
+
+\begin{table}[htbp]
+\renewcommand{\arraystretch}{1.2}
+\centering
+\begin{tabular}{|p{3.2cm}|p{2.6cm}|p{2.6cm}|p{2.6cm}|p{2.6cm}|}
+\hline
+\textbf{Característica técnica} & \textbf{Wompi} & \textbf{Mercado Pago} & \textbf{Kushki} & \textbf{Rapyd} \\ \hline
+Autenticación saliente & Bearer token con llave pública & Bearer token con Access Token & Cabecera \texttt{Private-Merchant-Id} & Firma HMAC por petición con \textit{salt} y fecha \\ \hline
+Unidad del monto & Entero en centavos (\texttt{amount\_in\_cents}) & Pesos (unidad mayor) & Pesos con desglose estructurado de IVA & Pesos como número o texto \\ \hline
+Cobro con tarjeta & 2 llamadas (token de aceptación + cobro) & 1 llamada síncrona (\texttt{/v1/payments}) & 1 llamada (\texttt{/v1/charges}) & Redirección a página alojada \\ \hline
+Cobro con PSE & Transacción + consulta de URL & Orden (\texttt{/v1/orders}) o pago directo & Transacción dedicada PSE & Transacción debito bancario \\ \hline
+Algoritmo de firma en webhook & SHA-256 sobre campos concatenados & HMAC-SHA256 sobre manifiesto y \textit{request-id} & HMAC-SHA256 sobre identificador y cuerpo & HMAC-SHA256 en Base64 con \textit{salt} y fecha \\ \hline
+Contenido de la notificación & Transacción completa & Solo identificador del recurso & Transacción completa & Transacción completa \\ \hline
+\end{tabular}
+\caption{Comparativa técnica de las cuatro pasarelas de pago seleccionadas}
+\label{tab:comparativa-pasarelas}
+\end{table}
 
 \subsection{Soluciones relacionadas y estado del arte}
-% Comparar soluciones relacionadas con criterios explícitos y referencias verificables.
-% No inferir superioridad de Kit Pagos sin resultados de evaluación.
+En la literatura y en la industria del software se han propuesto diversas estrategias para mitigar la complejidad de la integración multipasarela. Estas soluciones se agrupan en tres categorías principales:
+
+\subsubsection{Bibliotecas de abstracción en código abierto}
+En ecosistemas maduros de desarrollo web existen bibliotecas multipasarela reconocidas:
+\begin{itemize}
+    \item \textbf{Omnipay (PHP):} Es una de las bibliotecas de abstracción de pagos más difundidas. Implementa un patrón de pasarela unificada (\textit{Gateway Interface}) que estandariza las llamadas de autorización, captura y reembolso. No obstante, Omnipay está concebido prioritariamente para el mercado europeo y norteamericano, carece de adaptadores oficiales para el ecosistema bancario colombiano (PSE) y no proporciona herramientas desacopladas de simulación de fallos transaccionales.
+    \item \textbf{ActiveMerchant (Ruby on Rails):} Históricamente una de las primeras abstracciones comerciales de pagos. Diseñada para operar de forma transparente con tarjetas de crédito, presenta limitaciones severas al manejar flujos asíncronos basados en redirección bancaria y no provee verificación unificada de webhooks para proveedores latinoamericanos.
+\end{itemize}
+
+\subsubsection{Servicios comerciales de orquestación de pagos (SaaS)}
+En el sector empresarial han surgido plataformas comerciales de orquestación de pagos como \textbf{Spreedly}, \textbf{Primer} y \textbf{Gr4vy}. Estas soluciones operan como un intermediario en la nube (\textit{Payment Orchestrator}) que intercepta las peticiones del comercio y las enruta dinámicamente hacia distintas pasarelas en función de costos o disponibilidad.
+
+Aunque estas plataformas resuelven el problema del acoplamiento funcional, presentan barreras estructurales para la gran mayoría de pequeñas y medianas empresas en Colombia:
+\begin{enumerate}
+    \item \textbf{Costo recurrente y comisiones intermedias:} Cobran tarifas fijas mensuales elevadas o comisiones adicionales por cada transacción procesada, lo cual encarece los márgenes financieros del comercio.
+    \item \textbf{Intermediación externa y dependencia operativa:} Agregan un salto de red adicional en la nube y un nuevo punto único de fallo que el comercio no controla.
+    \item \textbf{Soporte insuficiente de medios de pago locales:} Su catálogo de conectores prioriza tarjetas internacionales y billeteras globales (Apple Pay, Google Pay), relegando o implementando de forma incompleta pasarelas especializadas en PSE y recaudos bancarios colombianos.
+\end{enumerate}
+
+\subsubsection{Integración directa y SDKs oficiales de proveedores}
+La alternativa convencional consiste en integrar individualmente cada pasarela utilizando sus respectivas bibliotecas oficiales (por ejemplo, el SDK de Mercado Pago o los clientes de Wompi). Esta práctica acarrea los siguientes problemas de diseño:
+\begin{itemize}
+    \item Cada biblioteca impone sus propias dependencias transitivas, paradigmas de configuración y modelos de manejo de errores, multiplicando el tamaño de la aplicación y la deuda técnica.
+    \item No existe interoperabilidad semántica: sustituir un adaptador exige reescribir sustancialmente los controladores y servicios del comercio.
+    \item La verificación de webhooks se dispersa en algoritmos heterogéneos, incrementando el riesgo de brechas de seguridad por validaciones laxas o vulnerables a ataques de temporización.
+\end{itemize}
 
 \subsection{Síntesis de la brecha}
-% Conectar el problema documentado con los requisitos y el diseño que se presentan después.
+El análisis conceptual y el estado del arte ponen de manifiesto una brecha tecnológica clara:
+\begin{quote}
+No existe en el ecosistema de desarrollo de software colombiano un framework de código abierto, agnóstico y ligero que unifique la integración de Wompi, Mercado Pago, Kushki y Rapyd bajo una arquitectura extensible, con soporte pleno de tarjetas y PSE, verificación criptográfica segura y una API de simulación desacoplada que habilite pruebas locales reproducibles sin costo operativo.
+\end{quote}
 
+Esta brecha justifica plenamente el diseño y construcción de \textbf{Kit Pagos Colombia}. Las especificaciones de requisitos, decisiones de arquitectura y componentes funcionales desarrollados para cerrar esta brecha se analizan en los capítulos subsiguientes.
