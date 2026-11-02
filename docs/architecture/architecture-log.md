@@ -4247,7 +4247,35 @@ Así, los paneles se configuran una sola vez. Se descartaron dos opciones:
 
 El plan está en `prototypes/README.md`, «Los webhooks reales, en vivo». Kushki se muestra con el simulador local, por decisión de Joan del mismo día.
 
-**Estado:** El origen nuevo quedó medido en las cuatro pasarelas, con B, C y D. Falta ensayar el plan de los webhooks en vivo: Joan crea la cuenta de ngrok y registra su dominio en los paneles de Wompi, Mercado Pago y Rapyd.
+**El ensayo del plan (#165).** Joan creó su cuenta gratuita de ngrok y registró el dominio en los tres paneles. Los ids de cada orden y la traza están en el comentario de resultados del #165.
+
+- **ngrok sin Homebrew.** La máquina del ensayo no tenía Homebrew. Se instaló el binario oficial de ngrok.com para macOS en `~/bin`, sin `sudo`, y se comprobó la firma de Apple: «Developer ID Application: ngrok, Inc. (TEX8MHRDQ9)». La versión fue la 3.39.13.
+- **El dominio** asignado termina en `.ngrok-free.dev`, y no en `.ngrok-free.app` como decía el README. `ngrok http 4000` lo usa sin indicarlo.
+- **Kushki con el simulador local** (29 de octubre de 2026, hora de Colombia), en A, B y D:
+  - la tarjeta nace aprobada y el simulador solo emite cuando un pago cambia de estado, así que su aviso se disparó con `POST /v1/sim/webhooks/trigger`;
+  - el PSE pasó a `approvedTransaction` en la primera consulta, y el simulador avisó solo;
+  - los dos casos dejaron `webhook: APPROVED` con su estado nativo, y la tienda respondió 200.
+
+  El `.env` no traía `KUSHKI_WEBHOOK_SECRET`, que el simulador y las tiendas necesitan iguales para firmar y verificar. Ahora el `.env` de Joan lleva un valor.
+- **Los webhooks reales**, el 2 de noviembre de 2026 entre las 01:50 y las 02:28 (hora de Colombia), con cada prototipo en el puerto 4000 detrás del túnel:
+
+  | | Wompi, tarjeta | Mercado Pago, tarjeta | Rapyd, tarjeta en su página | Rapyd, PSE |
+  |---|---|---|---|---|
+  | B | `APPROVED` | `APPROVED (processed)` | un `PENDING (ACT)` y dos `APPROVED (CLO)` | `PENDING (ACT)` y `APPROVED (CLO)` |
+  | D | `APPROVED` | `APPROVED (processed)` | dos `PENDING (ACT)` y un `APPROVED (CLO)` | `PENDING (ACT)` y `APPROVED (CLO)` |
+  | A | `APPROVED` | `APPROVED (processed)` | un `PENDING (ACT)` y dos `APPROVED (CLO)` | no se probó |
+
+  El inspector de ngrok registró 19 avisos, todos con `200`. Las notificaciones de Mercado Pago vinieron de la aplicación del vendedor de prueba (`…0415`) y verificaron con la clave del `.env`. La página de advertencia del plan gratuito no se interpuso: los avisos llegaron con el agente de cada pasarela (`Faraday`, `MercadoPago WebHook v1.0 order`, `axios`), no con el de un navegador.
+
+Lo que no estaba en el plan:
+
+- **La red del ensayo corta el tráfico que sale de la máquina hacia ngrok.** `curl` a la URL pública termina en `Connection reset by peer` durante el TLS. Desde afuera la misma URL responde, y los avisos entraron porque vienen de los servidores de cada pasarela. En una red así, la URL pública no se puede abrir en el navegador de la máquina.
+- **B y D precargan la tarjeta 4242 para las cuatro pasarelas.** Para Mercado Pago hay que escribir la suya (4013 5406 8274 6260, `APRO Ruiz`); A la cambia sola.
+- **El simulador escribía en su log las credenciales nativas de Kushki.** Su serializador solo ocultaba `authorization` y las cabeceras `x-gateway-*`, y Kushki manda las suyas como `Private-Merchant-Id` y `Public-Merchant-Id`: el log del ensayo las guardó con su valor. Joan decidió arreglarlo en el mismo PR con una lista de cabeceras permitidas (`LOGGABLE_HEADERS`): el log solo escribe con su valor las cabeceras inofensivas conocidas y oculta las demás, también las de una pasarela futura.
+  - Se descartó ampliar la lista de prohibidas, `SENSITIVE_HEADERS`. La ruta de webhooks de la API REST la usa para quitar las credenciales antes de verificar una firma, y agregar ahí `access_key` o `signature`, de Rapyd, habría roto esa verificación.
+  - Los logs de Render no se revisaron. Si alguien usó Render en modo simulador con las llaves de UAT de Kushki, pueden estar ahí.
+
+**Estado:** El origen nuevo quedó medido en las cuatro pasarelas, con B, C y D. El plan de los webhooks en vivo quedó ensayado con A, B y D (#165), y el log del simulador se corrigió en el mismo PR. Falta repetir el ensayo en la red donde será la sustentación y revisar los logs de Render.
 
 ### 121. Las notificaciones de Mercado Pago en sandbox las firma la aplicación del vendedor de prueba (PR #162)
 
@@ -4434,7 +4462,13 @@ Los webhooks reales del sandbox no se midieron en A; en B y D sí (punto 121). S
 
 **Lo que agregó Joshua el 25 de octubre de 2026** (`3d48f31`): al elegir la pasarela, la página precarga su tarjeta aprobada, y en Mercado Pago, el titular `APRO Ruiz`, que es el que aprueba. La revisión le quitó un segundo `listener` del selector, que duplicaba el del formulario y pedía dos veces los bancos de PSE.
 
-**Estado:** Resuelto en la rama del #163 y medido. A entra en la matriz de prototipos de `.github/workflows/ci.yml` en el mismo PR, y lo aprueba Henao. Los webhooks reales de A quedan para el #165.
+**Estado:** Resuelto en la rama del #163 y medido. A entra en la matriz de prototipos de `.github/workflows/ci.yml` en el mismo PR, y lo aprueba Henao. Los webhooks reales de A se ensayaron el 2 de noviembre de 2026 por el dominio de ngrok (#165, punto 120), y A se comportó como B:
+
+- Wompi dejó `webhook: APPROVED`;
+- Mercado Pago dejó `webhook: APPROVED (processed)`;
+- la tarjeta de Rapyd dejó un `PENDING (ACT)` y dos `APPROVED (CLO)`, los tres encontrados por la referencia de la orden.
+
+Kushki se probó con el simulador local.
 
 ### 124. Las letras de los prototipos: A es el del SDK solo en el servidor, y D el que no usa la solución (PR #163)
 
@@ -4476,7 +4510,9 @@ Las listas de letras quedaron en orden («B y D»), salvo las que se emparejan c
   - el plan de evaluación, la guía de medición, la metodología y los objetivos de la tesis, cuya tabla de prototipos se reordenó de A a D y corrigió la fila de A, que seguía «por construir»;
   - este registro.
 
-**Estado:** Resuelto en el #163.
+**Lo que quedó cruzado** lo encontró el ensayo del #165: las claves del carrito en `localStorage`. A usaba `kit-pagos-prototipo-d:cart` y D usaba `kit-pagos-prototipo-a:cart`. No chocaban, porque son distintas, pero no correspondían a la letra. Se corrigieron en el PR del #165.
+
+**Estado:** Resuelto en el #163, y las claves del carrito en el #165.
 
 ### 125. La API de Simulación tiene dos superficies REST y tres patrones de integración (issue #108)
 

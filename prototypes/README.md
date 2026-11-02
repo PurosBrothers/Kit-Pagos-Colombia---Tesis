@@ -151,7 +151,7 @@ El esqueleto lee el `.env` de la raíz, el mismo de la API de Simulación (una v
 **Los webhooks (función 4)** llegan a `/webhooks/<pasarela>`.
 
 - **En el sandbox**, cada pasarela notifica a la URL registrada en su panel, que tiene que ser pública. `localtest.me` no sirve: en el servidor de la pasarela también resuelve a `127.0.0.1`. Hace falta un túnel, como en [«Los webhooks reales, en vivo»](#los-webhooks-reales-en-vivo). Sin él, la orden se resuelve con la consulta de su página.
-- **Con el simulador local**, el webhook llega solo. Basta con arrancar `simulator-api` con `SIMULATOR_WEBHOOK_TARGET_URL=http://localhost:4000/webhooks/{gateway}` y `SIMULATOR_WEBHOOK_AUTO=true` (sección 4.2 de [`3-api-de-simulacion.md`](../docs/02-arquitectura/3-api-de-simulacion.md)). El simulador, B y D tienen que leer los mismos secretos de webhook y la misma `RAPYD_WEBHOOK_URL`. El simulador emite solo cuando un pago cambia de estado; uno que nace resuelto se notifica con `POST /v1/sim/webhooks/trigger`. La tarjeta de Rapyd pagada en su página llega con la misma secuencia del sandbox: dos avisos en `ACT` y después `PAYMENT_COMPLETED`.
+- **Con el simulador local**, el webhook llega solo. Basta con arrancar `simulator-api` con `SIMULATOR_WEBHOOK_TARGET_URL=http://localhost:4000/webhooks/{gateway}` y `SIMULATOR_WEBHOOK_AUTO=true` (sección 4.2 de [`3-api-de-simulacion.md`](../docs/02-arquitectura/3-api-de-simulacion.md)). El simulador, B y D tienen que leer los mismos secretos de webhook y la misma `RAPYD_WEBHOOK_URL`, y los toman del `.env` de la raíz. Para Kushki el secreto es `KUSHKI_WEBHOOK_SECRET`, que el `.env.example` deja vacío: hay que darle un valor, cualquiera, el mismo para el simulador y para la tienda. El simulador emite solo cuando un pago cambia de estado; uno que nace resuelto, como la tarjeta de Kushki, se notifica con `POST /v1/sim/webhooks/trigger` y el cuerpo `{"gateway":"kushki","transactionId":"<transacción>"}`. La tarjeta de Rapyd pagada en su página llega con la misma secuencia del sandbox: dos avisos en `ACT` y después `PAYMENT_COMPLETED`.
 - **Si corren los dos prototipos a la vez**, el segundo necesita otro `PORT`, y el destino de los webhooks del simulador es uno solo.
 
 **Para probar en el día a día no hace falta túnel.**
@@ -168,7 +168,21 @@ Para mostrar, por ejemplo en la sustentación, que cada pasarela notifica y que 
 
 **Una vez, días antes:**
 
-1. **Preparar ngrok.** Crear la cuenta gratuita en ngrok, instalarlo (`brew install ngrok`) y conectarlo con `ngrok config add-authtoken <token>`; el token está en el panel de ngrok. El mismo panel muestra el dominio de la cuenta, de la forma `<nombre>.ngrok-free.app`.
+1. **Preparar ngrok.** Crear la cuenta gratuita en [ngrok](https://dashboard.ngrok.com/signup), instalarlo y conectarlo:
+   - **Con Homebrew:** `brew install ngrok`.
+   - **Sin Homebrew**, con el binario oficial en `~/bin` y sin `sudo`:
+
+     ```bash
+     mkdir -p ~/bin
+     curl -fL -o /tmp/ngrok.zip https://bin.ngrok.com/c/bNyj1mQVY4c/ngrok-v3-stable-darwin-arm64.zip
+     unzip -o /tmp/ngrok.zip -d ~/bin && rm /tmp/ngrok.zip
+     codesign -dv --verbose=2 ~/bin/ngrok 2>&1 | grep Authority
+     ```
+
+     La primera línea `Authority` tiene que decir «Developer ID Application: ngrok, Inc. (TEX8MHRDQ9)». El enlace es el de [ngrok.com/downloads/mac-os](https://ngrok.com/downloads/mac-os) para Apple Silicon.
+   - **Conectarlo:** `ngrok config add-authtoken <token>`, con el token de [«Your Authtoken»](https://dashboard.ngrok.com/get-started/your-authtoken) en el panel de ngrok.
+
+   La cuenta gratuita trae un dominio asignado, de la forma `<nombre>.ngrok-free.dev`, que no cambia y que `ngrok http` usa solo. Aparece en la línea `Forwarding` al correr `ngrok http 4000`.
 2. **Registrar en el modo de pruebas de cada panel** la URL `https://<dominio>/webhooks/<pasarela>`:
    - **Wompi:** la URL de eventos del ambiente de pruebas.
    - **Mercado Pago:** los webhooks de la aplicación del vendedor de prueba, en su sesión, con los eventos de órdenes. La clave secreta que muestra se copia a `MERCADOPAGO_WEBHOOK_SECRET` del `.env` (ver arriba). Después de guardar hay que volver a revelarla, por si cambió.
@@ -177,17 +191,19 @@ Para mostrar, por ejemplo en la sustentación, que cada pasarela notifica y que 
 
 **El día:**
 
-1. **Arrancar.** Se levanta un prototipo en el puerto 4000 (`npm start` en su carpeta) y, en otra terminal, se corre `ngrok http 4000`.
-2. **Pagar.** Se abre `http://localtest.me:4000` y se paga. Cada `webhook:` que llega aparece, con su estado nativo, en la traza de la terminal y en el «Detalle técnico de la orden».
+1. **Arrancar.** Se levanta un prototipo en el puerto 4000 y, en otra terminal, se corre `ngrok http 4000`. B y D se arrancan con `npm start` en su carpeta. A abre por omisión en el 4200, así que se arranca con `PORT=4000 npm start`.
+2. **Pagar.** Se abre `http://localtest.me:4000` y se paga. Cada `webhook:` que llega aparece, con su estado nativo, en la traza de la terminal y en el «Detalle técnico de la orden». A no escribe esa traza en la terminal; su historial sale en el detalle de la orden.
    - **Wompi:** la tarjeta aprobada llega como `APPROVED`.
-   - **Mercado Pago:** la tarjeta aprobada llega como `APPROVED (processed)`, con la clave del vendedor de prueba.
+   - **Mercado Pago:** la tarjeta aprobada llega como `APPROVED (processed)`, con la clave del vendedor de prueba. B y D precargan la tarjeta 4242 para las cuatro pasarelas, así que para Mercado Pago hay que escribir la suya: 4013 5406 8274 6260, 11/30, titular `APRO Ruiz`. A la cambia sola.
    - **Rapyd:** la tarjeta pagada en su página manda tres avisos. En D quedan como dos `PENDING (ACT)` y un `APPROVED (CLO)`. En B el segundo ya sale `APPROVED (CLO)`: ante un aviso pendiente, B consulta el pago, y para entonces Rapyd ya lo cerró. El PSE llega como `APPROVED (CLO)`.
    - **Kushki:** no hubo acceso a su consola de UAT, y eso queda como límite del experimento. Su webhook se muestra con el simulador local, firmado igual que la pasarela, como en «Con el simulador local».
 3. **Cambiar de prototipo.** Se detiene el primero y se arranca el otro en el mismo puerto; el túnel y los paneles no cambian.
 
-Lo medido contra los sandboxes está en los puntos 118 y 121.
+**El inspector de ngrok**, en `http://127.0.0.1:4040`, muestra cada aviso que llegó y lo que respondió la tienda. La página de advertencia del plan gratuito no se interpone: solo aparece en el tráfico HTML de un navegador, y los avisos llegan con el agente de cada pasarela. En una red que corte el tráfico saliente hacia ngrok, como la del ensayo del 2 de noviembre de 2026, la URL pública no se abre desde la máquina. Los avisos llegan igual, porque vienen de afuera.
 
-- **Wompi, Mercado Pago y Rapyd:** sus webhooks reales verifican la firma y actualizan la orden en B y en D, medido el 22 de octubre de 2026 por un túnel. En Mercado Pago, con la clave de la aplicación del vendedor de prueba.
+Lo medido contra los sandboxes está en los puntos 118, 120 y 121.
+
+- **Wompi, Mercado Pago y Rapyd:** sus webhooks reales verifican la firma y actualizan la orden en B y en D. Se midió el 22 de octubre de 2026 por un túnel, y de nuevo el 2 de noviembre de 2026 con el dominio de ngrok, también en A. En Mercado Pago, con la clave de la aplicación del vendedor de prueba.
 - **Kushki:** queda sin medir, porque no hubo acceso a su consola de UAT, y se declara como límite del experimento. Su firma se prueba con el simulador.
 
 **Los datos de prueba**, medidos entre el 19 y el 21 de octubre de 2026 en los dos prototipos:
