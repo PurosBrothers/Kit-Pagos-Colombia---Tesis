@@ -1,0 +1,23 @@
+\subsection{Plan de Aceptación del Producto}
+
+Los criterios de aceptación de cada entregable son acordados entre el equipo y el director desde el inicio del proyecto. Todos los criterios deben ser verificables objetivamente; ninguno depende de apreciaciones subjetivas del evaluador.
+
+\subsubsection{Prototipo funcional del SDK}
+
+El SDK se considera aceptado cuando compila sin errores en TypeScript estricto, cuando los cuatro adaptadores (Wompi, PayU, Mercado Pago, Kushki) producen respuestas normalizadas correctas ante los cuatro escenarios de prueba definidos en la API de simulación, cuando la cobertura de pruebas unitarias sobre el núcleo es igual o superior al 80\%, y cuando el paquete puede instalarse desde npm y usarse en un proyecto externo nuevo sin modificar su código fuente. La herramienta de validación es Jest para las pruebas automatizadas y npm pack para la verificación de instalación.
+
+\subsubsection{API de simulación desplegada}
+
+La API se considera aceptada cuando todos los endpoints documentados responden en menos de 500ms bajo condiciones normales, cuando cubre los cuatro escenarios de prueba para cada pasarela (pago exitoso, rechazo, error de red y notificación webhook), cuando está desplegada y accesible desde internet sin necesidad de credenciales reales, y cuando la colección de Postman que documenta sus endpoints produce resultados exitosos al ejecutarse desde un entorno limpio. La herramienta de validación es Postman y el registro de logs del servidor de despliegue.
+
+\subsubsection{Documentación centralizada de datos de prueba}
+
+La documentación se considera aceptada cuando cubre las cuatro pasarelas con al menos los siguientes datos por proveedor: tarjetas de prueba con sus CVV y fechas de vencimiento, documentos de identidad válidos para sandbox y referencias de pago de ejemplo. Debe estar publicada en el repositorio público y validada contra el comportamiento real del sandbox de cada pasarela mediante al menos una prueba manual documentada por pasarela.
+
+\subsubsection{Informe comparativo de métricas CK}
+
+El informe se considera aceptado cuando contiene los valores de WMC, CBO y RFC calculados con ts-morph sobre las mismas clases en ambos escenarios (integración directa e integración con el framework), cuando los proyectos prototípicos sobre los que se calculan están documentados con suficiente detalle para que el experimento sea reproducible, y cuando el análisis comparativo incluye una interpretación de las diferencias observadas en términos de complejidad y acoplamiento. El director valida la pertinencia del análisis.
+
+\subsubsection{Documentación final del trabajo de grado y repositorio público}
+
+La documentación final se considera aceptado cuando cubre todas las fases del ciclo DSR con sus resultados, cuando están todos los documentos requeridos (Memoria, SAD, SDD, SPMP, SRS, VFP) cuando el repositorio público incluye instrucciones de instalación, ejemplos de integración para cada pasarela y la documentación generada por TypeDoc, y cuando un integrante no involucrado en la escritura de una sección puede seguir las instrucciones del repositorio e integrar el SDK en un proyecto nuevo sin contactar a los autores. El director aprueba formalmente el documento.
