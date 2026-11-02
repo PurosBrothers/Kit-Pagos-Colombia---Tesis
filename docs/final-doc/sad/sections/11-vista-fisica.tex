@@ -1,0 +1,26 @@
+\section{Vista física}
+De los tres componentes que conforman Kit Pagos Colombia (el SDK, la API de Simulación y la documentación centralizada de datos de prueba), únicamente la API de Simulación requiere una vista física propia dentro de este documento. El SDK se distribuye como un paquete de npm que se instala e importa directamente dentro del proceso de la aplicación del comercio que lo consume, por lo que no posee un ciclo de despliegue independiente ni una infraestructura propia que documentar a este nivel. De manera similar, la documentación de datos de prueba corresponde a contenido estático alojado dentro del repositorio del proyecto, sin un componente en ejecución asociado. La API de Simulación, en cambio, sí constituye un servicio que debe permanecer desplegado y accesible públicamente durante la fase de evaluación del proyecto, ya que reproduce el comportamiento de las pasarelas reales para que tanto el equipo desarrollador como los evaluadores puedan ejecutar los escenarios de prueba sin depender de las plataformas de pago externas.
+
+La Figura 15 presenta el Diagrama de Despliegue construido bajo la notación C4 para la API de Simulación. Este diagrama complementa al Diagrama de Contenedores presentado en la sección anterior, trasladando la anotación de infraestructura que allí aparecía únicamente como texto descriptivo hacia una representación explícita de nodos físicos y sus relaciones.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.6\textwidth]{"../../architecture/Simulador API/Deploy Diagram - C4.png"}
+\caption{Diagrama de despliegue de la API de simulación}
+\label{fig:deployment}
+\end{figure}
+
+\subsection{Actores externos}
+
+\subsubsection{Desarrollador / Tester QA}
+Este actor es quien durante la fase de evaluación accede directamente a la API mediante un navegador o herramientas como Postman, con el fin de explorar los endpoints documentados, ejecutar los distintos escenarios de prueba disponibles (aprobado, rechazado, fondos insuficientes, timeout y error de red) y disparar manualmente el envío de webhooks sintéticos.
+
+\subsubsection{Aplicación del comercio}
+Representada como un sistema externo debido a que, como se mencionó, el SDK embebido dentro de ella no forma parte del alcance de esta vista; su única relevancia aquí es que constituye el consumidor real de la API cuando el SDK opera en modo simulación, y a la vez es el receptor de los webhooks que la API despacha de forma asíncrona.
+
+\subsection{Infraestructura de despliegue}
+La API se aloja dentro de una plataforma en la nube de tipo PaaS, la alternativa seleccionada corresponde a Render. Dentro de dicha plataforma, la aplicación corre sobre una instancia con runtime de Node.js en su versión 18 o superior, que es el mismo requisito de compatibilidad definido para el resto del proyecto. Finalmente, dentro de ese runtime se ejecuta el contenedor lógico de la API de Simulación, construido sobre Fastify y TypeScript, que expone tanto los endpoints de simulación bajo el patrón \texttt{/v1/sim/\{pasarela\}/*} como el endpoint de disparo manual de webhooks \texttt{/v1/sim/webhooks/trigger} y la documentación interactiva generada automáticamente en /docs mediante la especificación OpenAPI 3.0.
+
+\subsection{Relaciones y Flujos de Comunicación}
+Las relaciones del diagrama reflejan tres flujos de comunicación, todos ellos sobre HTTPS. El primero corresponde a la exploración y prueba directa que realiza el Desarrollador o Tester QA sobre la API desplegada. El segundo corresponde a las solicitudes de pago que la Aplicación del Comercio envía hacia la API cuando el SDK se encuentra configurado en modo simulación, replicando así el mismo contrato que tendría una solicitud dirigida a una pasarela real. El tercero es el envío asíncrono de webhooks sintéticos firmados desde la API hacia la Aplicación del Comercio, que permite validar que el mecanismo de verificación de firmas del SDK funcione correctamente frente a eventos generados por el simulador.
+

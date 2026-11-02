@@ -1,0 +1,23 @@
+\section{Restricciones}
+Indique cualquier restricción que limite la libertad de los ingenieros a la hora de decidir la arquitectura del sistema y las soluciones a los ASR. Las principales categorías de restricciones son:
+Técnicas: Directamente relacionadas con las tecnologías, métodos de ingeniería, sistemas de software, etc.
+Organizacionales/políticas: Situaciones internas o externas a la organización y de las personas que limiten las decisiones arquitectónicas del sistema.
+Convencionales: Necesidades de seguimiento de estándares, guías de codificación, leyes, etc.
+
+\begin{table}[htbp]
+\centering
+\caption{Restricciones}
+\label{tab:restricciones}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4cm}|c|X|}
+\hline
+\textbf{Restricción} & \textbf{Categoría} & \textbf{Descripción} \\ \hline
+Lenguaje único del SDK & Técnica & El SDK se implementa exclusivamente en TypeScript/Node.js 18 LTS en adelante. Esto descarta cualquier optra decisión arquitectónica que dependa de otro runtime o lenguaje (por ejemplo no se puede resolver el cálculo de metricas CK con herramientas Java estándar, se debe usar ts-morph) \\ \hline
+Dependencia de sandboxes externos & Técnica & El framework depende de la disponibilidad de los ambientes sandbox de cada pasarela para su validación. Cambios en las APIs de los proveedores pueden requerir actualizaciones en los adaptadores, lo que introduce una dependencia externa no controlable por el equipo. \\ \hline
+Infraestructura de nivel gratuito & Organizacional/política & El despliegue de la API de Simulación se realiza sobre una plataforma PaaS de plan gratuito o bajo costo (Render), lo que impone límites de disponibilidad, rendimiento y tiempos de arranque en frío que la arquitectura debe tolerar. \\ \hline
+Duración del proyecto académico & Organizacional/política & El proyecto se desarrolla en un período de cinco meses (julio–noviembre 2026) como trabajo de grado, lo que limita la cantidad de pasarelas integradas, la profundidad de cada adaptador y descarta decisiones arquitectónicas que requieran más tiempo de maduración. \\ \hline
+Cumplimiento de PCI DSS por delegación & Convencional & El framework no puede procesar ni almacenar datos de tarjeta de crédito directamente; toda operación sensible debe delegarse a los mecanismos certificados de cada pasarela, en cumplimiento del estándar PCI DSS. \\ \hline
+Términos de uso de las APIs de los proveedores & Convencional & El uso en producción está sujeto a los términos y condiciones de las APIs de Wompi, Rapyd, Mercado Pago y Kushki; el framework no puede modificar ni interceptar los flujos de autenticación internos de ninguna pasarela. \\ \hline
+\end{tabularx}
+\end{table}
+
