@@ -4247,7 +4247,7 @@ Así, los paneles se configuran una sola vez. Se descartaron dos opciones:
 
 El plan está en `prototypes/README.md`, «Los webhooks reales, en vivo». Kushki se muestra con el simulador local, por decisión de Joan del mismo día.
 
-**El ensayo del plan (#165).** Joan creó su cuenta gratuita de ngrok y registró el dominio en los tres paneles. Los ids de cada orden y la traza están en el comentario de resultados del #165.
+**El ensayo del plan (#165).** Joan creó su cuenta gratuita de ngrok y registró el dominio en los tres paneles. Los ids de cada orden y la traza están en los comentarios de resultados del #165.
 
 - **ngrok sin Homebrew.** La máquina del ensayo no tenía Homebrew. Se instaló el binario oficial de ngrok.com para macOS en `~/bin`, sin `sudo`, y se comprobó la firma de Apple: «Developer ID Application: ngrok, Inc. (TEX8MHRDQ9)». La versión fue la 3.39.13.
 - **El dominio** asignado termina en `.ngrok-free.dev`, y no en `.ngrok-free.app` como decía el README. `ngrok http 4000` lo usa sin indicarlo.
@@ -4266,16 +4266,20 @@ El plan está en `prototypes/README.md`, «Los webhooks reales, en vivo». Kushk
   | A | `APPROVED` | `APPROVED (processed)` | un `PENDING (ACT)` y dos `APPROVED (CLO)` | no se probó |
 
   El inspector de ngrok registró 19 avisos, todos con `200`. Las notificaciones de Mercado Pago vinieron de la aplicación del vendedor de prueba (`…0415`) y verificaron con la clave del `.env`. La página de advertencia del plan gratuito no se interpuso: los avisos llegaron con el agente de cada pasarela (`Faraday`, `MercadoPago WebHook v1.0 order`, `axios`), no con el de un navegador.
+- **En la red de la sustentación**, el mismo 2 de noviembre entre las 13:24 y las 13:28, con B, el mismo túnel y los mismos paneles:
+  - Wompi llegó como `APPROVED`, Mercado Pago como `APPROVED (processed)`, y la tarjeta de Rapyd como un `PENDING (ACT)` y dos `APPROVED (CLO)`;
+  - el inspector registró 5 avisos, todos con `200`;
+  - `localtest.me`, los sandboxes, Render y el agente de ngrok respondieron igual que en la red de Joan.
 
 Lo que no estaba en el plan:
 
-- **La red del ensayo corta el tráfico que sale de la máquina hacia ngrok.** `curl` a la URL pública termina en `Connection reset by peer` durante el TLS. Desde afuera la misma URL responde, y los avisos entraron porque vienen de los servidores de cada pasarela. En una red así, la URL pública no se puede abrir en el navegador de la máquina.
+- **Desde la máquina del ensayo no se abre la URL pública.** `curl` a esa URL termina en `Connection reset by peer` durante el TLS. Desde afuera la misma URL responde, y los avisos entraron porque vienen de los servidores de cada pasarela. Pasó igual en la red de Joan y en la de la sustentación, así que lo más probable es que lo corten los controles corporativos de la máquina, y no la red. No se comprobó desde otra máquina. Mientras tanto, la URL pública no se puede abrir en el navegador de esa máquina.
 - **B y D precargan la tarjeta 4242 para las cuatro pasarelas.** Para Mercado Pago hay que escribir la suya (4013 5406 8274 6260, `APRO Ruiz`); A la cambia sola.
 - **El simulador escribía en su log las credenciales nativas de Kushki.** Su serializador solo ocultaba `authorization` y las cabeceras `x-gateway-*`, y Kushki manda las suyas como `Private-Merchant-Id` y `Public-Merchant-Id`: el log del ensayo las guardó con su valor. Joan decidió arreglarlo en el mismo PR con una lista de cabeceras permitidas (`LOGGABLE_HEADERS`): el log solo escribe con su valor las cabeceras inofensivas conocidas y oculta las demás, también las de una pasarela futura.
   - Se descartó ampliar la lista de prohibidas, `SENSITIVE_HEADERS`. La ruta de webhooks de la API REST la usa para quitar las credenciales antes de verificar una firma, y agregar ahí `access_key` o `signature`, de Rapyd, habría roto esa verificación.
-  - Los logs de Render no se revisaron. Si alguien usó Render en modo simulador con las llaves de UAT de Kushki, pueden estar ahí.
+  - Los logs de Render no se revisaron. Si alguien usó Render en modo simulador con las llaves de UAT de Kushki, pueden estar ahí, y también el `access_key` de Rapyd, que el log viejo tampoco ocultaba. La revisión queda en el #188, para Joshua, que tiene el acceso al panel de Render.
 
-**Estado:** El origen nuevo quedó medido en las cuatro pasarelas, con B, C y D. El plan de los webhooks en vivo quedó ensayado con A, B y D (#165), y el log del simulador se corrigió en el mismo PR. Falta repetir el ensayo en la red donde será la sustentación y revisar los logs de Render.
+**Estado:** El origen nuevo quedó medido en las cuatro pasarelas, con B, C y D. El plan de los webhooks en vivo quedó ensayado con A, B y D (#165), también en la red de la sustentación con B, y el log del simulador se corrigió en el mismo PR. Falta revisar los logs de Render (#188).
 
 ### 121. Las notificaciones de Mercado Pago en sandbox las firma la aplicación del vendedor de prueba (PR #162)
 

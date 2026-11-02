@@ -199,11 +199,11 @@ Para mostrar, por ejemplo en la sustentación, que cada pasarela notifica y que 
    - **Kushki:** no hubo acceso a su consola de UAT, y eso queda como límite del experimento. Su webhook se muestra con el simulador local, firmado igual que la pasarela, como en «Con el simulador local».
 3. **Cambiar de prototipo.** Se detiene el primero y se arranca el otro en el mismo puerto; el túnel y los paneles no cambian.
 
-**El inspector de ngrok**, en `http://127.0.0.1:4040`, muestra cada aviso que llegó y lo que respondió la tienda. La página de advertencia del plan gratuito no se interpone: solo aparece en el tráfico HTML de un navegador, y los avisos llegan con el agente de cada pasarela. En una red que corte el tráfico saliente hacia ngrok, como la del ensayo del 2 de noviembre de 2026, la URL pública no se abre desde la máquina. Los avisos llegan igual, porque vienen de afuera.
+**El inspector de ngrok**, en `http://127.0.0.1:4040`, muestra cada aviso que llegó y lo que respondió la tienda. La página de advertencia del plan gratuito no se interpone: solo aparece en el tráfico HTML de un navegador, y los avisos llegan con el agente de cada pasarela. Desde la máquina del ensayo del 2 de noviembre de 2026, la URL pública no se abrió, ni en la red de Joan ni en la de la sustentación (punto 120). Los avisos llegan igual, porque vienen de afuera.
 
 Lo medido contra los sandboxes está en los puntos 118, 120 y 121.
 
-- **Wompi, Mercado Pago y Rapyd:** sus webhooks reales verifican la firma y actualizan la orden en B y en D. Se midió el 22 de octubre de 2026 por un túnel, y de nuevo el 2 de noviembre de 2026 con el dominio de ngrok, también en A. En Mercado Pago, con la clave de la aplicación del vendedor de prueba.
+- **Wompi, Mercado Pago y Rapyd:** sus webhooks reales verifican la firma y actualizan la orden en B y en D. Se midió el 22 de octubre de 2026 por un túnel, y de nuevo el 2 de noviembre de 2026 con el dominio de ngrok, también en A. En Mercado Pago, con la clave de la aplicación del vendedor de prueba. Ese mismo día se repitió con B en la red de la sustentación.
 - **Kushki:** queda sin medir, porque no hubo acceso a su consola de UAT, y se declara como límite del experimento. Su firma se prueba con el simulador.
 
 **Los datos de prueba**, medidos entre el 19 y el 21 de octubre de 2026 en los dos prototipos:
