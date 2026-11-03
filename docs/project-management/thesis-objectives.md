@@ -2,7 +2,7 @@
 
 Este documento escribe por primera vez en el repositorio los objetivos específicos del trabajo de grado, conecta cada uno con la evidencia que lo demuestra y define los proyectos prototípicos que lo van a demostrar. Es el artefacto que cierra el entregable de la Fase 2 del SPMP (*"SRS inicial, criterios de evaluación formalizados, proyectos prototípicos definidos"*) que nunca se produjo: hasta la creación de este archivo los objetivos solo existían en el SPMP, fuera del repositorio, y la única mención dentro de `docs/` era una pregunta de pasada en `6-tokenizacion-frontend.md` (si el trabajo del issue #110 debía convertirse en un objetivo), sin lista ni rastreo del resto.
 
-**Fuente de los objetivos:** `SPMP - Kit Pagos Colombia.md`, sección 1.2.3 (documento fuera del repositorio, en Google Drive/Downloads, versión consultada el 28 de septiembre de 2026). Este documento transcribe el texto literal y no lo reescribe; si el texto aprobado difiere de lo que el proyecto terminó haciendo, esa diferencia se nombra en la [sección de divergencias](#4-divergencias-nombradas-entre-el-spmp-aprobado-y-lo-ejecutado), no se disimula.
+**Fuente de los objetivos:** el SPMP, sección 1.2.3, cuyo original está en [`docs/final-doc/spmp/SPMP-original.pdf`](../final-doc/spmp/SPMP-original.pdf). La transcripción se hizo el 28 de septiembre de 2026 con una copia en Markdown; el 2 de noviembre de 2026 se comprobó que los seis objetivos coinciden letra por letra con ese PDF. Este documento transcribe el texto literal y no lo reescribe; si el texto aprobado difiere de lo que el proyecto terminó haciendo, esa diferencia se nombra en la [sección de divergencias](#4-divergencias-nombradas-entre-el-spmp-aprobado-y-lo-ejecutado), no se disimula.
 
 ---
 
@@ -96,7 +96,7 @@ Los objetivos específicos **viven en este documento aparte** y se **referencian
 
 ## Referencias
 
-- `SPMP - Kit Pagos Colombia.md` (fuera del repositorio), sección 1.2.3 — fuente de los objetivos.
+- [`docs/final-doc/spmp/SPMP-original.pdf`](../final-doc/spmp/SPMP-original.pdf), sección 1.2.3 — fuente de los objetivos.
 - [`docs/project-management/traceability-matrix.md`](traceability-matrix.md) — matriz de requisitos funcionales (artefacto del DoD).
 - [`docs/project-management/prototypes-evaluation-plan.md`](prototypes-evaluation-plan.md) — diseño experimental aprobado de la Fase 5.
 - [`docs/04-metricas-y-pruebas/4-medir-los-prototipos.md`](../04-metricas-y-pruebas/4-medir-los-prototipos.md) — cómo se recolecta cada variable.
