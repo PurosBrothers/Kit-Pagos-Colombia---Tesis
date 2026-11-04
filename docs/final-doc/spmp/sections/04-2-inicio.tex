@@ -1,0 +1,75 @@
+\subsection{Inicio del proyecto}
+
+El inicio del proyecto contempla las actividades necesarias para preparar al equipo y al entorno de trabajo antes del desarrollo del framework. Esto incluye la transferencia de conocimientos técnicos, la organización de herramientas y la configuración de la infraestructura requerida para asegurar una ejecución consistente durante las diferentes fases del proyecto.
+
+\subsubsection{Entrenamiento del Personal}
+
+El equipo cuenta con base sólida en programación orientada a objetos, TypeScript y consumo de APIs REST. No obstante, la ejecución del proyecto requiere competencias específicas que no todos los integrantes dominan con la misma profundidad al inicio. El plan a continuación cierra esas brechas.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\SinNumero
+\begin{longtable}{|P{0.167}|P{0.162}|P{0.181}|P{0.185}|P{0.185}|P{0.12}|}
+  \hline
+  Conocimiento / Habilidad & Brecha identificada & Integrantes & Responsable de la transferencia & Mecanismo & Momento \\
+  \hline
+  \endfirsthead
+  \hline
+  Conocimiento / Habilidad & Brecha identificada & Integrantes & Responsable de la transferencia & Mecanismo & Momento \\
+  \hline
+  \endhead
+  Arquitectura hexagonal aplicada en TypeScript & Conocimiento conceptual presente; aplicación práctica insuficiente & Todos & Líder de arquitectura y núcleo & Sesión grupal de 2 horas con código de ejemplo; revisión del capítulo aplicado de Cockburn (2024) & Inicio de la Fase 3 \\
+  \hline
+  Fastify con TypeScript y validación de esquemas JSON & Conocimiento de Express presente; Fastify desconocido & Líder de integración & Autoaprendizaje guiado con documentación oficial de Fastify; endpoint de ejemplo documentado en Notion & Fase 3 &  \\
+  \hline
+  ts-morph para extracción de métricas CK & Herramienta no conocida por ningún integrante & Líder de evaluación (autoaprendizaje previo) → sesión de transferencia & Autoaprendizaje individual; sesión práctica grupal de 1.5 horas con casos reales del proyecto & Autoaprendizaje en Fase 3; sesión grupal antes de Fase 5 &  \\
+  \hline
+  APIs de las cuatro pasarelas & Conocimiento heterogéneo; ningún integrante conoce las cuatro & Un integrante por pasarela según asignación de la Fase 1 & Revisión documental individual de documentación oficial; transferencia al equipo mediante programación en pares en Fase 4 & Fase 1; transferencia en Fase 4 &  \\
+  \hline
+  Publicación de paquete en npm & No realizado previamente por el equipo & Líder de arquitectura & Autoaprendizaje con documentación oficial de npm; guía de publicación redactada en Notion & Antes del hito H3 &  \\
+  \hline
+\end{longtable}
+\end{center}
+
+El mecanismo transversal de transferencia es una sesión técnica de 30 minutos al inicio de cada semana de trabajo, integrada a la revisión del backlog, en la que cada integrante comparte lo aprendido durante la semana anterior. Los artefactos resultantes (guías, fragmentos de código, decisiones técnicas) se documentan en Notion para que estén accesibles durante todo el proyecto. La transferencia de conocimiento se considera completada cuando los integrantes pueden aplicar de manera autónoma lo aprendido en actividades reales del proyecto, como la implementación de componentes, configuración de herramientas o ejecución de pruebas relacionadas con su frente de trabajo.
+
+\subsubsection{Infraestructura}
+
+La siguiente tabla describe todas las tareas de configuración y mantenimiento de la infraestructura del proyecto, con su responsable, momento de ejecución y frecuencia.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\SinNumero
+\begin{longtable}{|P{0.403}|P{0.167}|P{0.174}|P{0.257}|}
+  \hline
+  Tarea & Rol responsable & Momento & Frecuencia \\
+  \hline
+  \endfirsthead
+  \hline
+  Tarea & Rol responsable & Momento & Frecuencia \\
+  \hline
+  \endhead
+  Crear repositorio GitHub con estructura de ramas (main, develop, feature/*) y política de protección de rama principal & Líder de arquitectura & Semana 1 & Una vez; política se revisa si surgen problemas de flujo \\
+  \hline
+  Inicializar proyecto TypeScript con tsconfig estricto, estructura de paquete npm y licencia Apache 2.0 & Líder de arquitectura & Semana 1 & Una vez; tsconfig se ajusta al agregar dependencias \\
+  \hline
+  Configurar pipeline de GitHub Actions (lint con ESLint, pruebas con Jest, reporte de cobertura) & Coordinador & Semana 2 & Una vez; actualizar al agregar nuevas fases al pipeline \\
+  \hline
+  Crear tablero en GitHub Projects con columnas Backlog / En progreso / Completado; cargar backlog inicial & Coordinador & Semana 1 & Backlog se actualiza al inicio de cada fase \\
+  \hline
+  Crear cuenta de despliegue en Railway o Render; configurar despliegue continuo desde la rama main & Líder de integración & Inicio Fase 4, Iteración 3 & Una vez; verificar disponibilidad mensualmente \\
+  \hline
+  Configurar espacio de trabajo en Notion (actas, ADRs, bitácoras, registro de cambios) & Coordinador & Semana 1 & Actualización continua por todos los integrantes \\
+  \hline
+  Verificar acceso a los entornos sandbox de las cuatro pasarelas (credenciales, disponibilidad de endpoints) & Líder de integración & Inicio Fase 1 e inicio Fase 4 & Al inicio de cada fase de desarrollo \\
+  \hline
+  Configurar colección inicial en Postman con variables de entorno para sandbox y para API de simulación & Líder de integración & Inicio Fase 4, Iteración 3 & Actualizar por cada endpoint nuevo implementado \\
+  \hline
+  Configurar TypeDoc para generación automática de documentación a partir de comentarios JSDoc & Líder de arquitectura & Inicio Fase 4, Iteración 1 & Verificar en cada release \\
+  \hline
+  Publicar versión inicial del paquete en npm (0.1.0, marcada como pre-release) & Líder de arquitectura & H3 completado & Por cada release \\
+  \hline
+\end{longtable}
+\end{center}
+
+Todas las credenciales (tokens de sandbox, claves de despliegue) se almacenan como secretos en GitHub Actions y nunca se versionan en el repositorio. El integrante que crea una credencial es responsable de documentar su propósito en Notion sin exponer el valor.

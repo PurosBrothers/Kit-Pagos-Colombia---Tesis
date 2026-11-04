@@ -1,0 +1,119 @@
+\section{Vista General del Proyecto}
+
+El proyecto Kit Pagos Colombia surge a partir de un problema recurrente en el desarrollo de software colombiano: integrar pasarelas de pago sigue siendo un proceso fragmentado, repetitivo y, en muchos casos, innecesariamente complejo. Plataformas como Wompi, PayU, Mercado Pago y Kushki ofrecen servicios similares, pero cada una maneja estructuras distintas para autenticación, respuestas HTTP, validaciones y notificaciones asíncronas. En la práctica, esto obliga a los equipos de desarrollo a implementar varias veces la misma lógica, aumentando el tiempo de integración y la probabilidad de errores.
+
+De acuerdo con la Cámara Colombiana de Comercio Electrónico, durante 2025 las transacciones digitales en Colombia superaron los 140 billones de pesos (“Informe de comercio minorista / Diciembre 2025”, s. f.), lo que evidencia el crecimiento sostenido del comercio electrónico y la necesidad de herramientas que simplifiquen la incorporación de servicios de pago dentro de aplicaciones modernas. A pesar de esto, el ecosistema colombiano continúa dependiendo de APIs heterogéneas que exigen procesos de integración independientes para cada proveedor.
+
+Frente a este escenario, el proyecto propone la construcción de un framework open source que permita unificar la interacción con distintas pasarelas bajo una misma interfaz de programación. La intención no es reemplazar las APIs oficiales de los proveedores, sino construir una capa intermedia que reduzca la complejidad técnica que enfrentan los desarrolladores cuando necesitan trabajar con múltiples pasarelas dentro de una misma aplicación.
+
+El framework está compuesto por tres elementos principales. El primero es un SDK con interfaz unificada que abstrae las diferencias entre Wompi, PayU, Mercado Pago y Kushki para operaciones comunes como creación de pagos, consulta de estados y recepción de webhooks. El segundo componente es una API de simulación desplegada, diseñada para facilitar pruebas de integración sin depender completamente de los entornos sandbox externos. Finalmente, el proyecto incluye una documentación centralizada con datos de prueba y configuraciones utilizadas por cada proveedor, buscando reducir el tiempo que normalmente se pierde navegando entre distintas documentaciones oficiales.
+
+El propósito principal del proyecto es desarrollar y evaluar una solución que simplifique la integración de múltiples pasarelas de pago en el contexto colombiano. Más allá de construir software funcional, el trabajo busca analizar si una arquitectura unificada realmente reduce la complejidad de implementación frente a una integración tradicional realizada directamente sobre las APIs nativas de cada proveedor.
+
+La propuesta se desarrolla bajo el enfoque de Design Science Research (DSR), metodología orientada a proyectos cuyo resultado principal es la construcción y validación de un artefacto tecnológico (Peffers, Tuunanen, Rothenberger \& Chatterjee, 2007). Esto implica que el framework no solamente debe funcionar correctamente, sino que además debe evaluarse mediante criterios técnicos verificables. Para ello, el proyecto compara integraciones realizadas con el framework frente a integraciones tradicionales utilizando las métricas WMC, CBO y RFC del conjunto de métricas CK propuesto por Chidamber y Kemerer (1994).
+
+El diseño del framework se apoya principalmente en la arquitectura hexagonal propuesta por Cockburn (2024), la cual permite separar el núcleo de negocio de las dependencias externas mediante puertos y adaptadores. Esta decisión arquitectónica resulta especialmente útil en un ecosistema como el de las pasarelas de pago, donde los proveedores cambian constantemente sus mecanismos internos y sus convenciones de integración. Adicionalmente, se emplean patrones de diseño del catálogo GoF como Strategy, Facade y Factory para encapsular el comportamiento específico de cada pasarela y ofrecer una interfaz homogénea hacia el desarrollador (Gamma, Helm, Johnson \& Vlissides, 1994).
+
+El alcance del proyecto está delimitado a cuatro pasarelas utilizadas activamente en Colombia: Wompi, PayU, Mercado Pago y Kushki. El framework cubre operaciones esenciales relacionadas con pagos digitales y manejo de notificaciones asíncronas, además de la simulación de escenarios controlados de prueba. Sin embargo, no contempla procesamiento financiero real, integración con sistemas contables, interfaces gráficas de pago ni soporte para proveedores distintos a los definidos inicialmente. Tampoco modifica los mecanismos internos de seguridad implementados por las pasarelas, ya que el framework actúa únicamente como intermediario entre el cliente y los proveedores externos.
+
+Como resultado del proyecto se espera obtener un SDK funcional basado en arquitectura hexagonal, una API REST de simulación desplegada, documentación pública de datos de prueba, un informe comparativo de métricas de evaluación y el repositorio público del framework con documentación técnica de uso. La intención es que estos entregables no se limiten únicamente al contexto académico del trabajo de grado, sino que puedan servir como base reutilizable para desarrolladores y futuros proyectos relacionados con integración de pagos en Colombia.
+
+\subsection{Visión del Producto}
+
+El ecosistema colombiano de pasarelas de pago está fragmentado. Wompi, PayU, Mercado Pago y Kushki funcionan cada una con sus propias convenciones de autenticación, estructuras de respuesta distintas y mecanismos de notificación asíncrona particulares. Para un equipo de desarrollo que necesita integrar más de una, esa fragmentación se convierte en trabajo repetitivo: hay que estudiar cuatro documentaciones, implementar cuatro lógicas de autenticación y normalizar manualmente los formatos de respuesta. El tiempo invertido crece con cada proveedor adicional y la probabilidad de errores también.
+
+El Kit Pagos Colombia busca resolver eso. Es un framework open source que unifica la integración de estas pasarelas bajo una interfaz común, de modo que un desarrollador pueda interactuar con varias de ellas usando la misma lógica de código. Además, incluye una API de simulación que elimina la dependencia de los entornos sandbox externos durante el desarrollo, y una documentación que centraliza los datos de prueba dispersos en múltiples portales.
+
+La visión de largo plazo es que el kit funcione como referencia técnica dentro del ecosistema fintech colombiano, reduciendo las barreras de entrada para que proyectos de menor escala puedan incorporar múltiples opciones de pago sin duplicar esfuerzo. Este trabajo de grado construye y evalúa la primera versión funcional de esa visión.
+
+\subsection{Propósito, Alcance y Objetivos}
+
+\subsubsection{Propósito}
+
+Este proyecto se realiza como trabajo de grado en Ingeniería de Sistemas. Su propósito es construir y evaluar un artefacto de software que resuelva el problema de la fragmentación en el proceso de integración de pasarelas de pago en Colombia. La construcción del artefacto se enmarca en Design Science Research, que exige no solo que el sistema sea desarrollado correctamente, sino que sea validado en escenarios representativos del problema original y que sus resultados sean comunicados de forma rigurosa.
+
+\subsubsection{Alcance}
+
+El proyecto incluye el diseño, desarrollo y evaluación de tres componentes:
+
+\begin{itemize}
+  \item El SDK con interfaz unificada: una biblioteca de software que abstrae las diferencias entre las APIs de Wompi, PayU, Mercado Pago y Kushki para las operaciones de creación de pagos, consulta de estado y gestión de notificaciones asíncronas (webhooks).
+  \item La API de simulación: un servidor REST desplegado que replica el comportamiento de las cuatro pasarelas en cuatro escenarios de prueba controlados (pago exitoso, pago rechazado, error de red y notificación asíncrona).
+  \item La documentación centralizada de datos de prueba: consolidación en un repositorio público de los datos de tarjetas, identificaciones y referencias de pago que cada pasarela provee en su entorno sandbox.
+\end{itemize}
+
+El proyecto no incluye: procesamiento real de transacciones financieras; interfaces de usuario para flujos de pago; cobertura de pasarelas distintas a las cuatro mencionadas; integración con sistemas contables o ERP; ni responsabilidad sobre la continuidad de las APIs externas de los proveedores. La capa de seguridad propia de cada pasarela (autenticación con tokens, cifrado de datos, cumplimiento PCI-DSS) tampoco es modificada; el framework delega correctamente hacia cada proveedor sin interferir en sus mecanismos internos.
+
+\subsubsection{Objetivos}
+
+El objetivo general es desarrollar el Kit Pagos Colombia para simplificar la integración de múltiples pasarelas de pago en el contexto colombiano.
+
+Los objetivos específicos son seis.
+
+\begin{itemize}
+  \item \textbf{Analizar} las características técnicas, mecanismos de integración y consideraciones de seguridad de las cuatro pasarelas seleccionadas.
+  \item \textbf{Diseñar} la arquitectura del framework aplicando la arquitectura hexagonal y patrones GoF.
+  \item \textbf{Desarrollar} un prototipo funcional del framework que implemente la interfaz unificada y los mecanismos de comunicación segura.
+  \item \textbf{Implementar} la API de simulación.
+  \item \textbf{Consolidar} los datos de prueba por pasarela para su documentación.
+  \item \textbf{Evaluar} el framework mediante su aplicación en proyectos prototípicos usando las métricas WMC, CBO y RFC de Chidamber y Kemerer (1994), comparando los resultados frente a una integración directa con las APIs nativas.
+\end{itemize}
+
+\subsection{Supuestos y Restricciones}
+
+\subsubsection{Supuestos}
+
+El proyecto asume que las APIs de Wompi, PayU, Mercado Pago y Kushki se mantendrán estables en sus versiones actuales durante el período de desarrollo. Un cambio incompatible hacia atrás en alguna de ellas obligaría a rediseñar el adaptador correspondiente, lo que impactaría el cronograma. Esta suposición es razonable dado que las APIs de pasarelas de pago suelen tener versiones con ciclos de vida largos por las implicaciones que tienen sobre sistemas productivos.
+
+Se asume que los entornos sandbox de las cuatro pasarelas estarán disponibles para consulta y prueba durante todas las fases del proyecto. La indisponibilidad prolongada de alguno afectaría la implementación y verificación del adaptador correspondiente.
+
+Se asume que los cuatro integrantes del equipo dedicarán el tiempo acordado al proyecto durante el semestre, y que el director mantendrá disponibilidad para las reuniones de seguimiento establecidas. También se asume que es técnicamente viable construir una capa de abstracción suficientemente homogénea sobre las cuatro pasarelas para las operaciones fundamentales; esto está respaldado por trabajos previos como el de Manuaba e Hisyam (2022), aunque su validez específica para el conjunto colombiano se verificará en la fase de análisis.
+
+\subsubsection{Restricciones}
+
+El proyecto está acotado a un semestre académico, lo que limita la evaluación a proyectos prototípicos construidos por el propio equipo. El framework se distribuirá bajo la licencia Apache 2.0 , la cual permite usar, modificar y distribuir software libremente, incluyendo fines comerciales y creaciones propietarias, sin obligación de liberar el código fuente de las modificaciones, siempre que se incluyan los avisos de derechos de autor y cambios (Apache Software Foundation, 2004). El despliegue de la API de simulación se realizará en una plataforma de nube con plan gratuito o de bajo costo (como Railway o Render), lo que impone restricciones de disponibilidad y rendimiento que deben considerarse durante las pruebas. La elección del lenguaje de programación del SDK impone restricciones sobre las herramientas disponibles para calcular las métricas CK, aspecto que se aborda en la sección de Lenguajes y Herramientas.
+
+\subsection{Entregables}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{|P{0.227}|P{0.229}|P{0.519}|}
+  \hline
+  \textbf{Entregable} & \textbf{Estándares asociados} & \textbf{Justificación} \\
+  \hline
+  \endfirsthead
+  \hline
+  \textbf{Entregable} & \textbf{Estándares asociados} & \textbf{Justificación} \\
+  \hline
+  \endhead
+  \caption{Entregables.}
+  \label{tab:entregables}\\
+  \endlastfoot
+  Prototipo funcional del SDK con interfaz unificada para Wompi, PayU, Mercadopago y Kushki & Cockburn, A. (2024). \textit{Hexagonal Architecture Explained}; Gamma, E., Helm, R., Johnson, R., \& Vlissides, J. \textit{Design Patterns: Elements of Reusable Object-Oriented Software}; Hohpe, G. \& Woolf, B. (2003). \textit{Enterprise Integration Patterns} & La arquitectura hexagonal establece el estilo estructural del SDK, garantizando que el núcleo de lógica de pagos sea independiente de los proveedores. Los patrones GoF (Strategy, Facade y Factory) fundamentan las decisiones de diseño de la interfaz unificada y los adaptadores. Los patrones de integración empresarial de Hohpe y Woolf justifican el mecanismo de normalización de respuestas y el manejo de comunicaciones asíncronas entre el framework y las pasarelas. \\
+  \hline
+  API de simulación desplegada con endpoints que replican el comportamiento de las pasarelas & Fielding, R. T. (2000). \textit{Architectural Styles and the Design of Network-based Software Architectures}; Ammann, P., \& Offutt, J. (2016). \textit{Introduction to Software Testing} & Los principios REST de Fielding fundamentan el diseño de la interfaz de la API de simulación, garantizando una interfaz coherente, sin estado y desacoplada de cualquier cliente. Los criterios de Ammann y Offutt justifican la cobertura de escenarios que debe exponer la API (éxito, rechazo, error de red y notificaciones asíncronas) y el entorno controlado equivalente a un sandbox. \\
+  \hline
+  Documentación centralizada de datos de prueba por pasarela & Ammann, P., \& Offutt, J. (2016). \textit{Introduction to Software Testing} & La noción de entorno sandbox como espacio de verificación aislado, definida por Ammann y Offutt, justifica la necesidad de consolidar los datos de prueba de cada proveedor en un formato accesible y estructurado, reduciendo la dependencia de fuentes dispersas durante el desarrollo. \\
+  \hline
+  Informe comparativo de métricas de evaluación (WMC, CBO, RFC) & Chidamber, S. R. \& Kemerer, C. F. (1994). \textit{A metrics suite for object oriented design}. IEEE Transactions on Software Engineering, 20(6), 476–493 & Las métricas CK (Chidamber y Kemerer) proveen una herramienta cuantitativa y reproducible para comparar la complejidad, el acoplamiento y la superficie de interacción del código de integración con y sin el framework. Su uso garantiza que la evaluación del artefacto no dependa exclusivamente de observaciones subjetivas. \\
+  \hline
+  Documento final del trabajo de grado y repositorio público con documentación de uso & Peffers, K., Tuunanen, T., Rothenberger, M., \& Chatterjee, S. (2007). \textit{A design science research methodology for information systems research}. Journal of Management Information Systems, 24, 45–77 & DSR exige que los artefactos producidos y las lecciones aprendidas sean comunicados de forma rigurosa a las audiencias relevantes. El documento de grado y el repositorio público materializan esta exigencia, presentando el proceso de construcción, los resultados de la evaluación y las condiciones bajo las cuales el framework resulta útil. \\
+  \hline
+\end{longtable}
+\end{center}
+
+\subsection{Evolución del Plan}
+
+Este documento no es estático. A medida que el proyecto avance y se produzcan ajustes en el alcance, el cronograma, los riesgos o las decisiones técnicas, el SPMP deberá actualizarse para reflejar el estado real del proyecto. Cada entrega parcial del trabajo de grado es una oportunidad obligatoria de revisión, especialmente de la carta Gantt descrita en la sección de \textbf{Calendarización}, que debe estar actualizada en cada entrega.
+
+Cualquier integrante puede proponer un cambio al plan. La propuesta se discute en la reunión semanal del equipo y, si afecta el alcance o los criterios de evaluación definidos con el director, se comunica antes de implementarse. Los cambios aprobados se registran en el historial de cambios del documento con fecha, autor y descripción breve. El SPMP se versiona en el repositorio del proyecto bajo control de cambios en GitHub.
+
+Los cambios que no requieren aprobación del director son: ajustes al cronograma que no afecten los hitos principales, actualización de la tabla de riesgos, correcciones menores de redacción y actualización de métricas de progreso. Los que sí requieren alineación son:
+
+\begin{itemize}
+  \item Modificaciones al alcance del proyecto
+  \item Cambios en los entregables o sus criterios de aceptación
+  \item Cambios en la metodología de evaluación.
+\end{itemize}
+
+Se anticipa al menos una actualización por cada hito completado, con una revisión mayor al finalizar la fase de desarrollo para reflejar los resultados de las pruebas internas y los ajustes que hayan surgido durante la implementación de los adaptadores.
