@@ -1,0 +1,116 @@
+% Estilo común del SRS, el SAD y el plan de pruebas. Reproduce el formato del SRS y el
+% SAD originales: carta, márgenes de una pulgada, Times de 10 puntos en el cuerpo.
+% Las rutas son relativas a la carpeta del documento: se compila desde ella
+% (latexmk -cd) y se carga con \input{../comun/estilo}.
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-tabla,es-noshorthands,es-lcroman]{babel}
+\usepackage{tgtermes}
+\usepackage{tgheros}
+\usepackage[letterpaper,margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{titletoc}
+\usepackage{caption}
+\usepackage[hidelinks]{hyperref}
+
+\setstretch{1.15}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt plus 2pt}
+
+\addto\captionsspanish{%
+  \renewcommand{\contentsname}{Tabla de Contenidos}%
+  \renewcommand{\listtablename}{Lista de Tablas}%
+  \renewcommand{\listfigurename}{Lista de Figuras}%
+}
+
+\titleformat{\section}{\normalfont\bfseries\fontsize{12}{14}\selectfont}{\thesection.}{0.3em}{}
+\titleformat{\subsection}{\normalfont\bfseries\fontsize{11}{13}\selectfont}{\thesubsection}{0.3em}{}
+\titleformat{\subsubsection}{\normalfont\bfseries\normalsize}{\thesubsubsection}{0.3em}{}
+\titlespacing*{\section}{0pt}{14pt}{8pt}
+\titlespacing*{\subsection}{0pt}{12pt}{6pt}
+\titlespacing*{\subsubsection}{0pt}{10pt}{4pt}
+
+\titlecontents{section}[0pt]{\addvspace{2pt}\bfseries}
+  {\thecontentslabel.\ }{}{\titlerule*[0.3em]{.}\contentspage}
+\titlecontents{subsection}[1.5em]{}
+  {\thecontentslabel\ }{}{\titlerule*[0.3em]{.}\contentspage}
+\titlecontents{subsubsection}[3em]{}
+  {\thecontentslabel\ }{}{\titlerule*[0.3em]{.}\contentspage}
+\titlecontents{table}[0.75in]{}
+  {\tablename~\thecontentslabel.\ }{}{\titlerule*[0.3em]{.}\contentspage}
+\titlecontents{figure}[0.75in]{}
+  {\figurename~\thecontentslabel.\ }{}{\titlerule*[0.3em]{.}\contentspage}
+
+\captionsetup{labelsep=period,font=it,justification=centering}
+
+\newcommand{\kpNombre}{}
+\newcommand{\kpVersion}{}
+\newcommand{\kpFecha}{}
+\newcommand{\NombreDocumento}[1]{\renewcommand{\kpNombre}{#1}}
+\newcommand{\VersionDocumento}[1]{\renewcommand{\kpVersion}{#1}}
+\newcommand{\FechaDocumento}[1]{\renewcommand{\kpFecha}{#1}}
+
+\newcommand{\Portada}{%
+  \hypersetup{
+    pdftitle={\kpNombre\ - Kit Pagos Colombia},
+    pdfauthor={Andres Henao Niño, Joan Emmanuel Orduz Chia, Joshua Prieto Zambrano, David Estevan Rodriguez Jurado}
+  }%
+  \begin{titlepage}
+    \centering
+    \setstretch{1}%
+    \setlength{\parskip}{0pt}%
+    \fontsize{12}{16}\selectfont
+    \includegraphics[height=6.96cm]{../comun/logo-javeriana}\par
+    \vspace{46pt}
+    {\fontsize{14}{16}\selectfont\bfseries\kpNombre\par}
+    \vspace{16pt}
+    Presentan\par
+    \vspace{16pt}
+    Andres Henao Niño\par
+    Joan Emmanuel Orduz Chia\par
+    Joshua Prieto Zambrano\par
+    David Estevan Rodriguez Jurado\par
+    \vspace{31pt}
+    Director\par
+    Jaime Andrés Pavlich Mariscal\par
+    \vspace{21pt}
+    Pontificia Universidad Javeriana\par
+    Facultad de Ingeniería\par
+    Trabajo de Grado\par
+    \vspace{16pt}
+    Bogotá D.C.\par
+    \kpFecha\par
+    Versión \kpVersion\par
+  \end{titlepage}%
+  \pagenumbering{roman}%
+}
+
+% Cada fila se agrega con \Cambio{versión}{fecha}{descripción}{autor(es)}.
+\newenvironment{HistorialDeCambios}{%
+  \section*{Historial de Cambios}%
+  \renewcommand{\arraystretch}{1.3}%
+  \tabularx{\textwidth}{|c|c|X|>{\raggedright\arraybackslash}p{4.2cm}|}
+  \hline
+  \textbf{Versión} & \textbf{Fecha} & \textbf{Descripción del cambio} & \textbf{Autor(es)} \\
+  \hline
+}{%
+  \endtabularx
+  \clearpage
+}
+\newcommand{\Cambio}[4]{#1 & #2 & #3 & #4 \\ \hline}
+
+% La plantilla PTP pide que la numeración arábiga empiece en la Introducción y que las
+% listas de tablas y figuras no entren en la tabla de contenidos.
+\newcommand{\Indices}{%
+  \tableofcontents
+  \clearpage
+  \listoftables
+  \listoffigures
+  \clearpage
+  \pagenumbering{arabic}%
+}

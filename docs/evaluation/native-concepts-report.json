@@ -1,0 +1,419 @@
+{
+  "generatedAt": "2026-10-29T02:21:04.145Z",
+  "catalog": [
+    {
+      "identifier": "amount_in_cents",
+      "gateway": "wompi",
+      "description": "Monto en centavos en la API de transacciones de Wompi"
+    },
+    {
+      "identifier": "acceptance_token",
+      "gateway": "wompi",
+      "description": "Token de aceptación de términos y condiciones de Wompi"
+    },
+    {
+      "identifier": "x-event-checksum",
+      "gateway": "wompi",
+      "description": "Cabecera de verificación de webhook de Wompi"
+    },
+    {
+      "identifier": "integrity",
+      "gateway": "wompi",
+      "description": "Firma de integridad y tipo de firma en Wompi"
+    },
+    {
+      "identifier": "transaction_amount",
+      "gateway": "mercadopago",
+      "description": "Campo de monto en creación de pagos de Mercado Pago"
+    },
+    {
+      "identifier": "total_amount",
+      "gateway": "mercadopago",
+      "description": "Campo de monto total en órdenes y checkout de Mercado Pago"
+    },
+    {
+      "identifier": "x-signature",
+      "gateway": "mercadopago",
+      "description": "Cabecera de firma HMAC en webhooks de Mercado Pago"
+    },
+    {
+      "identifier": "x-kushki-signature",
+      "gateway": "kushki",
+      "description": "Cabecera de firma de webhooks de Kushki"
+    },
+    {
+      "identifier": "Private-Merchant-Id",
+      "gateway": "kushki",
+      "description": "Cabecera de autenticación privada de Kushki"
+    },
+    {
+      "identifier": "Public-Merchant-Id",
+      "gateway": "kushki",
+      "description": "Cabecera de autenticación pública para tokenización de Kushki"
+    },
+    {
+      "identifier": "APPROVAL",
+      "gateway": "kushki",
+      "description": "Estado nativo de transacción aprobada en tarjetas Kushki"
+    },
+    {
+      "identifier": "access_key",
+      "gateway": "rapyd",
+      "description": "Cabecera de autenticación pública/id en API de Rapyd"
+    },
+    {
+      "identifier": "salt",
+      "gateway": "rapyd",
+      "description": "Cabecera de sal/nonce en cálculo de firma de Rapyd"
+    },
+    {
+      "identifier": "CLO",
+      "gateway": "rapyd",
+      "description": "Estado nativo cerrado (closed checkout/payment) en Rapyd"
+    }
+  ],
+  "reports": [
+    {
+      "target": "prototypes/checkout-sin-solucion/src/payments",
+      "scannedFiles": 7,
+      "totalOccurrences": 18,
+      "distinctIdentifiersCount": 10,
+      "distinctIdentifiers": [
+        "CLO",
+        "Private-Merchant-Id",
+        "Public-Merchant-Id",
+        "acceptance_token",
+        "access_key",
+        "amount_in_cents",
+        "salt",
+        "total_amount",
+        "x-kushki-signature",
+        "x-signature"
+      ],
+      "totalMatches": 18,
+      "byGateway": {
+        "kushki": 4,
+        "mercadopago": 2,
+        "rapyd": 8,
+        "wompi": 4
+      },
+      "byIdentifier": {
+        "Public-Merchant-Id": 2,
+        "Private-Merchant-Id": 1,
+        "x-kushki-signature": 1,
+        "total_amount": 1,
+        "x-signature": 1,
+        "CLO": 1,
+        "salt": 6,
+        "access_key": 1,
+        "acceptance_token": 3,
+        "amount_in_cents": 1
+      },
+      "files": [
+        {
+          "file": "prototypes/checkout-sin-solucion/src/payments/browser/client.js",
+          "totalOccurrences": 1,
+          "distinctIdentifiersCount": 1,
+          "distinctIdentifiers": [
+            "Public-Merchant-Id"
+          ],
+          "totalMatches": 1,
+          "byGateway": {
+            "kushki": 1
+          },
+          "byIdentifier": {
+            "Public-Merchant-Id": 1
+          },
+          "matches": [
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/browser/client.js",
+              "line": 147,
+              "column": 53,
+              "identifier": "Public-Merchant-Id",
+              "gateway": "kushki",
+              "lineContent": "headers: { \"Content-Type\": \"application/json\", \"Public-Merchant-Id\": config.publicKey.trim() },"
+            }
+          ]
+        },
+        {
+          "file": "prototypes/checkout-sin-solucion/src/payments/gateway.ts",
+          "totalOccurrences": 0,
+          "distinctIdentifiersCount": 0,
+          "distinctIdentifiers": [],
+          "totalMatches": 0,
+          "byGateway": {},
+          "byIdentifier": {},
+          "matches": []
+        },
+        {
+          "file": "prototypes/checkout-sin-solucion/src/payments/index.ts",
+          "totalOccurrences": 0,
+          "distinctIdentifiersCount": 0,
+          "distinctIdentifiers": [],
+          "totalMatches": 0,
+          "byGateway": {},
+          "byIdentifier": {},
+          "matches": []
+        },
+        {
+          "file": "prototypes/checkout-sin-solucion/src/payments/kushki.ts",
+          "totalOccurrences": 3,
+          "distinctIdentifiersCount": 3,
+          "distinctIdentifiers": [
+            "Private-Merchant-Id",
+            "Public-Merchant-Id",
+            "x-kushki-signature"
+          ],
+          "totalMatches": 3,
+          "byGateway": {
+            "kushki": 3
+          },
+          "byIdentifier": {
+            "Public-Merchant-Id": 1,
+            "Private-Merchant-Id": 1,
+            "x-kushki-signature": 1
+          },
+          "matches": [
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/kushki.ts",
+              "line": 169,
+              "column": 16,
+              "identifier": "Public-Merchant-Id",
+              "gateway": "kushki",
+              "lineContent": "? { \"Public-Merchant-Id\": this.config.publicMerchantId }"
+            },
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/kushki.ts",
+              "line": 170,
+              "column": 16,
+              "identifier": "Private-Merchant-Id",
+              "gateway": "kushki",
+              "lineContent": ": { \"Private-Merchant-Id\": this.config.privateMerchantId }),"
+            },
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/kushki.ts",
+              "line": 304,
+              "column": 53,
+              "identifier": "x-kushki-signature",
+              "gateway": "kushki",
+              "lineContent": "const signature = headerValue(webhook.headers, \"x-kushki-signature\");"
+            }
+          ]
+        },
+        {
+          "file": "prototypes/checkout-sin-solucion/src/payments/mercadopago.ts",
+          "totalOccurrences": 2,
+          "distinctIdentifiersCount": 2,
+          "distinctIdentifiers": [
+            "total_amount",
+            "x-signature"
+          ],
+          "totalMatches": 2,
+          "byGateway": {
+            "mercadopago": 2
+          },
+          "byIdentifier": {
+            "total_amount": 1,
+            "x-signature": 1
+          },
+          "matches": [
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/mercadopago.ts",
+              "line": 210,
+              "column": 68,
+              "identifier": "total_amount",
+              "gateway": "mercadopago",
+              "lineContent": "const common = { type: \"online\", processing_mode: \"automatic\", total_amount: total, external_reference: request.orderReference };"
+            },
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/mercadopago.ts",
+              "line": 314,
+              "column": 53,
+              "identifier": "x-signature",
+              "gateway": "mercadopago",
+              "lineContent": "const signature = headerValue(webhook.headers, \"x-signature\");"
+            }
+          ]
+        },
+        {
+          "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
+          "totalOccurrences": 8,
+          "distinctIdentifiersCount": 3,
+          "distinctIdentifiers": [
+            "CLO",
+            "access_key",
+            "salt"
+          ],
+          "totalMatches": 8,
+          "byGateway": {
+            "rapyd": 8
+          },
+          "byIdentifier": {
+            "CLO": 1,
+            "salt": 6,
+            "access_key": 1
+          },
+          "matches": [
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
+              "line": 103,
+              "column": 11,
+              "identifier": "CLO",
+              "gateway": "rapyd",
+              "lineContent": "case \"CLO\":"
+            },
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
+              "line": 179,
+              "column": 11,
+              "identifier": "salt",
+              "gateway": "rapyd",
+              "lineContent": "const salt = randomBytes(8).toString(\"hex\");"
+            },
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
+              "line": 184,
+              "column": 39,
+              "identifier": "salt",
+              "gateway": "rapyd",
+              "lineContent": "`${method}${pathname}${search}${salt}${timestamp}${this.config.accessKey}${this.config.secretKey}${body}`,"
+            },
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
+              "line": 190,
+              "column": 9,
+              "identifier": "access_key",
+              "gateway": "rapyd",
+              "lineContent": "access_key: this.config.accessKey,"
+            },
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
+              "line": 191,
+              "column": 9,
+              "identifier": "salt",
+              "gateway": "rapyd",
+              "lineContent": "salt,"
+            },
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
+              "line": 307,
+              "column": 11,
+              "identifier": "salt",
+              "gateway": "rapyd",
+              "lineContent": "const salt = headerValue(webhook.headers, \"salt\") ?? \"\";"
+            },
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
+              "line": 307,
+              "column": 48,
+              "identifier": "salt",
+              "gateway": "rapyd",
+              "lineContent": "const salt = headerValue(webhook.headers, \"salt\") ?? \"\";"
+            },
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/rapyd.ts",
+              "line": 312,
+              "column": 35,
+              "identifier": "salt",
+              "gateway": "rapyd",
+              "lineContent": "`${this.config.webhookUrl}${salt}${timestamp}${this.config.accessKey}${this.config.secretKey}${webhook.rawBody}`,"
+            }
+          ]
+        },
+        {
+          "file": "prototypes/checkout-sin-solucion/src/payments/wompi.ts",
+          "totalOccurrences": 4,
+          "distinctIdentifiersCount": 2,
+          "distinctIdentifiers": [
+            "acceptance_token",
+            "amount_in_cents"
+          ],
+          "totalMatches": 4,
+          "byGateway": {
+            "wompi": 4
+          },
+          "byIdentifier": {
+            "acceptance_token": 3,
+            "amount_in_cents": 1
+          },
+          "matches": [
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/wompi.ts",
+              "line": 203,
+              "column": 53,
+              "identifier": "acceptance_token",
+              "gateway": "wompi",
+              "lineContent": "const token = json?.data?.presigned_acceptance?.acceptance_token;"
+            },
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/wompi.ts",
+              "line": 205,
+              "column": 63,
+              "identifier": "acceptance_token",
+              "gateway": "wompi",
+              "lineContent": "throw new PaymentTechnicalError(\"Respuesta de Wompi sin acceptance_token válido\");"
+            },
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/wompi.ts",
+              "line": 234,
+              "column": 7,
+              "identifier": "amount_in_cents",
+              "gateway": "wompi",
+              "lineContent": "amount_in_cents: amountInCents,"
+            },
+            {
+              "file": "prototypes/checkout-sin-solucion/src/payments/wompi.ts",
+              "line": 238,
+              "column": 7,
+              "identifier": "acceptance_token",
+              "gateway": "wompi",
+              "lineContent": "acceptance_token: acceptanceToken,"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "prototypes/checkout-con-sdk-front-back/src/payments",
+      "scannedFiles": 3,
+      "totalOccurrences": 0,
+      "distinctIdentifiersCount": 0,
+      "distinctIdentifiers": [],
+      "totalMatches": 0,
+      "byGateway": {},
+      "byIdentifier": {},
+      "files": [
+        {
+          "file": "prototypes/checkout-con-sdk-front-back/src/payments/browser/client.js",
+          "totalOccurrences": 0,
+          "distinctIdentifiersCount": 0,
+          "distinctIdentifiers": [],
+          "totalMatches": 0,
+          "byGateway": {},
+          "byIdentifier": {},
+          "matches": []
+        },
+        {
+          "file": "prototypes/checkout-con-sdk-front-back/src/payments/gateways.ts",
+          "totalOccurrences": 0,
+          "distinctIdentifiersCount": 0,
+          "distinctIdentifiers": [],
+          "totalMatches": 0,
+          "byGateway": {},
+          "byIdentifier": {},
+          "matches": []
+        },
+        {
+          "file": "prototypes/checkout-con-sdk-front-back/src/payments/index.ts",
+          "totalOccurrences": 0,
+          "distinctIdentifiersCount": 0,
+          "distinctIdentifiers": [],
+          "totalMatches": 0,
+          "byGateway": {},
+          "byIdentifier": {},
+          "matches": []
+        }
+      ]
+    }
+  ]
+}

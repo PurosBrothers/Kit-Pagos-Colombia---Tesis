@@ -83,10 +83,6 @@ export const GatewayCredentialHeaders = {
     type: "string",
     description: "Secreto de integridad (solo Wompi).",
   },
-  "x-gateway-webhook-secret": {
-    type: "string",
-    description: "Secreto de firma de webhooks.",
-  },
 } as const;
 
 // ---------------------------------------------------------------------------

@@ -30,6 +30,7 @@
     "test:sandbox": "jest --config jest.sandbox.config.js",
     "lint": "eslint .",
     "metrics": "ts-node --project scripts/tsconfig.json scripts/ck-metrics.ts",
+    "metrics:concepts": "ts-node --project scripts/tsconfig.json scripts/native-concepts.ts",
     "check:readme": "ts-node --project scripts/tsconfig.json scripts/check-readme.ts",
     "check:published": "ts-node --project scripts/tsconfig.json scripts/check-published-package.ts"
   },

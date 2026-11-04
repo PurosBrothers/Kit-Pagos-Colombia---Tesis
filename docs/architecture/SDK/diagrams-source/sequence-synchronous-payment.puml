@@ -15,17 +15,21 @@ Facade -> Kushki : createPayment(request)
 Kushki -> API : POST /card/v1/charges
 
 alt Pago aprobado
-  API --> Kushki : HTTP 201\ntransaction_status = APPROVAL
-  Kushki --> Facade : rawResponse
-  Facade --> Comercio : Transaction(APPROVED)
+  API --> Kushki : HTTP 201
+  rnote over Kushki: transaction_status = APPROVAL
+  Kushki -> Kushki : ResponseNormalizer.normalize(rawResponse, gateway)
+  Kushki --> Facade : PaymentResult
+  Facade --> Comercio : PaymentResult(TRANSACTION: status=APPROVED)
 else Pago rechazado
-  API --> Kushki : HTTP 402\ntransaction_status = DECLINED
-  Kushki --> Facade : rawResponse
-  Facade --> Comercio : Transaction(DECLINED)
+  API --> Kushki : HTTP 402
+  rnote over Kushki: transaction_status = DECLINED
+  Kushki -> Kushki : ResponseNormalizer.normalize(rawResponse, gateway)
+  Kushki --> Facade : PaymentResult
+  Facade --> Comercio : PaymentResult(TRANSACTION: status=DECLINED)
 else Error tecnico
   API --> Kushki : HTTP 500
   Kushki --> Facade : error nativo
-  Facade --> Comercio : throw SdkError(GATEWAY_SERVER_ERROR)
+  Facade --> Comercio : throw KitPagosError(GATEWAY_SERVER_ERROR)
 end
 
 note over Comercio, API

@@ -1,0 +1,83 @@
+\section{Administración del Proyecto}
+
+La administración del proyecto define los mecanismos utilizados para planificar, coordinar y controlar la ejecución del Kit Pagos Colombia a lo largo de todas sus fases. Esta sección describe cómo se estimará el esfuerzo, cómo se pondrá en marcha el entorno de trabajo y cómo se organizarán las actividades, recursos y responsabilidades necesarias para garantizar el cumplimiento de los objetivos del proyecto.
+
+\subsection{Métodos y Herramientas de Estimación}
+
+La estimación del proyecto se realizó sobre dos dimensiones: el tamaño del software y el esfuerzo requerido para producirlo. Las estimaciones de tamaño y esfuerzo se consolidaron inicialmente en Google Spreadsheets, utilizando tablas de descomposición de componentes y distribución de carga por fase. GitHub Projects se utilizó complementariamente para hacer seguimiento al avance real frente a las estimaciones iniciales durante la ejecución del proyecto.
+
+\subsubsection{Estimación del tamaño del software}
+
+Se empleó estimación por conteo de componentes, partiendo de la arquitectura ya definida en la Fase 3. Este método consiste en identificar los módulos principales del sistema, asignarles una complejidad relativa y derivar de ahí un volumen de trabajo estimado en clases y módulos TypeScript.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\SinNumero
+\begin{longtable}{|P{0.243}|P{0.514}|P{0.243}|}
+  \hline
+  Componente & Descripción & Clases/módulos estimados \\
+  \hline
+  \endfirsthead
+  \hline
+  Componente & Descripción & Clases/módulos estimados \\
+  \hline
+  \endhead
+  Núcleo del SDK & Modelo de dominio, interfaces de puerto, lógica de normalización & 8–12 \\
+  \hline
+  Adaptador Wompi & Implementación de puertos para Wompi & 4–6 \\
+  \hline
+  Adaptador PayU & Implementación de puertos para PayU & 4–6 \\
+  \hline
+  Adaptador Mercado Pago & Implementación de puertos para Mercado Pago & 4–6 \\
+  \hline
+  Adaptador Kushki & Implementación de puertos para Kushki & 4–6 \\
+  \hline
+  API de simulación & Controladores Fastify, manejadores de escenarios & 8–12 \\
+  \hline
+  Infraestructura de pruebas & Suites Jest para núcleo, adaptadores y API & 10–15 \\
+  \hline
+  Total &  & 42–63 \\
+  \hline
+\end{longtable}
+\end{center}
+
+Estimación del esfuerzo del proyecto
+
+Se combinaron juicio de expertos y estimación por analogía. El referente es el trabajo de Manuaba e Hisyam (2022), que integró dos pasarelas de pago en condiciones similares. El Kit Pagos Colombia integra cuatro pasarelas, añade la API de simulación y el componente de evaluación con métricas CK, lo que representa aproximadamente el doble de la complejidad del referente.
+
+El aumento en la complejidad frente al referente no se debe únicamente a que el proyecto integra cuatro pasarelas en lugar de dos. El framework también incluye componentes adicionales que incrementan el esfuerzo de desarrollo, como la API de simulación, las pruebas automatizadas, la documentación técnica generada para el SDK y el proceso de evaluación mediante métricas CK. Además, la arquitectura hexagonal adoptada requiere definir previamente los contratos y la estructura del núcleo antes de implementar los adaptadores, lo que añade trabajo de diseño y validación técnica durante las primeras fases del proyecto.
+
+\begin{enumerate}
+  \item Cada integrante destina en promedio 12 horas semanales durante las 18 semanas del semestre, resultando en 864 horas-persona de esfuerzo total. La distribución por fase es la siguiente:
+\end{enumerate}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\SinNumero
+\begin{longtable}{|P{0.329}|P{0.157}|P{0.222}|}
+  \hline
+  Fase DSR & Porcentaje & Horas estimadas \\
+  \hline
+  \endfirsthead
+  \hline
+  Fase DSR & Porcentaje & Horas estimadas \\
+  \hline
+  \endhead
+  Identificación del problema & 10 \% & 87 \\
+  \hline
+  Definición de objetivos & 8 \% & 69 \\
+  \hline
+  Diseño & 12 \% & 104 \\
+  \hline
+  Desarrollo iterativo & 45 \% & 389 \\
+  \hline
+  Demostración y evaluación & 15 \% & 130 \\
+  \hline
+  Comunicación & 10 \% & 85 \\
+  \hline
+  Total & 100 \% & 864 \\
+  \hline
+\end{longtable}
+\end{center}
+
+El seguimiento del esfuerzo real frente al estimado se realiza en Google Spreadsheets, donde cada integrante registra sus horas al cierre de cada semana y el coordinador las compara con las horas proyectadas por fase. La tasa de completitud del backlog en GitHub Projects actúa como indicador proxy del avance: si el porcentaje de ítems completados es coherente con las horas consumidas, la estimación se considera válida. Una desviación superior al 20\% entre esfuerzo real y proyectado activa una revisión en la reunión semanal.

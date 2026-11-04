@@ -4247,7 +4247,39 @@ Así, los paneles se configuran una sola vez. Se descartaron dos opciones:
 
 El plan está en `prototypes/README.md`, «Los webhooks reales, en vivo». Kushki se muestra con el simulador local, por decisión de Joan del mismo día.
 
-**Estado:** El origen nuevo quedó medido en las cuatro pasarelas, con B, C y D. Falta ensayar el plan de los webhooks en vivo: Joan crea la cuenta de ngrok y registra su dominio en los paneles de Wompi, Mercado Pago y Rapyd.
+**El ensayo del plan (#165).** Joan creó su cuenta gratuita de ngrok y registró el dominio en los tres paneles. Los ids de cada orden y la traza están en los comentarios de resultados del #165.
+
+- **ngrok sin Homebrew.** La máquina del ensayo no tenía Homebrew. Se instaló el binario oficial de ngrok.com para macOS en `~/bin`, sin `sudo`, y se comprobó la firma de Apple: «Developer ID Application: ngrok, Inc. (TEX8MHRDQ9)». La versión fue la 3.39.13.
+- **El dominio** asignado termina en `.ngrok-free.dev`, y no en `.ngrok-free.app` como decía el README. `ngrok http 4000` lo usa sin indicarlo.
+- **Kushki con el simulador local** (29 de octubre de 2026, hora de Colombia), en A, B y D:
+  - la tarjeta nace aprobada y el simulador solo emite cuando un pago cambia de estado, así que su aviso se disparó con `POST /v1/sim/webhooks/trigger`;
+  - el PSE pasó a `approvedTransaction` en la primera consulta, y el simulador avisó solo;
+  - los dos casos dejaron `webhook: APPROVED` con su estado nativo, y la tienda respondió 200.
+
+  El `.env` no traía `KUSHKI_WEBHOOK_SECRET`, que el simulador y las tiendas necesitan iguales para firmar y verificar. Ahora el `.env` de Joan lleva un valor.
+- **Los webhooks reales**, el 2 de noviembre de 2026 entre las 01:50 y las 02:28 (hora de Colombia), con cada prototipo en el puerto 4000 detrás del túnel:
+
+  | | Wompi, tarjeta | Mercado Pago, tarjeta | Rapyd, tarjeta en su página | Rapyd, PSE |
+  |---|---|---|---|---|
+  | B | `APPROVED` | `APPROVED (processed)` | un `PENDING (ACT)` y dos `APPROVED (CLO)` | `PENDING (ACT)` y `APPROVED (CLO)` |
+  | D | `APPROVED` | `APPROVED (processed)` | dos `PENDING (ACT)` y un `APPROVED (CLO)` | `PENDING (ACT)` y `APPROVED (CLO)` |
+  | A | `APPROVED` | `APPROVED (processed)` | un `PENDING (ACT)` y dos `APPROVED (CLO)` | no se probó |
+
+  El inspector de ngrok registró 19 avisos, todos con `200`. Las notificaciones de Mercado Pago vinieron de la aplicación del vendedor de prueba (`…0415`) y verificaron con la clave del `.env`. La página de advertencia del plan gratuito no se interpuso: los avisos llegaron con el agente de cada pasarela (`Faraday`, `MercadoPago WebHook v1.0 order`, `axios`), no con el de un navegador.
+- **En la red de la sustentación**, el mismo 2 de noviembre entre las 13:24 y las 13:28, con B, el mismo túnel y los mismos paneles:
+  - Wompi llegó como `APPROVED`, Mercado Pago como `APPROVED (processed)`, y la tarjeta de Rapyd como un `PENDING (ACT)` y dos `APPROVED (CLO)`;
+  - el inspector registró 5 avisos, todos con `200`;
+  - `localtest.me`, los sandboxes, Render y el agente de ngrok respondieron igual que en la red de Joan.
+
+Lo que no estaba en el plan:
+
+- **Desde la máquina del ensayo no se abre la URL pública.** `curl` a esa URL termina en `Connection reset by peer` durante el TLS. Desde afuera la misma URL responde, y los avisos entraron porque vienen de los servidores de cada pasarela. Pasó igual en la red de Joan y en la de la sustentación, así que lo más probable es que lo corten los controles corporativos de la máquina, y no la red. No se comprobó desde otra máquina. Mientras tanto, la URL pública no se puede abrir en el navegador de esa máquina.
+- **B y D precargan la tarjeta 4242 para las cuatro pasarelas.** Para Mercado Pago hay que escribir la suya (4013 5406 8274 6260, `APRO Ruiz`); A la cambia sola.
+- **El simulador escribía en su log las credenciales nativas de Kushki.** Su serializador solo ocultaba `authorization` y las cabeceras `x-gateway-*`, y Kushki manda las suyas como `Private-Merchant-Id` y `Public-Merchant-Id`: el log del ensayo las guardó con su valor. Joan decidió arreglarlo en el mismo PR con una lista de cabeceras permitidas (`LOGGABLE_HEADERS`): el log solo escribe con su valor las cabeceras inofensivas conocidas y oculta las demás, también las de una pasarela futura.
+  - Se descartó ampliar la lista de prohibidas, `SENSITIVE_HEADERS`. La ruta de webhooks de la API REST la usa para quitar las credenciales antes de verificar una firma, y agregar ahí `access_key` o `signature`, de Rapyd, habría roto esa verificación.
+  - Los logs de Render no se revisaron. Si alguien usó Render en modo simulador con las llaves de UAT de Kushki, pueden estar ahí, y también el `access_key` de Rapyd, que el log viejo tampoco ocultaba. La revisión queda en el #188, para Joshua, que tiene el acceso al panel de Render.
+
+**Estado:** El origen nuevo quedó medido en las cuatro pasarelas, con B, C y D. El plan de los webhooks en vivo quedó ensayado con A, B y D (#165), también en la red de la sustentación con B, y el log del simulador se corrigió en el mismo PR. Falta revisar los logs de Render (#188).
 
 ### 121. Las notificaciones de Mercado Pago en sandbox las firma la aplicación del vendedor de prueba (PR #162)
 
@@ -4434,7 +4466,13 @@ Los webhooks reales del sandbox no se midieron en A; en B y D sí (punto 121). S
 
 **Lo que agregó Joshua el 25 de octubre de 2026** (`3d48f31`): al elegir la pasarela, la página precarga su tarjeta aprobada, y en Mercado Pago, el titular `APRO Ruiz`, que es el que aprueba. La revisión le quitó un segundo `listener` del selector, que duplicaba el del formulario y pedía dos veces los bancos de PSE.
 
-**Estado:** Resuelto en la rama del #163 y medido. A entra en la matriz de prototipos de `.github/workflows/ci.yml` en el mismo PR, y lo aprueba Henao. Los webhooks reales de A quedan para el #165.
+**Estado:** Resuelto en la rama del #163 y medido. A entra en la matriz de prototipos de `.github/workflows/ci.yml` en el mismo PR, y lo aprueba Henao. Los webhooks reales de A se ensayaron el 2 de noviembre de 2026 por el dominio de ngrok (#165, punto 120), y A se comportó como B:
+
+- Wompi dejó `webhook: APPROVED`;
+- Mercado Pago dejó `webhook: APPROVED (processed)`;
+- la tarjeta de Rapyd dejó un `PENDING (ACT)` y dos `APPROVED (CLO)`, los tres encontrados por la referencia de la orden.
+
+Kushki se probó con el simulador local.
 
 ### 124. Las letras de los prototipos: A es el del SDK solo en el servidor, y D el que no usa la solución (PR #163)
 
@@ -4476,7 +4514,62 @@ Las listas de letras quedaron en orden («B y D»), salvo las que se emparejan c
   - el plan de evaluación, la guía de medición, la metodología y los objetivos de la tesis, cuya tabla de prototipos se reordenó de A a D y corrigió la fila de A, que seguía «por construir»;
   - este registro.
 
-**Estado:** Resuelto en el #163.
+**Lo que quedó cruzado** lo encontró el ensayo del #165: las claves del carrito en `localStorage`. A usaba `kit-pagos-prototipo-d:cart` y D usaba `kit-pagos-prototipo-a:cart`. No chocaban, porque son distintas, pero no correspondían a la letra. Se corrigieron en el PR del #165.
+
+**Estado:** Resuelto en el #163, y las claves del carrito en el #165.
+
+### 125. La API de Simulación tiene dos superficies REST y tres patrones de integración (issue #108)
+
+**Responsable:** David (issue #108; PR de esta implementación pendiente de asociar).
+
+**Contexto.** La iteración de la API REST agregó al proceso existente de `simulator-api` una segunda responsabilidad: además de imitar las APIs de las cuatro pasarelas bajo `/v1/sim`, expone las operaciones propias de Kit Pagos bajo `/v1/api`. Ambas superficies comparten Fastify, puerto y despliegue. La descripción anterior del SAD solo presentaba el simulador de pasarelas, y la sección 3.6 de `layers-and-components.md` todavía afirmaba que RF-13 y OpenAPI estaban pendientes.
+
+**Decisión 1: extender `simulator-api` y conservar una frontera de módulos explícita.** La alternativa era crear un paquete o servicio separado (por ejemplo, `rest-api/`) que dependiera del SDK y dejar al simulador dedicado exclusivamente a imitar pasarelas. Se descartó porque el requerimiento era extender el simulador existente como parte natural de la solución, no crear un sistema paralelo. La contrapartida —un proceso con dos responsabilidades distintas— se contiene en `simulator-api/src/kit-pagos-api/`: el módulo traduce HTTP a llamadas de `KitPagos`, mientras `simulator-api/src/routes/` mantiene las rutas de simulación. CORS también se registra en el plugin REST para no cambiar las respuestas de `/v1/sim`.
+
+**Decisión 2: la llamada de regreso a `/v1/sim` es HTTP, no un ciclo de dependencias.** El SDK, si no recibe `baseUrl`, dirige sus adaptadores al simulador local en `http://localhost:3000/v1/sim/<pasarela>`. Por ello, una solicitud a `/v1/api` puede entrar al SDK y volver por HTTP a `/v1/sim` en el mismo proceso. No existe un ciclo de dependencias entre paquetes: el SDK no depende de `simulator-api`; solo realiza una solicitud HTTP al destino configurado. Este recorrido permite probar Kit Pagos completo por HTTP sin instalar el SDK en el frontend ni disponer de credenciales de una pasarela.
+
+**Decisión 3: registrar los tres patrones de integración, sin confundir lo implementado con lo futuro.**
+
+| Patrón | Flujo | Estado |
+|---|---|---|
+| P1 | Backend del comercio → SDK → pasarela | Existente; no cambia con esta iteración. |
+| P2 | Frontend → REST `/v1/api` → SDK → pasarela | Implementado en esta iteración; el SDK puede llamar por HTTP a `/v1/sim` para las pruebas locales. |
+| P3 | Frontend → SDK unificado de pasarelas | El flujo integral no está implementado. `KitPagosBrowser` tokeniza con Wompi, Mercado Pago y Kushki, pero no sustituye la integración de pagos del backend; Rapyd requiere checkout alojado. El issue #110 investigó su viabilidad. |
+
+**Decisión 4: registrar el estado parcial del beneficio de DA-02.** DA-02 justificó Fastify, entre otros motivos, porque `@fastify/swagger` permitiría generar OpenAPI automáticamente. Ese supuesto no se verificó durante dos iteraciones: ninguna de las 23 rutas existentes entonces declaraba `schema`, por lo que Swagger no tenía metadatos de ruta que publicar. El PR #146 (issue #105) implementó el registro de `@fastify/swagger` y `@fastify/swagger-ui`, y las rutas de `/v1/api` declaran sus schemas en `kit-pagos-api/openapi/schemas.ts`; la documentación se sirve en `/docs`, `/docs/json` y `/docs/yaml`. Sin embargo, las rutas de `/v1/sim` siguen sin declarar schemas: #106 y #107 permanecen abiertos para completar esa cobertura, así que RF-13 no debe marcarse como completamente implementado. El nombre concreto del componente en el código es `registerOpenApi` dentro de `kit-pagos-api/openapi/register.ts`, no una clase `OpenAPIProvider`.
+
+**Decisión 5: modelo de credenciales.** Se conserva el modelo híbrido del punto 63: credenciales del servidor como perfil predeterminado y credenciales del cliente por cabeceras `x-gateway-*` como opción; el cliente nunca puede proporcionar `webhookSecret`. No se exige repetir secretos por petición cuando puede utilizarse el perfil del servidor.
+
+**Lo medido.** La implementación registra `/v1/api` como plugin con prefijo y registra la documentación OpenAPI al construir la aplicación Fastify. Las rutas REST publican schemas para validación y generación de OpenAPI. No se afirman cifras de comparación entre patrones: las cifras de comparación formal corresponden al experimento de la Fase 5 y aún no existen.
+
+**Estado:** Resuelto en `layers-and-components.md`, la matriz de trazabilidad, los objetivos y las fuentes PlantUML de contexto, contenedores y componentes. Los tres PNG del repositorio se regeneraron desde esas fuentes y reemplazaron las figuras anteriores. OpenAPI y los schemas de `/v1/api` están implementados; la cobertura de `/v1/sim` sigue pendiente en #106 y #107. El SAD original es externo al repositorio; las instrucciones y el texto propuesto para actualizarlo están en [`sad-update-rest-api.md`](sad-update-rest-api.md). Las figuras embebidas en ese documento externo deben reemplazarse al aplicar el texto propuesto. El punto 14 duplicado ya fue renumerado a 76 en el punto 75. Una búsqueda de `punto 14` en `sdk/src`, `simulator-api/src` y `examples/` no encontró citas de código dependientes de la numeración.
+
+### 126. El SRS, el SAD y el plan de pruebas comparten un estilo LaTeX, y la memoria no compilaba sin errores (issue #167)
+
+**Responsable:** Orduz.
+
+**Contexto.** El SRS y el SAD existían como PDF fuera del repositorio (sus metadatos dicen «Google Docs Renderer»), y el plan de pruebas parte de la plantilla PTP, que pide en la portada la versión y un logo, y una tabla de historial de cambios. El issue #167 pide llevar los tres a LaTeX con el formato de esos originales, una carpeta por documento en `docs/final-doc/`, renombrar `latex-project/` a `memoria/` y compilar los cuatro PDF en la CI. El estilo quedó en `docs/final-doc/comun/estilo.tex`; cómo se usa y cómo se compila está en `docs/final-doc/README.md`.
+
+**Decisión 1: pdfLaTeX con `tgtermes` y `tgheros`, no `fontspec`.** El issue pedía TeX Gyre Termes y Heros en lugar de Times New Roman y Arial. Cargarlas con `fontspec` obliga a XeLaTeX o LuaLaTeX, y la memoria se compila con pdfLaTeX. Joan decidió el 28 de octubre de 2026 usar pdfLaTeX en los cuatro documentos, para que la CI tenga una sola cadena. En los originales, Arial solo aparece en las viñetas del SAD y en espacios al final de las líneas del índice del SRS; el texto visible es Times. Por eso Heros queda como la familia sin serifas y no aparece en los PDF mientras ningún texto la use.
+
+**Decisión 2: el logo sale del vector que publica la universidad, no de la imagen de los originales.** Los PDF originales traen el logo como un PNG de 300 × 412 píxeles en escala de grises. El manual de identidad visual pide el azul institucional siempre que sea posible, admite el negro al 100 % y no permite tonos de gris. Se recortó en vector la versión vertical de `lPUJ Colombia.ai` y se dejó en azul, como decidió Joan el 28 de octubre de 2026.
+
+**Decisión 3: la memoria carga `babel` una sola vez.** `main.tex` traía `\usepackage[spanish]{babel}` y, en la línea siguiente, `\usepackage[spanish, es-lcroman]{babel}`. LaTeX se detiene en la segunda con «Option clash for package babel»: con `-halt-on-error`, que es lo que corre la CI, no hay PDF y `latexmk` sale con código 12. Sin esa opción, pdfLaTeX sigue después del error, ignora la segunda línea y produce el documento. Se quitó la segunda línea porque deja la memoria idéntica a lo que producía hasta ahora. Quitar la primera habría activado `es-lcroman` y cambiado once páginas de los preliminares.
+
+**Decisión 4: la compilación va en un workflow propio, `final-doc.yml`.** La [sintaxis de workflows](https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions) solo admite `paths` bajo `on.<push|pull_request>`, para el workflow entero. Dentro de `ci.yml`, no compilar LaTeX en cada PR exigía un job previo que comparara la base del PR con `HEAD` en `docs/final-doc`. En un workflow aparte basta con `paths`: corre cuando un PR hacia `devops` o `main`, o un push a esas ramas, cambia `docs/final-doc/**` o el propio workflow. Joan eligió el workflow aparte el 28 de octubre de 2026. Usa `texlive/texlive:latest` y las acciones en `@v4`, como `ci.yml`, que no cambia.
+
+**Decisión 5: versión 0.1 hasta la entrega.** Las portadas y el historial llevan la 0.1 y «octubre de 2026» mientras los documentos se escriben, y pasan a 1.0, con la fecha de entrega, cuando se entreguen. Lo decidió Joan el 28 de octubre de 2026.
+
+**Lo medido**, el 28 de octubre de 2026, con TinyTeX v2026.10 (TeX Live 2026, `latexmk` 4.88) y los comandos del job:
+
+| Documento | Resultado |
+|---|---|
+| `srs`, `sad`, `pruebas` | 4 páginas cada uno, sin avisos en el log. Solo incrustan TeX Gyre Termes, normal y negrita. Las líneas de la portada quedan a menos de 1 punto de su altura en el SRS original. |
+| `memoria` | 23 páginas. Comparada con la de `latex-project/` en `devops` (`e569dee`), compilada sin `-halt-on-error`: ninguna diferencia de píxel a 150 ppp. |
+
+TinyTeX necesitó diez paquetes además de los que trae (la lista está en el README). La imagen de la CI trae TeX Live completo y no los necesita. El workflow no se ha ejecutado en GitHub Actions: su YAML pasó `actionlint` 1.7.12.
+
+**Estado:** Implementado en el PR del #167. Faltan la primera ejecución de `final-doc.yml` en GitHub Actions y el visto bueno de David al cambio de `babel` en la memoria.
 
 ### 109. Los schemas de las rutas de simulación validan y documentan, pero no reescriben la petición ni la respuesta (issue #106, PR #137)
 
@@ -4900,6 +4993,18 @@ con la que se dibujaron.
 (ver el mapeo de reemplazo completo entregado por chat, con la sección exacta del `.docx` para
 cada figura). Cada responsable de sección (ver tabla de la Sección A) debe reemplazar la imagen
 correspondiente por el PNG regenerado.
+
+### Issue #108 — Figuras de contexto, contenedores y componentes de la API de Simulación
+
+**Encontrado:** los diagramas existentes mostraban la API de Simulación únicamente como simulador de pasarelas y no distinguían la nueva superficie `/v1/api` de las rutas `/v1/sim`. Las figuras del SAD externo también necesitan esa actualización.
+
+**Estado:** Resuelto. Las fuentes `context-diagram.puml`, `container-diagram.puml` y `component-diagram.puml` de `docs/architecture/Simulador API/diagrams-source/` muestran las dos superficies, la llamada local a `KitPagos`, el retorno HTTP del SDK a `/v1/sim` y los patrones de integración implementados y futuro. Los PNG correspondientes se regeneraron localmente con PlantUML y reemplazaron los diagramas del repositorio:
+
+- `Context Diagram - C4.png`
+- `Container Diagram - C4.png`
+- `Component Diagram - C4.png`
+
+El SAD original sigue siendo externo al repositorio; al trasladar la propuesta de [`sad-update-rest-api.md`](sad-update-rest-api.md), se deben reemplazar allí las tres figuras embebidas por estas versiones regeneradas.
 
 ---
 

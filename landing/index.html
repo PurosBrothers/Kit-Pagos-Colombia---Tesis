@@ -1023,7 +1023,7 @@
               Con <code>kit-pagos-colombia/browser</code> el formulario de la tarjeta es tuyo, y un script malicioso en tu página podría leer el número antes de que se tokenice. Lo que lo limita es una cabecera <code>Content-Security-Policy</code>, y esa la manda tu servidor, no el SDK. El SDK tampoco decide el monto: cobra lo que le pides, así que el precio lo pone tu servidor con su catálogo.
             </p>
             <p class="limit-text">
-              Los tres prototipos del proyecto no mandan esa cabecera, y en el que corre solo en el navegador el monto lo decide la página. Son demostraciones contra los sandboxes, no plantillas para producción. La política medida con Wompi, Mercado Pago y Kushki, y lo demás que le toca al comercio, está en la <a href="https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/blob/devops/docs/03-sdk/4-guia-de-implementacion.md#9-lo-que-el-sdk-no-puede-hacer-por-el-comercio" target="_blank" rel="noopener noreferrer">guía de implementación, §9</a>.
+              Los cuatro prototipos del proyecto no mandan esa cabecera, y en el que corre solo en el navegador (el C) el monto lo decide la página. Son demostraciones contra los sandboxes, no plantillas para producción. La política medida con Wompi, Mercado Pago y Kushki, y lo demás que le toca al comercio, está en la <a href="https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/blob/devops/docs/03-sdk/4-guia-de-implementacion.md#9-lo-que-el-sdk-no-puede-hacer-por-el-comercio" target="_blank" rel="noopener noreferrer">guía de implementación, §9</a>.
             </p>
           </div>
         </div>
@@ -1226,6 +1226,38 @@ cd ../examples &amp;&amp; npm install &amp;&amp; npm run simulate:wompi</code></
             <a href="https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis" target="_blank" rel="noopener noreferrer" class="doc-link">
               <span class="doc-link-title">Repositorio en GitHub</span>
               <span class="doc-link-desc">Código fuente con licencia Apache-2.0</span>
+              <span class="doc-link-arrow">↗</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="academic-panel" id="prototipos">
+          <div class="academic-text">
+            <h3 class="academic-subtitle">Los cuatro prototipos</h3>
+            <p>
+              Para medir el aporte del SDK construimos el mismo checkout de comercio electrónico de cuatro maneras. Todos cobran con las cuatro pasarelas (Wompi, Mercado Pago, Kushki y Rapyd), con tarjeta y con PSE, contra sus sandboxes oficiales. El <strong>experimento compara D, el control, contra B, el tratamiento</strong>; A y C son demostraciones de alcance.
+            </p>
+          </div>
+
+          <div class="academic-links-grid">
+            <a href="https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/tree/devops/prototypes/checkout-con-sdk-solo-back" target="_blank" rel="noopener noreferrer" class="doc-link">
+              <span class="doc-link-title">A · SDK solo en el servidor</span>
+              <span class="doc-link-desc">Nuestro prototipo original. La tarjeta no pasa por el módulo de navegador del SDK. Fuera del experimento</span>
+              <span class="doc-link-arrow">↗</span>
+            </a>
+            <a href="https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/tree/devops/prototypes/checkout-con-sdk-front-back" target="_blank" rel="noopener noreferrer" class="doc-link">
+              <span class="doc-link-title">B · SDK en servidor y navegador</span>
+              <span class="doc-link-desc">Nuestro primer valor agregado: <code>KitPagos</code> y <code>KitPagosBrowser</code>. Es el tratamiento del experimento</span>
+              <span class="doc-link-arrow">↗</span>
+            </a>
+            <a href="https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/tree/devops/prototypes/checkout-frontend-rest" target="_blank" rel="noopener noreferrer" class="doc-link">
+              <span class="doc-link-title">C · Frontend contra la API REST</span>
+              <span class="doc-link-desc">Otro valor agregado: el navegador cobra contra <code>/v1/api</code> sin servidor de pagos propio. Fuera del experimento</span>
+              <span class="doc-link-arrow">↗</span>
+            </a>
+            <a href="https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/tree/devops/prototypes/checkout-sin-solucion" target="_blank" rel="noopener noreferrer" class="doc-link">
+              <span class="doc-link-title">D · Sin solución (control)</span>
+              <span class="doc-link-desc">Integración a mano con <code>fetch</code> contra la API nativa de cada pasarela. Con él se comparan las métricas</span>
               <span class="doc-link-arrow">↗</span>
             </a>
           </div>

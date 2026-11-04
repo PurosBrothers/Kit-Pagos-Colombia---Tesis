@@ -1,0 +1,7 @@
+\section{Modelo de datos}
+Kit Pagos Colombia no tiene un modelo de datos persistente que documentar en esta sección. No hay que confundirlo con el modelo de dominio de la sección 3: ese modelo describe estructuras que viven en memoria durante una sola llamada al SDK (Transaction, Amount, Currency, etc.). Esta sección, en cambio, habla de datos que el sistema guardaría de forma duradera entre solicitudes, y ese tipo de almacenamiento no existe en ninguno de los tres componentes del proyecto.
+
+El SDK Unificado no guarda estado entre invocaciones. Como se explica en la vista física (sección 11), el SDK se distribuye como paquete de npm y se instala e importa directamente en la aplicación del comercio que lo usa. Por eso no tiene ciclo de despliegue propio ni infraestructura que documentar. Sus once componentes (sección 9.1) trabajan solo con los datos que reciben en cada llamada: el Payment Facade devuelve una entidad Transaction que el Response Normalizer construye en memoria a partir de la respuesta de la pasarela. Ningún componente escribe ni consulta un repositorio de datos.
+
+La API de Simulación tampoco necesita persistencia. Sus seis componentes (sección 9.2) resuelven cada petición de forma determinista usando la información que viene en la propia solicitud, en concreto los headers \texttt{x-simulate-\allowbreak scenario} y \texttt{x-simulate-\allowbreak delay}. No guarda historial entre solicitudes ni mantiene estado compartido.
+

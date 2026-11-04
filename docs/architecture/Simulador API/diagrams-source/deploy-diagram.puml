@@ -14,12 +14,12 @@ rectangle "**Aplicacion del Comercio (SDK embebido)**\n\nNode.js — Fuera de al
 
 rectangle "Plataforma Cloud (Render)\n[Platform as a Service]" as Cloud #FFFFFF {
   rectangle "Instancia de Aplicacion\n[Node.js 18+ Runtime]" as Instance #FFFFFF {
-    rectangle "**API de Simulacion**\n<i>[Fastify / TypeScript]</i>\n\nReplica el comportamiento\nde Wompi, Rapyd, Mercado\nPago y Kushki. Expone\n/v1/sim/{pasarela}/*,\n/v1/sim/webhooks/trigger y\n/docs (OpenAPI 3.0)" as API #2E75B6
+    rectangle "**API de Simulacion**\n<i>[Fastify / TypeScript]</i>\n\nReplica el comportamiento\nde Wompi, Rapyd, Mercado\nPago y Kushki. Expone\ndos superficies: /v1/sim\n(simulador pasarelas) y\n/v1/api (REST SDK).\nAdemas /v1/sim/webhooks/trigger\ny /docs (OpenAPI 3.0)" as API #2E75B6
   }
 }
 
 Dev --> API : Explora endpoints,\nprueba escenarios y\ndispara webhooks\n[HTTPS/REST]
-Comercio --> API : Envia solicitudes de\npago en modo simulacion\n[HTTPS/REST]
+Comercio --> API : Solicitudes de pago\n(modo simulacion /v1/sim\no REST directo /v1/api)\n[HTTPS/REST]
 API --> Comercio : Despacha webhooks\nsinteticos firmados\n[HTTP POST]
 
 note bottom of Cloud

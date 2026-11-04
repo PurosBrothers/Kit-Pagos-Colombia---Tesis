@@ -94,16 +94,18 @@ Todas contables por script, ninguna por apreciación.
 
 | # | Variable | Cómo se mide | Qué demuestra |
 |---|---|---|---|
-| 1 | **Líneas de código de integración** | Conteo sobre el módulo de pagos de cada prototipo con las cuatro pasarelas, excluyendo el esqueleto común | El costo de la integración completa |
-| 2 | **Costo de agregar cada pasarela** | `git show --stat` de cada commit de pasarela (Mercado Pago, Kushki y Rapyd), sobre `src/payments/` y `test/payments/` | El costo del *vendor lock-in*, pasarela por pasarela, que es el problema de la tesis |
-| 3 | **Métricas CK (WMC, CBO, RFC, MAX_CC)** | El script de `ts-morph` del issue #19 (`npm run metrics`), corrido sobre las clases de pago de cada prototipo. Fórmulas fijadas en `methodology.md` §6.1 | Lo que exige literalmente el Hito H5 |
-| 4 | **Conceptos nativos expuestos** | Conteo de identificadores propios de pasarela (`amount_in_cents`, `transaction_amount`, `APPROVAL`, `CLO`...) presentes en el código del prototipo | Cuánta documentación de pasarela tiene que leer el desarrollador |
+| 1 | **Líneas de código de integración** | `npx cloc@2.10.0` sobre el módulo de pagos de cada prototipo (`src/payments/`), contando solo líneas de código (`code`), sin comentarios ni blancos | El costo de la integración completa |
+| 2 | **Costo de agregar cada pasarela** | `git show --stat` de cada commit de pasarela (Wompi en commit base, Mercado Pago, Kushki y Rapyd), sobre `src/payments/` y `test/payments/` | El costo del *vendor lock-in*, pasarela por pasarela, que es el problema de la tesis |
+| 3 | **Métricas CK (WMC, CBO, RFC, MAX_CC)** | `npm run metrics -- --unit file` con `ts-morph` sobre `src/payments/` de cada prototipo. Adaptado por archivo según `methodology.md` §6.1.1 para comparar equitativamente el módulo funcional de B con el modular/clases de D | Lo que exige literalmente el Hito H5 |
+| 4 | **Conceptos nativos expuestos** | Script `sdk/scripts/native-concepts.ts` que busca identificadores propios de pasarela con fronteras de palabra (`amount_in_cents`, `transaction_amount`, `APPROVAL`, `CLO`...) en el código, sin los comentarios. Reporta los identificadores distintos y sus ocurrencias | Cuánta documentación de pasarela tiene que leer el desarrollador |
 | 5 | **Pasarelas alcanzables** | Cuántas de las cuatro cobran de punta a punta, con tarjeta y con PSE, en el sandbox oficial, y en el simulador donde el sandbox no deja | Que los dos prototipos cubren el mismo alcance, y qué límite de cada sandbox lo impide si no |
-| 6 | **Cobertura de pruebas** | Jest, con el mismo esfuerzo de pruebas en ambos | Si la abstracción hace el código más fácil de probar |
+| 6 | **Cobertura de pruebas** | Jest con `collectCoverageFrom: ["src/payments/**"]`, con el mismo esfuerzo de pruebas en ambos | Si la abstracción hace el código más fácil de probar |
 
 La variable 4 es más interesante de lo que parece. En el prototipo B el conteo debería ser **cero**: si aparece un solo `amount_in_cents` en el código del comercio, significa que la abstracción tiene una fuga, y eso sería un hallazgo negativo que hay que reportar igual.
 
 La variable 3 depende de que la fórmula de WMC sea la canónica, y no es un detalle menor para la validez de esta comparación. Mientras el script calculó WMC como conteo de métodos, un método único de 360 líneas con un `switch` de cuatro ramas puntuaba WMC 1 (ver `architecture-log.md`, punto 34). Ese es precisamente el patrón que se espera encontrar en el prototipo D, donde la integración directa concentra el mapeo de cada pasarela en el código del comercio: con la fórmula vieja, el prototipo más complejo habría reportado el mejor WMC, y la comparación habría dicho lo contrario de lo que ocurre en el código. La corrección de la fórmula es lo que vuelve interpretable esta variable, y `MAX_CC` es la que hace visible ese patrón concreto.
+
+**Adaptación de CK por archivo (issue #134):** En el prototipo B, `src/payments/` no contiene clases (solo funciones y configuración tipada), mientras que en D cada pasarela tiene una clase y entre 6 y 12 funciones de módulo auxiliares. La medición clásica por clase reportaba vacío en B y parcial en D. Siguiendo `methodology.md` §6.1.1, se mide la unidad de archivo (`--unit file`): WMC suma la complejidad de todas las funciones/métodos del archivo, MAX_CC reporta la función más compleja del archivo, CBO cuenta los tipos externos en todas las firmas del archivo, y RFC totaliza las funciones locales más los métodos externos invocados y las funciones llamadas directamente no declaradas en el archivo.
 
 ### Lo que no se va a medir como evidencia principal
 

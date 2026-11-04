@@ -3,6 +3,7 @@ import { tmpdir } from "os";
 import path from "path";
 import {
   analyzeProject,
+  analyzeProjectFiles,
   applyExceptionRegistry,
   loadExceptionRegistry,
   parseArgs,
@@ -42,6 +43,7 @@ describe("ck-metrics", () => {
       expect(options.roots.map((root) => path.basename(root))).toEqual(["src", "src-browser"]);
       expect(path.basename(options.tsconfig ?? "")).toBe("tsconfig.json");
       expect(options.mode).toBe("guard");
+      expect(options.unit).toBe("class");
       expect(options.applyKnownExceptions).toBe(true);
     });
 
@@ -51,7 +53,14 @@ describe("ck-metrics", () => {
       expect(options.roots).toEqual([SAMPLE_ROOT]);
       expect(options.tsconfig).toBe(SAMPLE_TSCONFIG);
       expect(options.mode).toBe("measure");
+      expect(options.unit).toBe("class");
       expect(options.applyKnownExceptions).toBe(false);
+    });
+
+    it("should support --unit and --files flags", () => {
+      expect(parseArgs([...SAMPLE_ARGS, "--unit", "file"]).unit).toBe("file");
+      expect(parseArgs([...SAMPLE_ARGS, "--unit", "all"]).unit).toBe("all");
+      expect(parseArgs([...SAMPLE_ARGS, "--files"]).unit).toBe("file");
     });
 
     it.each([
@@ -59,6 +68,7 @@ describe("ck-metrics", () => {
       ["a flag without value", ["--root"]],
       ["a flag followed by another flag", ["--root", "--mode", "guard"]],
       ["an invalid mode", ["--root", "x", "--mode", "strict"]],
+      ["an invalid unit", ["--root", "x", "--unit", "method"]],
       ["a tsconfig without root", ["--tsconfig", "x/tsconfig.json"]],
     ])("should reject %s", (_label, argv) => {
       expect(() => parseArgs(argv)).toThrow(UsageError);
@@ -95,8 +105,8 @@ describe("ck-metrics", () => {
         const report = JSON.parse(readFileSync(file, "utf8"));
         expect(report).toMatchObject({
           mode: "measure",
-          roots: [SAMPLE_ROOT],
-          tsconfig: SAMPLE_TSCONFIG,
+          roots: ["sdk/test/scripts/fixtures/ck-sample/src"],
+          tsconfig: "sdk/test/scripts/fixtures/ck-sample/tsconfig.json",
           knownExceptionsApplied: false,
           totalClasses: 1,
           violatingClasses: 1,
@@ -111,6 +121,59 @@ describe("ck-metrics", () => {
       const metrics = analyzeProject({ roots: [SAMPLE_ROOT], applyKnownExceptions: false });
 
       expect(metrics[0].WMC).toBe(23);
+    });
+  });
+
+  describe("file-level metrics (issue #134)", () => {
+    it("should compute metrics for files using analyzeProjectFiles()", () => {
+      const fileMetrics = analyzeProjectFiles({ roots: [SAMPLE_ROOT], tsconfig: SAMPLE_TSCONFIG });
+
+      expect(fileMetrics).toHaveLength(1);
+      expect(fileMetrics[0]).toMatchObject({
+        file: "Amount.ts",
+        WMC: 23,
+        maxCC: 2,
+        functionCount: 12,
+        CBO: 0,
+      });
+      expect(fileMetrics[0].violations).toEqual(["WMC 23 exceeds threshold (≤ 20)"]);
+    });
+
+    it("should run with --unit file in measure mode and print file table", () => {
+      expect(run([...SAMPLE_ARGS, "--unit", "file"])).toBe(0);
+
+      expect(printed()).toContain("CK Metrics Report (Files as Units)");
+      expect(printed()).toContain("Amount.ts");
+      expect(printed()).toContain("WMC 23 exceeds threshold");
+      expect(printed()).toContain("1/1 file(s) exceed one or more thresholds");
+    });
+
+    it("should exit with 1 with --unit file in guard mode when violating", () => {
+      expect(run([...SAMPLE_ARGS, "--unit", "file", "--mode", "guard"])).toBe(1);
+    });
+
+    it("should output files array in JSON report when --unit file is used", () => {
+      const dir = mkdtempSync(path.join(tmpdir(), "ck-file-metrics-"));
+      const file = path.join(dir, "report.json");
+      try {
+        expect(run([...SAMPLE_ARGS, "--unit", "file", "--json", file])).toBe(0);
+
+        const report = JSON.parse(readFileSync(file, "utf8"));
+        expect(report.unit).toBe("file");
+        expect(report.totalFiles).toBe(1);
+        expect(report.violatingFiles).toBe(1);
+        expect(report.files[0].file).toBe("Amount.ts");
+        expect(report.files[0].WMC).toBe(23);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("should support --unit all to analyze both classes and files", () => {
+      expect(run([...SAMPLE_ARGS, "--unit", "all"])).toBe(0);
+
+      expect(printed()).toContain("CK Metrics Report");
+      expect(printed()).toContain("CK Metrics Report (Files as Units)");
     });
   });
 
@@ -238,11 +301,61 @@ describe("ck-metrics", () => {
 
       const report = JSON.parse(readFileSync(file, "utf8"));
       expect(report).toMatchObject({
-        exceptionsRegistry: exceptions,
+        exceptionsRegistry: expect.stringMatching(/ck-exceptions\.json$/),
         registeredExceptions: [AMOUNT_WMC],
         staleExceptions: [stale],
         violatingClasses: 0,
       });
+    });
+  });
+
+  describe("file mode (--unit file) on functional files", () => {
+    const FILE_SAMPLE_ROOT = path.join(__dirname, "fixtures", "ck-file-sample", "src");
+    const FILE_SAMPLE_TSCONFIG = path.join(__dirname, "fixtures", "ck-file-sample", "tsconfig.json");
+
+    it("should measure standalone functions, const arrows, object methods, callback branches, imported types and direct calls", () => {
+      const fileMetrics = analyzeProjectFiles({
+        roots: [FILE_SAMPLE_ROOT],
+        tsconfig: FILE_SAMPLE_TSCONFIG,
+      });
+
+      const sample = fileMetrics.find((m) => m.file === "moduleSample.ts");
+      expect(sample).toBeDefined();
+
+      // WMC: processOrder(3) + calculateTax(1) + validate(2) + format(1) = 7
+      expect(sample?.WMC).toBe(7);
+      // MAX_CC: processOrder() has complexity 3 because branches in unassigned callback sum to containing function
+      expect(sample?.maxCC).toBe(3);
+      expect(sample?.worstFunction).toBe("processOrder()");
+      // CBO: OrderPayload from ./types used in signature of processOrder
+      expect(sample?.CBO).toBe(1);
+      // RFC: 4 callables + 4 external calls (externalHelper direct call + map + round + trim) = 8
+      expect(sample?.RFC).toBe(8);
+      expect(sample?.violations).toEqual([]);
+    });
+
+    it("should run successfully in measure mode with --unit file and output JSON", () => {
+      const dir = mkdtempSync(path.join(tmpdir(), "ck-file-metrics-"));
+      const jsonFile = path.join(dir, "report.json");
+
+      const exitCode = run([
+        "--root",
+        FILE_SAMPLE_ROOT,
+        "--tsconfig",
+        FILE_SAMPLE_TSCONFIG,
+        "--unit",
+        "file",
+        "--json",
+        jsonFile,
+      ]);
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(readFileSync(jsonFile, "utf8"));
+      expect(parsed.unit).toBe("file");
+      expect(parsed.files).toBeDefined();
+      expect(parsed.files.length).toBeGreaterThanOrEqual(1);
+
+      rmSync(dir, { recursive: true, force: true });
     });
   });
 });

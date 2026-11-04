@@ -1,0 +1,52 @@
+\documentclass[10pt]{article}
+\input{../comun/estilo}
+\usepackage{longtable}
+\usepackage{float}
+
+% Columna de ancho proporcional al de la tabla del original, alineada a la izquierda.
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{\dimexpr #1\linewidth-2\tabcolsep-1pt\relax}}
+
+% Las siete tablas que el original no rotula no cuentan en la numeración: con \LTcaptype vacío,
+% longtable no avanza el contador de tablas, pero tampoco LT@tables, con el que guarda en el
+% .aux los anchos de columna de cada tabla; por eso se avanza aquí. Va dentro del grupo de la tabla.
+\newcommand{\SinNumero}{\renewcommand{\LTcaptype}{}\stepcounter{LT@tables}}
+
+\NombreDocumento{SPMP}
+\VersionDocumento{1.1}
+\FechaDocumento{noviembre de 2026}
+
+\begin{document}
+\sloppy
+
+\Portada
+
+\begin{HistorialDeCambios}
+  \Cambio{0.1}{02/11/2026}{Portada, historial de cambios e índices con el estilo común (issue \#189).}{Joan Emmanuel Orduz Chia}
+  \Cambio{1.0}{mayo de 2026}{Versión inicial en procesador de texto (Google Docs).}{Andres Henao Niño, Joan Emmanuel Orduz Chia, Joshua Prieto Zambrano, David Estevan Rodriguez Jurado}
+  \Cambio{1.1}{noviembre de 2026}{Paso a LaTeX con el estilo común, sin cambios de contenido (issue \#190).}{Joan Emmanuel Orduz Chia}
+\end{HistorialDeCambios}
+
+\input{sections/00-prefacio}
+\clearpage
+
+\Indices
+
+\input{sections/01-vista-general}
+\input{sections/02-glosario}
+\input{sections/03-1-ciclo-de-vida}
+\input{sections/03-2-lenguajes-y-herramientas}
+\input{sections/03-3-plan-de-aceptacion}
+\input{sections/03-4-organizacion}
+\input{sections/04-1-estimacion}
+\input{sections/04-2-inicio}
+\input{sections/04-3-planes-de-trabajo}
+\input{sections/05-monitoreo-y-control}
+\input{sections/06-entrega}
+\input{sections/07-1-ambiente}
+\input{sections/07-2-riesgos}
+\input{sections/07-3-configuracion}
+\input{sections/07-4-metricas}
+\input{sections/07-5-calidad}
+\input{sections/08-referencias}
+
+\end{document}

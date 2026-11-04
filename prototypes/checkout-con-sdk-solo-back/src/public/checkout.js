@@ -10,7 +10,7 @@
  */
 "use strict";
 
-const CART_KEY = "kit-pagos-prototipo-d:cart";
+const CART_KEY = "kit-pagos-prototipo-a:cart";
 const MAX_QUANTITY = 9;
 const POLL_INTERVAL_MS = 2500;
 const POLL_ATTEMPTS = 8;

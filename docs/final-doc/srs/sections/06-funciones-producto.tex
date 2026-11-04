@@ -1,0 +1,437 @@
+\section{Funciones del Producto}
+
+Esta sección especifica los requisitos funcionales del framework Kit Pagos Colombia. La sección 6.1 presenta los requisitos funcionales en formato tabular con identificador, descripción, componente y prioridad. La sección 6.2 en adelante complementa esta especificación mediante historias de usuario que expresan cada requisito desde la perspectiva del usuario, acompañadas de criterios de aceptación verificables.
+
+\subsection{Requisitos Funcionales}
+
+La Tabla~\ref{tab:requisitos-funcionales} presenta el listado consolidado de requisitos funcionales del framework, organizados por componente. Las prioridades se clasifican en Alta (esencial para el MVP), Media (importante pero no bloqueante) y Baja (deseable en versiones futuras).
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{|c|p{8.1cm}|c|c|}
+  \hline
+  \textbf{ID} & \textbf{Descripción del requisito} & \textbf{Componente} & \textbf{Prioridad} \\
+  \hline
+  \endfirsthead
+  \hline
+  \textbf{ID} & \textbf{Descripción del requisito} & \textbf{Componente} & \textbf{Prioridad} \\
+  \hline
+  \endhead
+  \hline
+  \endfoot
+  \hline
+  \caption{Requisitos funcionales del framework Kit Pagos Colombia.}
+  \label{tab:requisitos-funcionales}\\
+  \endlastfoot
+  RF-01 & El sistema debe permitir crear una intención de pago con tarjeta o PSE mediante una interfaz unificada, especificando pasarela, monto, moneda, referencia de orden, datos del pagador y método de pago. El resultado debe distinguir entre una transacción resuelta y una redirección requerida. & SDK & Alta \\
+  \hline
+  RF-02 & El sistema debe normalizar la respuesta de creación y consulta a una \texttt{Transaction} con identificador, monto, moneda, pagador, estado normalizado, estado nativo (\texttt{rawStatus}) y, cuando exista, motivo de rechazo. & SDK & Alta \\
+  \hline
+  RF-03 & El sistema debe permitir consultar el estado de una transacción por identificador y pasarela, mapeándolo a los seis estados normalizados \texttt{APPROVED}, \texttt{DECLINED}, \texttt{PENDING}, \texttt{EXPIRED}, \texttt{VOIDED} y \texttt{ERROR}. & SDK & Alta \\
+  \hline
+  RF-04 & El sistema debe validar la firma criptográfica de un webhook con el algoritmo de cada pasarela (Wompi SHA-256; Rapyd, Mercado Pago y Kushki HMAC-SHA256), dentro de una ventana de tolerancia, y retornar un evento normalizado. & SDK & Alta \\
+  \hline
+  RF-05 & El sistema debe lanzar \texttt{KitPagosError} con un código de \texttt{KitPagosErrorCode} ante condiciones de fallo esperadas, incluyendo timeout, credenciales inválidas, recurso no encontrado y operación no soportada. & SDK & Alta \\
+  \hline
+  RF-06 & El sistema debe permitir cambiar la pasarela activa modificando la configuración de inicialización, sin cambiar el código de negocio del llamador. & SDK & Alta \\
+  \hline
+  RF-07 & El sistema debe reintentar con retroceso exponencial y fluctuación las operaciones idempotentes (\texttt{getPaymentStatus} y \texttt{getPseBanks}) ante fallos transitorios, y no debe reintentar \texttt{createPayment}. & SDK & Media \\
+  \hline
+  RF-08 & El sistema debe redactar credenciales, tokens y secretos de los mensajes, cuerpos y causas de los errores del SDK. & SDK & Alta \\
+  \hline
+  RF-09 & El sistema debe exponer bajo \texttt{/v1/sim} endpoints que replican las APIs nativas de las cuatro pasarelas, con sus formatos de petición y respuesta, sin requerir credenciales reales. & API de Simulación & Alta \\
+  \hline
+  RF-10 & El sistema debe permitir elegir el escenario de respuesta de \texttt{/v1/sim} mediante la cabecera \texttt{x-simulator-scenario} o \texttt{x-simulate-scenario}, los datos de prueba de cada pasarela, los montos reservados o las marcas de credencial. El escenario se fija en la creación y las consultas no lo alteran. & API de Simulación & Alta \\
+  \hline
+  RF-11 & El sistema debe replicar la estructura de error nativa de cada pasarela en los escenarios de fallo, incluyendo el código y el mensaje del proveedor. & API de Simulación & Alta \\
+  \hline
+  RF-12 & El sistema debe disparar un webhook firmado hacia una URL destino configurada y emitir webhooks automáticamente cuando cambia el estado de un pago simulado. & API de Simulación & Media \\
+  \hline
+  RF-13 & El sistema debe publicar la especificación OpenAPI 3.0 de las rutas que declaran esquema en \texttt{/docs}, \texttt{/docs/json} y \texttt{/docs/yaml}. & API de Simulación & Media \\
+  \hline
+  RF-14 & El sistema debe proveer documentación de datos de prueba por pasarela, con credenciales de sandbox, tarjetas, montos y referencias, y el nivel de evidencia de cada dato. & Documentación & Alta \\
+  \hline
+  RF-15 & El sistema debe indicar el comportamiento esperado de cada dato de prueba y su fuente oficial, distinguiendo lo medido contra la API real de lo tomado de la documentación. & Documentación & Media \\
+  \hline
+  RF-16 & El sistema debe exponer las operaciones de Kit Pagos por REST bajo \texttt{/v1/api}: pasarelas, creación y consulta de pagos, bancos PSE y verificación de webhooks. & API de Simulación (\texttt{/v1/api}) & Alta \\
+  \hline
+  RF-17 & El sistema debe tokenizar la tarjeta en el navegador con \texttt{kit-pagos-colombia/browser} contra Wompi, Mercado Pago y Kushki, sin que el número pase por el servidor del comercio; Rapyd se rechaza con \texttt{UNSUPPORTED\_OPERATION}. & SDK (navegador) & Alta \\
+  \hline
+  RF-18 & El sistema debe exponer el motivo de rechazo como código nativo y categoría normalizada (\texttt{INSUFFICIENT\_FUNDS}, \texttt{INVALID\_CARD\_DATA}, \texttt{CARD\_RESTRICTED}, \texttt{FRAUD\_SUSPICION}, \texttt{NETWORK\_ERROR}, \texttt{AUTHENTICATION\_FAILED}, \texttt{DUPLICATED\_PAYMENT} o \texttt{UNKNOWN}). & SDK & Media \\
+  \hline
+  RF-19 & El sistema debe listar los bancos PSE disponibles por pasarela y traducir el código de compensación de ACH Colombia (\texttt{PseBankCode}) al código que exige cada proveedor. & SDK & Media \\
+  \hline
+\end{longtable}
+\end{center}
+
+\subsection{Historias de Usuario}
+
+Las siguientes historias de usuario complementan los requisitos funcionales de la Tabla~\ref{tab:requisitos-funcionales}, expresando cada necesidad desde la perspectiva del usuario y acompañándola de criterios de aceptación verificables. Cada historia referencia el requisito funcional que desarrolla.
+
+\subsection{SDK --- Interfaz unificada de integración}
+
+\subsubsection{HU-01: Crear una intención de pago con tarjeta o PSE}
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & crear una intención de pago especificando únicamente la pasarela deseada, el monto, los datos del pagador y el método de pago mediante una sola llamada al SDK \\
+    \hline
+    \textbf{Para} & no tener que conocer los detalles de autenticación y formato de solicitud propios de cada proveedor \\
+    \hline
+  \end{tabularx}
+  \caption{HU-01}
+  \label{tab:hu-01}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El SDK acepta una solicitud de creación de pago con los parámetros: pasarela, monto, moneda, referencia de orden, datos del pagador, método de pago, URL de retorno y, cuando la pasarela lo exige, desglose de impuestos.
+  \item El método de pago puede ser tarjeta, a partir de un token emitido por la pasarela, o PSE, con el código del banco y la naturaleza jurídica del pagador. El SDK no acepta el número de tarjeta.
+  \item El SDK retorna un \texttt{PaymentResult} que distingue una transacción resuelta (\texttt{TRANSACTION}) de una redirección requerida (\texttt{REDIRECT\_REQUIRED}), con la URL de redirección, el identificador de la pasarela y el estado nativo.
+  \item Con PSE, las cuatro pasarelas redirigen al banco. Con tarjeta, Rapyd redirige a su página alojada y Wompi y Kushki pueden solicitar 3DS.
+  \item El SDK soporta las pasarelas Wompi, Rapyd, Mercado Pago y Kushki sin que el código del llamador deba cambiar entre ellas.
+  \item Si la pasarela retorna un error esperado, el SDK lanza un \texttt{KitPagosError} con código normalizado y mensaje descriptivo.
+\end{itemize}
+
+\subsubsection{HU-02: Consultar el estado de una transacción}
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & consultar el estado actual de una transacción utilizando su identificador y la pasarela que la procesó \\
+    \hline
+    \textbf{Para} & obtener siempre un estado normalizado sin tener que interpretar los estados específicos de cada proveedor \\
+    \hline
+  \end{tabularx}
+  \caption{HU-02}
+  \label{tab:hu-02}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El SDK retorna el estado de la transacción mapeado a uno de los seis estados normalizados: \texttt{APPROVED}, \texttt{DECLINED}, \texttt{PENDING}, \texttt{EXPIRED}, \texttt{VOIDED} o \texttt{ERROR}.
+  \item La respuesta incluye el estado nativo de la pasarela en el campo \texttt{rawStatus} para auditoría.
+  \item Si el estado es \texttt{DECLINED}, la respuesta incluye el motivo de rechazo con su código nativo y su categoría normalizada.
+  \item Si el identificador no existe en la pasarela indicada, el SDK lanza un \texttt{KitPagosError} con código \texttt{RESOURCE\_NOT\_FOUND}.
+  \item En Kushki, la consulta de un cobro de tarjeta del flujo síncrono puede lanzar \texttt{UNSUPPORTED\_OPERATION}; el estado ya viene resuelto en la creación y las actualizaciones llegan por webhook.
+\end{itemize}
+
+\subsubsection{HU-03: Validar y procesar un webhook entrante}
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & validar la firma de un webhook recibido y extraer el evento normalizado que contiene, con una sola llamada al SDK \\
+    \hline
+    \textbf{Para} & no tener que implementar la lógica de validación de firma de cada pasarela por separado \\
+    \hline
+  \end{tabularx}
+  \caption{HU-03}
+  \label{tab:hu-03}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El SDK valida la firma del webhook con el algoritmo de cada pasarela:
+    \begin{itemize}
+      \item Wompi: SHA-256 sobre la concatenación de los valores declarados en \texttt{signature.properties}, el timestamp y el secreto de eventos; la firma viaja en \texttt{x-event-checksum}.
+      \item Rapyd: HMAC-SHA256 en Base64 sobre la URL registrada, el salt, el timestamp, el access key, el secreto y el cuerpo; la firma viaja en \texttt{signature}.
+      \item Mercado Pago: HMAC-SHA256 en hexadecimal sobre el manifiesto formado por el \texttt{data.id} de la URL, el \texttt{x-request-id} y el timestamp; la firma viaja en \texttt{x-signature}.
+      \item Kushki: HMAC-SHA256 en hexadecimal sobre el cuerpo y el \texttt{x-kushki-id} separados por un punto; la firma viaja en \texttt{x-kushki-signature}.
+    \end{itemize}
+  \item Si la firma es inválida, el SDK lanza un \texttt{KitPagosError} con código \texttt{WEBHOOK\_SIGNATURE\_INVALID}.
+  \item Si la firma es válida, el SDK retorna un \texttt{WebhookEvent} con el tipo de evento, la pasarela, el identificador de la transacción, el nuevo estado y, cuando la firma lo cubre, la referencia de la orden.
+  \item El SDK aplica una ventana de tolerancia contra la repetición de notificaciones viejas, configurable y de 300 segundos por omisión.
+  \item El webhook de Mercado Pago se procesa como \texttt{PENDING} porque la firma no cubre el cuerpo; el comercio confirma el estado con \texttt{getPaymentStatus()}.
+  \item La verificación de Rapyd exige la URL de webhook registrada en su panel; sin ella, el SDK lanza \texttt{INVALID\_CREDENTIALS}.
+\end{itemize}
+
+\subsubsection{HU-04: Cambiar de pasarela sin modificar la lógica de negocio}
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software senior \\
+    \hline
+    \textbf{Quiero} & cambiar la pasarela activa de mi aplicación modificando únicamente la configuración del framework, sin tocar el código de negocio \\
+    \hline
+    \textbf{Para} & reducir el riesgo y el esfuerzo de migración entre proveedores \\
+    \hline
+  \end{tabularx}
+  \caption{HU-04}
+  \label{tab:hu-04}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El framework permite especificar la pasarela activa mediante un parámetro de configuración en la inicialización.
+  \item Al cambiar la pasarela en la configuración, todas las operaciones de pago se redirigen al nuevo proveedor sin modificar el código del llamador.
+  \item El cambio de pasarela no afecta la estructura ni el tipo de las respuestas retornadas por el SDK.
+  \item Las diferencias de cada pasarela (token de tarjeta, página alojada de Rapyd, requisitos de PSE y desglose de impuestos de Kushki) las resuelve el adaptador correspondiente.
+\end{itemize}
+
+\subsubsection{HU-05: Manejo automático de reintentos ante fallos transitorios}
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & que el SDK reintente automáticamente las operaciones idempotentes cuando la pasarela devuelve un error transitorio (timeout, error 500) \\
+    \hline
+    \textbf{Para} & mejorar la resiliencia de la integración sin implementar lógica de reintento manualmente y sin riesgo de cobrar dos veces \\
+    \hline
+  \end{tabularx}
+  \caption{HU-05}
+  \label{tab:hu-05}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El SDK reintenta \texttt{getPaymentStatus()} y \texttt{getPseBanks()} ante errores de red o respuestas 5xx de la pasarela, con retroceso exponencial y fluctuación.
+  \item El número máximo de reintentos es configurable y su valor por omisión es 3, con una espera base de 1 segundo y un tope de 4 segundos.
+  \item \texttt{createPayment()} no se reintenta, para no duplicar un cobro.
+  \item Si se supera el número máximo de reintentos, el SDK lanza un \texttt{KitPagosError} con código \texttt{MAX\_RETRIES\_EXCEEDED}.
+  \item Cada petición a la pasarela respeta el límite \texttt{timeoutMs} configurado, de 30 segundos por omisión.
+\end{itemize}
+
+\subsection{API de Simulación}
+
+\subsubsection{HU-06: Simular una transacción aprobada}
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador o tester \\
+    \hline
+    \textbf{Quiero} & enviar una solicitud de pago a la API de Simulación y recibir una respuesta que replica el comportamiento de una transacción aprobada por cada pasarela \\
+    \hline
+    \textbf{Para} & probar el flujo de éxito de mi integración sin depender del sandbox real de la pasarela \\
+    \hline
+  \end{tabularx}
+  \caption{HU-06}
+  \label{tab:hu-06}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item La API de Simulación expone bajo \texttt{/v1/sim} un conjunto de endpoints por pasarela que acepta los mismos parámetros que la API real del proveedor.
+  \item La respuesta del endpoint de éxito replica la estructura de una respuesta aprobada de la pasarela correspondiente.
+  \item La API de Simulación corre en local con \texttt{npm run dev} en \texttt{simulator-api/} y se despliega en Render desde la rama \texttt{devops}; no requiere credenciales reales.
+  \item La misma instancia expone \texttt{/v1/api} con las operaciones de Kit Pagos por REST.
+  \item El escenario de un cobro se fija en la creación y las consultas posteriores no lo alteran.
+\end{itemize}
+
+\subsubsection{HU-07: Simular escenarios de error controlados}
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & tester de software \\
+    \hline
+    \textbf{Quiero} & provocar escenarios de rechazo, timeout y error de red en la API de Simulación mediante parámetros, datos de prueba o montos reservados \\
+    \hline
+    \textbf{Para} & verificar que mi integración maneja correctamente los casos de fallo sin tener que reproducirlos en el sandbox real \\
+    \hline
+  \end{tabularx}
+  \caption{HU-07}
+  \label{tab:hu-07}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item La API de Simulación elige el escenario con la cabecera \texttt{x-simulator-scenario} o \texttt{x-simulate-scenario}, con los datos de prueba de cada pasarela, con montos reservados o con marcas en las credenciales.
+  \item Soporta, entre otros, los escenarios \texttt{APPROVED}, \texttt{DECLINED}, \texttt{PENDING}, \texttt{EXPIRED}, \texttt{VOIDED}, \texttt{ERROR}, \texttt{TIMEOUT}, \texttt{NETWORK\_ERROR}, \texttt{RATE\_LIMIT}, \texttt{SERVER\_ERROR} y \texttt{MALFORMED\_RESPONSE}.
+  \item La respuesta de cada escenario replica la estructura de error nativa de la pasarela correspondiente.
+  \item El escenario \texttt{TIMEOUT} introduce un retardo configurable antes de responder, simulando latencia real.
+  \item Las combinaciones que una ruta no sabe producir responden \texttt{501} en lugar de inventar una respuesta.
+  \item El escenario se fija en la creación; una consulta posterior no lo cambia.
+\end{itemize}
+
+\subsubsection{HU-08: Recibir una notificación webhook simulada}
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & solicitar a la API de Simulación que envíe un webhook a una URL de mi aplicación, o que lo emita automáticamente cuando cambia un pago, replicando el formato y la firma de la pasarela correspondiente \\
+    \hline
+    \textbf{Para} & probar el endpoint receptor de webhooks de mi aplicación sin esperar eventos reales del sandbox \\
+    \hline
+  \end{tabularx}
+  \caption{HU-08}
+  \label{tab:hu-08}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item La API de Simulación expone \texttt{POST /v1/sim/webhooks/trigger} para disparar un webhook firmado.
+  \item El destino sale de la configuración del servidor (\texttt{SIMULATOR\_WEBHOOK\_TARGET\_URL}), no de la petición.
+  \item La emisión automática envía un webhook cuando un pago simulado cambia de estado.
+  \item La firma del webhook es válida y puede verificarse con el mecanismo del SDK para la pasarela indicada.
+  \item Si \texttt{API\_AUTH\_TOKEN} está configurado, el disparo exige el token.
+  \item Si no hay destino configurado, la API responde \texttt{409} con el webhook firmado en el cuerpo.
+  \item La API retorna el resultado del intento de envío (éxito o fallo de la entrega).
+\end{itemize}
+
+\subsubsection{HU-09: Consumir Kit Pagos por REST sin instalar el SDK}
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador frontend \\
+    \hline
+    \textbf{Quiero} & crear y consultar pagos, listar bancos PSE y verificar webhooks a través de \texttt{/v1/api}, sin instalar el SDK ni conocer la pasarela \\
+    \hline
+    \textbf{Para} & integrar pagos desde un cliente de navegador o desde cualquier lenguaje que hable HTTP \\
+    \hline
+  \end{tabularx}
+  \caption{HU-09}
+  \label{tab:hu-09}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item \texttt{GET /v1/api/gateways} retorna las pasarelas soportadas y cómo recibe la tarjeta cada una.
+  \item \texttt{POST /v1/api/payments} crea un pago y responde \texttt{201} con \texttt{TRANSACTION} o \texttt{REDIRECT\_REQUIRED}.
+  \item \texttt{GET /v1/api/payments/:id?gateway=} consulta el estado de una transacción.
+  \item \texttt{GET /v1/api/pse-banks?gateway=} lista los bancos PSE de una pasarela o de las cuatro.
+  \item \texttt{POST /v1/api/webhooks/:gateway} verifica la firma y retorna el evento normalizado, o \texttt{401} si la firma no es válida.
+  \item Las credenciales de pasarela son opcionales mediante cabeceras \texttt{x-gateway-*}; si se omiten, se usan las del servidor. El cliente no puede proporcionar \texttt{webhookSecret}.
+  \item CORS se aplica a \texttt{/v1/api} y a las tres rutas de tokenización de \texttt{/v1/sim} que llama el navegador; las demás respuestas de \texttt{/v1/sim} no cambian.
+  \item Las rutas de \texttt{/v1/api} declaran esquemas de OpenAPI.
+\end{itemize}
+
+\subsection{SDK de navegador}
+
+\subsubsection{HU-10: Tokenizar la tarjeta en el navegador}
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador frontend \\
+    \hline
+    \textbf{Quiero} & tokenizar la tarjeta en el navegador contra la pasarela, sin que el número pase por el servidor del comercio \\
+    \hline
+    \textbf{Para} & reducir el alcance de PCI DSS del backend y reutilizar una sola interfaz para varias pasarelas \\
+    \hline
+  \end{tabularx}
+  \caption{HU-10}
+  \label{tab:hu-10}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El módulo se importa desde \texttt{kit-pagos-colombia/browser} y expone \texttt{KitPagosBrowser.tokenizeCard()}.
+  \item \texttt{tokenizeCard()} acepta la pasarela, la llave pública, el ambiente, los datos de la tarjeta y, para Kushki, el monto del cobro.
+  \item Tokeniza contra Wompi, Mercado Pago y Kushki. Con Rapyd lanza \texttt{KitPagosError} con código \texttt{UNSUPPORTED\_OPERATION} sin abrir conexiones.
+  \item La petición se corta a los \texttt{timeoutMs} configurados (30\,000 por omisión) y lanza \texttt{GATEWAY\_TIMEOUT} si se agota.
+  \item El número de la tarjeta viaja solo entre el navegador y la pasarela; el servidor del comercio recibe el token opaco.
+  \item La página donde se escribe la tarjeta sigue en el alcance del comercio (SAQ A-EP): la Content-Security-Policy la debe enviar su servidor.
+  \item Kushki ata el token al monto; cobrarlo por otro monto responde \texttt{400 K220} y el SDK lo entrega como \texttt{INVALID\_REQUEST}.
+  \item El módulo se carga en Node 20.19 o superior para renderizado del lado del servidor.
+\end{itemize}
+
+\subsection{Motivo de rechazo y bancos PSE}
+
+\subsubsection{HU-11: Conocer el motivo de un rechazo}
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & recibir el código nativo y la categoría normalizada del motivo por el que la pasarela rechazó un pago \\
+    \hline
+    \textbf{Para} & mostrarle al comprador una causa útil y distinguir un rechazo de negocio de una falla técnica \\
+    \hline
+  \end{tabularx}
+  \caption{HU-11}
+  \label{tab:hu-11}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item \texttt{Transaction.rejectionReason} solo existe cuando el estado es \texttt{DECLINED}; un estado \texttt{ERROR} es una falla técnica y no un rechazo del banco.
+  \item El motivo incluye \texttt{rejectionCode}, tal como lo entrega la pasarela, y \texttt{rejectionCategory}, normalizada.
+  \item Las categorías son \texttt{INSUFFICIENT\_FUNDS}, \texttt{INVALID\_CARD\_DATA}, \texttt{CARD\_RESTRICTED}, \texttt{FRAUD\_SUSPICION}, \texttt{NETWORK\_ERROR}, \texttt{AUTHENTICATION\_FAILED}, \texttt{DUPLICATED\_PAYMENT} y \texttt{UNKNOWN}.
+  \item Mercado Pago usa el \texttt{status\_detail} del pago; Rapyd usa el \texttt{failure\_code}; Kushki usa el \texttt{responseCode} numérico de un \texttt{400} de cobro.
+  \item En Kushki, un \texttt{400} con código numérico se entrega como transacción \texttt{DECLINED}; un código con prefijo \texttt{K} sigue siendo un error de la petición.
+  \item Wompi no envía un código de rechazo estable, solo un mensaje de texto; en ese caso \texttt{rejectionReason} queda vacío.
+  \item Un webhook no trae el motivo; el comercio conserva el que obtuvo en la creación o en la consulta.
+\end{itemize}
+
+\subsubsection{HU-12: Obtener los bancos PSE disponibles}
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador de software \\
+    \hline
+    \textbf{Quiero} & obtener la lista de bancos PSE que acepta la pasarela y usar el mismo código de banco en las cuatro \\
+    \hline
+    \textbf{Para} & construir el selector de banco del pagador sin depender de los códigos internos de cada proveedor \\
+    \hline
+  \end{tabularx}
+  \caption{HU-12}
+  \label{tab:hu-12}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item \texttt{getPseBanks()} retorna una lista de \texttt{PseBank} con el código que espera la pasarela, el nombre para mostrar y, cuando está en el catálogo, el código de compensación de ACH Colombia.
+  \item Los códigos que devuelve \texttt{getPseBanks()} solo son válidos en la pasarela que los entregó.
+  \item \texttt{PseBankCode} permite pedir un banco por su código de compensación en cualquiera de las cuatro pasarelas; el adaptador de Rapyd lo traduce al nombre del método \texttt{co\_pse\_*\_bank}.
+  \item PSE está disponible en Wompi, Rapyd, Mercado Pago y Kushki.
+  \item Un pago con PSE exige el documento del pagador; si falta, el SDK lanza \texttt{INVALID\_REQUEST} antes de la llamada de red.
+  \item \texttt{GET /v1/api/pse-banks} expone la misma lista por REST.
+\end{itemize}
+
+\subsection{Documentación de datos de prueba}
+
+\subsubsection{HU-13: Acceder a datos de prueba por pasarela}
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    \textbf{Como} & desarrollador o tester \\
+    \hline
+    \textbf{Quiero} & encontrar en un único lugar los datos de prueba disponibles para cada pasarela: tarjetas, credenciales de sandbox, referencias y parámetros especiales \\
+    \hline
+    \textbf{Para} & no tener que buscar en múltiples fuentes de documentación de cada proveedor durante el desarrollo \\
+    \hline
+  \end{tabularx}
+  \caption{HU-13}
+  \label{tab:hu-13}
+\end{table}
+
+\textbf{Criterios de aceptación:}
+\begin{itemize}
+  \item El repositorio incluye un documento de datos de prueba por pasarela: \texttt{wompi.md}, \texttt{mercado-pago.md}, \texttt{kushki.md} y \texttt{rapyd.md}.
+  \item Para cada pasarela se documentan las credenciales de sandbox, las tarjetas de prueba con su comportamiento esperado, los montos y referencias válidas, y los flujos medidos.
+  \item Cada afirmación declara su nivel de evidencia: medido contra la API real con fecha, medido parcialmente, o tomado de la documentación oficial sin comprobar.
+  \item La documentación indica la fuente oficial de cada dato y la fecha de la medición.
+  \item Las pruebas de contrato contra los sandboxes mantienen vigentes los datos medidos.
+  \item La documentación declara los huecos conocidos por pasarela, incluidos los desenlaces de PSE que no se pueden observar.
+\end{itemize}

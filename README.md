@@ -98,6 +98,17 @@ El ejemplo rápido de código, con la firma exacta de cada llamada, está en la 
 | [`docs/06-landing/`](docs/06-landing/) | El alcance de la página de presentación ([sitio web en vivo](https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/)) |
 | [`docs/testing-data/`](docs/testing-data/README.md) | El tercer componente: los datos de prueba de las cuatro pasarelas |
 
+### Los prototipos
+
+Para medir el aporte del SDK hay cuatro implementaciones del mismo checkout, en [`prototypes/`](prototypes/README.md). El experimento compara **D contra B**; A y C son demostraciones de alcance.
+
+| Letra | Carpeta | Qué es |
+|---|---|---|
+| A | [`checkout-con-sdk-solo-back/`](prototypes/checkout-con-sdk-solo-back/README.md) | Nuestro prototipo original: el SDK solo en el servidor, sin su módulo de navegador |
+| B | [`checkout-con-sdk-front-back/`](prototypes/checkout-con-sdk-front-back/) | El SDK completo, en el servidor y en el navegador. El tratamiento |
+| C | [`checkout-frontend-rest/`](prototypes/checkout-frontend-rest/) | El navegador cobra contra la API REST `/v1/api` |
+| D | [`checkout-sin-solucion/`](prototypes/checkout-sin-solucion/) | Integración a mano con `fetch`. El control |
+
 ### Referencia y contexto académico
 
 - [`docs/architecture/architecture-log.md`](docs/architecture/architecture-log.md) — El registro de decisiones del proyecto: más de 100 puntos técnicos documentados con los defectos medidos, las decisiones tomadas y las que siguen abiertas. Es la fuente de verdad de por qué el código es como es.
@@ -129,7 +140,7 @@ Límites de las pasarelas, no del proyecto, que aparecieron probando la tienda d
 - El **token de tarjeta tampoco** es portable entre pasarelas: lo emite el frontend (`kit-pagos-colombia/browser`) contra cada pasarela respectiva.
 - **Solo tarjeta y PSE.** No hay efectivo, ni Nequi, ni suscripciones, ni reembolsos.
 - **Ni el SDK ni los prototipos protegen la página donde se escribe la tarjeta.**
-  - La Content-Security-Policy la manda el servidor del comercio, y ninguno de los tres prototipos la manda.
+  - La Content-Security-Policy la manda el servidor del comercio, y ninguno de los cuatro prototipos la manda.
   - En el prototipo C, además, el monto lo decide el navegador.
   - Los prototipos son demostraciones contra los sandboxes, no plantillas para producción. Lo que un comercio tiene que agregar está en la [guía de implementación](docs/03-sdk/4-guia-de-implementacion.md) §9.
 - **La redirección no desaparece.** Con PSE redirigen las cuatro.
