@@ -7,12 +7,15 @@ skinparam LifeLineBorderColor #666666
 
 participant "Tester / QA\n(o Trigger Interno)" as Tester
 participant "Simulator API\n(Fastify)" as SimAPI
-participant "SignatureGenerator\n& Dispatcher" as Dispatcher
+participant "SignatureGenerator" as Generator
+participant "WebhookDispatcher" as Dispatcher
 participant "Comercio\n(Webhook Endpoint)" as Comercio
 participant "SDK KitPagos" as SDK
 
 Tester -> SimAPI : POST /v1/sim/webhooks/trigger\n{gateway, transactionId}
-SimAPI -> Dispatcher : generateAndDispatch(gateway, transactionId)
+SimAPI -> Generator : generate(subject)
+Generator --> SimAPI : OutgoingWebhook
+SimAPI -> Dispatcher : deliver(webhook)
 Dispatcher -> Comercio : POST {webhookUrl}(rawPayload, headers)
 
 Comercio -> SDK : validateWebhook(rawPayload, headers, options?)

@@ -13,7 +13,7 @@ participant "TransactionStore" as Store
 
 Comercio -> SDK : createPayment(CreatePaymentRequest)
 SDK -> SimAPI : POST /v1/sim/{gateway}/payments\n(Auth + Body nativo de la pasarela)
-SimAPI -> MockFactory : buildSuccessResponse(gateway, request)
+SimAPI -> MockFactory : buildApprovedResponse(gateway, request)
 MockFactory -> MockFactory : Genera payload nativo\n(Wompi: {data:{id,status:"APPROVED"}},\nMercado Pago: {id,status:"approved"},\nRapyd: {data:{id,status:"CLO",paid:true}},\nKushki: {ticketNumber,details:{transactionStatus:"APPROVAL"}})
 MockFactory -> Store : save(gatewayTransactionId, payload)
 Store --> MockFactory : OK

@@ -13,7 +13,11 @@ participant "TransactionStore" as Store
 
 Comercio -> SDK : createPayment(CreatePaymentRequest)
 SDK -> SimAPI : POST /v1/sim/{gateway}/payments
-SimAPI -> MockFactory : buildRejectedResponse(gateway, request)
+alt Mercado Pago
+  SimAPI -> MockFactory : buildRejectedResponse(request)
+else Wompi, Kushki o Rapyd
+  SimAPI -> MockFactory : buildDeclinedResponse(request)
+end
 MockFactory -> MockFactory : Genera payload nativo de rechazo\n(Wompi: {data:{id,status:"DECLINED",\nstatus_message:"Fondos insuficientes"}},\nMercado Pago: {id,status:"rejected",\nstatus_detail:"cc_rejected_insufficient_amount"},\nRapyd: {data:{id,status:"ERR",\nfailure_code:"INSUFFICIENT_FUNDS"}},\nKushki: {ticketNumber,details:{transactionStatus:"DECLINED"}})
 MockFactory -> Store : save(gatewayTransactionId, payload)
 Store --> MockFactory : OK

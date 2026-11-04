@@ -1,4 +1,4 @@
-﻿@startuml Sequence Diagram - Payment Creation
+@startuml Sequence Diagram - Payment Creation
 title A - Creacion de Pago (pendiente + webhook)
 skinparam backgroundColor white
 skinparam sequenceMessageAlign center

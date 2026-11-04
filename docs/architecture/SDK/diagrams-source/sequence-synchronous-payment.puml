@@ -1,4 +1,4 @@
-﻿@startuml Sequence Diagram - Synchronous Payment
+@startuml Sequence Diagram - Synchronous Payment
 title B - Pago Sincrono (Kushki - Tarjeta)
 skinparam backgroundColor white
 skinparam sequenceMessageAlign center
@@ -16,13 +16,13 @@ Kushki -> API : POST /card/v1/charges
 
 alt Pago aprobado
   API --> Kushki : HTTP 201
-  transaction_status = APPROVAL
+  rnote over Kushki: transaction_status = APPROVAL
   Kushki -> Kushki : ResponseNormalizer.normalize(rawResponse, gateway)
   Kushki --> Facade : PaymentResult
   Facade --> Comercio : PaymentResult(TRANSACTION: status=APPROVED)
 else Pago rechazado
   API --> Kushki : HTTP 402
-  transaction_status = DECLINED
+  rnote over Kushki: transaction_status = DECLINED
   Kushki -> Kushki : ResponseNormalizer.normalize(rawResponse, gateway)
   Kushki --> Facade : PaymentResult
   Facade --> Comercio : PaymentResult(TRANSACTION: status=DECLINED)

@@ -1,4 +1,4 @@
-﻿@startuml Sequence Diagram - Webhook Conciliation
+@startuml Sequence Diagram - Webhook Conciliation
 title C - Conciliacion por Webhook (asincrono)
 skinparam backgroundColor white
 skinparam sequenceMessageAlign center
