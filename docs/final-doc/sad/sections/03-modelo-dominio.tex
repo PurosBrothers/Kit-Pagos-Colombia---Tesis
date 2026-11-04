@@ -3,15 +3,15 @@
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{"../../architecture/SDK/Domain Class Diagram.png"}
-\caption{Diagrama de clases del dominio}
-\label{fig:domain_classes}
+\caption{Diagrama de clases del dominio del SDK}
+\label{fig:domain_classes_SDK}
 \end{figure}
 
 \FloatBarrier
 \renewcommand{\arraystretch}{1.3}
 \begin{longtable}{|>{\raggedright\arraybackslash}p{0.25\textwidth}|p{\dimexpr\textwidth-0.25\textwidth-4\tabcolsep-3\arrayrulewidth\relax}|}
-\caption{Conceptos del Sistema}
-\label{tab:domain_concepts}\\
+\caption{Conceptos del SDK y su explicación}
+\label{tab:domain_concepts_SDK}\\
 \hline
 \textbf{Concepto} & \textbf{Explicación} \\ \hline
 \endfirsthead
@@ -36,27 +36,27 @@ RejectionCategory (Enumeración) & Clasifica el motivo de un rechazo en ocho cat
 SdkErrorCode (Enumeración) & Códigos de error técnico normalizados (timeout, credenciales inválidas, límite de solicitudes, etc.), independientes de qué pasarela los causó. Cada uno tiene un mensaje amigable asociado en el catálogo centralizado del SDK. \\ \hline
 Gateway (Enumeración) & Identifica cuál de las cuatro pasarelas está involucrada (WOMPI, RAPYD, MERCADOPAGO, KUSHKI). Se usa tanto en GatewayTransactionId como en SdkError para saber de dónde vino cada dato. \\ \hline
 SimulationRequestHeaders (Objeto de Valor) & Forma del resultado que produce HttpRouterMiddleware.extractHeaders(req): encapsula scenario (SimulationScenario) y delayMs (número opcional, solo relevante para TIMEOUT). Es el objeto que ScenarioExecutionEngine.execute() recibe como entrada. \\ \hline
-MockPaymentResult (Objeto de Valor) & Representación interna normalizada que ScenarioExecutionEngine construye para los tres escenarios de negocio (APPROVED, DECLINED, INSUFFICIENT\_FUNDS) antes de que GatewayMockFactory la traduzca a la forma nativa exacta de cada pasarela. Encapsula gatewayTransactionId, gateway, scenario, amount, currency, rawStatus (el valor nativo que la pasarela real emitiría) y, cuando aplica, un rejectionReason. No se usa para TIMEOUT ni NETWORK\_ERROR. \\ \hline
+MockPaymentResult (Objeto de Valor) & Representación interna normalizada que ScenarioExecutionEngine construye para los tres escenarios de negocio (APPROVED, DECLINED, INSUFFICIENT\_FUNDS) antes de que GatewayMockFactory la traduzca a la forma nativa exacta de cada pasarela. Encapsula gatewayTransactionId, gateway, scenario, amount, currency, rawStatus (el valor nativo que la pasarela real emitiría) y, cuando aplica, un rejectionReason. No se usa para TIMEOUT ni NETWORK\_ERROR que no delegan en GatewayMockFactory (9.2.2) \\ \hline
 \end{longtable}
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.6\textwidth]{"../../architecture/Simulador API/Deploy Diagram - C4.png"}
-\caption{Diagrama de despliegue de la API de simulación (Conceptos Adicionales)}
-\label{fig:domain_sim_concepts}
+\includegraphics[width=0.6\textwidth]{"../../architecture/Simulador API/diagrama-clases-dominio-simulacion.png"}
+\caption{Diagrama de Clases del Dominio – API de Simulación}
+\label{fig:domain_classes_API}
 \end{figure}
 
 \begin{table}[htbp]
 \centering
 \caption{Conceptos Adicionales del Dominio (Simulación)}
-\label{tab:domain_sim_concepts}
+\label{tab:domain_concepts_API}
 \renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\textwidth}{|l|X|}
 \hline
 \textbf{Concepto} & \textbf{Explicación} \\ \hline
-SimulationScenario (Enumeración) & Los cinco escenarios controlables que un desarrollador o tester puede solicitar mediante el header \texttt{x-simulate-scenario}, normalizados en inglés para ser consistentes con el resto del vocabulario del dominio: APPROVED, DECLINED, INSUFFICIENT\_FUNDS, TIMEOUT, NETWORK\_ERROR. RF-10 los describe en español; son equivalentes semánticos — HttpRouterMiddleware traduce el valor del header hacia este enum interno. \\ \hline
+SimulationScenario (Enumeración) & Los cinco escenarios controlables que un desarrollador o tester puede solicitar mediante el header \texttt{x-simulate-scenario}, normalizados en inglés para ser consistentes con el resto del vocabulario del dominio: APPROVED, DECLINED, INSUFFICIENT\_FUNDS, TIMEOUT, NETWORK\_ERROR. RF-10 los describe en español (APROBADO, RECHAZADO, FONDOS\_INSUFICIENTES, TIMEOUT, ERROR\_RED); son equivalentes semánticos — HttpRouterMiddleware traduce el valor del header hacia este enum interno. \\ \hline
 WebhookTriggerRequest (Objeto de Valor) & Forma de la solicitud que WebhookTriggerEndpoint recibe en POST /v1/sim/webhooks/trigger. Encapsula targetUrl, gateway, eventType y scenario (el resultado que el webhook simulado debe reflejar). SignatureGenerator y GatewayMockFactory la usan para construir el payload firmado que finalmente se despacha (RF-12). \\ \hline
-WebhookEvent (Objeto de Valor) & Representa el evento notificado de forma asíncrona por una pasarela cuando cambia el estado de una transacción. Encapsula el identificador nativo de la transacción (gatewayTransactionId), el tipo de evento normalizado, la pasarela de origen (gateway), el estado resultante mapeado al dominio (status) y el payload nativo original (rawPayload). Es retornado por WebhookVerifier.parse() para dar cumplimiento a RF-04. \\ \hline
+WebhookEvent (Objeto de Valor) & Representa el evento notificado de forma asíncrona por una pasarela cuando cambia el estado de una transacción. Encapsula el identificador nativo de la transacción (gatewayTransactionId), el tipo de evento normalizado, la pasarela de origen (gateway), el estado resultante mapeado al dominio (status) y el payload nativo original (rawPayload). Es retornado por WebhookVerifier.parse() para dar cumplimiento a RF-04, en lugar del boolean que el diagrama obsoleto sugería. \\ \hline
 Credentials (Objeto de Valor) & Encapsula el par de llaves (publicKey, privateKey) que el desarrollador configura por pasarela mediante SdkConfigurator.configure(options). SdkConfigurator mantiene un mapa Gateway $\to$ Credentials y cada Adapter las usa internamente para autenticarse ante su proveedor, sin que se propaguen a logs, errores ni respuestas del SDK (RF-08). \\ \hline
 \end{tabularx}
 \end{table}
