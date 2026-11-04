@@ -1,7 +1,8 @@
 # Documentos finales
 
-Fuentes LaTeX de los cuatro documentos que se entregan con el trabajo de grado. Los PDF compilados (/*/main.pdf) no se
-versionan: se compilan con `latexmk` y pdfLaTeX, en local o en la CI, los unicos PDF que se versionan son los originales.
+Fuentes LaTeX de los cinco documentos que se entregan con el trabajo de grado. Los PDF compilados
+(`/*/main.pdf`) no se versionan: se compilan con `latexmk` y pdfLaTeX, en local o en la CI. Los
+únicos PDF que se versionan son los originales.
 
 | Carpeta | Contenido |
 |---|---|
@@ -67,10 +68,11 @@ esta carpeta ya los excluye, junto con los `main.pdf`.
 
 Con [TinyTeX](https://yihui.org/tinytex/), la variante por omisión (`TinyTeX-1`) no trae todo lo
 que usan estos documentos. Estos son los paquetes que hubo que agregar el 28 de octubre de 2026
-con TinyTeX v2026.10 (TeX Live 2026, `latexmk` 4.88):
+con TinyTeX v2026.10 (TeX Live 2026, `latexmk` 4.88), más `placeins` y `grfext`, que se sumaron
+después porque el SAD no compila sin ellos:
 
 ```bash
-tlmgr install babel-spanish caption carlisle enumitem fancyhdr hyphen-spanish setspace tex-gyre titlesec titling
+tlmgr install babel-spanish caption carlisle enumitem fancyhdr grfext hyphen-spanish placeins setspace tex-gyre titlesec titling
 fmtutil-sys --byfmt pdflatex
 ```
 
