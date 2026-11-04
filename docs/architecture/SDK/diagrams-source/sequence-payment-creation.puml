@@ -14,9 +14,9 @@ Comercio -> Facade : createPayment(request)
 Facade -> Adapter : createPayment(request)
 Adapter -> Pasarela : POST /payments (nativo)
 Pasarela --> Adapter : 201 Created\n(estado nativo = pendiente, token)
-Adapter --> Facade : rawResponse
-Facade -> Facade : ResponseNormalizer.normalize(rawResponse, gateway)
-Facade --> Comercio : Transaction(PENDING)
+Adapter -> Adapter : ResponseNormalizer.normalize(rawResponse, gateway)
+Adapter --> Facade : PaymentResult
+Facade --> Comercio : PaymentResult(PENDING) o PaymentResult(REDIRECT_REQUIRED)
 
 note over Comercio, Pasarela
   Este flujo NO entrega el resultado final del pago.

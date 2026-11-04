@@ -1,0 +1,70 @@
+\section{Vista de componentes}
+
+\subsection{Diagrama de Componentes — SDK Kit Pagos Colombia (Nivel 3)}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{"../../architecture/SDK/Component Diagram - C4.png"}
+\caption{Diagrama de Componentes del SDK}
+\label{fig:component_sdk}
+\end{figure}
+
+El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su diseño interno sigue la arquitectura hexagonal (Ports \& Adapters) que organiza el sistema alrededor de un núcleo de dominio independiente, comunicado con el exterior únicamente a través de interfaces abstractas. El diagrama expone once componentes con responsabilidades claramente delimitadas, cuyo alcance de implementación fue definido en función del tiempo disponible y de la prioridad de cada pasarela dentro del proyecto.
+
+\subsubsection{Payment Facade}
+Es el punto de entrada único del SDK y el único componente con el que el desarrollador interactúa directamente. Expone tres métodos públicos: createPayment(), getPaymentStatus() y validateWebhook(). Su propósito es ocultar la complejidad interna del sistema detrás de una interfaz simple y predecible, implementando el patrón Facade del catálogo GoF. Retorna entidades Transaction normalizadas al desarrollador o excepciones SdkError tipadas en caso de fallo.
+
+\subsubsection{SDK Configurator}
+Gestiona toda la configuración del SDK en un único punto: pasarela activa, credenciales por proveedor, modo de entorno y parámetros del mecanismo de reintento. El switch entre modo producción y modo simulación vive en este componente. Cuando el modo es simulación, los adaptadores redirigen sus solicitudes hacia la API de Simulación, que constituye el entorno principal de validación durante la fase de evaluación del proyecto.
+
+\subsubsection{Gateway Factory}
+Recibe el enum Gateway, con valores WOMPI, RAPYD, MERCADOPAGO o KUSHKI y retorna la instancia del adaptador correspondiente, implementando el patrón Factory del catálogo GoF. Cambiar de pasarela es una operación de configuración: el desarrollador modifica el parámetro de inicialización del SDK y el Factory instancia el adaptador correcto sin que ningún otro componente deba cambiar.
+
+\subsubsection{Payment Gateway Port}
+Es la interfaz abstracta que define el contrato que todo adaptador debe cumplir, especificando las tres operaciones disponibles sin conocimiento de ningún proveedor específico. Es el elemento central de la arquitectura hexagonal y el que hace posible la extensibilidad hacia nuevos proveedores sin modificar el núcleo del sistema.
+
+\subsubsection{Wompi Adapter, Rapyd Adapter, Mercado Pago Adapter y Kushki Adapter}
+Cada uno implementa el Payment Gateway Port y traduce su contrato hacia las convenciones del proveedor que representa. Dentro del alcance del proyecto, los cuatro adaptadores se encuentran implementados y validados en los respectivos ambientes sandbox, con distintos niveles de prioridad. El Wompi Adapter es el de mayor prioridad y profundidad de validación, dado que Wompi es la pasarela con mayor penetración en el mercado colombiano, la mejor documentación técnica y el sandbox de más fácil acceso. Los adaptadores de Rapyd, Mercado Pago y Kushki tienen el mismo nivel de completitud funcional, aunque su validación en sandbox fue progresiva durante el período de desarrollo. En modo simulación, los cuatro adaptadores redirigen sus solicitudes hacia la API de Simulación mediante HTTPS incluyendo los headers de control de escenario.
+
+\subsubsection{Response Normalizer}
+Recibe la respuesta nativa de cualquier adaptador y la transforma al modelo de dominio unificado del SDK, mapeando los estados crudos de cada proveedor al enum TransactionStatus con valores APPROVED, DECLINED, PENDING, EXPIRED, VOIDED y ERROR, y construyendo la entidad Transaction correspondiente. Este componente es el que hace medible el impacto del framework mediante las métricas CK: al centralizar la normalización, el código cliente no necesita referenciar los tipos de respuesta de ninguna pasarela, lo que reduce directamente su CBO.
+
+\subsubsection{Webhook Verifier}
+Verifica la autenticidad de los webhooks entrantes de cada pasarela mediante el método verify(payload, headers, secret, gateway): boolean. Dentro del alcance del proyecto, la implementación completa del algoritmo de verificación corresponde a Wompi mediante SHA-256, que es la pasarela de referencia. Para Rapyd y Kushki se implementa la verificación con el algoritmo correspondiente HMAC-SHA256, en un nivel de profundidad suficiente para validar los webhooks generados por el simulador durante la fase de evaluación. Por otro lado, para Mercado Pago el algoritmo es el mismo pero el resultado viaja en un encabezado con un formato propio (ts=\dots,v1=\dots). El detalle exacto de cada fórmula está documentado en el Lenguaje Ubicuo del proyecto.
+
+\subsubsection{Transaction Entity}
+Es la entidad central del dominio del SDK. Encapsula el estado unificado de una transacción (rawStatus, authorizationCode, payer, amount, currency) e implementa los métodos de consulta isApproved(), isPending() e isFinal() que permiten al desarrollador tomar decisiones de negocio sin depender de los estados crudos de ninguna pasarela.
+
+\subsubsection{Retry Handler}
+Implementa backoff exponencial con valores configurables (por defecto tres reintentos con intervalos de 1, 2 y 4 segundos) ante errores transitorios como timeout de red o respuestas HTTP 5xx. Distingue entre errores transitorios candidatos a reintento y errores definitivos que no se recuperarán con intentos adicionales. Si se supera el máximo de intentos, pasa el error al Error Handler con código MAX\_RETRIES\_EXCEEDED.
+
+\subsubsection{Error Handler}
+Convierte cualquier error en una excepción SdkError tipada con código normalizado del enum SdkErrorCode, que incluye INVALID\_\allowbreak CREDENTIALS, GATEWAY\_\allowbreak TIMEOUT, CONNECTION\_\allowbreak FAILED, WEBHOOK\_\allowbreak SIGNATURE\_\allowbreak INVALID y MAX\_\allowbreak RETRIES\_\allowbreak EXCEEDED entre otros, mensaje descriptivo en español e inglés y pasarela de origen. Garantiza que el desarrollador nunca reciba excepciones no manejadas ni errores en formato nativo de ninguna pasarela.
+
+\subsection{Diagrama de Componentes — API de Simulación (Nivel 3)}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{"../../architecture/Simulador API/Component Diagram - C4.png"}
+\caption{Diagrama de Componentes de la API de Simulación}
+\label{fig:component_sim}
+\end{figure}
+
+La API de Simulación es un servicio Fastify sobre Node.js 18 cuya arquitectura interna sigue un flujo de procesamiento secuencial con responsabilidades claramente delimitadas entre cinco componentes. El diagrama muestra ese flujo de izquierda a derecha, desde la recepción de la solicitud hasta la generación de la respuesta. El alcance del simulador fue definido deliberadamente para maximizar la utilidad durante la fase de evaluación del proyecto dentro del tiempo disponible.
+
+\subsubsection{HTTP Router \& Headers Middleware}
+Es la puerta de entrada del simulador, implementado como un plugin Fastify. Intercepta todas las solicitudes REST entrantes e identifica la pasarela de destino a partir de la estructura de la URL: \texttt{/v1/sim/wompi/*}, \texttt{/v1/sim/rapyd/*}, \texttt{/v1/sim/mercadopago/*} o \texttt{/v1/sim/kushki/*}. Extrae los dos headers de control que gobiernan el comportamiento del simulador: \texttt{x-simulate-scenario}, que indica el escenario a ejecutar, y \texttt{x-simulate-delay}, que especifica los milisegundos de latencia a introducir. Las solicitudes pueden provenir del SDK Kit Pagos Colombia en modo simulación o directamente del Desarrollador o Tester mediante herramientas REST.
+
+\subsubsection{Scenario Execution Engine}
+Es el componente de decisión del simulador. Para los escenarios de negocio (APROBADO, RECHAZADO y FONDOS\_INSUFICIENTES) delega la construcción del payload al Gateway Mock Factory. Para TIMEOUT introduce la latencia especificada antes de responder, permitiendo verificar que el Retry Handler del SDK maneja correctamente los tiempos de espera prolongados. Para ERROR\_RED retorna directamente una respuesta HTTP 500 o 502 sin invocar al Mock Factory, simulando la caída del servidor del proveedor.
+
+\subsubsection{Gateway Mock Factory}
+Construye payloads JSON que replican con exactitud la estructura de las respuestas nativas de cada pasarela para los escenarios de éxito y rechazo. Está compuesto por cuatro fábricas internas (WompiMockFactory, RapydMockFactory, MercadoPagoMockFactory y KushkiMockFactory) cada una con conocimiento del vocabulario de campos y valores propios de su proveedor. La precisión de este componente es crítica para la validación del framework: si el formato del Mock no coincide con el de la pasarela real, el Response Normalizer del SDK fallará en los escenarios de prueba.
+
+\subsubsection{Signature Generator}
+Calcula la firma criptográfica que acompaña a los webhooks simulados, de modo que el Webhook Verifier del SDK pueda verificarla. Dentro del alcance del proyecto, la implementación completa corresponde a Wompi mediante SHA-256. Para Rapyd, Mercado Pago y Kushki se implementa la firma con sus algoritmos respectivos en un nivel suficiente para que los webhooks generados por el simulador pasen la verificación del SDK durante la fase de evaluación. En el caso de Rapyd, ese algoritmo es HMAC-SHA256 con el resultado codificado en Base64, distinto del MD5 que usaba la pasarela que este proyecto documentaba originalmente en este mismo lugar. Este componente no opera de forma automática ni asíncrona, es invocado por el Webhook Trigger Endpoint cuando el desarrollador solicita explícitamente el envío de un webhook sintético.
+
+\subsubsection{Webhook Trigger Endpoint}
+Es el componente que gestiona el envío de webhooks sintéticos de forma controlada y explícita. A diferencia de un despachador automático, este endpoint requiere que el desarrollador o tester lo invoque manualmente mediante una solicitud POST a /v1/sim/webhooks/trigger, indicando la URL destino, el tipo de evento y la pasarela a simular. Esta decisión de diseño responde a una restricción práctica del contexto de evaluación académica: los proyectos prototípicos que integran el framework corren típicamente en entornos locales sin URL pública fija, lo que hace inviable el dispatch automático sin una solución de tunelización adicional. Al requerir invocación manual, el componente elimina esa dependencia sin sacrificar la capacidad de probar el flujo completo de validación de webhooks.
+
+\subsubsection{OpenAPI Documentation Provider}
+Sirve automáticamente la especificación OpenAPI 3.0 del simulador en el endpoint /docs mediante el plugin Swagger de Fastify. No requiere mantenimiento manual, cada modificación en los endpoints del simulador se refleja automáticamente en la especificación. Constituye uno de los entregables formales del proyecto definidos en la propuesta, lo que hace que este componente produzca directamente un artefacto evaluable sin trabajo adicional.
+

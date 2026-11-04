@@ -1,7 +1,7 @@
 # Documentos finales
 
-Fuentes LaTeX de los cinco documentos que se entregan con el trabajo de grado. Los PDF no se
-versionan: se compilan con `latexmk` y pdfLaTeX, en local o en la CI.
+Fuentes LaTeX de los cuatro documentos que se entregan con el trabajo de grado. Los PDF compilados (/*/main.pdf) no se
+versionan: se compilan con `latexmk` y pdfLaTeX, en local o en la CI, los unicos PDF que se versionan son los originales.
 
 | Carpeta | Contenido |
 |---|---|

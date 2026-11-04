@@ -1,0 +1,34 @@
+\section{Introducción}
+
+\subsection{Propósito del documento}
+Este documento corresponde a la Descripción de la Arquitectura de Software (SAD, por sus siglas en inglés) del proyecto Kit Pagos Colombia. Su propósito es presentar de forma estructurada las decisiones arquitectónicas que fundamentan el diseño y la construcción del sistema, describir los componentes que lo conforman, justificar las elecciones tecnológicas adoptadas y documentar los atributos de calidad que la arquitectura busca satisfacer.
+
+El documento está dirigido principalmente a los miembros del equipo de desarrollo, al director del proyecto y a los evaluadores académicos del trabajo de grado. Un lector con conocimientos en ingeniería de software encontrará en este documento los elementos suficientes para comprender la estructura del sistema, razonar sobre sus decisiones de diseño y extender el framework con nuevas pasarelas sin necesidad de intervenir en su núcleo.
+
+\subsection{Descripción general del sistema}
+Kit Pagos Colombia es un framework de código abierto implementado en TypeScript sobre Node.js 18 LTS, cuyo propósito es simplificar el proceso de integración de múltiples pasarelas de pago en aplicaciones de software desarrolladas en el contexto colombiano. El ecosistema de pagos digitales en Colombia está actualmente fragmentado entre cuatro proveedores principales (Wompi, Rapyd, Mercado Pago y Kushki), cada uno con sus propias convenciones de autenticación, formatos de respuesta, mecanismos de notificación asíncrona y comportamientos ante errores. Esta fragmentación obliga a los equipos de desarrollo a reimplementar lógica específica por cada proveedor, multiplicando el esfuerzo, la probabilidad de errores y el tiempo invertido cada vez que un proyecto requiere incorporar una pasarela adicional.
+
+El framework aborda este problema mediante tres componentes complementarios. El primero es un SDK con interfaz unificada que abstrae las diferencias entre proveedores y expone un conjunto consistente de operaciones (creación de pagos, consulta de estado y validación de webhooks) independientemente de la pasarela activa. El segundo es una API web de simulación desplegada que replica el comportamiento de las pasarelas para los escenarios de prueba más frecuentes, sin requerir credenciales reales ni configuración local adicional. El tercero es una documentación centralizada de datos de prueba que consolida, por pasarela, las tarjetas de prueba, credenciales de sandbox y referencias de pago disponibles en cada proveedor.
+
+\subsection{Objetivos de negocio que el sistema debe cumplir}
+La arquitectura del framework está orientada a satisfacer los siguientes objetivos, derivados directamente de los objetivos específicos del proyecto de grado:
+
+\begin{itemize}
+    \item El framework debe permitir que un desarrollador integre cualquiera de las cuatro pasarelas soportadas utilizando la misma interfaz de programación, de modo que cambiar de proveedor implique únicamente modificar un parámetro de configuración sin alterar el código de negocio de la aplicación.
+    \item El framework debe ofrecer un entorno de pruebas controlado a través de la API de simulación, que permita reproducir escenarios de éxito, rechazo, error de red y notificaciones asíncronas sin depender de la disponibilidad ni de las restricciones de los sandboxes oficiales de cada proveedor.
+    \item El framework debe ser extensible, de modo que la incorporación de una nueva pasarela en el futuro requiera únicamente la implementación de un nuevo adaptador sin modificar el núcleo del sistema.
+    \item El framework debe ser evaluable mediante métricas objetivas de calidad de código. Su impacto se medirá comparando los valores de WMC, CBO y RFC, métricas del conjunto propuesto por Chidamber y Kemerer (1994) entre una integración directa con las APIs nativas de las pasarelas y una integración equivalente utilizando el framework.
+\end{itemize}
+
+\subsection{Atributos de calidad principales}
+Los atributos de calidad que la arquitectura debe satisfacer se derivan de los requisitos no funcionales especificados en el documento SRS del proyecto, organizados bajo la clasificación FURPS+:
+
+\begin{itemize}
+    \item \textbf{Extensibilidad.} La arquitectura hexagonal (Ports \& Adapters) garantiza que el núcleo del SDK sea independiente de cualquier pasarela específica. La incorporación de un nuevo proveedor requiere únicamente implementar una clase adaptadora que cumpla el contrato del puerto, sin modificar ningún componente existente.
+    \item \textbf{Usabilidad.} El framework debe poder instalarse mediante un único comando y su documentación debe permitir que un desarrollador con conocimientos básicos de Node.js complete su primera integración en un tiempo máximo de dos horas, verificado mediante una sesión de prueba de usabilidad durante la fase de evaluación.
+    \item \textbf{Confiabilidad.} El SDK no debe lanzar excepciones no manejadas bajo ninguna condición de error esperada. Ante errores transitorios implementa reintentos automáticos con backoff exponencial (3 intentos con intervalos de 1s, 2s y 4s por defecto). La API de simulación debe permanecer accesible durante todo el período de evaluación del proyecto.
+    \item \textbf{Rendimiento.} El overhead introducido por el framework frente a una llamada directa a la API de cada pasarela no debe superar los 100 milisegundos en condiciones de red normales. La API de simulación debe responder en menos de 500 milisegundos para escenarios sin latencia intencionada.
+    \item \textbf{Seguridad.} Toda comunicación entre el SDK y las APIs de las pasarelas se realiza exclusivamente a través de HTTPS. Las credenciales de cada proveedor no deben ser expuestas en logs, mensajes de error ni en las respuestas del SDK. El framework no almacena ni procesa datos de tarjeta de crédito directamente, esa responsabilidad recae en los mecanismos certificados de cada pasarela.
+    \item \textbf{Mantenibilidad.} El código del framework debe seguir las convenciones de estilo definidas en el repositorio, verificables mediante el comando npm run lint. Cada adaptador debe estar acompañado de pruebas de integración que verifiquen su funcionamiento contra la API de simulación.
+\end{itemize}
+

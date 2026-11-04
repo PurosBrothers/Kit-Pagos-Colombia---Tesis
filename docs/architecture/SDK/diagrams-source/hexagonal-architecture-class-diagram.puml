@@ -51,7 +51,6 @@ package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
     --
     card(cardToken) : PaymentMethod
     pse(attributes) : PaymentMethod
-    cash(attributes) : PaymentMethod
   }
 
   class PseBank <<Value Object>> #C8E6C9 {
@@ -107,8 +106,8 @@ package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
     class KushkiWebhookHandler #BBDEFB
   }
 
-  class SdkError <<Error>> #F8BBD0 {
-    code : SdkErrorCode
+  class KitPagosError <<Error>> #F8BBD0 {
+    code : KitPagosErrorCode
     gateway : Gateway
     originalPayload : unknown
   }
@@ -125,7 +124,6 @@ package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
   enum PaymentMethodType #E0E0E0 {
     CARD
     PSE
-    CASH
   }
 
   enum Gateway #E0E0E0 {
@@ -183,7 +181,7 @@ package "APLICACION (Puertos y Servicios)" #FFFFFF {
   }
 
   class ErrorHandler <<Servicio de Aplicacion>> #2E75B6 {
-    handle(rawError, gateway) : SdkError
+    handle(rawError, gateway) : KitPagosError
     --
     <i>divide por forma del error,</i>
     <i>no por pasarela</i>
@@ -202,7 +200,7 @@ package "INFRAESTRUCTURA (Facade, Factory y Adapters)" #FFFFFF {
     createPayment(request) : Promise<PaymentResult>
     getPaymentStatus(id) : Promise<Transaction>
     getPseBanks() : Promise<PseBank[]>
-    validateWebhook(payload, headers) : WebhookEvent
+    validateWebhook(payload, headers, options?) : WebhookEvent
   }
 
   class SDKConfigurator <<Configuration Module>> #2E75B6 {
@@ -226,8 +224,7 @@ package "INFRAESTRUCTURA (Facade, Factory y Adapters)" #FFFFFF {
   KitPagos --> GatewayFactory : solicita adapter
   KitPagos --> RetryHandler : envuelve llamada
   KitPagos ..> WebhookVerifier : valida webhook
-  KitPagos --> ResponseNormalizer : normaliza respuesta
-  GatewayFactory ..> PaymentGatewayPort : instancia
+    GatewayFactory ..> PaymentGatewayPort : instancia
   WompiAdapter ..|> PaymentGatewayPort
   RapydAdapter ..|> PaymentGatewayPort
   MercadoPagoAdapter ..|> PaymentGatewayPort

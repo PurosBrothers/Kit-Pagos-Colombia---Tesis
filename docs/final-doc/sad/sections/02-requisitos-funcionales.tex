@@ -1,0 +1,29 @@
+\section{Visión general de los requisitos funcionales}
+En la tabla 1 se presenta el listado consolidado de requisitos funcionales del framework, organizados por componente. Las prioridades se clasifican en Alta (esencial para el MVP), Media (importante pero no bloqueante) y Baja (deseable en versiones futuras).
+
+\begin{table}[htbp]
+\centering
+\caption{Requisitos funcionales}
+\label{tab:req_func}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|l|X|l|l|}
+\hline
+\textbf{ID} & \textbf{Descripción del requisito} & \textbf{Componente} & \textbf{Prioridad} \\ \hline
+RF-01 & El sistema debe permitir crear una intención de pago especificando pasarela, monto, moneda, referencia de orden y datos del pagador mediante una interfaz unificada. & SDK & Alta \\ \hline
+RF-02 & El sistema debe retornar una respuesta normalizada ante la creación de un pago, incluyendo el identificador de transacción, el estado inicial y la URL o token de pago según la pasarela. & SDK & Alta \\ \hline
+RF-03 & El sistema debe permitir consultar el estado de una transacción por identificador y retornarlo mapeado a los estados normalizados: PENDIENTE, APROBADO, RECHAZADO, EXPIRADO o ERROR. & SDK & Alta \\ \hline
+RF-04 & El sistema debe validar la firma criptográfica de un webhook entrante utilizando el algoritmo correspondiente a cada pasarela y retornar un evento normalizado si la firma es válida. & SDK & Alta \\ \hline
+RF-05 & El sistema debe lanzar excepciones tipadas con código de error normalizado y mensaje descriptivo ante cualquier condición de fallo esperada (timeout, credenciales inválidas, recurso no encontrado). & SDK & Alta \\ \hline
+RF-06 & El sistema debe permitir cambiar la pasarela activa modificando únicamente el parámetro de configuración en la inicialización del framework, sin modificar el código de negocio del llamador. & SDK & Alta \\ \hline
+RF-07 & El sistema debe reintentar automáticamente una operación ante errores transitorios (timeout, respuestas 5xx) siguiendo una estrategia de backoff exponencial configurable, hasta un número máximo de intentos definido por el usuario. & SDK & Media \\ \hline
+RF-08 & El sistema debe garantizar que las credenciales de cada pasarela no sean expuestas en logs, mensajes de error ni en las respuestas del SDK. & SDK & Alta \\ \hline
+RF-09 & El sistema debe exponer endpoints REST que repliquen el comportamiento de creación de pago de cada pasarela soportada, accesibles sin credenciales reales. & API Simulación & Alta \\ \hline
+RF-10 & El sistema debe permitir configurar el escenario de respuesta de cada endpoint mediante un parámetro de la solicitud, soportando al menos: APROBADO, RECHAZADO, FONDOS\_INSUFICIENTES, TIMEOUT y ERROR\_RED. & API Simulación & Alta \\ \hline
+RF-11 & El sistema debe replicar la estructura exacta de las respuestas de error de cada pasarela en los escenarios de fallo configurados. & API Simulación & Alta \\ \hline
+RF-12 & El sistema debe permitir solicitar el envío de un webhook simulado hacia una URL destino, con el formato y firma correspondientes a la pasarela indicada. & API Simulación & Media \\ \hline
+RF-13 & El sistema debe exponer la especificación OpenAPI 3.0 de la API de simulación en un endpoint público (/docs), accesible a través de un navegador web. & API Simulación & Media \\ \hline
+RF-14 & El sistema debe proveer documentación de datos de prueba organizada por pasarela, incluyendo tarjetas de prueba, credenciales de sandbox y referencias de pago válidas para cada proveedor. & Documentación & Alta \\ \hline
+RF-15 & El sistema debe indicar el comportamiento esperado de cada dato de prueba (tarjeta aprobada, tarjeta rechazada, fondos insuficientes) junto con la fuente oficial del proveedor. & Documentación & Media \\ \hline
+\end{tabularx}
+\end{table}
+

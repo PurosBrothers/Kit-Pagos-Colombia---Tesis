@@ -1,0 +1,79 @@
+\section{Vista de procesos}
+Esta sección describe el comportamiento dinámico de los flujos más críticos del sistema en relación con sus atributos de calidad, complementando las vistas estáticas de componentes (secciones 8 y 9) con Diagramas de Secuencia (C4 Dynamic Diagram) que muestran cómo colaboran esos componentes en tiempo de ejecución. Se agrupan en dos conjuntos: los que describen el comportamiento interno del SDK frente a la aplicación del comercio, y los que describen el comportamiento de la API de Simulación frente a cada escenario de prueba configurable.
+
+\subsection{Diagramas de Secuencia — SDK}
+
+\subsubsection{Creación de Pago (pendiente + webhook)}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{"../../architecture/SDK/Sequence Diagram - Payment Creation.png"}
+\caption{Diagrama de Secuencia del SDK de creación de pago}
+\label{fig:seq_create_payment}
+\end{figure}
+
+Este diagrama ilustra el flujo estándar de creación de un pago cuando la pasarela responde de forma asíncrona. El Comercio invoca el método createPayment(request) sobre la fachada principal KitPagos (Facade), la cual delega la llamada enviando createPayment(request) hacia el Adapter (previamente seleccionado mediante el GatewayFactory). El Adapter realiza una petición nativa POST /payments (nativo) hacia la API de la pasarela (o de simulación) y recibe una respuesta 201 Created que incluye el token y el estado nativo equivalente a pendiente. Posteriormente, el Adapter devuelve rawResponse a KitPagos (Facade), componente que invoca internamente a ResponseNormalizer.normalize(rawResponse, gateway) para transformar la respuesta cruda en la entidad del dominio Transaction con estado PENDING. Finalmente, la fachada retorna la instancia Transaction(PENDING) de vuelta al Comercio.
+
+El diagrama deja explícito, mediante una nota, que este flujo no entrega el resultado final del pago; la confirmación definitiva (APROBADO, RECHAZADO, etc.) llega posteriormente de manera asíncrona mediante un webhook, cuyo procesamiento se documenta por separado en el diagrama de conciliación por webhook. Este comportamiento es relevante para el atributo de calidad de confiabilidad, ya que evidencia que el SDK no bloquea al comercio esperando una resolución síncrona que la pasarela no garantiza en su llamada inicial.
+
+\subsubsection{Pago Síncrono (Kushki — Tarjeta)}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.75\textwidth]{"../../architecture/SDK/Sequence Diagram - Synchronous Payment.png"}
+\caption{Diagrama de Secuencia del SDK de creación de pago síncrona}
+\label{fig:seq_create_payment_sync}
+\end{figure}
+
+Este diagrama documenta la excepción al flujo anterior: para operaciones con tarjeta sobre Kushki, la pasarela sí devuelve el resultado final de la transacción en la misma respuesta HTTP, sin requerir conciliación posterior por webhook. El diagrama usa un bloque alt para mostrar las tres ramas posibles ante la llamada POST /charges del KushkiAdapter: pago aprobado (HTTP 201, PaymentResult(APPROVED)), pago rechazado (HTTP 402, PaymentResult(REJECTED)) y error técnico (HTTP 500, traducido a SdkError(GATEWAY\_ERROR)). Este diagrama es importante porque advierte a quien implemente o integre el SDK que el patrón de "pendiente + webhook" documentado en 10.1.1 no es universal: el comportamiento síncrono de Kushki para tarjetas es una particularidad del proveedor que el KushkiAdapter debe manejar de forma distinta a los demás, sin que esa diferencia se filtre hacia el código del comercio gracias a la normalización de PaymentResult.
+
+\subsubsection{Conciliación por Webhook (asíncrono)}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.75\textwidth]{"../../architecture/SDK/Sequence Diagram - Webhook Conciliation.png"}
+\caption{Diagrama de Secuencia del SDK de conciliación por webhook}
+\label{fig:seq_webhook_sdk}
+\end{figure}
+
+Este diagrama complementa al de Creación de Pago (10.1.1) mostrando cómo se resuelve finalmente una transacción que quedó en estado PENDING. La Pasarela envía un POST /webhook con el payload y los headers de firma hacia el WebhookController, que delega en ProcesarWebhookUseCase. Este último invoca verifySignature() sobre el Adapter correspondiente antes de procesar cualquier dato del evento, siguiendo el bloque alt que separa el camino de firma válida (se parsea el webhook, se actualiza la transacción y se retorna HTTP 200) del camino de firma inválida (se descarta el evento y se retorna HTTP 401 con SdkError(WEBHOOK\_SIGNATURE\_INVALID), sin llegar a actualizar ninguna transacción). Este diagrama materializa directamente el ADR-04 (verificación criptográfica de firmas) y es crítico para el atributo de calidad de seguridad: deja explícito que ningún dato de un webhook se procesa antes de validar su origen. La nota final, sobre Kushki no publicar su algoritmo de firma, documenta una limitación conocida que el Adapter debe comunicar explícitamente al comercio, en línea con el riesgo técnico ya identificado sobre la implementación parcial de firmas.
+
+\subsection{Diagramas de Secuencia — API de Simulación}
+
+\subsubsection{Pago Exitoso (Escenario 1)}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.9\textwidth]{"../../architecture/Simulador API/Sequence Diagram - Successful Payment.png"}
+\caption{Diagrama de Secuencia de la API de Simulación de pago exitoso}
+\label{fig:seq_sim_success}
+\end{figure}
+
+Muestra el flujo base de la API de Simulación: el Comercio invoca createPayment() sobre el SDK, que traduce la llamada en un POST /simulate/\{gateway\}/payments hacia la API. El Scenario Engine resuelve el escenario a partir del orderReference recibido (una nota aclara que el propio orderReference codifica el escenario esperado, por ejemplo con el sufijo "-SUCCESS") y retorna el payload nativo de éxito. Este diagrama es especialmente relevante porque su nota final expone, con datos concretos, el problema central que resuelve el ADR-03: cada pasarela representa un pago aprobado con un vocabulario distinto (APPROVED en Wompi, CLO en Rapyd (acompañado del campo paid: true), approved en minúsculas en Mercado Pago, y el caso particular de Kushki con APPROVAL en lugar de APPROVED), lo que justifica la existencia del Response Normalizer.
+
+\subsubsection{Pago Rechazado (Escenario 2)}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.9\textwidth]{"../../architecture/Simulador API/Sequence Diagram - Denied Payment.png"}
+\caption{Diagrama de Secuencia de la API de Simulación de pago rechazado}
+\label{fig:seq_sim_declined}
+\end{figure}
+
+Extiende el flujo anterior mostrando dos operaciones en secuencia: la creación del pago (que retorna un estado DECLINED normalizado) y la consulta posterior de estado mediante getTransactionStatus(), que el diagrama marca explícitamente como determinista (el Scenario Engine resuelve el mismo resultado de rechazo ante la misma referencia). Es el diagrama donde se evidencia el mapeo hacia rejectionCode y rejectionCategory descrito en el modelo de dominio, y su nota final documenta, igual que en el escenario anterior, la heterogeneidad real del motivo de rechazo entre proveedores (texto libre en Wompi, el código compuesto ERROR\_PROCESSING\_CARD seguido del código de red entre corchetes en Rapyd (por ejemplo, ERROR\_PROCESSING\_CARD - [51] para fondos insuficientes), \texttt{status\_detail} en Mercado Pago, y la combinación de code + processorError en Kushki), justificando por qué esa normalización debe vivir en el SDK y no quedar como responsabilidad del comercio.
+
+\subsubsection{Error de Red (Escenario 3)}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.9\textwidth]{"../../architecture/Simulador API/Sequence Diagram - Network Error.png"}
+\caption{Diagrama de Secuencia de la API de Simulación de error de red}
+\label{fig:seq_sim_error}
+\end{figure}
+
+Documenta el escenario más complejo de los cuatro, mediante un bloque alt con dos ramas. La primera es timeout: la API de Simulación deliberadamente no responde dentro del umbral configurado, y el SDK debe capturar el corte de conexión y mapearlo a SdkError(GATEWAY\_TIMEOUT) o CONNECTION\_FAILED). La segunda es error de servidor simulado, donde la nota final señala una particularidad crítica para la implementación de los Adapters: Kushki siempre devuelve HTTP 200 incluso ante un error, por lo que su Adapter no puede confiar en el código de estado HTTP para detectar la falla y debe inspeccionar explícitamente el campo \texttt{body.code} o \texttt{body.error} del payload. Rapyd es distinto en este punto: sí devuelve códigos HTTP reales (4xx o 5xx) cuando la operación falla, pero el detalle específico del error igual viaja dentro del cuerpo de la respuesta, en un objeto status anidado (\texttt{status.error\_code}, \texttt{status.message}), así que su Adapter también necesita leer el body completo, solo que puede apoyarse primero en el código HTTP como una señal confiable, algo que el Adapter de Kushki no puede hacer. Este diagrama es directamente relevante para el atributo de calidad de confiabilidad y para el ADR-05 (reintentos), ya que ambas ramas terminan siendo clasificadas por el Retry Handler del SDK como errores transitorios candidatos a reintento.
+
+\subsubsection{Notificación Webhook (Escenario 4)}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{"../../architecture/Simulador API/Sequence Diagram - Webhook Notification.png"}
+\caption{Diagrama de Secuencia de la API de Simulación de Notificación webhook}
+\label{fig:seq_sim_webhook}
+\end{figure}
+
+Muestra el lado de la API de Simulación que dispara webhooks sintéticos: tras crear un pago con escenario "webhook", el Scenario Engine construye el payload nativo con firma simulada y lo envía mediante POST al endpoint del Comercio. El diagrama usa un alt para mostrar la verificación de firma en el lado del SDK receptor (verifyWebhookSignature), diferenciando el camino de firma válida (que procesa el evento, normaliza el estado y permite al comercio actualizar su orden interna) del de firma inválida (que descarta el evento con SdkError(WEBHOOK\_SIGNATURE\_INVALID)). Es el complemento natural del diagrama de Conciliación por Webhook (10.1.3): mientras aquel muestra cómo el SDK procesa un webhook real, este muestra cómo la API de Simulación lo genera de forma controlada para poder ejercitar ese flujo durante las pruebas. La nota final resume el estado de implementación de la firma por pasarela (Wompi completo mediante SHA-256; Rapyd, Mercado Pago y Kushki implementados a un nivel suficiente para las pruebas del simulador, sin la robustez de un algoritmo validado contra la documentación oficial completa de cada proveedor"), documentando de forma trazable el riesgo técnico ya identificado sobre la verificación incompleta de firmas.
+
