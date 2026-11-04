@@ -495,10 +495,14 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 con dos superficie
 | **RF-09** Endpoints REST por pasarela | N/A | `HTTPRouter` (`/v1/sim/{pasarela}/*`) |
 | **RF-10** Escenarios controlados configurables | N/A: el SDK no envía cabeceras; el escenario sale de los datos que ya envía (monto, credencial, dato de prueba) | `HTTPRouter` → `resolveScenario()` → `ScenarioEngine` o la ruta de cada pasarela |
 | **RF-11** Estructura de error nativa por pasarela | `ResponseNormalizer` (campo `rawStatus`) | `GatewayMockFactory` (payload de error nativo) |
-| **RF-12** Webhook sintético hacia URL destino | `WebhookVerifier` (validación del receptor) | `webhookTriggerRoute` → `SignatureGenerator` → `WebhookDispatcher` (issue #122) |
-| **RF-13** Especificación OpenAPI 3.0 en `/docs` | `@fastify/swagger` y `@fastify/swagger-ui` | `kit-pagos-api/openapi/register.ts` y `schemas.ts`; cobertura de `/v1/sim` pendiente (#106, #107) |
+| **RF-12** Webhook sintético y emisión automática | `WebhookVerifier` (validación del receptor) | `webhookTriggerRoute` → `SignatureGenerator` → `WebhookDispatcher`; la emisión automática la dispara el estado final del pago (issue #122) |
+| **RF-13** Especificación OpenAPI 3.0 en `/docs` | `@fastify/swagger` y `@fastify/swagger-ui` | `kit-pagos-api/openapi/register.ts` y `schemas.ts`; cobertura de `/v1/sim` pendiente en #106 (#107 se completó en #183) |
 | **RF-14** Documentación de datos de prueba por pasarela | N/A | Documentación centralizada (repositorio) |
 | **RF-15** Comportamiento esperado por dato de prueba | `ResponseNormalizer` (mapeo de estados) | `GatewayMockFactory` (escenarios por dato) |
+| **RF-16** Exponer Kit Pagos por REST en `/v1/api` | `KitPagos` (fachada que consumen los routers) | `kit-pagos-api/` (`gateways`, `payments`, `pse-banks`, `webhooks`) → `KitPagos` |
+| **RF-17** Tokenizar la tarjeta en el navegador | `KitPagosBrowser` → `WompiTokenizer`, `MercadoPagoTokenizer` y `KushkiTokenizer`; Rapyd responde `UNSUPPORTED_OPERATION` | `tokenizationCors` y las rutas de tokenización de `/v1/sim/{wompi,mercadopago,kushki}` |
+| **RF-18** Motivo de rechazo con código y categoría | `ResponseNormalizer` → `RejectionReason` (`failureCode` + `category`) | `GatewayMockFactory` (payload nativo de rechazo por pasarela) |
+| **RF-19** Listar bancos PSE y traducir el código ACH | `KitPagos.getPseBanks()` → adaptadores; `PseBankCode` y `PseBank` | `GET /v1/api/pse-banks` → `GatewayMockFactory` (catálogo de bancos por pasarela) |
 
 ---
 

@@ -1,18 +1,33 @@
 \documentclass[10pt]{article}
 \input{../comun/estilo}
+\usepackage{longtable}
+\usepackage{float}
 
 \NombreDocumento{SRS}
-\VersionDocumento{0.1}
+\VersionDocumento{2.0}
 \FechaDocumento{octubre de 2026}
 
 \begin{document}
+\sloppy
 
 \Portada
 
 \begin{HistorialDeCambios}
   \Cambio{0.1}{28/10/2026}{Portada, historial de cambios e índices con el estilo común (issue \#167).}{Joan Emmanuel Orduz Chia}
+  \Cambio{1.0}{mayo de 2026}{Versión inicial en procesador de texto (Word).}{Andres Henao Niño, Joan Emmanuel Orduz Chia, Joshua Prieto Zambrano, David Estevan Rodriguez Jurado}
+  \Cambio{1.1}{octubre de 2026}{Paso a LaTeX con el estilo común, sin cambios de contenido (issue \#168).}{Andres Henao Niño}
+  \Cambio{2.0}{octubre de 2026}{Reescritura del SRS para reflejar el framework construido (issue \#169): Rapyd reemplaza a PayU; seis estados normalizados; SDK de servidor y módulo de navegador; API de Simulación con \texttt{/v1/sim} y \texttt{/v1/api}; requisitos RF-16 a RF-19; historias de usuario y criterios de aceptación actualizados; requisitos no funcionales y restricciones ajustados a Node 20.19+, simulador local y Render, y alcance de PCI DSS.}{Andres Henao Niño}
 \end{HistorialDeCambios}
 
 \Indices
+
+\input{sections/01-introduccion}
+\input{sections/02-vision-producto}
+\input{sections/03-restricciones}
+\input{sections/04-modelo-dominio}
+\input{sections/05-caracteristicas-usuarios}
+\input{sections/06-funciones-producto}
+\input{sections/07-requisitos-no-funcionales}
+\input{sections/08-referencias}
 
 \end{document}

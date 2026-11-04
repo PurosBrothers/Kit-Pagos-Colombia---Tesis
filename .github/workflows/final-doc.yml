@@ -15,17 +15,17 @@ on:
 
 jobs:
   final-doc:
-    name: Final documents (latexmk build of SRS, SAD, test plan and thesis)
+    name: Final documents (latexmk build of SRS, SAD, test plan, SPMP and thesis)
     runs-on: ubuntu-latest
     container: texlive/texlive:latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build the four PDFs with latexmk
+      - name: Build the five PDFs with latexmk
         run: |
           mkdir -p final-doc-pdf
-          for doc in srs sad pruebas memoria; do
+          for doc in srs sad pruebas spmp memoria; do
             latexmk -pdf -interaction=nonstopmode -halt-on-error -cd "docs/final-doc/$doc/main.tex"
             cp "docs/final-doc/$doc/main.pdf" "final-doc-pdf/$doc.pdf"
           done

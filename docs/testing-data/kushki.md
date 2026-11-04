@@ -534,7 +534,7 @@ Usa los siguientes números de identificación al solicitar el token de `cash in
 | **Aprobada** | `5451 9515 7492 5480` | `(201) Suscripción creada` |
 | **Declinada en Token** | `4574 4412 1519 0335` | `(017) Transacción declinada` |
 
-### B. Ejecució﻿n de Cobros bajo demanda
+### B. Ejecución de Cobros bajo demanda
 
 Para probar la posterior ejecución del cobro recurrente asociado a la suscripción creada:
 
