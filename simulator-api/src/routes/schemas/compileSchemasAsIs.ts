@@ -30,7 +30,25 @@ const validator = addFormats(
   }),
 );
 
+/**
+ * Un error que llega a Fastify sin respuesta propia (un JSON roto, una excepción del handler) se
+ * serializa con el schema de su código si la ruta lo declara, como `Object.create(error, …)` con
+ * `statusCode`, `error` y `message` no enumerables. `JSON.stringify` lo dejaría en `{}`; sale con
+ * el cuerpo que Fastify arma cuando la ruta no declara ese código.
+ */
+function serialize(data: unknown): string {
+  if (data instanceof Error) {
+    const { statusCode, code, error, message } = data as Error & {
+      statusCode?: number;
+      code?: string;
+      error?: string;
+    };
+    return JSON.stringify({ statusCode, code, error, message });
+  }
+  return JSON.stringify(data);
+}
+
 export function compileSchemasAsIs(app: FastifyInstance): void {
   app.setValidatorCompiler(({ schema }) => validator.compile(schema));
-  app.setSerializerCompiler(() => (data) => JSON.stringify(data));
+  app.setSerializerCompiler(() => serialize);
 }

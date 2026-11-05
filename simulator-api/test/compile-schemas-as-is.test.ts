@@ -59,4 +59,28 @@ describe("compileSchemasAsIs: the simulation schemas do not rewrite requests or 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ total: "150000" });
   });
+
+  it("answers an error nobody answered with the body Fastify gives a route that does not declare that code", async () => {
+    const failing = async (request: { body: unknown }) => {
+      if ((request.body as { fail?: boolean }).fail) {
+        throw new Error("fallo inesperado del handler");
+      }
+      return {};
+    };
+    const declaring = Fastify({ logger: false });
+    declaring.register(async (routes) => {
+      compileSchemasAsIs(routes);
+      routes.post("/boom", { schema: { response: { 400: { type: "object" }, 500: { type: "object" } } } }, failing);
+    });
+    const plain = Fastify({ logger: false });
+    plain.post("/boom", failing);
+
+    for (const payload of ['{"fail": true}', '{"fail": ']) {
+      const options = { method: "POST" as const, url: "/boom", headers: { "content-type": "application/json" }, payload };
+      const [got, expected] = await Promise.all([declaring.inject(options), plain.inject(options)]);
+
+      expect(expected.json().message).toBeTruthy();
+      expect({ status: got.statusCode, body: got.json() }).toEqual({ status: expected.statusCode, body: expected.json() });
+    }
+  });
 });
