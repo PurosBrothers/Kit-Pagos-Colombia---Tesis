@@ -44,7 +44,7 @@ Internamente, \texttt{KitPagos.validateWebhook()} resuelve el contexto de firma 
 
 La nota del diagrama original quedó atrás en dos aspectos. Primero, la verificación HMAC-SHA256 de Kushki sobre \texttt{payload + '.' + x-kushki-id} (cabecera \texttt{x-kushki-signature}) está implementada en \texttt{KushkiWebhookHandler}, aunque solo se probó con el simulador (punto 120); segundo, en Mercado Pago la notificación solo avisa que hubo novedad sobre un identificador, por lo que \texttt{MercadoPagoWebhookHandler.parse()} devuelve \texttt{newStatus: TransactionStatus.PENDING} y el comercio completa la conciliación en dos pasos consultando \texttt{kitPagos.getPaymentStatus(event.gatewayTransactionId)} (puntos 26 y 70).
 
-\subsection{Diagramas de Secuencia — API de Simulación}
+\subsection{Diagramas de Secuencia --- API de Simulación}
 
 \subsubsection{Pago Exitoso (Escenario 1)}
 \begin{figure}[htbp]
