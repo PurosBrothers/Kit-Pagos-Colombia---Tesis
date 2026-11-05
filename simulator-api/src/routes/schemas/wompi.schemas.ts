@@ -32,7 +32,9 @@ const simulateScenarioHeader = {
     "SERVER_ERROR, INTERNAL_ERROR, BAD_GATEWAY, SERVICE_UNAVAILABLE, FLAPPING, " +
     "DUPLICATE_PAYMENT, SLOW, MALFORMED_JSON, MALFORMED_BODY, HTML_ERROR, 429, 500, " +
     "502, 503 e INVALID_CREDENTIALS. " +
-    "Un escenario de creación desconocido devuelve 501. En tokenización solo se " +
+    "Un escenario de creación desconocido devuelve 501. Sin la cabecera deciden la tarjeta " +
+    "de prueba (4111 1111 1111 1111 termina DECLINED) y los montos reservados de 10 001 a " +
+    "10 604 pesos; si ninguno pide un escenario, APPROVED. En tokenización solo se " +
     "aplican escenarios técnicos.",
   example: "APPROVED",
 } as const;
@@ -60,6 +62,39 @@ const wompiErrorBody = {
   },
 } as const;
 
+/**
+ * Las fallas técnicas de `technicalFailure.ts` en la creación, con el cuerpo de
+ * `WompiErrorMockFactory`. Nivel 3, convención del simulador.
+ */
+const creationFailureResponses = {
+  200: {
+    description:
+      "MALFORMED_JSON (un cuerpo que no es JSON) o MALFORMED_BODY (`{ data: {} }`, sin los " +
+      "campos de la transacción). Prueban el normalizador del SDK.",
+  },
+  429: { description: "RATE_LIMIT, TOO_MANY_REQUESTS o 429.", ...wompiErrorBody },
+  500: {
+    description: "SERVER_ERROR, INTERNAL_ERROR o 500. NETWORK_ERROR corta la conexión sin responder.",
+    ...wompiErrorBody,
+  },
+  502: {
+    description: "BAD_GATEWAY o 502. HTML_ERROR también responde 502, con una página HTML y no JSON.",
+    ...wompiErrorBody,
+  },
+  503: { description: "SERVICE_UNAVAILABLE o 503, y las dos primeras peticiones de FLAPPING.", ...wompiErrorBody },
+  504: { description: "TIMEOUT o GATEWAY_TIMEOUT, y SLOW después de su espera.", ...wompiErrorBody },
+} as const;
+
+/** Las fallas de consulta que deja pedidas el monto de la creación (issue #122). */
+const queryFailureResponses = {
+  500: { description: "La creación fue por 10 600 pesos (QUERY_SERVER_ERROR).", ...wompiErrorBody },
+  503: {
+    description: "La creación fue por 10 602 pesos (QUERY_FLAPPING): fallan dos consultas y la tercera responde.",
+    ...wompiErrorBody,
+  },
+  504: { description: "La creación fue por 10 604 pesos (QUERY_SLOW), después de la espera de SLOW.", ...wompiErrorBody },
+} as const;
+
 /** Objeto transaction que devuelve Wompi dentro de `data`. */
 const wompiTransactionObject = {
   type: "object",
@@ -80,7 +115,7 @@ const wompiTransactionObject = {
       type: "object",
       description:
         "Método de pago. Para PSE incluye extra.async_payment_url " +
-        "solo en la primera consulta GET (flujo de dos pasos).",
+        "desde la primera consulta GET; la creación no la trae (flujo de dos pasos).",
       properties: {
         type: { type: "string", example: "PSE" },
         token: {
@@ -88,6 +123,7 @@ const wompiTransactionObject = {
           description: "Token devuelto por POST /v1/sim/wompi/tokens/cards para pagos con tarjeta.",
           example: "tok_sim_12345678",
         },
+        installments: { type: "integer", description: "Cuotas de un cobro con tarjeta.", example: 1 },
         user_type: { type: "integer", example: 0 },
         user_legal_id: { type: "string", example: "123456789" },
         user_legal_id_type: { type: "string", example: "CC" },
@@ -99,8 +135,8 @@ const wompiTransactionObject = {
         extra: {
           type: "object",
           description:
-            "Datos adicionales. async_payment_url aparece solo en la primera " +
-            "consulta GET de un PSE (architecture-log punto 43).",
+            "Datos adicionales. async_payment_url aparece a partir de la primera " +
+            "consulta GET de un PSE, no en la creación (architecture-log punto 43).",
           additionalProperties: true,
         },
       },
@@ -126,8 +162,9 @@ export const postWompiTransactionsSchema = {
     "real (architecture-log punto 50). Requiere acceptance_token de un solo uso y una firma " +
     "de integridad válida; faltas y firmas inválidas responden 422. " +
     "Para PSE la respuesta también es PENDING y sin URL de redirección: " +
-    "la URL aparece solo en la primera consulta GET subsiguiente (architecture-log punto 43). " +
-    "El header `x-simulate-scenario` controla el escenario; sin él se asume APPROVED.",
+    "la URL aparece en la primera consulta GET subsiguiente (architecture-log punto 43). " +
+    "El header `x-simulate-scenario` controla el escenario; sin él deciden la tarjeta de " +
+    "prueba y el monto.",
   tags: ["Wompi Simulación"],
   headers: {
     type: "object",
@@ -175,6 +212,12 @@ export const postWompiTransactionsSchema = {
           "y los datos del banco; para tarjeta, declara type=CARD y el token.",
         properties: {
           type: { type: "string", example: "PSE" },
+          token: {
+            type: "string",
+            description: "Token de POST /v1/sim/wompi/tokens/cards, en un cobro con tarjeta.",
+            example: "tok_sim_809b112742b44621",
+          },
+          installments: { type: "integer", description: "Cuotas de un cobro con tarjeta.", example: 1 },
           user_type: { type: "integer", example: 0 },
           user_legal_id: { type: "string", example: "123456789" },
           user_legal_id_type: { type: "string", example: "CC" },
@@ -198,20 +241,24 @@ export const postWompiTransactionsSchema = {
     },
     examples: [
       {
-        amount_in_cents: 5000000,
+        amount_in_cents: 6800000,
         currency: "COP",
-        reference: "ref-card-001",
-        customer_email: "cliente@ejemplo.com",
-        payment_method: { type: "CARD" },
-        acceptance_token: "sim_acceptance_abc123",
+        reference: "orden-1042",
+        customer_email: "comprador@example.com",
+        payment_method: { type: "CARD", token: "tok_sim_809b112742b44621", installments: 1 },
+        acceptance_token: "sim_acceptance_5ae098eb-cf10-4808-a4a8-15a82f65d96a",
+        signature: "6fb6e613acbb2c8fd322121bf8738eb3013c8326db0b084c7681619711946c2b",
+        redirect_url: "http://localhost:4001/orden/1042",
       },
     ],
   },
   response: {
+    ...creationFailureResponses,
     201: {
       description:
         "Transacción creada exitosamente. status siempre es PENDING al crear " +
-        "(Wompi es asíncrono; la consulta GET posterior resuelve el estado final).",
+        "(Wompi es asíncrono; la consulta GET posterior resuelve el estado final). " +
+        "Ejemplos: tarjeta, y PSE sin URL del banco.",
       type: "object",
       properties: {
         data: wompiTransactionObject,
@@ -220,15 +267,46 @@ export const postWompiTransactionsSchema = {
       examples: [
         {
           data: {
-            id: "550e8400-e29b-41d4-a716-446655440000",
+            id: "bf0dc67c-a8bb-43f5-b4da-e4553a522505",
             status: "PENDING",
-            amount_in_cents: 5000000,
+            amount_in_cents: 6800000,
             currency: "COP",
-            reference: "ref-card-001",
-            customer_email: "cliente@ejemplo.com",
+            reference: "orden-1042",
+            customer_email: "comprador@example.com",
+            payment_method: { type: "CARD", token: "tok_sim_809b112742b44621", installments: 1 },
+          },
+        },
+        {
+          data: {
+            id: "72c61198-6bda-4087-9cd9-c00a3410f6dc",
+            status: "PENDING",
+            amount_in_cents: 6800000,
+            currency: "COP",
+            reference: "orden-1043",
+            customer_email: "comprador@example.com",
+            payment_method: {
+              type: "PSE",
+              user_type: 0,
+              user_legal_id_type: "CC",
+              user_legal_id: "1999888777",
+              financial_institution_code: "1",
+              payment_description: "Pedido 1043",
+              extra: { is_three_ds: false, three_ds_auth_type: null },
+            },
+            redirect_url: "http://localhost:4001/orden/1043",
           },
         },
       ],
+    },
+    401: {
+      description:
+        "Llave inválida: INVALID_CREDENTIALS, o sin cabecera una llave que contiene `invalid`, " +
+        "`inexistente` o `not_found`.",
+      ...wompiErrorBody,
+    },
+    409: {
+      description: "DUPLICATE_PAYMENT: la segunda transacción con la misma referencia.",
+      ...wompiErrorBody,
     },
     422: {
       description:
@@ -263,7 +341,9 @@ export const getWompiTransactionSchema = {
     "Para PSE: primera consulta → PENDING con `payment_method.extra.async_payment_url`; " +
     "segunda consulta → estado final según financial_institution_code " +
     "('1'=APPROVED, '2'=DECLINED, '3'=ERROR). " +
-    "Devuelve 404 en forma nativa de Wompi si el id no existe.",
+    "Devuelve 404 en forma nativa de Wompi si el id no existe. Las fallas de consulta que " +
+    "pide el monto de la creación no se aplican a la consulta que publica la URL de un PSE: " +
+    "esa la hace el SDK dentro de la creación.",
   tags: ["Wompi Simulación"],
   params: {
     type: "object",
@@ -272,13 +352,15 @@ export const getWompiTransactionSchema = {
       id: {
         type: "string",
         description: "Identificador UUID de la transacción",
-        example: "550e8400-e29b-41d4-a716-446655440000",
+        example: "bf0dc67c-a8bb-43f5-b4da-e4553a522505",
       },
     },
   },
   response: {
     200: {
-      description: "Transacción encontrada. La transacción está envuelta en `data`.",
+      description:
+        "Transacción encontrada. La transacción está envuelta en `data`. Ejemplos: tarjeta " +
+        "resuelta, y las dos consultas de un PSE con el banco '1'.",
       type: "object",
       properties: {
         data: wompiTransactionObject,
@@ -287,20 +369,78 @@ export const getWompiTransactionSchema = {
       examples: [
         {
           data: {
-            id: "550e8400-e29b-41d4-a716-446655440000",
+            id: "bf0dc67c-a8bb-43f5-b4da-e4553a522505",
             status: "APPROVED",
-            amount_in_cents: 5000000,
+            amount_in_cents: 6800000,
             currency: "COP",
-            reference: "ref-card-001",
-            customer_email: "cliente@ejemplo.com",
+            reference: "orden-1042",
+            customer_email: "comprador@example.com",
+            payment_method: { type: "CARD", token: "tok_sim_809b112742b44621", installments: 1 },
+          },
+        },
+        {
+          data: {
+            id: "72c61198-6bda-4087-9cd9-c00a3410f6dc",
+            status: "PENDING",
+            amount_in_cents: 6800000,
+            currency: "COP",
+            reference: "orden-1043",
+            customer_email: "comprador@example.com",
+            payment_method: {
+              type: "PSE",
+              user_type: 0,
+              user_legal_id_type: "CC",
+              user_legal_id: "1999888777",
+              financial_institution_code: "1",
+              payment_description: "Pedido 1043",
+              extra: {
+                is_three_ds: false,
+                three_ds_auth_type: null,
+                async_payment_url:
+                  "http://localhost:3000/v1/sim/wompi/pse/redirect?ticket_id=72c611986bda40879cd9c00a3410f6dc",
+              },
+            },
+            redirect_url: "http://localhost:4001/orden/1043",
+          },
+        },
+        {
+          data: {
+            id: "72c61198-6bda-4087-9cd9-c00a3410f6dc",
+            status: "APPROVED",
+            amount_in_cents: 6800000,
+            currency: "COP",
+            reference: "orden-1043",
+            customer_email: "comprador@example.com",
+            payment_method: {
+              type: "PSE",
+              user_type: 0,
+              user_legal_id_type: "CC",
+              user_legal_id: "1999888777",
+              financial_institution_code: "1",
+              payment_description: "Pedido 1043",
+              extra: {
+                is_three_ds: false,
+                three_ds_auth_type: null,
+                async_payment_url:
+                  "http://localhost:3000/v1/sim/wompi/pse/redirect?ticket_id=72c611986bda40879cd9c00a3410f6dc",
+              },
+            },
+            redirect_url: "http://localhost:4001/orden/1043",
           },
         },
       ],
+    },
+    403: {
+      description:
+        "Llave privada inválida: INVALID_CREDENTIALS, o sin cabecera una llave `prv_` que " +
+        "contiene `invalid`, `inexistente` o `not_found`.",
+      ...wompiErrorBody,
     },
     404: {
       description: "Transacción no encontrada.",
       ...wompiErrorBody,
     },
+    ...queryFailureResponses,
   },
 } as const;
 
@@ -360,6 +500,12 @@ export const getWompiMerchantSchema = {
       },
       required: ["data"],
     },
+    404: {
+      description:
+        "Comercio inexistente: INVALID_CREDENTIALS, o sin cabecera una llave que contiene " +
+        "`invalid`, `inexistente` o `not_found`.",
+      ...wompiErrorBody,
+    },
   },
 } as const;
 
@@ -408,6 +554,11 @@ export const getWompiPseInstitutionsSchema = {
           meta: {},
         },
       ],
+    },
+    500: { description: "La credencial contiene `sim_server_error` (issue #122).", ...wompiErrorBody },
+    503: {
+      description: "La credencial contiene `sim_flapping`: fallan dos peticiones y la tercera responde.",
+      ...wompiErrorBody,
     },
   },
 } as const;

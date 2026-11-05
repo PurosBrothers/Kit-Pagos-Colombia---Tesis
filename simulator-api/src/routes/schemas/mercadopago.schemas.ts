@@ -37,9 +37,12 @@ const mpSimulateScenarioHeader = {
     "escenarios técnicos TIMEOUT, GATEWAY_TIMEOUT, NETWORK_ERROR, CONNECTION_ERROR, " +
     "RATE_LIMIT, TOO_MANY_REQUESTS, SERVER_ERROR, INTERNAL_ERROR, BAD_GATEWAY, " +
     "SERVICE_UNAVAILABLE, FLAPPING, DUPLICATE_PAYMENT, SLOW, MALFORMED_JSON, " +
-    "MALFORMED_BODY, HTML_ERROR, 429, 500, 502, 503 e INVALID_CREDENTIALS. " +
-    "Orders admite solo el subconjunto implementado " +
-    "y responde 501 para los escenarios de creación no soportados.",
+    "MALFORMED_BODY, HTML_ERROR, 429, 500, 502, 503 e INVALID_CREDENTIALS, en /payments y " +
+    "en /orders. DUPLICATE_PAYMENT es la diferencia: en /payments el segundo pago con la " +
+    "misma external_reference responde 409; en /orders se crea otra orden aprobada, porque " +
+    "la Orders API no rechaza el duplicado (medido el 15 de octubre de 2026). Cualquier otro " +
+    "valor responde 501. Sin la cabecera deciden el titular de la tarjeta de prueba y los " +
+    "montos reservados de 10 001 a 10 604 pesos; si ninguno pide un escenario, APPROVED.",
   example: "APPROVED",
 } as const;
 
@@ -132,6 +135,48 @@ const mpOrdersErrorBody = {
   },
 } as const;
 
+/**
+ * Las fallas técnicas de `technicalFailure.ts` en la creación de pagos y de órdenes. Las dos
+ * rutas responden el cuerpo de `MercadoPagoErrorMockFactory`, el de la Payments API. Nivel 3,
+ * convención del simulador.
+ */
+const creationFailureResponses = {
+  200: {
+    description:
+      "MALFORMED_JSON (un cuerpo que no es JSON) o MALFORMED_BODY (`{}`). Prueban el " +
+      "normalizador del SDK.",
+  },
+  429: { description: "RATE_LIMIT, TOO_MANY_REQUESTS o 429.", ...mpPaymentsErrorBody },
+  500: {
+    description: "SERVER_ERROR, INTERNAL_ERROR o 500. NETWORK_ERROR corta la conexión sin responder.",
+    ...mpPaymentsErrorBody,
+  },
+  502: {
+    description: "BAD_GATEWAY o 502. HTML_ERROR también responde 502, con una página HTML y no JSON.",
+    ...mpPaymentsErrorBody,
+  },
+  503: { description: "SERVICE_UNAVAILABLE o 503, y las dos primeras peticiones de FLAPPING.", ...mpPaymentsErrorBody },
+  504: { description: "TIMEOUT o GATEWAY_TIMEOUT, y SLOW después de su espera.", ...mpPaymentsErrorBody },
+} as const;
+
+/** Las fallas de consulta que deja pedidas el monto de la creación (issue #122). */
+const queryFailureResponses = {
+  500: { description: "La creación fue por 10 600 pesos (QUERY_SERVER_ERROR).", ...mpPaymentsErrorBody },
+  503: {
+    description: "La creación fue por 10 602 pesos (QUERY_FLAPPING): fallan dos consultas y la tercera responde.",
+    ...mpPaymentsErrorBody,
+  },
+  504: { description: "La creación fue por 10 604 pesos (QUERY_SLOW), después de la espera de SLOW.", ...mpPaymentsErrorBody },
+} as const;
+
+/** El 401 de las consultas y de la Orders API (medido, `docs/testing-data/mercado-pago.md`). */
+const invalidAccessTokenResponse = {
+  description:
+    "Access token inexistente (las marcas de `invalidCredential.ts`): " +
+    "`{ code: \"unauthorized\", message: \"invalid access token\" }`.",
+  ...mpPaymentsErrorBody,
+} as const;
+
 // ─── Schemas por ruta ────────────────────────────────────────────────────────
 
 /**
@@ -201,30 +246,34 @@ export const postMpPaymentsSchema = {
     additionalProperties: true,
     examples: [
       {
-        transaction_amount: 50000,
-        description: "Compra en mi tienda",
-        token: "tok_test_abc123",
+        transaction_amount: 68000,
+        description: "Pedido 1042",
+        external_reference: "orden-1042",
+        token: "a1b2c3d4e5f6",
         installments: 1,
-        payer: { email: "cliente@ejemplo.com" },
+        payment_method_id: "visa",
+        payer: { email: "comprador@example.com" },
       },
     ],
   },
   response: {
+    ...creationFailureResponses,
     201: {
       description:
         "Pago creado. status 'approved' para APPROVED, 'rejected' para REJECTED/DECLINED.",
       ...mpPaymentResponseObject,
       examples: [
         {
-          id: 1234567890,
+          id: 3886404643,
           status: "approved",
           status_detail: "accredited",
-          transaction_amount: 50000,
+          transaction_amount: 68000,
           currency_id: "COP",
-          description: "Compra en mi tienda",
-          payer: { email: "cliente@ejemplo.com" },
-          date_created: "2026-09-21T23:52:46.000Z",
-          date_approved: "2026-09-21T23:52:46.000Z",
+          description: "Pedido 1042",
+          external_reference: "orden-1042",
+          payer: { email: "comprador@example.com" },
+          date_created: "2026-11-04T23:36:12.276Z",
+          date_approved: "2026-11-04T23:36:12.276Z",
         },
       ],
     },
@@ -271,7 +320,7 @@ export const getMpPaymentSchema = {
       id: {
         type: "string",
         description: "Identificador del pago",
-        example: "1234567890",
+        example: "3886404643",
       },
     },
   },
@@ -281,22 +330,25 @@ export const getMpPaymentSchema = {
       ...mpPaymentResponseObject,
       examples: [
         {
-          id: "1234567890",
+          id: 3886404643,
           status: "approved",
           status_detail: "accredited",
-          transaction_amount: 50000,
+          transaction_amount: 68000,
           currency_id: "COP",
-          description: "Consulta de pago 1234567890",
-          payer: { email: "customer@example.com" },
-          date_created: "2026-09-21T23:52:46.000Z",
-          date_approved: "2026-09-21T23:52:46.000Z",
+          description: "Pedido 1042",
+          external_reference: "orden-1042",
+          payer: { email: "comprador@example.com" },
+          date_created: "2026-11-04T23:36:12.276Z",
+          date_approved: "2026-11-04T23:36:12.276Z",
         },
       ],
     },
+    401: invalidAccessTokenResponse,
     404: {
       description: "Pago no encontrado.",
       ...mpPaymentsErrorBody,
     },
+    ...queryFailureResponses,
   },
 } as const;
 
@@ -543,6 +595,7 @@ export const postMpOrdersSchema = {
         data: { type: "object", additionalProperties: true },
       },
     },
+    401: invalidAccessTokenResponse,
     409: {
       description: "La llave de idempotencia ya se usó con otro cuerpo.",
       ...mpOrdersErrorBody,
@@ -556,6 +609,7 @@ export const postMpOrdersSchema = {
       type: "object",
       properties: { error: { type: "string" } },
     },
+    ...creationFailureResponses,
   },
 } as const;
 
@@ -583,18 +637,19 @@ export const getMpOrderSchema = {
       id: {
         type: "string",
         description: "Identificador de la orden",
-        example: "ord-abc-001",
+        example: "ORD01GUYT3T2PNR",
       },
     },
   },
   response: {
     200: {
-      description: "Orden encontrada.",
+      description: "Orden encontrada. El ejemplo es la consulta de la orden de tarjeta de POST /orders.",
       type: "object",
       properties: {
         id: { type: "string" },
         type: { type: "string" },
         processing_mode: { type: "string" },
+        external_reference: { type: "string" },
         total_amount: { type: "string" },
         total_paid_amount: { type: "string" },
         country_code: { type: "string" },
@@ -604,33 +659,59 @@ export const getMpOrderSchema = {
           example: "processed",
         },
         status_detail: { type: "string" },
+        capture_mode: { type: "string", description: "Solo tarjeta." },
         currency: { type: "string" },
         created_date: { type: "string", format: "date-time" },
         last_updated_date: { type: "string", format: "date-time" },
         payer: { type: "object", properties: { entity_type: { type: "string" } } },
+        config: { type: "object", additionalProperties: true },
         transactions: { type: "object", additionalProperties: true },
       },
       examples: [
         {
-          id: "ord-abc-001",
+          id: "ORD01GUYT3T2PNR",
           type: "online",
           processing_mode: "automatic",
-          total_amount: "150000",
-          total_paid_amount: "150000",
-          country_code: "CO",
+          external_reference: "orden-1042",
+          total_amount: "68000",
+          total_paid_amount: "68000",
+          country_code: "COL",
           status: "processed",
-          status_detail: "paid",
+          status_detail: "accredited",
+          capture_mode: "automatic_async",
           currency: "COP",
-          created_date: "2026-09-21T23:52:46.000Z",
-          last_updated_date: "2026-09-21T23:52:46.000Z",
-          payer: { entity_type: "individual" },
+          created_date: "2026-11-04T23:36:12.291Z",
+          last_updated_date: "2026-11-04T23:36:12.291Z",
+          config: { online: { transaction_security: { validation: "never" } } },
+          transactions: {
+            payments: [
+              {
+                id: "PAY01NACMRGELAJ",
+                amount: "68000",
+                paid_amount: "68000",
+                reference_id: "042vxfnadt",
+                status: "processed",
+                status_detail: "accredited",
+                payment_method: {
+                  id: "visa",
+                  type: "credit_card",
+                  token: "tok_sim_mp_aai7hyqwt1",
+                  installments: 1,
+                  installment_amount: "68000",
+                  transaction_security: { validation: "never" },
+                },
+              },
+            ],
+          },
         },
       ],
     },
+    401: invalidAccessTokenResponse,
     404: {
       description: "Orden no encontrada.",
       ...mpOrdersErrorBody,
     },
+    ...queryFailureResponses,
   },
 } as const;
 
@@ -698,6 +779,15 @@ export const getMpPaymentMethodsSchema = {
           },
         ],
       ],
+    },
+    401: {
+      description: "Access token inexistente (las marcas de `invalidCredential.ts`).",
+      ...mpPaymentsErrorBody,
+    },
+    500: { description: "La credencial contiene `sim_server_error` (issue #122).", ...mpPaymentsErrorBody },
+    503: {
+      description: "La credencial contiene `sim_flapping`: fallan dos peticiones y la tercera responde.",
+      ...mpPaymentsErrorBody,
     },
   },
 } as const;
