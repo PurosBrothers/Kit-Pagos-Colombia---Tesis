@@ -382,4 +382,22 @@ describe("GET /docs/json — especificación OpenAPI", () => {
     expect(checkoutPost.responses).toHaveProperty("200");
     expect(checkoutPost.responses).toHaveProperty("501");
   });
+
+  it("declara cada etiqueta que usa una operación, y /health queda en Diagnóstico (issue #106)", async () => {
+    const app = buildApp({ logger: false });
+    const response = await app.inject({ method: "GET", url: "/docs/json" });
+    const spec = response.json<Record<string, unknown>>();
+    const paths = spec.paths as Record<string, Record<string, { tags?: string[] }>>;
+    const declared = (spec.tags as Array<Record<string, unknown>>).map((t) => t.name);
+    const used = new Set(
+      Object.values(paths)
+        .flatMap((operations) => Object.values(operations))
+        .flatMap((operation) => operation.tags ?? []),
+    );
+
+    expect([...used].filter((tag) => !declared.includes(tag))).toEqual([]);
+    expect(paths["/health"].get.tags).toEqual(["Diagnóstico"]);
+    expect(paths["/v1/sim/wompi/transactions"].post.tags).toEqual(["Wompi Simulación"]);
+    expect(paths["/v1/sim/mercadopago/orders"].post.tags).toEqual(["Mercado Pago Simulación"]);
+  });
 });

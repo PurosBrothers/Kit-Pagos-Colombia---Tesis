@@ -64,6 +64,16 @@ async function registerOpenApiPlugin(app: FastifyInstance): Promise<void> {
           description: "Endpoints de infraestructura: health check y estado del servidor.",
         },
         {
+          name: "Wompi Simulación",
+          description:
+            "Endpoints que replican la API nativa de Wompi para cobro con tarjeta, PSE y tokenización.",
+        },
+        {
+          name: "Mercado Pago Simulación",
+          description:
+            "Endpoints que replican la API nativa de Mercado Pago para pagos, órdenes de tarjeta y PSE, y tokenización.",
+        },
+        {
           name: "Kushki Simulación",
           description:
             "Endpoints que replican la API nativa de Kushki para cobro con tarjeta y transferencias PSE.",

@@ -6,7 +6,7 @@ export const getHealthSchema = {
   description:
     "Verifica que la API de Simulación está levantada y funcionando. " +
     "No requiere autenticación ni cabeceras de escenario.",
-  tags: ["Infraestructura"],
+  tags: ["Diagnóstico"],
   response: {
     200: {
       description: "La API está operativa.",
