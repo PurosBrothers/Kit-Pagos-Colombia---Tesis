@@ -2,12 +2,15 @@
 \section{INTRODUCCIÓN}
 
 \subsection{Contexto y motivación}
-% Presentar brevemente el contexto colombiano, la integración con varias pasarelas y la motivación del trabajo.
+
+Un comercio colombiano que quiere cobrar por internet debe integrarse con una pasarela de pago, y si quiere ofrecer más de una o cambiar de proveedor, debe repetir esa integración. Wompi, Mercado Pago, Kushki y Rapyd ofrecen operaciones equivalentes: cobrar con tarjeta o con PSE, consultar el estado de un pago y recibir notificaciones. Sin embargo, cada una define su propia autenticación, la unidad de sus montos, el nombre de sus estados y la firma de sus \textit{webhooks}. El proyecto pasó por ese cambio. PayU era una de las cuatro pasarelas del SPMP; cuando Rapyd compró su operación en América Latina, en marzo de 2025, se reemplazó por Rapyd (punto 15 de la bitácora de arquitectura).
 
 \subsection{Propósito, alcance y enfoque}
-% Resumir el problema, la contribución del artefacto, sus límites y el enfoque Design Science Research.
-% No anticipar cifras ni conclusiones de la evaluación de Fase 5.
+
+El propósito del trabajo es construir y evaluar el Kit Pagos Colombia, un artefacto para simplificar la integración de múltiples pasarelas de pago en el contexto colombiano (Equipo del Proyecto, 2026b). Según el SPMP, el artefacto tiene tres componentes: un SDK en TypeScript con una interfaz unificada para las cuatro pasarelas, una API de Simulación y una documentación centralizada de los datos de prueba de cada pasarela. El SDK se publicó en npm como \texttt{kit-pagos-colombia} (Kit Pagos Colombia, 2026), y la API de Simulación, desplegada en Render, reproduce los flujos de las pasarelas sin depender de sus \textit{sandboxes} oficiales. Quedan fuera, también según el SPMP, el procesamiento real de transacciones, las interfaces de usuario para flujos de pago, otras pasarelas y la integración con sistemas contables. Durante la construcción se agregaron piezas que el SPMP no contemplaba: la superficie REST \texttt{/v1/api}, el módulo de navegador \texttt{kit-pagos-colombia/browser}, los prototipos A y C y una página de presentación. El capítulo IV las discute frente a esas exclusiones.
+
+El trabajo sigue el enfoque de Design Science Research (Hevner et al., 2004; Peffers et al., 2007) en las seis fases que adapta el SPMP: identificación del problema, definición de objetivos, diseño, desarrollo iterativo, demostración y evaluación, y comunicación. La evaluación compara dos tiendas con el mismo esqueleto: el prototipo B integra las pasarelas con el SDK, y el D lo hace directamente contra las APIs nativas. Ambos se miden con seis variables, entre ellas las métricas WMC, CBO y RFC (Chidamber \& Kemerer, 1994). Este capítulo no adelanta sus resultados.
 
 \subsection{Organización del documento}
-% Explicar en uno o dos párrafos qué encontrará el lector en cada capítulo.
-% La plantilla tiene indicaciones contradictorias sobre extensión (60 y 80 páginas): confirmar el límite vigente.
+
+El capítulo II formula el problema y presenta los objetivos aprobados. El III reúne los conceptos de los pagos en línea, las cuatro pasarelas y las soluciones relacionadas. El IV analiza los requisitos, el alcance y sus divergencias frente al SPMP. El V presenta el diseño arquitectónico, y el VI, la construcción del SDK, la API de Simulación, los datos de prueba y los prototipos. El VII expone la validación y los resultados de la evaluación, y el VIII cierra con las conclusiones por objetivo, el impacto y el trabajo futuro.
