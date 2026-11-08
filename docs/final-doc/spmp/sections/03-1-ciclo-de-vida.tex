@@ -9,17 +9,17 @@ La naturaleza del proyecto determina cuál metodología se elige antes de analiz
 \subsubsection{Adaptación del ciclo de vida}
 
 \begin{itemize}
-  \item \textbf{Identificación y definición del problema:} Consiste en estudiar las documentaciones técnicas de Wompi, PayU, Mercado Pago y Kushki para identificar sus diferencias en aspectos relevantes para su implementación tales como, autenticación, estructuras de respuesta, manejo de webhooks y comportamiento ante errores. El resultado de esta fase es una especificación técnica que traduce la fragmentación del ecosistema en requerimientos funcionales concretos para el framework. Esta fase produce el mapa del ecosistema y el repositorio de parámetros de prueba.
+  \item \textbf{Identificación y definición del problema:} Consiste en estudiar las documentaciones técnicas de Wompi, Rapyd (que adquirió PayU GPO), Mercado Pago y Kushki para identificar sus diferencias en aspectos relevantes para su implementación tales como, autenticación, estructuras de respuesta, manejo de webhooks y comportamiento ante errores. El resultado de esta fase es una especificación técnica que traduce la fragmentación del ecosistema en requerimientos funcionales concretos para el framework. Esta fase produce el mapa del ecosistema y el repositorio de parámetros de prueba.
   \item \textbf{Definición de objetivos:} A partir del análisis anterior se delimita el alcance del framework: qué operaciones debe soportar, bajo qué criterios se seleccionaron las pasarelas, cómo se medirá el éxito del proyecto y cuales son las características que deben tener los proyectos prototípicos usados en la evaluación. Esta fase produce el documento de alcance, los criterios de evaluación formalizados y el backlog inicial.
   \item \textbf{Diseño:} Aquí las decisiones del documento de alcance se convierten en contratos arquitectónicos verificables: el modelo de dominio unificado del framework, los puertos de la arquitectura hexagonal, la especificación de los adaptadores por cada pasarela y el diseño de la API de simulación con sus escenarios de prueba. Esta fase produce un conjunto de artefactos de diseño que orientan el desarrollo sin ambigüedad y que también funcionan como criterios de corrección durante la implementación.
   \item \textbf{Desarrollo:} Es la fase más extensa del proyecto y la única que opera de forma iterativa internamente. Se construye en tres iteraciones dependientes:
   \begin{itemize}
     \item El núcleo del framework con sus contratos de puerto.
     \item Los adaptadores de cada pasarela con bajo acoplamiento, siendo independientes entre sí.
-    \item API de simulación junto con la documentación de datos de prueba y las pruebas internas.
+    \item La API de Simulación completa, la documentación de datos de prueba, la página de presentación y los prototipos B y D, los cuatro entregables que \texttt{methodology.md} (sección 2.1) asigna a esta iteración.
   \end{itemize}
-  El orden no es arbitrario: la arquitectura hexagonal impone que el núcleo y sus contratos existan antes de que cualquier adaptador pueda construirse correctamente.
-  \item \textbf{Demostración y evaluación:} El framework se aplica en los proyectos prototípicos definidos en la fase 2 (definición de objetivos) y sobre el código resultante se calculan las métricas definidas en el documento de la propuesta, WMC, CBO y RFC de Chidamber y Kemerer (1994). Estas métricas se comparan a las de una integración directa con las APIs nativas, lo que constituye el núcleo experimental del proyecto. En paralelo de esta evaluación, sucede la demostración, siendo esta el acto de integrar el framework en los prototipos.
+  El orden no es arbitrario: la arquitectura hexagonal impone que el núcleo y sus contratos existan antes de que cualquier adaptador pueda construirse correctamente. La versión 1.0 de este plan ponía los prototipos en la fase de demostración; sus issues (\#150 y \#151) quedaron en el hito de la Iteración 3 y se cerraron el 25 de octubre de 2026.
+  \item \textbf{Demostración y evaluación:} El framework se aplica en los proyectos prototípicos y sobre el código resultante se miden seis variables, entre ellas las métricas WMC, CBO y RFC de Chidamber y Kemerer (1994). El prototipo B, que usa el framework, se compara con el D, que integra las cuatro pasarelas directamente contra sus APIs nativas, lo que constituye el núcleo experimental del proyecto (\path{docs/project-management/prototypes-evaluation-plan.md}). En paralelo de esta evaluación, sucede la demostración, siendo esta el acto de integrar el framework en los prototipos.
   \item \textbf{Comunicación:} Esta fase comprende la consolidación del documento de trabajo de grado y la publicación del repositorio público con documentación suficiente para que un desarrollador externo pueda integrar el kit sin haber estado involucrado en el desarrollo del mismo. Aunque esta fase cierra formalmente el ciclo DSR, su redacción comienza desde las primeras fases: el documento de grado no es una actividad de cierre sino un artefacto que crece en paralelo con el proyecto.
 \end{itemize}
 
@@ -33,6 +33,39 @@ Los seis hitos que marcan el avance del ciclo de vida son:
   \item H3: el núcleo del SDK funcional con al menos un adaptador operativo.
   \item H4: los cuatro adaptadores y la API de simulación completos y con pruebas internas aprobadas; H5, los proyectos prototípicos evaluados con las métricas CK (Chidamber, Kemerer, 1994) registradas; y H6, el repositorio público publicado y el documento de grado entregado.
 \end{itemize}
+
+La Tabla~\ref{tab:hitos-reales} compara la semana en que el plan ubicaba cada hito con la fecha en que se alcanzó. Las semanas S01 a S18 de la versión 1.0 no tenían fechas; aquí se anclan al calendario con la Iteración 1 en la semana del 24 de agosto de 2026, como hace \texttt{methodology.md} (sección 10.2), así que la S01 empieza el 13 de julio. Las fechas reales salen del último issue cerrado de cada hito de GitHub, en hora de Colombia, y de las respuestas del equipo para las Fases 1 y 2.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{|P{0.12}|P{0.22}|P{0.28}|P{0.38}|}
+  \hline
+  \textbf{Hito} & \textbf{Plan (versión 1.0)} & \textbf{Real} & \textbf{Fuente} \\
+  \hline
+  \endfirsthead
+  \hline
+  \textbf{Hito} & \textbf{Plan (versión 1.0)} & \textbf{Real} & \textbf{Fuente} \\
+  \hline
+  \endhead
+  \caption{Fechas planeadas y reales de los hitos.}
+  \label{tab:hitos-reales}\\
+  \endlastfoot
+  H1 & S03 (hasta el 2 de agosto) & Junio de 2026 & Las Fases 1 y 2 se hicieron entre abril y junio de 2026, según el equipo. Los datos de prueba se validaron después, con mediciones fechadas desde el 18 de septiembre (\texttt{docs/testing-data/README.md}, sección 3) \\
+  \hline
+  H2 & S07 (hasta el 30 de agosto) & 6 de septiembre de 2026 & Último cierre del hito «Fase 3 – Diseño (cierre)» \\
+  \hline
+  H3 parcial & S08 (hasta el 6 de septiembre) & 15 de septiembre de 2026 & Último cierre de la Iteración 1 \\
+  \hline
+  H3 completo & S10 (hasta el 20 de septiembre) & 21 de septiembre de 2026 & Último cierre de la Iteración 2 \\
+  \hline
+  H4 & S12 (hasta el 4 de octubre) & 7 de noviembre de 2026 & Último cierre de la Iteración 3 (\#106); el \#112 sigue abierto \\
+  \hline
+  H5 & S16 (hasta el 1 de noviembre) & No alcanzado al 7 de noviembre de 2026 & Las seis variables se midieron el 22 y el 28 de octubre (\path{docs/evaluation/recoleccion-seis-variables.md}); el informe (\#135) está abierto \\
+  \hline
+  H6 & S18 (hasta el 15 de noviembre) & Entrega prevista el 9 de noviembre de 2026 & Hito «Fase 6 – Comunicación» \\
+  \hline
+\end{longtable}
+\end{center}
 
 La Figura~\ref{fig:ciclo-de-vida} ilustra el ciclo de vida del proyecto. La fase 4 al ser el desarrollo se tomará como iterativa de manera interna a la misma con el fin de garantizar un desarrollo ágil.
 
@@ -87,6 +120,6 @@ Para el desarrollo de los adaptadores, que son el componente de mayor complejida
 
 Para las pruebas, el framework se valida primero contra la API de simulación propia antes de validarse contra los sandboxes reales de las pasarelas. Esto reduce la dependencia de credenciales externas durante el desarrollo y permite pruebas más controladas y reproducibles. Las pruebas unitarias sobre el núcleo y las pruebas de integración sobre los adaptadores se automatizan desde el principio y se ejecutan en cada pull request mediante integración continua.
 
-Para la revisión de código, se adopta una política estricta de pull requests: ningún cambio sobre la rama principal del repositorio se hace sin la revisión de al menos otro integrante. Esto funciona como mecanismo de control de calidad continuo y también como transferencia de conocimiento entre quienes trabajan en frentes distintos del framework.
+Para la revisión de código, se adopta una política estricta de pull requests: ningún cambio entra a las ramas \texttt{devops} y \texttt{main} sin un pull request revisado por al menos otro integrante (\texttt{CONTRIBUTING.md}). Esto funciona como mecanismo de control de calidad continuo y también como transferencia de conocimiento entre quienes trabajan en frentes distintos del framework.
 
-Para la evaluación con métricas CK, el diseño experimental se establece desde la fase 2 y no se improvisa al llegar a la fase 5. Los proyectos prototípicos, las clases sobre las que se calculan las métricas y la herramienta de medición se definen con anticipación, de modo que la comparación entre integración directa e integración con el framework sea reproducible y no esté sujeta a sesgos de selección posterior.
+Para la evaluación con métricas CK, el diseño experimental se fija antes de medir y no se improvisa al llegar a la fase 5. Los proyectos prototípicos y la herramienta de medición se definen con anticipación, igual que las unidades sobre las que se calculan las métricas: archivos, desde el issue \#134 (\texttt{methodology.md}, sección 6.1.1). Así, la comparación entre integración directa e integración con el framework es reproducible y no queda sujeta a sesgos de selección posterior.

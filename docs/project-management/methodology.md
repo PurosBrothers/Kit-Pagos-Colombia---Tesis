@@ -21,6 +21,8 @@ Scrum no desaparece: se usa como práctica interna dentro de la Fase 4 (Desarrol
 | 5 | Demostración y evaluación | 13–16 | 15% | Prototipos con y sin el framework, métricas CK calculadas, informe comparativo |
 | 6 | Comunicación | 16–18 | 10% | Documento de grado, repositorio público publicado |
 
+Las semanas son las del plan de mayo de 2026. Lo que pasó está en el SPMP 2.0 (issue #192): la tabla de hitos de la sección 3.1.3 y la carta Gantt de la 4.3.2 ponen, al lado de cada semana planeada, la ventana real. Las Fases 1 y 2 se hicieron entre abril y junio de 2026, antes de la semana S01, y la Iteración 3 se extendió sobre las Fases 5 y 6 (sección 10.2).
+
 La Fase 4 es la única que opera de forma iterativa internamente, y es la única con la que vamos a interactuar constantemente desde GitHub Issues y Milestones mientras estemos en desarrollo.
 
 ### Los seis hitos del ciclo de vida (H1 a H6)
@@ -115,7 +117,7 @@ Además, todo issue debe declarar explícitamente sus dependencias con otros iss
 
 | Integrante | Rol (SPMP) | Frente principal | Nota |
 |---|---|---|---|
-| Andrés Henao Niño | Coordinador del equipo | Gestión operativa: backlog, calendario, comunicación con el director, actas | Referido como "Henao" en la documentación de arquitectura del repositorio |
+| Andrés Henao Niño | Coordinador del equipo | Gestión operativa: backlog, calendario, comunicación con el director | Referido como "Henao" en la documentación de arquitectura del repositorio |
 | Joshua Prieto Zambrano | Líder de arquitectura y núcleo SDK | Modelo de dominio, puertos, implementación del núcleo | Revisa que los adaptadores cumplan los contratos de puerto |
 | David Estevan Rodríguez Jurado | Líder de integración | Los cuatro adaptadores y la API de simulación | También consolida la documentación de datos de prueba |
 | Joan Emmanuel Orduz Chía | Líder de evaluación y documentación | Métricas CK, proyectos prototípicos, documento de grado | Autor de este repositorio en GitHub (`joan-orduz`) |
@@ -128,7 +130,7 @@ Un requerimiento se considera implementado exitosamente solo cuando se cumplen *
 
 1. El pull request asociado fue aprobado por al menos un integrante distinto al autor.
 2. Las pruebas automatizadas relevantes pasan en el pipeline de CI con cobertura igual o superior al 80%.
-3. El ítem en el tablero de seguimiento está en estado completado.
+3. El issue está cerrado, con un comentario que explica la solución y enlaza el cambio (`CONTRIBUTING.md`).
 4. Los valores de WMC, CBO, RFC y MAX_CC de las clases modificadas están dentro de los umbrales definidos (WMC ≤ 20, CBO ≤ 5, RFC ≤ 20, MAX_CC ≤ 10).
 5. La [Matriz de Trazabilidad](traceability-matrix.md) ha sido actualizada para reflejar el requerimiento como implementado.
 
@@ -213,7 +215,7 @@ Si la tasa de completitud al cierre de una semana es inferior al 60% de las tare
 
 ## 7. Control de cambios de requerimientos
 
-Cualquier integrante o el director puede proponer un cambio a los requerimientos. Se registra la propuesta con descripción, justificación e impacto estimado sobre cronograma y entregables; el equipo la evalúa en la reunión semanal y decide por consenso (aprobar, rechazar o posponer). Si el cambio lo pidió el director, su aprobación es obligatoria antes de proceder. Un cambio aprobado actualiza, en este orden: el SRS, la [Matriz de Trazabilidad](traceability-matrix.md), y el backlog de GitHub Projects. Ningún cambio sobre la rama principal se acepta sin que el SRS esté actualizado primero.
+Cualquier integrante o el director puede proponer un cambio a los requerimientos. La propuesta se abre como un issue, con descripción, justificación e impacto estimado sobre cronograma y entregables; el equipo la evalúa en el grupo o en la reunión semanal y decide por consenso (aprobar, rechazar o posponer). Si el cambio lo pidió el director, su aprobación es obligatoria antes de proceder. Un cambio aprobado se implementa en un pull request que actualiza la [Matriz de Trazabilidad](traceability-matrix.md), y la decisión queda en el `architecture-log.md` cuando cambia el diseño. La versión 1.0 del SPMP exigía además que ningún cambio entrara a la rama principal sin el SRS actualizado; no se cumplió: el SRS pasó de la v1.0 de mayo a la v2.0 recién en el issue #169 (SPMP 2.0, sección 5.1.2).
 
 No requieren aprobación del director: ajustes al cronograma que no afecten los hitos principales, actualización de la tabla de riesgos, correcciones menores de redacción, actualización de métricas de progreso. Sí requieren su alineación: cambios en la metodología de evaluación, y en general cualquier cambio que toque alcance o hitos.
 
@@ -287,15 +289,17 @@ La entrega final del proyecto (Hito H6: documento de grado y repositorio públic
 
 `Iteración 1 – Núcleo del SDK · Semana 1` ya quedó fijada en GitHub como 24–31 de agosto de 2026 (milestone #2), con `Semana 2` cerrando el 7 de septiembre (milestone #3). Proyectando el mismo patrón de dos semanas por iteración para el resto de la Fase 4, y comprimiendo las Fases 5 y 6 para respetar el colchón de la sección 10.1, el cronograma completo queda así:
 
-| Bloque | Duración SPMP original | Duración en este plan | Ventana | Hito que cierra |
-|---|---|---|---|---|
-| Iteración 1 – Núcleo del SDK | 2 semanas | 2 semanas (sin cambio) | 24 ago – 7 sep | H3 parcial |
-| Iteración 2 – Adaptadores de pasarela | 2 semanas | 2 semanas (sin cambio) | 8 sep – 21 sep | H3 completo |
-| Iteración 3 – API de simulación y soporte de validación | 2 semanas | 2 semanas (sin cambio) | 22 sep – 5 oct | H4 |
-| Fase 5 – Demostración y evaluación | 3 semanas | **2 semanas (comprimida)** | 5 oct – 19 oct | H5 |
-| Fase 6 – Comunicación | 2 semanas | **1 semana (comprimida)** | 19 oct – 26 oct | H6 (contenido) |
-| Colchón de entrega | — | 2 semanas | 26 oct – 9 nov | — |
-| **Entrega final** | | | **9 nov 2026** | H6 (entrega) |
+| Bloque | Duración SPMP original | Duración en este plan | Ventana | Ventana real (primer y último cierre del hito) | Hito que cierra |
+|---|---|---|---|---|---|
+| Iteración 1 – Núcleo del SDK | 2 semanas | 2 semanas (sin cambio) | 24 ago – 7 sep | 20 ago – 15 sep | H3 parcial |
+| Iteración 2 – Adaptadores de pasarela | 2 semanas | 2 semanas (sin cambio) | 8 sep – 21 sep | 7 sep – 21 sep | H3 completo |
+| Iteración 3 – API de simulación y soporte de validación | 2 semanas | 2 semanas (sin cambio) | 22 sep – 5 oct | 27 sep – 7 nov (#112 abierto) | H4 |
+| Fase 5 – Demostración y evaluación | 3 semanas | **2 semanas (comprimida)** | 5 oct – 19 oct | 22 oct – 2 nov (#135 abierto) | H5 |
+| Fase 6 – Comunicación | 2 semanas | **1 semana (comprimida)** | 19 oct – 26 oct | desde el 31 oct, en curso | H6 (contenido) |
+| Colchón de entrega | — | 2 semanas | 26 oct – 9 nov | — | — |
+| **Entrega final** | | | **9 nov 2026** | | H6 (entrega) |
+
+La columna de la ventana real se agregó el 7 de noviembre de 2026 con los hitos de GitHub, en hora de Colombia, y coincide con la carta Gantt del SPMP 2.0 (sección 4.3.2). La compresión no alcanzó a proteger las fases: la Iteración 3 cerró 14 issues después del 5 de octubre y se solapó con las Fases 5 y 6, que se hicieron dentro del colchón.
 
 Este plan no le quita tiempo a la Fase 4: la única fase con margen cero para atrasarse es exactamente la que tiene más incertidumbre técnica (tres iteraciones de código real), así que cualquier atraso ahí consume directamente el colchón de la sección 10.1, no las fases posteriores.
 

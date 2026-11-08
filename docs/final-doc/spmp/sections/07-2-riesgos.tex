@@ -2,9 +2,36 @@
 
 El proyecto enfrenta diversos tipos de riesgos: técnicos (dificultades en integración con pasarelas de pago, limitaciones de APIs, problemas de rendimiento del SDK), organizacionales (cambios en disponibilidad de integrantes, conflictos de prioridades con otros proyectos académicos) y académicos (cambios en criterios de evaluación, retrasos en retroalimentación del director). Para administrar estos riesgos de manera sistemática, el equipo ejecuta un proceso continuo de identificación, valoración y mitigación a lo largo de todo el proyecto.
 
-En la reunión de planificación de cada ciclo de dos semanas, el equipo participa en una sesión de lluvia de ideas (brainstorming) de 30 minutos para identificar nuevos riesgos o cambios en riesgos ya existentes. Se consideran riesgos de todas las categorías mencionadas. El Coordinador documenta todos los riesgos propuestos en Notion sin aplicar ningún filtro inicial; en esta fase no hay criterio, solo se recopilan todas las preocupaciones del equipo. Para cada riesgo identificado, el equipo estima dos variables: probabilidad de ocurrencia (baja: <20\%, media: 20-60\%, alta: >60\%) e impacto esperado en caso de que el riesgo se concrete (bajo: retraso <3 días, medio: retraso 3-7 días, alto: retraso >7 días o cambio de alcance mayor). La prioridad del riesgo se calcula multiplicando probabilidad × impacto, y se clasifican riesgos en tres categorías: verde (prioridad <0.2, monitoreo pasivo), amarillo (0.2-0.6, requiere plan de acción), y rojo (>0.6, requiere escalada inmediata al director). Este análisis completo se registra en el Anexo B del proyecto.
+La versión 1.0 de este plan preveía un proceso periódico. En cada ciclo de dos semanas, una lluvia de ideas de 30 minutos identificaba los riesgos, y el Coordinador los registraba en Notion. Cada riesgo se valoraba por su probabilidad (baja, menos del 20\%; media, del 20 al 60\%; alta, más del 60\%) y su impacto (bajo, retraso de menos de 3 días; medio, de 3 a 7; alto, más de 7 o un cambio de alcance mayor). Los riesgos amarillos y rojos se revisaban en la reunión de los jueves, el director recibía un sumario quincenal y el detalle iba en los Anexos B y C. Ese proceso no se ejecutó como estaba escrito: no hubo sesiones periódicas ni registro en Notion, y los anexos que citaba no existen. Los riesgos se trataron cuando aparecieron, en los issues y en el registro de arquitectura.
 
-En cada reunión de sincronización (jueves), se revisan los riesgos de categoría amarillo y rojo, actualizando su estado y verificando que las acciones de mitigación se estén ejecutando según lo planeado. La Líder evaluación y documentación prepara un sumario quincenal de cambios en riesgos (nuevos identificados, riesgos que han desaparecido, cambios de prioridad) que se comparte con el director del proyecto. Riesgos nuevos pueden ser propuestos en cualquier momento por cualquier integrante; se añaden inmediatamente a Notion y se evalúan en la próxima reunión de planificación. Para cada riesgo de categoría rojo o amarillo, el equipo define acciones específicas de prevención (actividades para que el riesgo no ocurra) y mitigación (cómo responder si el riesgo sí ocurre). Por ejemplo, para el riesgo técnico de "dificultad en integración con pasarelas", la prevención es realizar pruebas exploratorias tempranas con APIs de sandbox, y la mitigación es diseñar adaptadores específicos si se identifica incompatibilidad. Para el riesgo organizacional de "cambio de disponibilidad de integrantes", la prevención es mantener documentación exhaustiva de decisiones técnicas en GitHub y Google Drive, y la mitigación es asignar responsables alternos para funciones críticas. Cada acción de mitigación tiene un responsable asignado, un plazo de inicio y una descripción de recursos necesarios.
+La Tabla~\ref{tab:riesgos-materializados} reúne los riesgos que se materializaron, con su evidencia y lo que se hizo. El equipo no identificó otros problemas serios. Tampoco les asignó probabilidad ni impacto con la escala anterior, así que la tabla no los incluye.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{|P{0.22}|P{0.30}|P{0.18}|P{0.30}|}
+  \hline
+  \textbf{Riesgo} & \textbf{Qué pasó} & \textbf{Evidencia} & \textbf{Qué se hizo} \\
+  \hline
+  \endfirsthead
+  \hline
+  \textbf{Riesgo} & \textbf{Qué pasó} & \textbf{Evidencia} & \textbf{Qué se hizo} \\
+  \hline
+  \endhead
+  \caption{Riesgos que se materializaron.}
+  \label{tab:riesgos-materializados}\\
+  \endlastfoot
+  Cambio en una pasarela & Rapyd había completado la adquisición de PayU GPO en América Latina, y el mecanismo de firma de los webhooks cambió & Punto 15 del registro de arquitectura & PayU se reemplazó por Rapyd con un adaptador nuevo, sin tocar el dominio \\
+  \hline
+  Límites de los sandboxes & Los sandboxes no permiten varios flujos de punta a punta, y las credenciales «de sandbox» de Mercado Pago resultaron ser de producción & Puntos 43, 45, 48 y 95 & El simulador siguió simulando los flujos que los sandboxes no dejan completar, con las formas medidas (punto 86) \\
+  \hline
+  Métrica de complejidad mal calculada & El guion calculaba WMC como conteo de métodos y no veía la complejidad & Punto 34 & Se corrigió la fórmula, el tope de WMC subió de 15 a 20 y se agregó MAX\_CC $\le 10$ \\
+  \hline
+  Retraso del desarrollo & La Iteración 3 se extendió sobre las Fases 5 y 6 & Tabla~\ref{tab:carta-gantt}; \texttt{metho\-dology.\allowbreak md}, sección 10.2 & Las Fases 5 y 6 se comprimieron para no mover la entrega del 9 de noviembre \\
+  \hline
+  Exposición de credenciales & En el ensayo de los webhooks en vivo, el log local del simulador guardó cabeceras con credenciales de Kushki & Issues \#165 y \#188; PR \#187 & El PR \#187 dejó las credenciales fuera del log, y el \#188 revisó que el log de Render no las tuviera \\
+  \hline
+\end{longtable}
+\end{center}
 
 \begin{figure}[H]
   \centering

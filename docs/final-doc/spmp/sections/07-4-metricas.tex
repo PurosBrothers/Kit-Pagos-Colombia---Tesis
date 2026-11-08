@@ -1,57 +1,41 @@
 \subsection{Métricas y Proceso de Medición}
 
-Para que el proyecto pueda ser gestionado efectivamente, es esencial medir el progreso, la calidad de los artefactos y la eficiencia del equipo. Se definen seis métricas principales: completitud de tareas (porcentaje de tareas completadas vs. planificadas cada semana, target $\geq$80\%), cobertura de pruebas unitarias (porcentaje de líneas de código ejecutadas por tests en el SDK, target $\geq$80\%), métricas de complejidad CK (WMC $\leq$15, CBO $\leq$5, RFC $\leq$20 por clase), cumplimiento de hitos (número de hitos completados en fecha ±3 días), defectos en revisión (número de defectos por artefacto, target $\leq$2 por artefacto), y tiempo de resolución de impedimentos (días hábiles entre reporte y resolución, target $\leq$2 días para impedimentos críticos).
+Para que el proyecto pueda ser gestionado efectivamente, es esencial medir el progreso, la calidad de los artefactos y la eficiencia del equipo. La versión 1.0 de este plan definía seis métricas, con su recolección en Notion y en hojas de cálculo, una revisión en la reunión de los jueves y un reporte consolidado al cierre de cada fase. Esas herramientas y reuniones no se usaron (sección 5.2). Las métricas que se miden en el proyecto son las que automatiza la integración continua y las que se leen en GitHub; las demás se dicen como no registradas.
 
-La recolección de métricas se realiza de manera específica para cada métrica. La completitud de tareas la recolecta el Coordinador cada viernes a las 5:00 p.m., revisando el board Notion del ciclo actual, contando tareas completadas vs. planificadas, y registrando el porcentaje en Google Sheets (proyecto/metricas-semanales). La cobertura de pruebas la recolecta el Líder SDK antes de cada merge a dev, ejecutando jest --coverage en el pipeline de CI/CD de GitHub Actions; el resultado se reporta automáticamente en el comentario del PR. Las métricas CK las recolecta el Líder SDK al final de cada ciclo de dos semanas, ejecutando un script de ts-morph que analiza el directorio src/ y genera un reporte JSON de WMC, CBO, RFC por clase; los valores se registran en Google Sheets (proyecto/metricas-ck). El cumplimiento de hitos lo recolecta el Coordinador cada jueves en la reunión de sincronización, revisando si los entregables asociados a cada hito están completos dentro del rango de fecha permitido (±3 días). Los defectos en revisión los recolectan el Líder SDK (para código) y el Líder Documentación (para documentos), contando comentarios de tipo "defecto" (no sugerencia, sino error) en PRs o Google Docs, y clasificándolos por tipo (lógico, estilo, cobertura). El tiempo de resolución de impedimentos lo recolecta el Coordinador, registrando en Notion o GitHub la fecha de reporte y fecha de resolución de cada impedimento, y calculando la diferencia en días hábiles.
-
-La información consolidada de métricas se utiliza de tres maneras. En las reuniones de sincronización semanales (jueves), el Coordinador presenta un resumen de métricas de la semana anterior; si hay desviaciones significativas (ej. completitud <60\%), se convoca una sesión de análisis de causa raíz. En los reportes de cierre de fase (al cierre de cada H1-H6), el Líder Documentación prepara un reporte consolidado de métricas del ciclo completado, incluyendo gráficas de tendencia de complejidad (WMC/CBO/RFC), cobertura de pruebas, cumplimiento de hitos y defectos encontrados; este reporte forma parte del documento de trabajo de grado para análisis retrospectivo. En la reunión quincenal con el director (viernes 4:00 p.m.), el Coordinador comparte un resumen ejecutivo de métricas clave (cumplimiento de hitos, estado de riesgos, impedimentos abiertos), que el director utiliza para validar que el progreso es adecuado y para autorizar cambios de alcance si es necesario.
-
-En resumen, las metricas que se usaran son las siguientes:
+En resumen, las métricas del proyecto son las siguientes:
 
 \begin{itemize}
   \item \textbf{Completitud de tareas}
 \end{itemize}
 
-La métrica de completitud de tareas mide el porcentaje de tareas completadas frente a las tareas planificadas en cada periodo de seguimiento. Esta métrica se relaciona principalmente con las secciones 5.2.1, 5.2.3 y 7.4 del SPMP. Se encuentra asociada a los planes de control de cambios, monitoreo y gestión de recursos. La meta establecida es mantener un cumplimiento igual o superior al 80\%. Su seguimiento se realizará semanalmente cada viernes a las 5:00 p.m., y el responsable de su monitoreo será el coordinador del proyecto.
+La métrica de completitud de tareas mide la proporción de issues cerrados frente a los planificados en el hito de la semana o de la fase. Esta métrica se relaciona con las secciones 5.2.1 y 5.2.3. La meta de la versión 1.0 era un cumplimiento igual o superior al 80\% cada semana. Se lee en los hitos de GitHub, pero no se registró como cifra semanal; la Tabla~\ref{tab:carta-gantt} muestra su efecto en las ventanas reales de cada iteración.
 
 \begin{itemize}
-  \item \textbf{Cobertura de pruebas unitarias}
+  \item \textbf{Cobertura de pruebas}
 \end{itemize}
 
-La cobertura de pruebas unitarias mide el porcentaje de líneas de código ejecutadas mediante pruebas automatizadas sobre el SDK y la API de simulación. Esta métrica toma como referencia principal las secciones 3.3.1, 5.2.3 y 7.4. Está asociada a los planes de aceptación del producto, control de cambios y aseguramiento de calidad. La meta definida es alcanzar una cobertura igual o superior al 80\%, criterio considerado no negociable para la aceptación del producto. La medición se ejecutará automáticamente en cada pull request mediante integración continua, y el responsable será el líder del SDK.
+La cobertura de pruebas mide el porcentaje de ramas, funciones, líneas y sentencias ejecutadas por las pruebas automatizadas, sobre todo el SDK y sobre toda la API de Simulación. Esta métrica toma como referencia las secciones 3.3.1, 5.2.1 y 7.5. La meta es una cobertura igual o superior al 80\% en las cuatro medidas, criterio no negociable para la aceptación del producto (\texttt{coverageThreshold} de \texttt{sdk/jest.config.js} y \texttt{simulator-api/jest.config.js}). La integración continua la mide en cada pull request, y Jest falla si no se alcanza.
 
 \begin{itemize}
-  \item \textbf{WMC (Weighted Methods per Class)}
+  \item \textbf{Métricas de complejidad CK y MAX\_CC}
 \end{itemize}
 
-La métrica WMC evalúa la complejidad de los métodos implementados dentro de las clases principales del framework. Sus referencias principales dentro del documento corresponden a las secciones 3.3.4, 5.2.3 y 7.4. Esta métrica se relaciona con los planes de aceptación del producto, evaluación DSR y cierre de fase. La meta establecida es mantener un valor menor o igual a 15. Su revisión se realizará cada dos semanas y al finalizar cada iteración del desarrollo, bajo la responsabilidad del líder del SDK.
-
-\begin{itemize}
-  \item \textbf{CBO (Coupling Between Object Classes)}
-\end{itemize}
-
-La métrica CBO mide el nivel de acoplamiento entre clases del sistema, permitiendo evaluar la dependencia estructural entre componentes del framework. Esta métrica referencia las secciones 3.3.4, 5.2.3 y 7.4 del SPMP. Se encuentra asociada a los planes de aceptación del producto, evaluación DSR y cierre de fase. La meta definida es mantener un valor menor o igual a 5. La medición se efectuará cada dos semanas y al cierre de cada iteración, siendo responsable el líder del SDK.
-
-\begin{itemize}
-  \item \textbf{RFC (Response For a Class)}
-\end{itemize}
-
-La métrica RFC mide la cantidad potencial de métodos que pueden ejecutarse como respuesta a una solicitud realizada sobre una clase. Sus referencias principales son las secciones 3.3.4, 5.2.3 y 7.4. Está asociada a los planes de aceptación del producto, evaluación DSR y cierre de fase. La meta establecida es mantener un valor menor o igual a 20. Esta métrica será revisada cada dos semanas y al finalizar cada iteración del proyecto, bajo responsabilidad del líder del SDK.
+WMC (Weighted Methods per Class) mide la complejidad de los métodos de una clase como la suma de su complejidad ciclomática, y CBO (Coupling Between Object Classes), su acoplamiento con otras clases. RFC (Response For a Class) cuenta los métodos que pueden ejecutarse en respuesta a un mensaje a la clase, y MAX\_CC es la mayor complejidad ciclomática de uno de sus métodos. Sus referencias son las secciones 3.3.4, 5.2.3 y 7.5. Los umbrales vigentes son WMC $\le 20$, CBO $\le 5$, RFC $\le 20$ y MAX\_CC $\le 10$ (\texttt{methodology.md}, sección 6). La versión 1.0 ponía WMC $\le 15$ y no tenía MAX\_CC; el cambio está en el punto 34 del registro de arquitectura, cuando la fórmula de WMC pasó de contar métodos a sumar su complejidad. La integración continua las mide en cada pull request del SDK y del simulador, en modo guarda (\texttt{npm run metrics}; el simulador con su registro de excepciones, \texttt{simulator-api/ck-exceptions.json}). Para el experimento, las mismas métricas adaptadas a archivos se midieron sobre los prototipos B y D el 28 de octubre de 2026 (\texttt{docs/evaluation/}).
 
 \begin{itemize}
   \item \textbf{Cumplimiento de hitos}
 \end{itemize}
 
-La métrica de cumplimiento de hitos verifica que los hitos H1 a H6 definidos en el ciclo de vida del proyecto se completen dentro del margen permitido de ±3 días respecto al cronograma planificado. Las referencias principales de esta métrica corresponden a las secciones 3.1.3, 5.2.3 y 7.4. Se relaciona con los planes de ciclo de vida, monitoreo y acción correctiva. La meta establecida es lograr un cumplimiento del 100\% de los hitos definidos. Su seguimiento será semanal cada jueves a las 3:00 p.m., y el responsable será el coordinador del proyecto.
+La métrica de cumplimiento de hitos verifica que los hitos H1 a H6 se completen dentro de un margen de más o menos tres días respecto al cronograma planificado. Las referencias principales de esta métrica corresponden a las secciones 3.1.3 y 5.2.1. La meta era cumplir el 100\% de los hitos en fecha. La Tabla~\ref{tab:hitos-reales} compara la fecha planeada y la real de cada uno.
 
 \begin{itemize}
   \item \textbf{Defectos encontrados en revisión}
 \end{itemize}
 
-Esta métrica contabiliza la cantidad de errores detectados durante las revisiones de código y documentación antes de integrar cambios a la rama principal del repositorio. Las referencias principales corresponden a las secciones 5.2.3, 7.3 y 7.5. Se asocia con los planes de control de cambios, calidad y cierre de fase. La meta establecida es mantener un máximo de dos defectos por artefacto revisado. La medición se realizará por cada revisión de código o documento efectuada, y los responsables serán los líderes técnicos del proyecto.
+Esta métrica contabiliza los errores detectados durante la revisión de código y documentación antes de integrar un cambio a \texttt{devops}. Las referencias principales corresponden a las secciones 7.3 y 7.5. La meta de la versión 1.0 era un máximo de dos defectos por artefacto revisado. Los defectos se señalan como comentarios en cada pull request, pero no se contaron ni se clasificaron como métrica.
 
 \begin{itemize}
   \item \textbf{Tiempo de resolución de impedimentos críticos}
 \end{itemize}
 
-Esta métrica mide el tiempo requerido para resolver bloqueos críticos que afecten el desarrollo normal del proyecto, incluyendo problemas de infraestructura, integración o dependencias externas. Sus referencias principales son las secciones 5.2.3 y 7.4. Está asociada a los planes de monitoreo, reportes y acción correctiva. La meta establecida es resolver cada impedimento crítico en un tiempo máximo de dos días hábiles. El seguimiento se realizará semanalmente cada jueves, y el responsable será el coordinador del proyecto.
+Esta métrica mide el tiempo requerido para resolver bloqueos críticos que afecten el desarrollo normal del proyecto, incluyendo problemas de infraestructura, integración o dependencias externas. La meta de la versión 1.0 era resolver cada impedimento crítico en un máximo de dos días hábiles. Los impedimentos se registran como issues con las etiquetas \texttt{bloqueante} o \texttt{urgente}; su tiempo de resolución se puede calcular con las fechas de apertura y cierre de cada issue, pero no se calculó durante el proyecto.
