@@ -104,7 +104,7 @@ Todo issue de código, sin excepción, debe responder no solo qué hay que hacer
 1. **Título**: corto, claro, orientado a la acción.
 2. **Responsable**: David, Joan, Henao o Joshua. La asignación se hace según complejidad, dependencias, carga de trabajo y necesidad de paralelización, no por rotación fija ni por buscar el mismo número de issues por persona.
 3. **Duración estimada**: fecha de inicio y de cierre. No todos los issues duran una semana; la duración depende de la complejidad real.
-4. **Ubicación**: la ruta o módulo exacto donde se hace el trabajo (por ejemplo `sdk/src/application/GatewayFactory.ts`), no solo "backend" o "SDK".
+4. **Ubicación**: la ruta o módulo exacto donde se hace el trabajo (por ejemplo `sdk/src/infrastructure/factories/GatewayFactory.ts`), no solo "backend" o "SDK".
 5. **Objetivo**: qué se pretende conseguir.
 6. **Contexto y justificación**: por qué se necesita, qué problema resuelve, qué componente habilita, qué dependencia tiene con otras partes.
 7. **Implementación**: qué debe hacer el desarrollador, con suficiente detalle para empezar sin tener que adivinar.
