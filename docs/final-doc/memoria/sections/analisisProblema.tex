@@ -4,8 +4,8 @@
 \subsection{Requisitos funcionales y no funcionales}
 El marco de requisitos de Kit Pagos Colombia formaliza las capacidades que el artefacto de software provee tanto a los comercios que lo integran como a los evaluadores que verifican su comportamiento. Los requisitos funcionales se derivan de la especificación técnica consolidada en el SRS y se encuentran trazados de manera continua en la matriz de trazabilidad del proyecto (\texttt{docs/project-management/traceability-matrix.md}).
 
-\subsubsection{Requisitos Funcionales (RF-01 a RF-15)}
-Los quince requisitos funcionales implementados se estructuran en cuatro bloques temáticos:
+\subsubsection{Requisitos funcionales (RF-01 a RF-19)}
+El SRS v2.0 (sección 6.1) especifica diecinueve requisitos funcionales, y la matriz de trazabilidad los registra todos como implementados; en RF-13, siete operaciones sin esquema quedan como límite declarado (\#106). El texto normativo de cada requisito está en el SRS; aquí se agrupan en bloques temáticos:
 
 \paragraph{A. Operaciones transaccionales del núcleo del SDK}
 \begin{itemize}
@@ -17,19 +17,19 @@ Los quince requisitos funcionales implementados se estructuran en cuatro bloques
 \paragraph{B. Seguridad, resiliencia y desacoplamiento}
 \begin{itemize}
     \item \textbf{RF-04 (Validar firma de webhook y normalizar evento):} El SDK debe verificar criptográficamente la autenticidad de las notificaciones entrantes de la pasarela (\texttt{verify}) mediante comparaciones en tiempo constante resistentes a ataques de temporización, y transformar la carga útil en una estructura unificada \texttt{WebhookEvent} (\texttt{parse}).
-    \item \textbf{RF-05 (Excepciones tipadas y estructuradas):} Todos los fallos operativos, errores de red o rechazos de pasarela deben encapsularse en una jerarquía tipada encabezada por \texttt{KitPagosError}, clasificando la causa bajo doce códigos canónicos (\texttt{KitPagosErrorCode}) que orientan la lógica del comercio.
+    \item \textbf{RF-05 (Excepciones tipadas):} El SDK lanza \texttt{KitPagosError}, con uno de los trece códigos de \texttt{KitPagosErrorCode}, ante las condiciones de fallo esperadas, como un \textit{timeout}, credenciales inválidas, un recurso inexistente o una operación no soportada.
     \item \textbf{RF-06 (Intercambiabilidad de pasarela sin alterar código):} La configuración del proveedor de pagos debe desacoplarse de la lógica de negocio mediante un configurador central (\texttt{SDKConfigurator}) y una factoría de adaptadores (\texttt{GatewayFactory}), permitiendo alternar entre pasarelas únicamente modificando las credenciales de inicialización.
     \item \textbf{RF-07 (Reintentos con retroceso exponencial):} Las peticiones que experimenten fallos transitorios de red o códigos HTTP 5xx recuperables deben reintentarse automáticamente con retroceso exponencial (\textit{exponential backoff}), absteniéndose estrictamente de reintentar operaciones de cobro no idempotentes.
-    \item \textbf{RF-08 (Protección y no exposición de credenciales):} El sistema debe sanitizar automáticamente cualquier registro de depuración, traza o volcado de error, garantizando que llaves secretas, tokens de acceso o datos personales no queden expuestos en consolas o registros de auditoría.
+    \item \textbf{RF-08 (Credenciales no expuestas):} El SDK debe redactar las credenciales, los tokens y los secretos de los mensajes, los cuerpos y las causas de sus errores.
 \end{itemize}
 
 \paragraph{C. Entorno de emulación y API de Simulación}
 \begin{itemize}
     \item \textbf{RF-09 (Endpoints REST por pasarela):} La API de Simulación debe exponer réplicas fieles de las rutas transaccionales de las cuatro pasarelas bajo prefijos dedicados (\texttt{/v1/sim/wompi/*}, \texttt{/v1/sim/mercadopago/*}, \texttt{/v1/sim/kushki/*}, \texttt{/v1/sim/rapyd/*}).
     \item \textbf{RF-10 (Inyección determinista de escenarios controlados):} El simulador debe admitir la inyección de comportamientos anómalos o de prueba (rechazos clasificados por fondos insuficientes, caídas de red, latencias y timeouts) mediante cabeceras \texttt{x-simulate-scenario}, montos de prueba reservados o credenciales marcadas.
-    \item \textbf{RF-11 (Estructura de error nativa por pasarela):} Al producirse un fallo simulado o real, el simulador y el normalizador del SDK deben preservar y exponer la estructura nativa y los mensajes originales emitidos por el proveedor (\texttt{rawStatus}).
+    \item \textbf{RF-11 (Estructura de error nativa por pasarela):} En los escenarios de fallo, el simulador debe responder con la estructura de error nativa de cada pasarela, con el código y el mensaje del proveedor.
     \item \textbf{RF-12 (Disparo sintético y emisión automática de webhooks):} El simulador debe permitir gatillar notificaciones asíncronas firmadas hacia el comercio mediante un endpoint administrativo (\texttt{POST /v1/sim/webhooks/trigger}) o mediante emisión automática retardada.
-    \item \textbf{RF-13 (Especificación OpenAPI 3.0 en \texttt{/docs}):} La API de Simulación debe publicar contratos OpenAPI 3.0 interactivos generados a partir de esquemas JSON formales validados con herramientas estándar del ecosistema.
+    \item \textbf{RF-13 (Especificación OpenAPI 3.0 en \texttt{/docs}):} La API de Simulación debe publicar la especificación OpenAPI 3.0 de las rutas que declaran esquema en \texttt{/docs}, \texttt{/docs/json} y \texttt{/docs/yaml}. Está implementado desde el PR \#137; las siete operaciones sin esquema (las cinco páginas HTML de los bancos simulados y los términos de Wompi, la tokenización de tarjeta de Kushki y el disparador de webhooks) quedan como límite declarado (punto 109).
 \end{itemize}
 
 \paragraph{D. Corpus documental y reproducibilidad}
@@ -43,8 +43,8 @@ Los requisitos no funcionales del framework se organizaron siguiendo el modelo d
 \begin{itemize}
     \item \textbf{Funcionalidad y Seguridad (\textit{Functionality}):} Aislamiento absoluto de datos sensibles de tarjetas (cumplimiento PCI DSS mediante tokenización en cliente). Mitigación estricta de ataques de temporización en la verificación de firmas criptográficas mediante \texttt{crypto.timingSafeEqual}.
     \item \textbf{Usabilidad y Facilidad de Integración (\textit{Usability}):} Diseño de interfaces orientadas al desarrollador en TypeScript con autocompletado y tipado estricto. La curva de adopción se minimiza al requerir una única firma metodológica para procesar pagos a través de cualquier pasarela.
-    \item \textbf{Confiabilidad (\textit{Reliability}):} Resiliencia ante fallos transitorios mediante políticas de reintento controladas. Manejo exhaustivo de estados excepcionales con doce códigos de error tipados (\texttt{KitPagosErrorCode}) que evitan fallos no controlados (\textit{unhandled exceptions}). Cobertura de pruebas unitarias superior al 80\% en el núcleo del SDK.
-    \item \textbf{Rendimiento y Eficiencia (\textit{Performance}):} Sobrecosto computacional despreciable introducido por la capa de abstracción del SDK en memoria. En el simulador, adopción del framework Fastify para garantizar tiempos de respuesta ultrarrápidos y bajo consumo de memoria.
+    \item \textbf{Confiabilidad (\textit{Reliability}):} Reintentos con retroceso exponencial y fluctuación solo para las operaciones idempotentes (\texttt{getPaymentStatus()} y \texttt{getPseBanks()}); \texttt{createPayment()} no se reintenta. Las condiciones de error esperadas se convierten en \texttt{KitPagosError} con uno de los trece códigos de \texttt{KitPagosErrorCode}. La Definition of Done exige una cobertura de pruebas de al menos 80\,\% en el SDK y en la API de Simulación, y la CI la verifica.
+    \item \textbf{Rendimiento (\textit{Performance}):} Cada petición a una pasarela tiene un límite de tiempo configurable (\texttt{timeoutMs}, 30 segundos por omisión). No se declaran umbrales de latencia del SDK ni del simulador porque no se midieron en un entorno controlado; el escenario \texttt{TIMEOUT} del simulador introduce el retardo que se configure.
     \item \textbf{Soportabilidad y Mantenibilidad (\textit{Supportability}):} Arquitectura Hexagonal que asegura bajo acoplamiento y alta cohesión. Incorporación de nuevos proveedores de pago mediante la adición de adaptadores aislados sin mutar el modelo de dominio. Verificación estricta de métricas de software de Chidamber y Kemerer (WMC, CBO, RFC) incorporadas como guardas de calidad en la integración continua.
 \end{itemize}
 
@@ -52,23 +52,22 @@ Los requisitos no funcionales del framework se organizaron siguiendo el modelo d
 
 \subsubsection{Restricciones tecnológicas y de entorno}
 \begin{enumerate}
-    \item \textbf{Plataforma de ejecución:} El SDK de servidor está desarrollado para operar en entornos Node.js en su versión LTS activa (Node.js $\ge 20.19$). El código fuente se compila desde TypeScript bajo configuración estricta (\texttt{strict: true}).
-    \item \textbf{Gestión de dependencias:} Para salvaguardar la ligereza del artefacto, el núcleo del SDK se diseñó sin dependencias foráneas pesadas, apoyándose exclusivamente en las utilidades criptográficas y de red nativas de la plataforma (\texttt{node:crypto}, \texttt{fetch} global).
+    \item \textbf{Plataforma de ejecución:} El SDK y la API de Simulación se implementan en TypeScript con \texttt{strict: true} sobre Node.js. El paquete declara \texttt{engines.node >= 20.19.0}; la versión 20.18 o anterior no carga el módulo de navegador.
+    \item \textbf{Gestión de dependencias:} El SDK tiene una sola dependencia de ejecución, \texttt{big.js}, para la aritmética decimal de los montos; la criptografía y la red usan los módulos nativos de la plataforma (\texttt{node:crypto} y \texttt{fetch}).
 \end{enumerate}
 
 \subsubsection{Restricciones de seguridad y regulación}
 \begin{enumerate}
-    \item \textbf{Fronteras de PCI DSS:} El servidor del comercio bajo ninguna circunstancia debe capturar, procesar ni almacenar números de tarjeta en texto claro (PAN) o códigos de seguridad (CVV). El cobro con tarjeta exige siempre un token emitido previamente desde el navegador del cliente.
+    \item \textbf{Fronteras de PCI DSS:} El SDK de servidor no recibe el número de tarjeta ni el código de seguridad: el cobro con tarjeta usa un token que emite la pasarela, salvo en Rapyd, donde el pagador escribe la tarjeta en la página alojada de Rapyd. Si la tarjeta se tokeniza desde el formulario del comercio con \texttt{KitPagosBrowser}, esa página sigue en el alcance del comercio (SAQ A-EP), y la cabecera Content-Security-Policy la debe enviar su servidor.
     \item \textbf{Autenticación de llamadas:} Las operaciones transaccionales exigen credenciales válidas provistas por las pasarelas (llaves públicas, privadas o secretos de integridad).
 \end{enumerate}
 
 \subsubsection{Exclusiones formales del alcance}
-De acuerdo con las delimitaciones aprobadas en el SPMP y confirmadas en el desarrollo:
-\begin{itemize}
-    \item \textbf{Interfaces gráficas de usuario para comercios:} El proyecto no incluye el desarrollo de plataformas completas de comercio electrónico ni interfaces de usuario finales con propósitos comerciales. Las interfaces construidas en los prototipos operan únicamente como casos de estudio mínimos para la medición experimental.
-    \item \textbf{Intermediación financiera o recaudación de fondos:} Kit Pagos Colombia no es una entidad financiera ni actúa como recaudador agregado; los fondos procesados fluyen de manera directa e inalterada entre la pasarela contratada y la cuenta bancaria del comercio.
-    \item \textbf{Soporte de métodos de pago en efectivo o puntos físicos:} El alcance se restringe estrictamente a los dos métodos digitales predominantes en Colombia: tarjetas (crédito/débito) y transferencias bancarias en línea a través de PSE.
-\end{itemize}
+El SPMP (sección 1.2.2, p.~9) delimita el alcance con estas exclusiones:
+\begin{quote}
+El proyecto no incluye: procesamiento real de transacciones financieras; interfaces de usuario para flujos de pago; cobertura de pasarelas distintas a las cuatro mencionadas; integración con sistemas contables o ERP; ni responsabilidad sobre la continuidad de las APIs externas de los proveedores.
+\end{quote}
+Dos de ellas se tensionaron durante el desarrollo y se discuten en las divergencias de este capítulo: los prototipos tienen páginas de pago y el patrón P2 usa un cliente de navegador, lo que roza la exclusión de interfaces de usuario para flujos de pago, y Rapyd reemplazó a PayU, una de las cuatro pasarelas que nombra el SPMP. El SRS v2.0 restringe además los métodos a tarjeta y PSE: no incluye efectivo, Nequi, Daviplata, suscripciones ni reembolsos.
 
 \subsection{Especificación funcional}
 El comportamiento dinámico del artefacto unifica los flujos de cobro en secuencias estructuradas que ocultan la complejidad de red de cada pasarela.
@@ -93,7 +92,7 @@ Cuando la pasarela emite un evento HTTP POST hacia la URL de notificación del c
 \begin{enumerate}
     \item El comercio captura el cuerpo crudo (\textit{raw body}) y las cabeceras HTTP de firma sin alterar la codificación de caracteres.
     \item Se invoca \texttt{kitPagos.validateWebhook(payload, headers)}.
-    \item El servicio \texttt{WebhookVerifier} selecciona la estrategia criptográfica de la pasarela, valida la ventana temporal contra ataques de repetición, ejecuta la comparación en tiempo constante y devuelve la estructura normalizada \texttt{WebhookEvent} con la transacción resuelta.
+    \item \texttt{WebhookVerifier} elige el manejador de la pasarela, comprueba que la marca de tiempo esté dentro de la ventana de tolerancia (300 segundos por omisión), compara la firma en tiempo constante y devuelve un \texttt{WebhookEvent} normalizado. En Mercado Pago la firma no cubre el cuerpo, así que el evento llega como \texttt{PENDING} y el comercio confirma el estado con \texttt{getPaymentStatus()}.
 \end{enumerate}
 
 \subsection{Trazabilidad y divergencias de alcance}
@@ -107,12 +106,12 @@ La Tabla~\ref{tab:trazabilidad-oe-rf} establece la correspondencia formal entre 
 \begin{tabular}{|p{3.2cm}|p{7.0cm}|p{4.2cm}|}
 \hline
 \textbf{Objetivo Específico} & \textbf{Requisitos Funcionales de Sustento} & \textbf{Evidencia en el Repositorio} \\ \hline
-OE-01 (Análisis técnico) & RF-01, RF-02, RF-03, RF-11, RF-14 & Documentación de pasarelas, lenguaje ubicuo y \texttt{docs/testing-data/}. \\ \hline
-OE-02 (Diseño arquitectónico) & RF-01, RF-02, RF-03, RF-04, RF-05, RF-06, RF-07, RF-08 & Puertos del dominio, adaptadores y \texttt{architecture-log.md}. \\ \hline
-OE-03 (SDK funcional) & RF-01, RF-02, RF-03, RF-04, RF-05, RF-06, RF-07, RF-08 & Paquete \texttt{sdk/src/}, adaptadores de las 4 pasarelas y pruebas Jest. \\ \hline
-OE-04 (API de Simulación) & RF-09, RF-10, RF-11, RF-12, RF-13 & Servicio \texttt{simulator-api/}, rutas \texttt{/v1/sim/*}, contratos OpenAPI y capa \texttt{/v1/api}. \\ \hline
-OE-05 (Datos de prueba) & RF-14, RF-15 & Guías estructuradas por pasarela en \texttt{docs/testing-data/}. \\ \hline
-OE-06 (Evaluación formal) & Soporte experimental sobre RF-01 a RF-15 & Protocolo de evaluación, prototipos comparativos y analizador de métricas CK. \\ \hline
+OE-01 (Análisis técnico) & RF-01, RF-02, RF-03, RF-11, RF-14, RF-18, RF-19 & Documentación de pasarelas, lenguaje ubicuo y \texttt{docs/testing-data/}. \\ \hline
+OE-02 (Diseño arquitectónico) & RF-01 a RF-08, RF-16, RF-17 & Puertos del dominio, adaptadores y \texttt{architecture-log.md}. \\ \hline
+OE-03 (SDK funcional) & RF-01 a RF-08, RF-16 a RF-19 & \texttt{sdk/}, \texttt{examples/} y \texttt{docs/03-sdk/}. \\ \hline
+OE-04 (API de Simulación) & RF-09, RF-10, RF-12, RF-13, RF-16 y RF-19 & \texttt{simulator-api/}, rutas \texttt{/v1/sim/*} y capa \texttt{/v1/api}. \\ \hline
+OE-05 (Datos de prueba) & RF-14, RF-15 & \texttt{docs/testing-data/}. \\ \hline
+OE-06 (Evaluación formal) & Sin RF directo: lo exigen el hito H5 y la metodología & Plan de evaluación, \texttt{ck-metrics.ts} y \texttt{docs/evaluation/}. \\ \hline
 \end{tabular}
 \caption{Matriz de trazabilidad entre Objetivos Específicos y Requisitos Funcionales}
 \label{tab:trazabilidad-oe-rf}
@@ -124,5 +123,5 @@ En concordancia con los principios de transparencia metodológica de Design Scie
 \begin{enumerate}
     \item \textbf{Incorporación de la capa REST propia (\texttt{/v1/api}):} El SPMP definió originalmente la API de Simulación como un servicio dedicado a emular las cuatro pasarelas externas (\texttt{/v1/sim/*}). Durante el desarrollo se identificó la oportunidad de exponer también las capacidades unificadas del propio Kit Pagos a través de endpoints REST estándar (\texttt{/v1/api}). Esta ampliación de alcance habilita el consumo del framework desde cualquier lenguaje de programación sin requerir la instalación de la biblioteca en Node.js, configurando el denominado patrón de integración P2 (Frontend $\to$ REST $\to$ SDK).
     \item \textbf{Construcción del Prototipo C (Cliente REST en navegador):} Aunque el SPMP excluye interfaces gráficas finales, se desarrolló un cliente web demostrativo en \texttt{prototypes/checkout-frontend-rest/} que ejercita de extremo a extremo la capa REST unificada frente a las cuatro pasarelas, aportando evidencia de interoperabilidad para el patrón P2.
-    \item \textbf{Delimitación del patrón P3 (Tokenización unificada en navegador):} Se investigó exhaustivamente la unificación de librerías de cliente para tokenización desde el navegador (\texttt{KitPagosBrowser}). La evaluación técnica demostró que mientras Wompi, Mercado Pago y Kushki permiten la captura directa de tokens en cliente, Rapyd impone el procesamiento de tarjetas exclusivamente a través de páginas de recaudo alojadas (\textit{hosted pages}). En consecuencia, el patrón P3 se consolidó como una contribución de valor agregado y límite declarado de diseño, manteniéndose fuera de los compromisos formales obligatorios del SPMP.
+    \item \textbf{Alcance del patrón P3 (tokenización unificada en el navegador):} La versión 1.0 del SPMP no lo contemplaba. El issue \#110 lo investigó y recomendó no convertirlo en un objetivo. Lo que existe de él es \texttt{KitPagosBrowser}, que tokeniza con Wompi, Mercado Pago y Kushki; Rapyd no ofrece tokenización en el navegador y cobra la tarjeta en su página alojada. El SRS v2.0 lo registra como RF-17, y el SPMP 2.0 lo describe como un patrón de integración implementado en parte, no como un objetivo nuevo.
 \end{enumerate}

@@ -11,11 +11,13 @@ A diferencia de economías donde los cobros por internet se concentran de forma 
 Sin embargo, cada pasarela opera bajo estándares propietarios, arquitecturas heterogéneas y contratos de integración divergentes. Para una organización que busca recibir pagos por internet, la interacción técnica no consiste simplemente en invocar un servicio web estandarizado, sino en comprender una cadena transaccional compleja donde intervienen el pagador, la aplicación del comercio, la pasarela de recaudo, las entidades adquirentes, las redes de franquicias (Visa, Mastercard, American Express) y las instituciones financieras emisoras. La ausencia de un estándar unificado en la industria nacional transfiere al desarrollador la carga técnica de gestionar protocolos de autenticación disímiles, algoritmos criptográficos incompatibles de verificación de firmas, modelos inconsistentes de ciclo de vida de la transacción y representaciones no uniformes de montos y divisas.
 
 \subsubsection{Formulación del Problema}
-En el marco del documento de planeación aprobado para el proyecto (\textit{Software Project Management Plan}, SPMP, sección 1.2.1), la problemática central se formula en los siguientes términos:
+El SPMP aprobado (\textit{Software Project Management Plan}) formula el problema al presentar el proyecto (sección 1, p.~7):
 
 \begin{quote}
-La integración de pasarelas de pago en aplicaciones de comercio electrónico en Colombia presenta una alta complejidad técnica derivada de la divergencia de contratos, mecanismos de autenticación, firmas criptográficas, formatos de notificación asíncrona (webhooks) y modelos de ciclo de vida entre los distintos proveedores disponibles en el mercado. Esta fragmentación genera acoplamiento estrecho entre la lógica de negocio del comercio y las especificaciones propietarias de cada pasarela, elevando sustancialmente los costos de desarrollo, dificultando la sustitución o incorporación de nuevos proveedores (\textit{vendor lock-in}) y comprometiendo la mantenibilidad y confiabilidad del software transaccional.
+El proyecto Kit Pagos Colombia surge a partir de un problema recurrente en el desarrollo de software colombiano: integrar pasarelas de pago sigue siendo un proceso fragmentado, repetitivo y, en muchos casos, innecesariamente complejo. Plataformas como Wompi, PayU, Mercado Pago y Kushki ofrecen servicios similares, pero cada una maneja estructuras distintas para autenticación, respuestas HTTP, validaciones y notificaciones asíncronas. En la práctica, esto obliga a los equipos de desarrollo a implementar varias veces la misma lógica, aumentando el tiempo de integración y la probabilidad de errores.
 \end{quote}
+
+En la sección 1.2.1 (pp.~8--9), el SPMP fija como propósito del trabajo construir y evaluar un artefacto de software que resuelva el problema de la fragmentación en el proceso de integración de pasarelas de pago en Colombia. El SPMP nombra a PayU porque es anterior a su reemplazo por Rapyd, que se explica en el capítulo III.
 
 Esta realidad técnica somete a los equipos de ingeniería a duplicar esfuerzos de implementación ante cada cambio de proveedor y aumenta la superficie de error en puntos críticos de seguridad, tales como la validación de webhooks y la tokenización de credenciales de pago.
 
@@ -24,7 +26,7 @@ Para resolver la problemática planteada, este trabajo desarrolló \textbf{Kit P
 
 \begin{enumerate}
     \item \textbf{SDK Unificado en TypeScript:} Una biblioteca orientada a entornos Node.js (y con módulo especializado para navegador) que proporciona una interfaz única y agnóstica de pasarela para las cuatro operaciones transaccionales esenciales: cobro con tarjeta de crédito, cobro mediante transferencia bancaria debito PSE, consulta y conciliación del estado de pagos, y verificación criptográfica estricta de notificaciones asíncronas (webhooks).
-    \item \textbf{API de Simulación:} Un servidor HTTP de pruebas desacoplado que implementa dos superficies transaccionales: por un lado, simula fielmente las especificaciones de red de las cuatro pasarelas soportadas bajo prefijos de ruta dedicados (\texttt{/v1/sim/*}), permitiendo la inyección determinista de escenarios de aprobación, rechazo clasificado, expiración y tiempos de espera controlados; por otro lado, expone una capa de servicios REST agnóstica (\texttt{/v1/api}) que permite la invocación remota de las capacidades del SDK mediante peticiones HTTP estándar.
+    \item \textbf{API de Simulación:} Un servidor HTTP de pruebas con dos superficies. Bajo \texttt{/v1/sim/*} imita las rutas y los formatos de las cuatro pasarelas a partir de lo medido en sus sandboxes, y permite elegir escenarios de aprobación, rechazo, expiración y tiempo de espera; las combinaciones sin evidencia de cómo responde la pasarela real devuelven \texttt{501}. Bajo \texttt{/v1/api} expone por HTTP las operaciones del SDK.
     \item \textbf{Documentación y Corpus de Datos de Prueba:} Un conjunto estructurado y versionado de especificaciones técnicas, credenciales de sandbox verificadas y esquemas de datos de prueba para Wompi, Mercado Pago, Kushki y Rapyd, clasificando explícitamente el nivel de evidencia de cada comportamiento transaccional observado.
 \end{enumerate}
 
@@ -33,12 +35,12 @@ La justificación de Kit Pagos Colombia se fundamenta en principios sólidos de 
 
 Asimismo, la solución mitiga riesgos críticos de seguridad y exactitud financiera:
 \begin{itemize}
-    \item \textbf{Prevención de vulnerabilidades de firma:} La verificación de webhooks se estandariza bajo comparaciones en tiempo constante resistentes a ataques de temporización (\textit{timing attacks}), garantizando el rechazo matemático de notificaciones forjadas.
+    \item \textbf{Prevención de vulnerabilidades de firma:} El SDK verifica la firma de cada pasarela con su algoritmo y la compara en tiempo constante (\texttt{crypto.timingSafeEqual}), para no filtrar la firma esperada por diferencias de tiempo. En Mercado Pago la firma no cubre el cuerpo, así que el evento se entrega como \texttt{PENDING} y el comercio confirma el estado con \texttt{getPaymentStatus()}.
     \item \textbf{Exactitud y representación monetaria:} Se neutralizan los errores de precisión derivados de la aritmética de punto flotante estándar (IEEE 754 en JavaScript) mediante la preservación de representaciones exactas en cadena de texto y tipos monetarios inmutables.
-    \item \textbf{Reducción del bloqueo de proveedor (\textit{vendor lock-in}):} Cambiar de una pasarela a otra (o incorporar redundancia operativa) deja de requerir una reescritura estructural del comercio; se convierte en una operación de configuración de credenciales y selección del adaptador respectivo.
+    \item \textbf{Reducción del bloqueo de proveedor (\textit{vendor lock-in}):} Las diferencias entre pasarelas quedan en los adaptadores, de modo que cambiar de pasarela o sumar una segunda no debería obligar a reescribir la lógica de negocio del comercio. Cuánto cambia en la práctica el código del comercio es una de las variables de la evaluación.
 \end{itemize}
 
-El impacto y la reducción del esfuerzo técnico de integración son sometidos a evaluación formal en fases posteriores del proyecto mediante métricas de diseño orientadas a objetos, sin formular hipótesis cuantitativas anticipadas en este capítulo.
+El efecto sobre el esfuerzo de integración se mide en la evaluación de la Fase 5, con las métricas WMC, CBO y RFC y las demás variables del plan de evaluación. Sus resultados se presentan en el capítulo VII; este capítulo no los anticipa.
 
 \subsection{Objetivos, alcance y entregables}
 
@@ -54,26 +56,26 @@ En correspondencia con el objetivo general y la metodología del proyecto, el SP
 
 \begin{itemize}
     \item \textbf{OE-01:} \textit{Analizar las características técnicas, mecanismos de integración y consideraciones de seguridad de las cuatro pasarelas seleccionadas.} \\
-    \textbf{Evidencia:} Implementado y consolidado en la caracterización técnica del producto (\texttt{docs/01-producto/3-las-cuatro-pasarelas.md}), la matriz de lenguaje ubicuo (\texttt{docs/02-arquitectura/ubiquitous-language.md}) y el repositorio de datos de prueba clasificados (\texttt{docs/testing-data/}).
+    \textbf{Evidencia:} Implementado y consolidado en la caracterización técnica del producto (\path{docs/01-producto/3-las-cuatro-pasarelas.md}), la matriz de lenguaje ubicuo (\path{docs/02-arquitectura/ubiquitous-language.md}) y el repositorio de datos de prueba clasificados (\path{docs/testing-data/}).
     
     \item \textbf{OE-02:} \textit{Diseñar la arquitectura del framework aplicando la arquitectura hexagonal y patrones GoF.} \\
-    \textbf{Evidencia:} Implementado mediante la especificación de puertos, entidades del dominio transaccional, adaptadores de infraestructura y registro histórico de decisiones arquitectónicas (\texttt{docs/architecture/architecture-log.md} y \texttt{docs/02-arquitectura/}).
+    \textbf{Evidencia:} Implementado mediante la especificación de puertos, entidades del dominio transaccional, adaptadores de infraestructura y registro histórico de decisiones arquitectónicas (\path{docs/architecture/architecture-log.md} y \path{docs/02-arquitectura/}).
     
     \item \textbf{OE-03:} \textit{Desarrollar un prototipo funcional del framework que implemente la interfaz unificada y los mecanismos de comunicación segura.} \\
     \textbf{Evidencia:} Implementado en el paquete central del SDK (\texttt{sdk/}), con la fachada unificada \texttt{KitPagos}, factoría de pasarelas, adaptadores para Wompi, Mercado Pago, Kushki y Rapyd, módulo de navegador para tokenización segura y suite de pruebas unitarias y de integración.
     
     \item \textbf{OE-04:} \textit{Implementar la API de simulación.} \\
-    \textbf{Evidencia:} Implementado en el servicio \texttt{simulator-api/}, que incluye rutas de simulación para las cuatro pasarelas bajo \texttt{/v1/sim/*}, inyección determinista de escenarios de error vía cabeceras \texttt{x-simulate-scenario}, contratos OpenAPI 3.0 validados y la capa REST unificada \texttt{/v1/api}.
+    \textbf{Evidencia:} Implementado en \texttt{simulator-api/}: rutas de simulación de las cuatro pasarelas bajo \texttt{/v1/sim/*}, escenarios elegidos por cabecera (\texttt{x-simulator-scenario}), datos de prueba, montos reservados o marcas de credencial, y la capa REST propia \texttt{/v1/api}. La especificación OpenAPI (RF-13) cubre \texttt{/v1/api} y, desde el PR \#137, las rutas de simulación de las cuatro pasarelas; siete operaciones sin esquema quedan como límite declarado (punto 109 del registro de arquitectura).
     
     \item \textbf{OE-05:} \textit{Consolidar los datos de prueba por pasarela para su documentación.} \\
     \textbf{Evidencia:} Implementado en el directorio \texttt{docs/testing-data/}, estructurado por pasarela, con tarjetas de prueba, credenciales sandbox validadas, listas de bancos PSE y categorización explícita del nivel de evidencia experimental.
     
     \item \textbf{OE-06:} \textit{Evaluar el framework mediante su aplicación en proyectos prototípicos usando las métricas WMC, CBO y RFC de Chidamber y Kemerer (1994), comparando los resultados frente a una integración directa con las APIs nativas.} \\
-    \textbf{Evidencia:} En ejecución dentro de la fase experimental del proyecto, apoyada en el protocolo de evaluación formal (\texttt{docs/project-management/prototypes-evaluation-plan.md}), los proyectos prototípicos de comparación y el analizador de código estático (\texttt{sdk/scripts/ck-metrics.ts}).
+    \textbf{Evidencia:} Pendiente: la ejecución es la Fase 5. El protocolo está en \path{docs/project-management/prototypes-evaluation-plan.md}, la herramienta de medición es \path{sdk/scripts/ck-metrics.ts} y las mediciones de los prototipos B y D están en \path{docs/evaluation/}. Sus resultados se presentan en el capítulo VII.
 \end{itemize}
 
 \subsubsection{Metodología, entregables y criterios aplicados}
-El marco metodológico estructural que guía el desarrollo del proyecto es \textbf{Design Science Research (DSR)} (Peffers et al., 2007). DSR resulta idóneo debido a que el propósito de la investigación es diseñar, construir y evaluar rigurosamente un artefacto de software destinado a resolver una clase de problema práctico relevante. El ciclo de vida de DSR abarca seis fases secuenciales:
+El marco metodológico del proyecto es \textbf{Design Science Research (DSR)} (Peffers et al., 2007), porque el resultado del trabajo es un artefacto de software que hay que construir y evaluar frente al problema que lo motivó. Peffers et al. proponen seis actividades en un orden nominal, que admite iterar y empezar por varias de ellas. El SPMP las adapta en seis fases (\path{docs/project-management/methodology.md}, sección 1): separa el diseño del desarrollo y junta la demostración con la evaluación.
 \begin{enumerate}
     \item \textbf{Identificación del problema:} Caracterización de la fragmentación de pasarelas en Colombia y levantamiento del repositorio de parámetros técnicos.
     \item \textbf{Definición de objetivos:} Especificación de requisitos, criterios de evaluación y diseño experimental comparativo.
@@ -100,7 +102,7 @@ API de Simulación &
   Fastify, esquemas OpenAPI 3.0 validados (\texttt{swagger-parser}), desacoplamiento de estado en memoria y soporte de cabeceras de inyección de escenarios (\texttt{x-simulate-scenario}). &
   Servidor reproducible en \texttt{simulator-api/}, con doble superficie: simulación de proveedores (\texttt{/v1/sim/*}) y servicio REST unificado (\texttt{/v1/api}). \\ \hline
 Corpus de datos de prueba &
-  Declaración formal de niveles de evidencia experimental (documentado, inferido, probado en sandbox) y normalización de escenarios de rechazo. &
+  Nivel de evidencia declarado por dato: medido contra la API real con fecha, medido solo hasta cierto punto del flujo, o tomado de la documentación oficial sin comprobar (\path{docs/testing-data/README.md}, sección 3). &
   Directorio \texttt{docs/testing-data/} con credenciales verificadas y conjuntos de datos para pruebas automatizadas y reproducibles. \\ \hline
 Proyectos prototípicos y evaluación &
   Aplicación de la suite de métricas de Chidamber y Kemerer (1994) mediante análisis sintáctico con \texttt{ts-morph}, en condiciones de medición controlada. &

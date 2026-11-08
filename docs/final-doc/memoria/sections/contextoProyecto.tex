@@ -17,20 +17,20 @@ La ejecución de un pago en línea no constituye una simple comunicación punto 
 \subsubsection{Tokenización y fronteras de seguridad PCI DSS}
 El tratamiento de datos de tarjetas de pago se encuentra estrictamente regulado por el Estándar de Seguridad de Datos para la Industria de Tarjetas de Pago (\textit{Payment Card Industry Data Security Standard}, PCI DSS). Almacenar, procesar o transmitir números de tarjeta (\textit{Primary Account Number}, PAN) o códigos de seguridad (CVV/CVC) en los servidores del comercio sujeta a la organización a rigurosas auditorías de infraestructura (cuestionarios SAQ D).
 
-Para mitigar este riesgo operativo, la industria adoptó el mecanismo de \textbf{tokenización en el cliente}: los datos sensibles de la tarjeta se capturan directamente desde el navegador o la aplicación móvil del usuario y se transmiten de manera aislada hacia la pasarela mediante campos protegidos o llamadas directas a sus APIs de tokenización. La pasarela almacena los datos de tarjeta en una bóveda segura (\textit{vault}) y devuelve un identificador efímero y no reversible denominado \textbf{token de tarjeta}. El comercio recibe únicamente dicho token y es este valor el que viaja hacia su servidor de backend para efectuar el cobro, reduciendo el alcance regulatorio del comercio al nivel más simple de cumplimiento (SAQ A).
+Para mitigar este riesgo operativo, la industria adoptó el mecanismo de \textbf{tokenización en el cliente}: los datos sensibles de la tarjeta se capturan directamente desde el navegador o la aplicación móvil del usuario y se transmiten de manera aislada hacia la pasarela mediante campos protegidos o llamadas directas a sus APIs de tokenización. La pasarela almacena los datos de tarjeta en una bóveda segura (\textit{vault}) y devuelve un identificador efímero y no reversible denominado \textbf{token de tarjeta}. El comercio recibe únicamente dicho token, y es este valor el que viaja hacia su servidor para efectuar el cobro. Eso deja al servidor fuera de los datos de la tarjeta, pero no a la página donde se escriben: si el formulario es del comercio y la tarjeta se envía a la pasarela con JavaScript, el comercio queda en el cuestionario SAQ A-EP. Solo cuando todos los elementos de la página de pago vienen de la pasarela (campos en \textit{iframes} o redirección) puede aspirar a SAQ A.
 
 \subsubsection{Autenticación, llaves y modelos de credenciales}
 Para interactuar con una pasarela, el comercio debe autenticarse ante sus servidores mediante esquemas de credenciales de API. Las pasarelas estructuran típicamente este control en dos niveles:
 \begin{itemize}
-    \item \textbf{Llave pública (\textit{Public Key}):} Diseñada para ser expuesta en interfaces de cliente (navegador o aplicaciones móviles); posee privilegios restringidos exclusivamente a la generación de tokens de tarjeta o consulta de listas de bancos.
+    \item \textbf{Llave pública (\textit{Public Key}):} Diseñada para ser expuesta en interfaces de cliente (navegador o aplicaciones móviles). Sus permisos son menores que los de la privada y cambian según la pasarela: tokenizar tarjetas, listar bancos o, en Wompi, crear transacciones firmadas con el secreto de integridad.
     \item \textbf{Llave privada o secreta (\textit{Secret/Private Key}):} Diseñada exclusivamente para entornos de servidor protegidos; cuenta con facultades para autorizar débitos, realizar reversiones o consultar historiales de clientes.
 \end{itemize}
-A pesar de esta aparente dicotomía, cada pasarela implementa protocolos de transporte divergentes: algunas exigen la llave en cabeceras estándar (\texttt{Authorization: Bearer}), otras mediante cabeceras propietarias (\texttt{x-client-id}, \texttt{x-private-api-key}), y otras más demandan que cada petición HTTP individual sea firmada criptográficamente con parámetros variables en el tiempo.
+A pesar de esta aparente dicotomía, cada pasarela transporta sus credenciales de forma distinta: Wompi y Mercado Pago usan la cabecera estándar \texttt{Authorization: Bearer}, Kushki usa cabeceras propias (\texttt{Public-Merchant-Id} y \texttt{Private-Merchant-Id}) y Rapyd exige firmar cada petición HTTP con un \textit{salt} y una marca de tiempo.
 
 \subsubsection{Integridad criptográfica y firmas digitales (HMAC)}
 La comunicación en transacciones de pago requiere mecanismos de protección contra la alteración de datos durante el tránsito (\textit{anti-tampering}). Si un atacante interceptara una solicitud y modificara el monto del cobro o la divisa, el comercio podría despachar mercancía por un valor inferior al pactado.
 
-Para asegurar la integridad, las pasarelas recurren a códigos de autenticación de mensajes basados en \textit{hash} (HMAC) o firmas con secreto compartido. El emisor serializa un conjunto ordenado de campos del pago (como la referencia, el monto, la moneda y un valor aleatorio o \textit{timestamp}), concatena una clave secreta y calcula una función criptográfica unidireccional (como SHA-256). El receptor recalcula la firma bajo los mismos parámetros exactos; cualquier discordancia en el cuerpo de la petición invalida la operación.
+Para asegurar la integridad, las cuatro pasarelas firman con un secreto compartido, en las peticiones del comercio, en los webhooks o en ambos, pero no de la misma forma. Wompi calcula un \textit{hash} SHA-256 sobre una cadena que incluye el secreto. Mercado Pago, Kushki y Rapyd usan HMAC-SHA256, donde el secreto es la llave del algoritmo y no parte del texto. En los dos casos, el receptor recalcula la firma con los mismos campos y cualquier diferencia invalida el mensaje.
 
 \subsubsection{Notificaciones asíncronas (Webhooks) y mitigación de vectores de ataque}
 En operaciones financieras, los desenlaces transaccionales son inherentemente asíncronos. Procesos como la autorización bancaria en PSE, revisiones de riesgo antifraude o confirmaciones de cobro fuera de línea impiden resolver el estado de la transacción en una sola respuesta síncrona HTTP. Por ello, las pasarelas emplean el patrón de \textbf{webhooks}: notificaciones HTTP POST enviadas desde los servidores de la pasarela hacia un endpoint público expuesto por el comercio.
@@ -58,7 +58,7 @@ Wompi (desarrollada por Bancolombia) es la pasarela nativa más extendida en el 
 \begin{itemize}
     \item \textbf{Autenticación y llaves:} Utiliza cuatro secretos independientes: llave pública, llave privada, secreto de integridad (para firmar solicitudes del comercio) y secreto de eventos (para firmar webhooks). De manera particular, el adaptador del SDK comprueba que todas las peticiones a la API se autentican enviando la llave pública en la cabecera \texttt{Authorization: Bearer}, sin que la llave privada deba viajar por la red en los flujos estándar de cobro.
     \item \textbf{Manejo del monto:} Exige de forma estricta el monto expresado en su unidad menor como un entero (\texttt{amount\_in\_cents}), multiplicando el valor en pesos por 100.
-    \item \textbf{Flujo transaccional:} Para tarjeta de crédito, requiere solicitar previamente un token de aceptación de términos legales (\textit{acceptance token}) antes de radicar la transacción. El cobro con tarjeta es asíncrono y la respuesta inicial se emite siempre en estado \texttt{PENDING}.
+    \item \textbf{Flujo transaccional:} Antes de crear cualquier transacción, con tarjeta o con PSE, exige un token de aceptación de términos (\textit{acceptance token}) de un solo uso. En el sandbox, el cobro con tarjeta nace en \texttt{PENDING} y pasa a su estado final unos segundos después (medido el 19 de septiembre de 2026, \path{docs/testing-data/wompi.md}, sección 1.1).
     \item \textbf{PSE:} Requiere crear la transacción bancaria y, en la primera consulta del estado del pago, devuelve la URL de redirección hacia la entidad financiera (\texttt{async\_payment\_url}).
     \item \textbf{Firma y Webhooks:} La firma de integridad se genera concatenando la referencia, el monto en centavos, la moneda y el secreto de integridad, aplicando SHA-256. El webhook remite la transacción completa estructurada.
 \end{itemize}
@@ -66,9 +66,9 @@ Wompi (desarrollada por Bancolombia) es la pasarela nativa más extendida en el 
 \subsubsection{Mercado Pago}
 Mercado Pago (división financiera de Mercado Libre) es uno de los procesadores con mayor presencia regional en América Latina.
 \begin{itemize}
-    \item \textbf{Autenticación:} Utiliza una clave privada o \textit{Access Token} transmitida como \texttt{Authorization: Bearer}. En transacciones de creación de cobros (\texttt{POST /v1/payments}) exige obligatoriamente la cabecera de control de concurrencia \texttt{X-Idempotency-Key}.
-    \item \textbf{Manejo del monto:} Recibe el monto en la unidad mayor (pesos colombianos con coma flotante).
-    \item \textbf{Flujo transaccional:} El cobro con tarjeta se radica en una sola llamada síncrona mediante el token generado en el frontend, retornando un estado inmediato (\texttt{approved}, \texttt{rejected} o \texttt{in\_process}).
+    \item \textbf{Autenticación:} Utiliza un \textit{Access Token} privado, transmitido como \texttt{Authorization: Bearer}. Toda creación (\texttt{POST /v1/payments} y \texttt{POST /v1/orders}) exige la cabecera \texttt{X-Idempotency-Key}.
+    \item \textbf{Manejo del monto:} Recibe el monto en pesos, en la unidad mayor. En la Orders API, \texttt{total\_amount} no admite decimales.
+    \item \textbf{Flujo transaccional:} Desde la versión 0.6.0 del SDK, la tarjeta se cobra por la Orders API (\texttt{POST} \path{/v1/orders}), igual que PSE: con las credenciales del vendedor de prueba, \texttt{POST} \path{/v1/payments} respondió \texttt{401} (medido el 15 de octubre de 2026). El desenlace llega en la misma respuesta: la orden queda \texttt{processed} si se aprueba, \texttt{failed} si se rechaza y \texttt{processing} si queda pendiente.
     \item \textbf{PSE:} Se procesa a través del endpoint de órdenes (\texttt{POST /v1/orders}) o pagos directos con el método \texttt{pse}, requiriendo datos detallados del pagador (dirección, tipo de documento y teléfono con desglose de código de área).
     \item \textbf{Firma y Webhooks:} Los webhooks de Mercado Pago no remiten los datos del pago, sino un identificador del recurso modificado (\texttt{data.id}). La verificación de autenticidad involucra un manifiesto firmado con HMAC-SHA256 presente en las cabeceras \texttt{x-signature} y \texttt{x-request-id}.
 \end{itemize}
@@ -79,7 +79,7 @@ Kushki es una plataforma de pagos regional con enfoque en procesamiento omnicana
     \item \textbf{Autenticación:} Utiliza cabeceras personalizadas: \texttt{Public-Merchant-Id} para llamadas públicas desde cliente y \texttt{Private-Merchant-Id} para invocaciones protegidas de servidor.
     \item \textbf{Manejo del monto:} Requiere un desglose estructurado de montos (\texttt{subtotalIva}, \texttt{subtotalIva0}, \texttt{iva}), expresados en pesos.
     \item \textbf{Flujo transaccional:} Permite la captura de tarjeta mediante tokenización. En PSE, cuenta con rutas específicas para listar entidades bancarias y crear la transferencia, devolviendo una URL de redirección bancaria.
-    \item \textbf{Firma y Webhooks:} Notifica el evento completo serializado. La verificación de la firma del webhook se calcula mediante HMAC-SHA256 sobre la concatenación del identificador de la transacción y el cuerpo del mensaje.
+    \item \textbf{Firma y Webhooks:} Notifica el evento completo serializado. La firma viaja en la cabecera \texttt{x-\allowbreak kushki-\allowbreak signature} y es un HMAC-SHA256 en hexadecimal sobre el cuerpo y el valor de \texttt{x-\allowbreak kushki-\allowbreak id}, una marca de tiempo, separados por un punto.
 \end{itemize}
 
 \subsubsection{Rapyd}
@@ -88,7 +88,7 @@ Rapyd es una plataforma de servicios financieros globales (\textit{Fintech-as-a-
     \item \textbf{Autenticación por firma de petición:} A diferencia de las demás pasarelas, Rapyd no admite llaves estáticas en cabeceras simples. Cada petición HTTP enviada por el comercio debe firmarse criptográficamente calculando un HMAC-SHA256 en Base64 sobre la tupla: método HTTP, ruta relativa, \textit{salt} aleatorio, \textit{timestamp} Unix, llave de acceso pública, llave secreta y cuerpo JSON serializado.
     \item \textbf{Manejo del monto:} Recibe el monto en pesos colombianos, pero la serialización exacta de decimales es crítica para que la firma calculada por el comercio coincida con la evaluada por los servidores de Rapyd.
     \item \textbf{Flujo transaccional:} No ofrece tokenización de tarjeta integrada en el navegador del cliente; el cobro con tarjeta se canaliza mediante una página de recaudo alojada (\textit{hosted checkout page}) provista por Rapyd.
-    \item \textbf{Firma y Webhooks:} Las notificaciones entrantes de webhook incluyen cabeceras de firma que demandan la misma verificación criptográfica de cuatro componentes utilizada en las peticiones salientes.
+    \item \textbf{Firma y Webhooks:} El webhook trae la firma en la cabecera \texttt{signature}, junto con \texttt{salt}, \texttt{timestamp} y \texttt{access\_key}. Se calcula como en las peticiones del comercio, HMAC-SHA256 en Base64, pero sobre la URL del webhook registrada en el panel en lugar del método y la ruta: URL, \textit{salt}, marca de tiempo, llave de acceso, secreto y cuerpo.
 \end{itemize}
 
 La Tabla~\ref{tab:comparativa-pasarelas} resume las discrepancias técnicas identificadas entre las cuatro pasarelas, evidenciando la marcada divergencia que justifica el desarrollo de una capa unificadora.
@@ -101,9 +101,9 @@ La Tabla~\ref{tab:comparativa-pasarelas} resume las discrepancias técnicas iden
 \textbf{Característica técnica} & \textbf{Wompi} & \textbf{Mercado Pago} & \textbf{Kushki} & \textbf{Rapyd} \\ \hline
 Autenticación saliente & Bearer token con llave pública & Bearer token con Access Token & Cabecera \texttt{Private-Merchant-Id} & Firma HMAC por petición con \textit{salt} y fecha \\ \hline
 Unidad del monto & Entero en centavos (\texttt{amount\_in\_cents}) & Pesos (unidad mayor) & Pesos con desglose estructurado de IVA & Pesos como número o texto \\ \hline
-Cobro con tarjeta & 2 llamadas (token de aceptación + cobro) & 1 llamada síncrona (\texttt{/v1/payments}) & 1 llamada (\texttt{/v1/charges}) & Redirección a página alojada \\ \hline
+Cobro con tarjeta & 2 llamadas (token de aceptación + cobro) & Orden (\path{/v1/orders}), desde el SDK 0.6.0 & 1 llamada (\path{/card/v1/charges}) & Redirección a página alojada \\ \hline
 Cobro con PSE & Transacción + consulta de URL & Orden (\texttt{/v1/orders}) o pago directo & Transacción dedicada PSE & Transacción debito bancario \\ \hline
-Algoritmo de firma en webhook & SHA-256 sobre campos concatenados & HMAC-SHA256 sobre manifiesto y \textit{request-id} & HMAC-SHA256 sobre identificador y cuerpo & HMAC-SHA256 en Base64 con \textit{salt} y fecha \\ \hline
+Algoritmo de firma en webhook & SHA-256 sobre campos concatenados & HMAC-SHA256 sobre manifiesto y \textit{request-id} & HMAC-SHA256 sobre cuerpo y marca de tiempo & HMAC-SHA256 en Base64 con \textit{salt} y fecha \\ \hline
 Contenido de la notificación & Transacción completa & Solo identificador del recurso & Transacción completa & Transacción completa \\ \hline
 \end{tabular}
 \caption{Comparativa técnica de las cuatro pasarelas de pago seleccionadas}
@@ -117,7 +117,7 @@ En la literatura y en la industria del software se han propuesto diversas estrat
 En ecosistemas maduros de desarrollo web existen bibliotecas multipasarela reconocidas:
 \begin{itemize}
     \item \textbf{Omnipay (PHP):} Es una de las bibliotecas de abstracción de pagos más difundidas. Implementa un patrón de pasarela unificada (\textit{Gateway Interface}) que estandariza las llamadas de autorización, captura y reembolso. No obstante, Omnipay está concebido prioritariamente para el mercado europeo y norteamericano, carece de adaptadores oficiales para el ecosistema bancario colombiano (PSE) y no proporciona herramientas desacopladas de simulación de fallos transaccionales.
-    \item \textbf{ActiveMerchant (Ruby on Rails):} Históricamente una de las primeras abstracciones comerciales de pagos. Diseñada para operar de forma transparente con tarjetas de crédito, presenta limitaciones severas al manejar flujos asíncronos basados en redirección bancaria y no provee verificación unificada de webhooks para proveedores latinoamericanos.
+    \item \textbf{ActiveMerchant (Ruby):} Biblioteca de código abierto (licencia MIT) que expone operaciones comunes de cobro (\texttt{purchase}, \texttt{authorize}, \texttt{refund} y \texttt{void}) sobre muchas pasarelas. Tiene adaptadores para Wompi, Kushki, Mercado Pago y Rapyd, los cuatro con Colombia entre sus países, pero ninguno de esos adaptadores menciona PSE ni la verificación de webhooks (revisado el 2 de noviembre de 2026).
 \end{itemize}
 
 \subsubsection{Servicios comerciales de orquestación de pagos (SaaS)}
