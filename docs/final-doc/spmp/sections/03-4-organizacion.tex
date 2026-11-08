@@ -26,11 +26,11 @@ El proyecto tiene adicionalmente dependencias técnicas con las cuatro pasarelas
   \hline
   Wompi (Bancolombia) & Pasarela de pago colombiana operada por Bancolombia, uno de los cuatro proveedores integrados en el framework & Provee documentación técnica de su API REST, entorno sandbox y datos de prueba utilizados en la fase de análisis, desarrollo y evaluación & \href{http://docs.wompi.co}{docs.wompi.co} \\
   \hline
-  PayU Latam & Pasarela de pago con operación activa en Colombia, uno de los cuatro proveedores integrados en el framework & Provee documentación técnica de su API, entorno sandbox y datos de prueba. & \href{http://developers.payulatam.com}{developers.\allowbreak payulatam.com} \\
+  Rapyd (que adquirió PayU GPO) & Plataforma de pagos global con operación en Colombia, uno de los cuatro proveedores integrados en el framework. En marzo de 2025 compró la operación de PayU GPO en América Latina, y el proyecto la integra en lugar de PayU (punto 15 del registro de arquitectura) & Provee documentación técnica de su API, entorno sandbox y datos de prueba & \href{https://docs.rapyd.net}{docs.rapyd.net} \\
   \hline
   Mercado Pago & Pasarela de origen argentino con operación en Colombia y varios países de latinoamérica, uno de los cuatro proveedores integrados en el framework & Provee documentación técnica de su API, entorno sandbox y datos de prueba & \href{http://developers.mercadopago.com}{developers.\allowbreak mercadopago.com} \\
   \hline
-  Kushki & Plataforma latinoamericana con operación activa en Colombia, uno de los cuatro proveedores integrados en el framework & Provee documentación técnica de su API, entorno sandbox y datos de prueba & \href{http://docs.kushkipagos.com}{docs.kushkipagos.com} \\
+  Kushki & Plataforma latinoamericana con operación activa en Colombia, uno de los cuatro proveedores integrados en el framework & Provee documentación técnica de su API, entorno sandbox y datos de prueba & \href{https://docs.kushki.com}{docs.kushki.com} \\
   \hline
 \end{longtable}
 \end{center}
@@ -72,11 +72,11 @@ La jerarquía en el nivel operativo es plana. El coordinador del equipo no tiene
   \hline
   Joshua Prieto Zambrano & Líder de arquitectura y núcleo SDK & Responsable del diseño estructural del framework y la implementación del núcleo & Diseño del modelo de dominio unificado; especificación de los puertos de la arquitectura hexagonal; implementación del núcleo del SDK; revisión de que los adaptadores cumplan los contratos de puerto \\
   \hline
-  David Estevan Rodriguez Jurado & Líder de integración & Responsable de los cuatro adaptadores por pasarela y de la API de simulación & Implementación de los adaptadores de Wompi, PayU, Mercado Pago y Kushki; desarrollo y despliegue de la API de simulación; consolidación de la documentación de datos de prueba \\
+  David Estevan Rodriguez Jurado & Líder de integración & Responsable de los cuatro adaptadores por pasarela y de la API de simulación & Implementación de los adaptadores de Wompi, Rapyd, Mercado Pago y Kushki; desarrollo y despliegue de la API de simulación; consolidación de la documentación de datos de prueba \\
   \hline
   Joan Emmanuel Orduz Chia & Líder de evaluación y documentación & Integrante responsable del proceso de medición con métricas CK, los proyectos prototípicos y el documento final & Diseño y ejecución de la evaluación comparativa con métricas WMC, CBO y RFC; desarrollo de los prototipos de medición; redacción del documento de grado y publicación del repositorio público \\
   \hline
 \end{longtable}
 \end{center}
 
-Los canales de comunicación internos del equipo son los siguientes: para coordinación diaria se utiliza WhatsApp; para reuniones formales de planificación y revisión se usa la herramienta de videoconferencia Microsoft Teams; para la gestión del backlog y seguimiento de tareas se usa Google Docs; y para el control de versiones y revisión de código se usa GitHub con política de pull requests para cambios sobre la rama principal.
+Los canales de comunicación del equipo son cuatro. La coordinación diaria entre los integrantes va por un grupo de WhatsApp, y las reuniones con el director, los lunes de 2 a 3 p.~m., por videoconferencia en Microsoft Teams. El backlog y el seguimiento de tareas se llevan en los hitos y los issues de GitHub. El control de versiones y la revisión de código también se hacen en GitHub, con pull requests para todo cambio sobre \texttt{devops} y \texttt{main}.

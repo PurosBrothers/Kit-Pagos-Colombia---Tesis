@@ -6,7 +6,7 @@ Los planes de trabajo describen cómo se ejecutarán las principales actividades
 
 La estructura de descomposición de trabajo (WBS) del proyecto se construyó tomando como referencia las seis fases del enfoque Design Science Research (DSR) definido para el desarrollo del framework. Cada fase agrupa actividades técnicas, organizacionales y de validación asociadas a los principales entregables del proyecto.
 
-Dado el carácter iterativo de la Fase 4 —correspondiente al desarrollo del artefacto— se presenta el detalle completo de una iteración representativa, incluyendo actividades de implementación, pruebas y validación incremental de los componentes del SDK. La gestión del proyecto se considera transversal a todas las fases y contempla actividades permanentes de seguimiento, documentación y control del avance.
+Dado el carácter iterativo de la Fase 4 ---correspondiente al desarrollo del artefacto--- se presenta el detalle completo de una iteración representativa, incluyendo actividades de implementación, pruebas y validación incremental de los componentes del SDK. La gestión del proyecto se considera transversal a todas las fases y contempla actividades permanentes de seguimiento, documentación y control del avance.
 
 1. Kit Pagos Colombia
 
@@ -15,15 +15,15 @@ Dado el carácter iterativo de la Fase 4 —correspondiente al desarrollo del ar
 \begin{itemize}
   \item 1.1.1 Elaboración y mantenimiento del SPMP
   \item 1.1.2 Seguimiento semanal del backlog
-  \item 1.1.3 Reportes quincenales de progreso al director
-  \item 1.1.4 Registro de actas de reunión y decisiones clave
+  \item 1.1.3 Presentación del avance en la reunión semanal con el director (no hubo reportes quincenales)
+  \item 1.1.4 Registro de las decisiones clave en el registro de arquitectura (\texttt{architecture-log.md})
 \end{itemize}
 
 1.2 Fase 1 – Identificación del problema
 
 \begin{itemize}
   \item 1.2.1 Análisis de autenticación, respuestas y webhooks de Wompi
-  \item 1.2.2 Análisis de autenticación, respuestas y webhooks de PayU
+  \item 1.2.2 Análisis de autenticación, respuestas y webhooks de Rapyd (que adquirió PayU GPO)
   \item 1.2.3 Análisis de autenticación, respuestas y webhooks de Mercado Pago
   \item 1.2.4 Análisis de autenticación, respuestas y webhooks de Kushki
   \item 1.2.5 Consolidación del mapa comparativo del ecosistema (Hito H1)
@@ -61,7 +61,7 @@ Dado el carácter iterativo de la Fase 4 —correspondiente al desarrollo del ar
 
 \begin{itemize}
   \item 1.5.2.1 Desarrollo del adaptador Wompi con pruebas de integración
-  \item 1.5.2.2 Desarrollo del adaptador PayU con pruebas de integración
+  \item 1.5.2.2 Desarrollo del adaptador Rapyd con pruebas de integración
   \item 1.5.2.3 Desarrollo del adaptador Mercado Pago con pruebas de integración
   \item 1.5.2.4 Desarrollo del adaptador Kushki con pruebas de integración
   \item 1.5.2.5 Validación cruzada de los cuatro adaptadores (Hito H3 completo)
@@ -71,36 +71,88 @@ Dado el carácter iterativo de la Fase 4 —correspondiente al desarrollo del ar
 
 \begin{itemize}
   \item 1.5.3.1 Implementación de escenarios de prueba para las pasarelas soportadas
-  \item 1.5.3.2 Despliegue de la API en Railway o Render
+  \item 1.5.3.2 Despliegue de la API en Render
   \item 1.5.3.3 Documentación centralizada de datos de prueba
   \item 1.5.3.4 Colección Postman versionada en el repositorio (Hito H4)
+  \item 1.5.3.5 API REST del kit bajo \texttt{/v1/api} (issues \#100 a \#104), que la versión 1.0 no tenía
+  \item 1.5.3.6 Módulo de navegador con la tokenización de tarjeta (issues \#126 y \#127), que la versión 1.0 no tenía
+  \item 1.5.3.7 Página de presentación del framework (issue \#113)
+  \item 1.5.3.8 Prototipos D, de integración directa, y B, con el SDK, para las cuatro pasarelas (issues \#150 y \#151)
 \end{itemize}
 
 1.6 Fase 5 – Demostración y evaluación
 
 \begin{itemize}
-  \item 1.6.1 Construcción de prototipos con integración directa a APIs nativas
-  \item 1.6.2 Construcción de prototipos utilizando el framework desarrollado
-  \item 1.6.3 Cálculo de métricas WMC, CBO y RFC mediante ts-morph
-  \item 1.6.4 Elaboración del informe comparativo (Hito H5)
+  \item 1.6.1 Prototipos A y C, fuera del experimento: el SDK solo en el servidor (issue \#164) y un cliente de navegador que consume \texttt{/v1/api}
+  \item 1.6.2 Medición de las seis variables sobre los prototipos B y D, con las métricas WMC, CBO y RFC calculadas con ts-morph y adaptadas a archivos (issue \#134)
+  \item 1.6.3 Elaboración del informe comparativo (issue \#135; Hito H5)
 \end{itemize}
 
 1.7 Fase 6 – Comunicación
 
 \begin{itemize}
-  \item 1.7.1 Redacción y revisión del documento final de trabajo de grado
-  \item 1.7.2 Publicación del repositorio público con README, ejemplos y TypeDoc
+  \item 1.7.1 Documentos finales en LaTeX: el SRS, el SAD, el plan de pruebas, este SPMP y la memoria del trabajo de grado (\texttt{docs/final-doc/})
+  \item 1.7.2 Publicación del repositorio público con README, ejemplos y la página de presentación
   \item 1.7.3 Entrega formal y presentación ante director y evaluadores (Hito H6)
 \end{itemize}
 
 \subsubsection{Calendarización}
 
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=\textwidth]{figuras/03-carta-gantt}
-  \caption{Carta Gantt}
-  \label{fig:carta-gantt}
-\end{figure}
+La Tabla~\ref{tab:carta-gantt} reemplaza a la carta Gantt de la versión 1.0, que estaba en semanas relativas y sin fechas. Cada fase e iteración del WBS tiene dos filas: la ventana que planeaba la versión 1.0 (\GPlan) y la que se ejecutó (\GReal). Las columnas 1 a 18 son las semanas S01 a S18, ancladas al calendario como en la sección 3.1.3. La S01 empieza el lunes 13 de julio de 2026, y la S18, el lunes 9 de noviembre. La columna «Abr--jun» reúne lo hecho entre abril y junio de 2026, antes de la S01.
+
+Las ventanas reales van del primer al último issue cerrado de cada hito de GitHub, en hora de Colombia. Las de las Fases 1 y 2 salen de las respuestas del equipo. La del diseño suma la versión 1.0 del SAD, de mayo de 2026, y el hito «Fase 3 -- Diseño (cierre)», del 20 de agosto al 6 de septiembre. Al 7 de noviembre de 2026, la Iteración 3 tiene abierto el issue \#112, la Fase 5 el \#135, y la Fase 6 sigue en curso. El cronograma de \texttt{methodology.md} (sección 10.2) había comprimido las Fases 5 y 6 para no mover la entrega del 9 de noviembre; la tabla muestra que la Iteración 3 se extendió sobre ambas.
+
+\begingroup
+\footnotesize
+\setlength{\tabcolsep}{1.5pt}
+\begin{center}
+\begin{longtable}{|>{\raggedright\arraybackslash}p{3.7cm}|>{\centering\arraybackslash}p{0.65cm}|>{\centering\arraybackslash}p{0.85cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|>{\centering\arraybackslash}p{0.42cm}|}
+  \hline
+  \textbf{Actividad del WBS} & & \textbf{Abr--jun} & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 & 10 & 11 & 12 & 13 & 14 & 15 & 16 & 17 & 18 \\
+  \hline
+  \endfirsthead
+  \hline
+  \textbf{Actividad del WBS} & & \textbf{Abr--jun} & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 & 10 & 11 & 12 & 13 & 14 & 15 & 16 & 17 & 18 \\
+  \hline
+  \endhead
+  \caption{Carta Gantt: ventana planeada y ventana real de cada fase e iteración.}
+  \label{tab:carta-gantt}\\
+  \endlastfoot
+  1.2 Fase 1 -- Identificación del problema & Plan & & \GPlan & \GPlan & \GPlan &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\
+  \cline{2-21}
+   & Real & \GReal &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\
+  \hline
+  1.3 Fase 2 -- Definición de objetivos & Plan & &  &  & \GPlan & \GPlan & \GPlan &  &  &  &  &  &  &  &  &  &  &  &  &  \\
+  \cline{2-21}
+   & Real & \GReal &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\
+  \hline
+  1.4 Fase 3 -- Diseño & Plan & &  &  &  &  & \GPlan & \GPlan & \GPlan &  &  &  &  &  &  &  &  &  &  &  \\
+  \cline{2-21}
+   & Real & \GReal &  &  &  &  &  & \GReal & \GReal & \GReal &  &  &  &  &  &  &  &  &  &  \\
+  \hline
+  1.5.1 Iteración 1 -- Núcleo del SDK & Plan & &  &  &  &  &  &  & \GPlan & \GPlan &  &  &  &  &  &  &  &  &  &  \\
+  \cline{2-21}
+   & Real &  &  &  &  &  &  & \GReal & \GReal & \GReal & \GReal & \GReal &  &  &  &  &  &  &  &  \\
+  \hline
+  1.5.2 Iteración 2 -- Adaptadores de pasarela & Plan & &  &  &  &  &  &  &  &  & \GPlan & \GPlan &  &  &  &  &  &  &  &  \\
+  \cline{2-21}
+   & Real &  &  &  &  &  &  &  &  &  & \GReal & \GReal & \GReal &  &  &  &  &  &  &  \\
+  \hline
+  1.5.3 Iteración 3 -- API de simulación y soporte de validación & Plan & &  &  &  &  &  &  &  &  &  &  & \GPlan & \GPlan &  &  &  &  &  &  \\
+  \cline{2-21}
+   & Real &  &  &  &  &  &  &  &  &  &  &  & \GReal & \GReal & \GReal & \GReal & \GReal & \GReal & \GReal &  \\
+  \hline
+  1.6 Fase 5 -- Demostración y evaluación & Plan & &  &  &  &  &  &  &  &  &  &  &  &  & \GPlan & \GPlan & \GPlan & \GPlan &  &  \\
+  \cline{2-21}
+   & Real &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & \GReal & \GReal & \GReal &  \\
+  \hline
+  1.7 Fase 6 -- Comunicación & Plan & &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & \GPlan & \GPlan & \GPlan \\
+  \cline{2-21}
+   & Real &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & \GReal & \GReal & \GReal \\
+  \hline
+\end{longtable}
+\end{center}
+\endgroup
 
 \begin{figure}[H]
   \centering
@@ -108,6 +160,8 @@ Dado el carácter iterativo de la Fase 4 —correspondiente al desarrollo del ar
   \caption{Diagrama BPMN iterativo}
   \label{fig:bpmn-iterativo}
 \end{figure}
+
+La Figura~\ref{fig:bpmn-iterativo} es el diagrama de la versión 1.0, y dos de sus pasos no se hicieron así. No hubo reporte quincenal al director: el avance se mostró en la reunión semanal de los lunes. Tampoco hubo una revisión técnica grupal formal al cierre de cada iteración: cada cambio se verificó en su pull request, con la integración continua y la revisión de otro integrante.
 
 \subsubsection{Asignación de Recursos}
 
@@ -125,23 +179,23 @@ Para cada actividad principal del WBS se indica el conjunto de roles involucrado
   Actividad (WBS) & Roles involucrados & Herramientas \\
   \hline
   \endhead
-  1.1 Gestión del proyecto & Coordinador (primario); todos los integrantes como reportantes & GitHub Projects, Notion, Microsoft Teams, Google Docs \\
+  1.1 Gestión del proyecto & Coordinador (primario); todos los integrantes como reportantes & GitHub (hitos, issues y pull requests), Microsoft Teams, WhatsApp \\
   \hline
-  1.2 Fase 1 – Identificación & Todos (un integrante por pasarela); Coordinador consolida el mapa del ecosistema & Documentaciones oficiales de las pasarelas, Notion, Draw.io \\
+  1.2 Fase 1 – Identificación & Todos (un integrante por pasarela); Coordinador consolida el mapa del ecosistema & Documentaciones oficiales de las pasarelas \\
   \hline
-  1.3 Fase 2 – Definición & Líder de evaluación redacta el SRS; Coordinador gestiona el backlog; todos revisan y aprueban & Google Docs, GitHub Projects, Notion \\
+  1.3 Fase 2 – Definición & Líder de evaluación redacta el SRS; Coordinador gestiona el backlog; todos revisan y aprueban & Word y Google Docs (versiones 1.0 de mayo del SRS y del SPMP) \\
   \hline
-  1.4 Fase 3 – Diseño & Líder de arquitectura lidera; todos revisan los contratos de puerto y los ADRs & Draw.io (UML y BPMN), Notion (ADRs), Google Docs \\
+  1.4 Fase 3 – Diseño & Líder de arquitectura lidera; todos revisan los contratos de puerto y los ADRs & Google Docs (versión 1.0 del SAD, de mayo, con sus ADR) y PlantUML \\
   \hline
   1.5.1 Iter 1 – Núcleo del SDK & Líder de arquitectura (primario); revisión obligatoria de todos antes de iniciar Iter 2 & TypeScript, Jest, GitHub (PR + CI), VS Code \\
   \hline
   1.5.2 Iter 2 – Adaptadores & Líder de integración coordina; cada adaptador se desarrolla en par con otro integrante & TypeScript, Jest, sandboxes de las cuatro pasarelas, GitHub \\
   \hline
-  1.5.3 Iter 3 – API de simulación & Líder de integración (primario); Líder de arquitectura apoya en diseño de contratos & Fastify, TypeScript, Railway o Render, Postman, GitHub \\
+  1.5.3 Iter 3 – API de simulación & Líder de integración (primario); Líder de arquitectura apoya en diseño de contratos & Fastify, TypeScript, Render, Postman y Newman, GitHub \\
   \hline
-  1.6 Fase 5 – Evaluación & Líder de evaluación lidera; todos construyen los prototipos asignados & ts-morph, TypeScript, Jest, Google Spreadsheets \\
+  1.6 Fase 5 – Evaluación & Líder de evaluación lidera; todos construyen los prototipos asignados & ts-morph, TypeScript, Jest y los guiones de medición del SDK (\texttt{ck-metrics.ts} y \texttt{native-concepts.ts}) \\
   \hline
-  1.7 Fase 6 – Comunicación & Líder de evaluación coordina la redacción del documento; todos contribuyen por secciones; Coordinador gestiona la publicación del repositorio & Google Docs, GitHub, TypeDoc, npm \\
+  1.7 Fase 6 – Comunicación & Líder de evaluación coordina la redacción del documento; todos contribuyen por secciones; Coordinador gestiona la publicación del repositorio & LaTeX con \texttt{latexmk}, GitHub, GitHub Pages, npm \\
   \hline
 \end{longtable}
 \end{center}
@@ -152,7 +206,7 @@ Los recursos del proyecto son exclusivamente humanos y de herramientas software.
 
 Costos reales del proyecto
 
-El proyecto opera íntegramente con herramientas de acceso gratuito. Los únicos costos potencialmente reales son los asociados al despliegue de la API de simulación.
+El proyecto opera íntegramente con herramientas de acceso gratuito; según el equipo, no se pagó nada. Los únicos costos potencialmente reales eran los del despliegue de la API de Simulación, y Render se usa en su plan gratuito.
 
 \begin{center}
 \renewcommand{\arraystretch}{1.2}
@@ -166,13 +220,17 @@ El proyecto opera íntegramente con herramientas de acceso gratuito. Los únicos
   Concepto & Período & Costo estimado (COP) & Justificación \\
   \hline
   \endhead
-  Despliegue en Railway o Render & Semanas 10–18 & \$0 & Ambas plataformas ofrecen tier gratuito con recursos suficientes para el volumen de pruebas del proyecto \\
+  Despliegue de la API de Simulación en Render & Desde el 5 de octubre de 2026 & \$0 & Plan gratuito (\texttt{render.yaml}, \texttt{plan: free}), con recursos suficientes para el volumen de pruebas del proyecto \\
   \hline
-  Herramientas de desarrollo (GitHub, npm, TypeScript, Jest, Postman, Notion) & Semanas 1–18 & \$0 & Gratuitas para proyectos open source o uso educativo \\
+  Página de presentación en GitHub Pages & Desde el 4 de octubre de 2026 & \$0 & Gratuito para repositorios públicos (\texttt{deploy-landing.yml}) \\
   \hline
-  Dominio y certificado SSL & Semanas 10–18 & \$0 & Las plataformas de despliegue proveen subdominio y HTTPS sin costo adicional \\
+  Dominio fijo de ngrok para los webhooks en vivo & Desde el 22 de octubre de 2026 & \$0 & Plan gratuito (punto 120 del registro de arquitectura) \\
   \hline
-  Total de costos reales & Semanas 1–18 & \$0 &  \\
+  Herramientas de desarrollo (GitHub, npm, TypeScript, Jest, Postman) & Todo el proyecto & \$0 & Gratuitas para proyectos open source o uso educativo; el paquete se publica en npm como público \\
+  \hline
+  Dominio y certificado SSL & Desde el 5 de octubre de 2026 & \$0 & Render provee el subdominio \texttt{onrender.com} con HTTPS sin costo adicional \\
+  \hline
+  Total de costos reales & Todo el proyecto & \$0 &  \\
   \hline
 \end{longtable}
 \end{center}
@@ -203,11 +261,11 @@ Aunque no se movilizan recursos financieros reales, el esfuerzo invertido tiene 
   \hline
   Demostración y evaluación & Semanas 13–16 & 130 & 3.250.000 \\
   \hline
-  Comunicación & Semanas 16–18 & 87 & 2.175.000 \\
+  Comunicación & Semanas 16–18 & 85 & 2.125.000 \\
   \hline
-  Total & Semanas 1–18 & 866 & 21.650.000 \\
+  Total & Semanas 1–18 & 864 & 21.600.000 \\
   \hline
 \end{longtable}
 \end{center}
 
-Este cálculo tiene propósito referencial y no implica flujo real de dinero. Su utilidad es dimensionar el valor del trabajo producido y servir como punto de comparación en caso de que proyectos similares requieran contratación externa.
+La versión 1.0 de este plan ponía 87 horas para la Comunicación en esta tabla y 85 en la de la sección 4.1, así que sus totales eran 866 y 864. Aquí se deja 85, con la que el total coincide con el supuesto de 12 horas semanales de cuatro integrantes durante 18 semanas. Este cálculo tiene propósito referencial y no implica flujo real de dinero. Su utilidad es dimensionar el valor del trabajo producido y servir como punto de comparación en caso de que proyectos similares requieran contratación externa.
