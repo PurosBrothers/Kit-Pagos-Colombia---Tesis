@@ -1,14 +1,47 @@
- \setcounter{subsection}{0}
+\setcounter{subsection}{0}
 
 \section{CONCLUSIONES, IMPACTO Y TRABAJO FUTURO}
+\sloppy
+
+% Pendiente: enlazar cada conclusión con la evidencia del capítulo VII cuando exista (#176) y escribir
+% OE-06 con el informe comparativo de la Fase 5 (#135), con los resultados adversos tal como salieron.
 
 \subsection{Cumplimiento de objetivos y contribuciones}
-% Responder OE-01..OE-06 uno por uno y citar la evidencia final. No inferir cumplimiento por existencia de código.
+Esta sección responde cada objetivo específico con la evidencia que hay en el repositorio. El estado de cada uno es el que registran \path{docs/project-management/thesis-objectives.md} (sección 2) y la matriz de trazabilidad, que da por implementados los diecinueve requisitos funcionales.
 
-\subsection{Análisis de Impacto del Proyecto}
-% Explicar impactos sustentados a corto, medio y largo plazo y los grupos de interés pertinentes.
-% Incluir Ingeniería de Sistemas y dimensiones global, económica, ambiental o social solo con sustento.
+\paragraph{OE-01 (análisis de las pasarelas).} Se cumplió. El análisis está en \path{docs/01-producto/3-las-cuatro-pasarelas.md}, en la matriz de lenguaje ubicuo y en \path{docs/testing-data/}, y el capítulo III lo resume. Mostró que las cuatro pasarelas difieren justo en lo que más pesa al integrarlas. Wompi firma con un \textit{hash} SHA-256 y las otras tres con HMAC-SHA256; la firma de Mercado Pago no cubre el cuerpo del webhook; Kushki rechaza una tarjeta con un \texttt{400} en lugar de una transacción rechazada, y Rapyd firma cada petición y cobra la tarjeta en su página. También mostró un límite: los sandboxes de Wompi, Mercado Pago y Kushki no permiten probar varios flujos de punta a punta (puntos 43, 45 y 54 del registro de arquitectura), y esos flujos se prueban contra la API de Simulación.
 
-\subsection{Conclusiones y Trabajo Futuro}
-% Derivar conclusiones de resultados verificados. Priorizar trabajo futuro desde límites observados,
-% requisitos pendientes y el límite investigado de P3.
+\paragraph{OE-02 (diseño de la arquitectura).} Se cumplió. El SDK aplica la arquitectura hexagonal: el dominio no conoce ninguna pasarela, y cada pasarela es un adaptador de \texttt{PaymentGatewayPort}. La fachada \texttt{KitPagos}, la fábrica \texttt{GatewayFactory} y las estrategias de normalización vienen del catálogo GoF (capítulo VI; Equipo del Proyecto, 2026a). Las decisiones quedaron en el registro de arquitectura, que llegó a 126 puntos. La CI verifica en cada pull request los umbrales de WMC, CBO, RFC y complejidad máxima del SDK y de la API de Simulación. No todas las clases caben en ellos. El SDK declara tres excepciones: el CBO de \texttt{Transaction}, el WMC de \texttt{Amount} y el CBO que el tipo \texttt{PseBank} suma a cinco clases. La API de Simulación declara una, el CBO de \texttt{KitPagosProvider}. Cada excepción se justifica en un punto del registro (\path{methodology.md}, sección 6.2).
+
+\paragraph{OE-03 (prototipo funcional del framework).} Se cumplió. El SDK está publicado en npm, con la 0.6.0 en \texttt{latest} y la 0.7.0-rc.2 en \texttt{next} (Kit Pagos Colombia, 2026). Implementa la interfaz unificada para tarjeta y PSE en las cuatro pasarelas y verifica la firma de los webhooks de cada una en tiempo constante y con ventana de tolerancia. También reintenta las operaciones idempotentes y redacta las credenciales de sus errores (RF-01 a RF-08 y RF-16 a RF-19). La interfaz unificada tiene límites que el SDK declara en lugar de esconder:
+\begin{itemize}
+    \item con Rapyd, el cobro con tarjeta es una redirección, porque Rapyd no tokeniza en el navegador;
+    \item en Mercado Pago, el evento del webhook llega como \texttt{PENDING}, y el comercio lo confirma con \texttt{getPaymentStatus()};
+    \item la 0.6.0 entregaba el rechazo de tarjeta de Kushki como un error técnico (\texttt{INVALID\_REQUEST}), y la 0.7.0-rc.2 lo entrega como una transacción rechazada (punto 122).
+\end{itemize}
+
+\paragraph{OE-04 (API de Simulación).} Se cumplió. Bajo \texttt{/v1/sim}, la API imita las rutas y los formatos de las cuatro pasarelas. Elige el escenario por cabecera, dato de prueba, monto reservado o marca de credencial, y emite los webhooks firmados cuando un pago cambia de estado. Bajo \texttt{/v1/api} ofrece por HTTP las operaciones del kit, que el prototipo C usa desde el navegador. Corre en local y en Render, en el plan gratuito. Quedan dos límites declarados: las combinaciones sin evidencia de cómo responde la pasarela real devuelven \texttt{501}, y siete de sus 43 operaciones no tienen esquema OpenAPI (punto 109).
+
+\paragraph{OE-05 (datos de prueba).} Se cumplió. \path{docs/testing-data/} reúne, por pasarela, las credenciales de sandbox, las tarjetas, los documentos, los bancos y los flujos medidos. Cada dato declara su nivel de evidencia: medido contra la API real con fecha, medido hasta cierto punto del flujo o tomado de la documentación sin comprobar. La API de Simulación reproduce esos datos, salvo los de Rapyd y los del PSE de Mercado Pago, donde decide la página del banco o de la pasarela.
+
+% OE-06 (evaluación con los prototipos): pendiente del informe comparativo de la Fase 5 (#135) y del capítulo VII (#176).
+
+Además del artefacto, el trabajo deja dos prácticas que se pueden reutilizar. La primera es un registro de decisiones que separa, para cada pasarela, lo medido en el sandbox de lo que dice su documentación. La segunda son las métricas CK verificadas en la CI como parte de la definición de terminado, con cada excepción justificada por escrito.
+
+\subsection{Análisis de impacto del proyecto}
+Para un equipo que integra pagos en Colombia, el impacto inmediato es práctico. Un paquete de código abierto, con licencia Apache 2.0, cubre tarjeta y PSE en cuatro pasarelas, y la API de Simulación permite probar rechazos, pagos pendientes y webhooks sin credenciales reales. La documentación de datos de prueba sirve también a quien no use el kit, porque reúne lo que cada sandbox acepta y lo que no. Cuánto reduce el esfuerzo de integración es la pregunta de la evaluación, y su respuesta está en el capítulo VII.
+
+Para la Ingeniería de Sistemas, el proyecto muestra una forma de aplicar Design Science Research a un artefacto de software con la evidencia versionada junto al código: requisitos trazados hasta sus pruebas, decisiones registradas y documentos que compilan en la misma CI. No se evaluaron impactos económicos, ambientales ni sociales, y por eso no se afirman.
+
+\subsection{Conclusiones y trabajo futuro}
+El trabajo futuro sale de los límites que el proyecto declaró:
+\begin{itemize}
+    \item \textbf{Publicar la 0.7.0 como versión estable.} Hoy está como 0.7.0-rc.2 en la etiqueta \texttt{next}, y la 0.6.0 de \texttt{latest} todavía entrega el rechazo de tarjeta de Kushki como un error técnico.
+    \item \textbf{Completar P3 con Rapyd} si Rapyd llega a ofrecer tokenización en el navegador. Mientras tanto, el cobro con tarjeta de Rapyd sigue en su página alojada.
+    \item \textbf{Dar esquema a las siete operaciones de la API de Simulación que no lo tienen} (punto 109).
+    \item \textbf{Ampliar los métodos de pago} a los que el alcance dejó fuera: efectivo, Nequi, Daviplata, suscripciones y reembolsos.
+    \item \textbf{Probar de punta a punta los flujos que los sandboxes no permiten}, cuando las pasarelas lo habiliten, y reemplazar con evidencia medida las combinaciones que hoy responden \texttt{501}.
+\end{itemize}
+
+% Pendiente: agregar las conclusiones de la evaluación y el trabajo futuro que salga de sus amenazas a la
+% validez cuando exista el capítulo VII (#176).
