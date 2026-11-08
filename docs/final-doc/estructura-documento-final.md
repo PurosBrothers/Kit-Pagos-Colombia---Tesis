@@ -9,33 +9,34 @@ La estructura se basa en la plantilla [`memoria/main.tex`](memoria/main.tex), lo
 ### Plantilla
 
 - **Confirmado:** existe una plantilla LaTeX en [`memoria/`](memoria/) con portadas, preliminares, capítulos, referencias y anexos.
-- **Pendiente de confirmar con el director o la coordinación:** que esta sea la versión institucional vigente y obligatoria. Que esté en el repositorio no demuestra por sí solo su autoridad.
-- La plantilla contiene indicaciones que no coinciden sobre la extensión: la introducción menciona un máximo de 60 páginas y referencias menciona 80 páginas sin incluirlas. No se debe fijar ni recortar el documento con base en una de esas cifras hasta confirmar el límite aplicable.
-- Los nombres de capítulos se especializan para Kit Pagos Colombia, conservando el orden y los componentes académicos que ya exige la plantilla. Si el director confirma títulos institucionales inmodificables, se conserva el título oficial y se usan los subtítulos propuestos.
+- **Pendiente de confirmar:** que esta sea la versión institucional vigente y obligatoria. Que esté en el repositorio no demuestra por sí solo su autoridad.
+- La plantilla contiene indicaciones que no coinciden sobre la extensión: la introducción menciona un máximo de 60 páginas y referencias menciona 80 páginas sin incluirlas. El límite que aplica es de 80 páginas sin anexos.
+- Los nombres de capítulos se especializan para Kit Pagos Colombia, conservando el orden y los componentes académicos que ya exige la plantilla. Si los títulos institucionales resultan inmodificables, se conserva el título oficial y se usan los subtítulos propuestos.
 
 ### Ubicación y formato elegidos
 
-La fuente de la memoria vivirá versionada en `docs/final-doc/memoria/`, en LaTeX. Es una decisión adecuada para este proyecto porque permite revisar cambios por Git, mantener el documento junto a la evidencia técnica, enlazar rutas del repositorio y compilar una versión reproducible. Google Docs no será la fuente maestra mientras se mantenga esta decisión; si el director exige una copia colaborativa, se tratará como copia derivada y se sincronizará con la fuente versionada.
+La fuente de la memoria vivirá versionada en `docs/final-doc/memoria/`, en LaTeX. Es una decisión adecuada para este proyecto porque permite revisar cambios por Git, mantener el documento junto a la evidencia técnica, enlazar rutas del repositorio y compilar una versión reproducible. Google Docs no será la fuente maestra mientras se mantenga esta decisión; si se necesita una copia colaborativa, se tratará como copia derivada y se sincronizará con la fuente versionada.
 
-El SAD se cita como fuente externa porque su versión aprobada está fuera del repositorio. Los originales del SRS y del SPMP sí están versionados, en [`srs/SRS-original.pdf`](srs/SRS-original.pdf) y [`spmp/SPMP-original.pdf`](spmp/SPMP-original.pdf). Antes de la entrega final se debe registrar la referencia bibliográfica verificable de cada fuente y la versión consultada; no se debe presentar una ruta local de Google Drive como si fuera una fuente pública.
+Los tres documentos del proyecto están versionados en LaTeX: el SAD 1.1 en [`sad/`](sad/), el SRS 2.0 en [`srs/`](srs/) y el SPMP 2.0 en [`spmp/`](spmp/). Los originales de mayo de 2026 están en [`sad/SAD-original.pdf`](sad/SAD-original.pdf), [`srs/SRS-original.pdf`](srs/SRS-original.pdf) y [`spmp/SPMP-original.pdf`](spmp/SPMP-original.pdf). Antes de la entrega final se debe registrar la referencia bibliográfica verificable de cada fuente y la versión consultada; no se debe presentar una ruta local de Google Drive como si fuera una fuente pública.
 
 ### Título de trabajo
 
 **Kit Pagos Colombia: desarrollo de un framework para simplificar la integración de múltiples pasarelas de pago en el contexto colombiano.**
 
-Es un título descriptivo derivado del objetivo general del SPMP, no una transcripción confirmada del título aprobado. Validarlo con el director antes de cerrar las portadas.
+Es un título descriptivo derivado del objetivo general del SPMP, no una transcripción confirmada del título aprobado. Validarlo antes de cerrar las portadas.
 
 ## 2. Contexto del artefacto y estado de evidencia
 
-Kit Pagos Colombia reúne tres componentes que deben presentarse como un artefacto integrado:
+Kit Pagos Colombia reúne cuatro componentes que deben presentarse como un artefacto integrado, los mismos que describen el SRS 2.0 y el SPMP 2.0:
 
 1. **SDK TypeScript**: interfaz común para integrar Wompi, Mercado Pago, Kushki y Rapyd, con adaptadores y arquitectura hexagonal.
-2. **API de Simulación**: permite ejercitar integraciones de forma controlada sin depender de transacciones reales. Distinguir sus rutas de simulación de las rutas REST propias `/v1/api`.
-3. **Documentación de datos de prueba**: describe datos y escenarios de las cuatro pasarelas y hace reproducibles las pruebas.
+2. **Módulo de navegador** (`kit-pagos-colombia/browser`): tokeniza la tarjeta con Wompi, Mercado Pago y Kushki; Rapyd cobra en su página alojada.
+3. **API de Simulación**: permite ejercitar integraciones de forma controlada sin depender de transacciones reales. Distinguir sus rutas de simulación de las rutas REST propias `/v1/api`.
+4. **Documentación de datos de prueba**: describe datos y escenarios de las cuatro pasarelas y hace reproducibles las pruebas.
 
-El proyecto también plantea tres patrones de integración: **P1**, backend del comercio hacia el SDK; **P2**, frontend del comercio hacia REST hacia el SDK; y **P3**, SDK unificado para tokenización desde el frontend. Según el registro de objetivos, P1 está implementado, la infraestructura REST de P2 está implementada pero su cliente demostrativo seguía pendiente en la última fotografía de los objetivos, y P3 fue investigado pero no implementado. Estas diferencias son parte del alcance y no deben ocultarse.
+El proyecto también plantea tres patrones de integración: **P1**, backend del comercio hacia el SDK; **P2**, frontend del comercio hacia REST hacia el SDK; y **P3**, SDK unificado para tokenización desde el frontend. Según el registro de objetivos (sección 3), P1 y P2 están implementados, y el cliente de P2 es el prototipo C. P3 está implementado en parte: `KitPagosBrowser` tokeniza con Wompi, Mercado Pago y Kushki, y Rapyd no tokeniza en el navegador. Estas diferencias son parte del alcance y no deben ocultarse.
 
-El issue [#115](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/issues/115) transcribe seis objetivos específicos del SPMP y define los prototipos A, B y C. La evidencia de estados en `thesis-objectives.md` es una fotografía del 28 de septiembre de 2026; la matriz de trazabilidad informa cambios revisados el 4 de octubre de 2026. En la revisión de esta estructura no se encontraron fuentes de los prototipos en `prototypes/` ni un informe de evaluación en `docs/evaluation/`. Por ello, OE-06 y los resultados formales de Fase 5 se tratan como **pendientes de evidencia en el repositorio**, no como resultados negativos ni como cifras conocidas.
+El issue [#115](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/issues/115) transcribe seis objetivos específicos del SPMP. Los cuatro prototipos están en `prototypes/` y los define `thesis-objectives.md` (sección 5.1): A (`checkout-con-sdk-solo-back`), B (`checkout-con-sdk-front-back`, tratamiento), C (`checkout-frontend-rest`, P2) y D (`checkout-sin-solucion`, control). La recolección de las seis variables sobre B y D está en [`docs/evaluation/`](../evaluation/) (28 de octubre de 2026); el informe comparativo de la Fase 5 todavía no existe. Por ello, OE-06 se trata como **pendiente**, y sus cifras se presentan solo en el capítulo VII.
 
 ## 3. Estructura de capítulos e inventario de fuentes
 
@@ -43,14 +44,14 @@ El issue [#115](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/issu
 |---|---|---|---|
 | Preliminares | Portadas, autoría, director, jurados, resolución, agradecimientos, resumen y abstract | [`memoria/sections/covers/`](memoria/sections/covers/) | Confirmar título oficial, código, nombres y cargos. Abstract y resumen deben redactarse al final y respetar el límite indicado por la plantilla. |
 | I. Introducción | Presentar problema, propósito, alcance, método, contribución y recorrido del documento | [`docs/01-producto/4-por-que-kit-pagos.md`](../01-producto/4-por-que-kit-pagos.md), [`docs/project-management/methodology.md`](../project-management/methodology.md), objetivos del SPMP | Escribir como memoria del trabajo realizado; separar motivación de resultados y no anticipar conclusiones experimentales. |
-| II. Descripción del proyecto y formulación del problema | Contexto colombiano, problema de integrar varias pasarelas, solución, justificación, objetivos, alcance, metodología y entregables | [`docs/01-producto/`](../01-producto/), [`docs/project-management/thesis-objectives.md`](../project-management/thesis-objectives.md), [`docs/project-management/methodology.md`](../project-management/methodology.md), el SPMP ([`spmp/SPMP-original.pdf`](spmp/SPMP-original.pdf)) | Transcribir los objetivos aprobados literalmente. Validar con el director las ampliaciones de alcance y los entregables efectivamente cerrados. |
-| III. Contexto: marco conceptual y estado del arte | Conceptos de pagos, seguridad y pasarelas; antecedentes y soluciones relacionadas | [`docs/01-producto/1-que-es-una-pasarela-de-pago.md`](../01-producto/1-que-es-una-pasarela-de-pago.md), [`2-conceptos-tecnicos.md`](../01-producto/2-conceptos-tecnicos.md), [`3-las-cuatro-pasarelas.md`](../01-producto/3-las-cuatro-pasarelas.md), fuentes oficiales citadas allí | Completar comparación académica de soluciones relacionadas; verificar y normalizar referencias bibliográficas y fecha de consulta. Evitar que el capítulo sea un glosario. |
-| IV. Análisis de requisitos y alcance | Requisitos funcionales y restricciones, especificación de alto nivel, casos de uso y trazabilidad | [`docs/02-arquitectura/layers-and-components.md`](../02-arquitectura/layers-and-components.md) §5, [`docs/project-management/traceability-matrix.md`](../project-management/traceability-matrix.md), los originales del SPMP y del SRS ([`spmp/SPMP-original.pdf`](spmp/SPMP-original.pdf), [`srs/SRS-original.pdf`](srs/SRS-original.pdf)), issues y pruebas enlazados por la matriz | Reconciliar los requisitos con el estado más reciente de la matriz y señalar los RF parciales o pendientes. La matriz es evidencia de proceso; no sustituye la explicación académica de requisitos. |
-| V. Diseño arquitectónico del Kit Pagos Colombia | Arquitectura, dominio, componentes, decisiones, patrones, seguridad y tecnologías | [`docs/02-arquitectura/1-arquitectura-hexagonal.md`](../02-arquitectura/1-arquitectura-hexagonal.md), [`2-hexagonal-en-kit-pagos.md`](../02-arquitectura/2-hexagonal-en-kit-pagos.md), [`layers-and-components.md`](../02-arquitectura/layers-and-components.md), [`ubiquitous-language.md`](../02-arquitectura/ubiquitous-language.md), [`docs/architecture/architecture-log.md`](../architecture/architecture-log.md), diagramas C4 | Contrastar el diseño con la versión aprobada del SAD y explicar discrepancias relevantes; citar el SAD externo. Seleccionar diagramas legibles y sincronizados con el código. |
-| VI. Construcción e implementación del artefacto | Proceso DSR e iterativo; SDK, simulador, datos de prueba, patrones de integración y prototipos | [`docs/03-sdk/`](../03-sdk/), [`docs/02-arquitectura/3-api-de-simulacion.md`](../02-arquitectura/3-api-de-simulacion.md), [`docs/testing-data/`](../testing-data/), [`examples/`](../../examples/), código en `sdk/` y `simulator-api/` | Anclar las afirmaciones de implementación al código y a pruebas actuales. Los prototipos A/B/C deben documentarse solo cuando existan y se pueda verificar su estado. |
-| VII. Validación y resultados | Pruebas, calidad del SDK, demostración, resultados de la evaluación y discusión de validez | [`docs/04-metricas-y-pruebas/`](../04-metricas-y-pruebas/), [`docs/project-management/prototypes-evaluation-plan.md`](../project-management/prototypes-evaluation-plan.md), [`docs/04-metricas-y-pruebas/4-medir-los-prototipos.md`](../04-metricas-y-pruebas/4-medir-los-prototipos.md), reportes de CI y pruebas | **Fase 5:** el plan define seis variables y amenazas a la validez, pero no se encontró el informe ni las fuentes de los prototipos. No incluir cifras, tablas vacías con valores supuestos ni comparaciones afirmadas hasta producir evidencia reproducible. |
+| II. Descripción del proyecto y formulación del problema | Contexto colombiano, problema de integrar varias pasarelas, solución, justificación, objetivos, alcance, metodología y entregables | [`docs/01-producto/`](../01-producto/), [`docs/project-management/thesis-objectives.md`](../project-management/thesis-objectives.md), [`docs/project-management/methodology.md`](../project-management/methodology.md), el SPMP ([`spmp/SPMP-original.pdf`](spmp/SPMP-original.pdf)) | Escrito en el #175. Los objetivos van literales; las ampliaciones de alcance son las del SPMP 2.0 (sección 1.2.2). |
+| III. Contexto: marco conceptual y estado del arte | Conceptos de pagos, seguridad y pasarelas; antecedentes y soluciones relacionadas | [`docs/01-producto/1-que-es-una-pasarela-de-pago.md`](../01-producto/1-que-es-una-pasarela-de-pago.md), [`2-conceptos-tecnicos.md`](../01-producto/2-conceptos-tecnicos.md), [`3-las-cuatro-pasarelas.md`](../01-producto/3-las-cuatro-pasarelas.md), fuentes oficiales citadas allí | Escrito en el #175, con la comparación de soluciones relacionadas por criterios explícitos y fecha de consulta. Mantener las referencias al día. |
+| IV. Análisis de requisitos y alcance | Requisitos funcionales y restricciones, especificación de alto nivel, casos de uso y trazabilidad | [`docs/02-arquitectura/layers-and-components.md`](../02-arquitectura/layers-and-components.md) §5, [`docs/project-management/traceability-matrix.md`](../project-management/traceability-matrix.md), los originales del SPMP y del SRS ([`spmp/SPMP-original.pdf`](spmp/SPMP-original.pdf), [`srs/SRS-original.pdf`](srs/SRS-original.pdf)), issues y pruebas enlazados por la matriz | Escrito en el #175 contra el SRS 2.0 y la matriz. Si cambia un RF, actualizar primero el SRS y la matriz. La matriz es evidencia de proceso; no sustituye la explicación académica de requisitos. |
+| V. Diseño arquitectónico del Kit Pagos Colombia | Arquitectura, dominio, componentes, decisiones, patrones, seguridad y tecnologías | [`docs/02-arquitectura/1-arquitectura-hexagonal.md`](../02-arquitectura/1-arquitectura-hexagonal.md), [`2-hexagonal-en-kit-pagos.md`](../02-arquitectura/2-hexagonal-en-kit-pagos.md), [`layers-and-components.md`](../02-arquitectura/layers-and-components.md), [`ubiquitous-language.md`](../02-arquitectura/ubiquitous-language.md), [`docs/architecture/architecture-log.md`](../architecture/architecture-log.md), diagramas C4 | Contrastar el diseño con el SAD 1.1 y explicar discrepancias relevantes. Seleccionar diagramas legibles y sincronizados con el código. |
+| VI. Construcción e implementación del artefacto | Proceso DSR e iterativo; SDK, simulador, datos de prueba, patrones de integración y prototipos | [`docs/03-sdk/`](../03-sdk/), [`docs/02-arquitectura/3-api-de-simulacion.md`](../02-arquitectura/3-api-de-simulacion.md), [`docs/testing-data/`](../testing-data/), [`examples/`](../../examples/), código en `sdk/` y `simulator-api/` | Anclar las afirmaciones de implementación al código y a pruebas actuales. Los cuatro prototipos (A a D) existen; documentarlos con su estado verificable. |
+| VII. Validación y resultados | Pruebas, calidad del SDK, demostración, resultados de la evaluación y discusión de validez | [`docs/04-metricas-y-pruebas/`](../04-metricas-y-pruebas/), [`docs/project-management/prototypes-evaluation-plan.md`](../project-management/prototypes-evaluation-plan.md), [`docs/04-metricas-y-pruebas/4-medir-los-prototipos.md`](../04-metricas-y-pruebas/4-medir-los-prototipos.md), reportes de CI y pruebas | **Fase 5:** el plan define seis variables y amenazas a la validez, y la recolección sobre B y D está en `docs/evaluation/`; falta el informe comparativo. No incluir cifras que no salgan de esa evidencia reproducible. |
 | VIII. Conclusiones, impacto y trabajo futuro | Respuesta a objetivos, contribuciones, límites, impacto y siguientes pasos | Objetivos, matriz, resultados validados, [`docs/03-sdk/6-tokenizacion-frontend.md`](../03-sdk/6-tokenizacion-frontend.md), arquitectura y plan de evaluación | Depende del cierre de resultados y de contrastar cada objetivo con evidencia final. P3 y requisitos pendientes se reportan como límites/trabajo futuro, no como logros implementados. |
-| Referencias | Fuentes académicas, documentación de pasarelas, SPMP, SAD, estándares y bibliotecas | Referencias dispersas en documentos de `docs/`, en el SPMP ([`spmp/SPMP-original.pdf`](spmp/SPMP-original.pdf)) y en el SAD externo | Elegir un único estilo requerido por la facultad/director, normalizar cada entrada y confirmar las fuentes externas consultables. |
+| Referencias | Fuentes académicas, documentación de pasarelas, SPMP, SAD, estándares y bibliotecas | Referencias dispersas en documentos de `docs/`, en el SPMP ([`spmp/SPMP-original.pdf`](spmp/SPMP-original.pdf)) y en el SAD externo | La memoria usa APA, con citas autor-año en el texto. Normalizar cada entrada nueva y confirmar que las fuentes externas sean consultables. |
 | Anexos | Material que complementa la memoria sin interrumpir el argumento | Diagramas fuente, matrices, contratos, evidencia de pruebas, manuales y artefactos publicados | Acordar qué se adjunta, qué se enlaza y qué debe quedar disponible desde la página/repositorio institucional. No duplicar capítulos enteros. |
 
 ### I. Introducción
@@ -87,7 +88,7 @@ Separar lo medido en sandbox de lo afirmado por documentación oficial. El [`arc
 
 ### IV. Análisis de requisitos y alcance
 
-1. Requisitos funcionales RF-01 a RF-15 y su contexto.
+1. Requisitos funcionales RF-01 a RF-19 y su contexto.
 2. Requisitos no funcionales y criterios de calidad, según la fuente aprobada.
 3. Restricciones: credenciales, seguridad, alcance de los sandboxes, límites de PCI DSS y exclusiones del SPMP.
 4. Especificación funcional: flujos de creación/consulta de pagos, webhooks, errores y simulación.
@@ -117,13 +118,14 @@ No describir la API simulada como si fuera una pasarela real ni asumir que una r
 3. API de Simulación: endpoints, escenarios y fidelidad respecto de los sandboxes.
 4. Documentación de datos de prueba como parte del artefacto.
 5. Ejemplos de integración y pruebas de contrato.
-6. Prototipos previstos:
-   - **A — control:** checkout con integración directa; Wompi y migración experimental a Mercado Pago.
-   - **B — tratamiento:** el mismo checkout mediante SDK, para el experimento comparativo.
-   - **C — demostración P2:** frontend hacia `/v1/api`; evidencia de alcance, no parte del experimento A/B principal.
+6. Prototipos (`thesis-objectives.md`, sección 5.1):
+   - **A:** checkout con el SDK solo en el servidor (`checkout-con-sdk-solo-back`); no participa del experimento.
+   - **B — tratamiento:** checkout con el SDK y el módulo de navegador (`checkout-con-sdk-front-back`).
+   - **C — demostración P2:** frontend hacia `/v1/api` (`checkout-frontend-rest`); evidencia de alcance, no parte del experimento.
+   - **D — control:** checkout con integración directa de las cuatro pasarelas (`checkout-sin-solucion`).
 7. Decisiones de implementación que afectaron el diseño, con referencias a puntos pertinentes del architecture log.
 
-A y B deben ser funcionalmente equivalentes y compartir el esqueleto no relacionado con pagos; C demuestra P2. P3 es una investigación concluida sin prototipo ni objetivo específico nuevo, según #115 y el análisis de tokenización frontend.
+B y D son funcionalmente equivalentes y comparten el esqueleto no relacionado con pagos; C demuestra P2. P3 está implementado en parte, sin prototipo propio ni objetivo específico nuevo, según #115 y el análisis de tokenización frontend.
 
 ### VII. Validación y resultados
 
@@ -131,10 +133,10 @@ A y B deben ser funcionalmente equivalentes y compartir el esqueleto no relacion
 2. Resultados de pruebas unitarias, de integración, contrato y CI, indicando alcance y entorno.
 3. Métricas CK WMC, CBO, RFC y MAX_CC: explicar fórmulas y presentar resultados solo desde reportes verificables.
 4. Demostración funcional del artefacto.
-5. Evaluación formal de Fase 5: comparación A/B y las seis variables del plan (líneas de integración, diff de migración, métricas CK, conceptos nativos expuestos, pasarelas alcanzables y cobertura de pruebas).
+5. Evaluación formal de Fase 5: comparación de B y D con las seis variables del plan (líneas de integración, costo de agregar cada pasarela, métricas CK, conceptos nativos expuestos, pasarelas alcanzables y cobertura de pruebas).
 6. Análisis de amenazas a la validez, límites del estudio y resultados que contradigan la hipótesis.
 
-**Dependencia explícita:** el plan sitúa el informe comparativo en `docs/evaluation/`. En la revisión actual no se encontró ese informe ni código fuente de los prototipos en `prototypes/`. Este capítulo queda parcialmente pendiente hasta localizar o producir el material, ejecutar el protocolo y guardar su evidencia. No afirmar ni estimar cifras y no presentar las hipótesis del plan como resultados.
+**Dependencia explícita:** el plan sitúa el informe comparativo en `docs/evaluation/`. Ya están ahí la recolección de las seis variables sobre B y D y sus reportes; el informe comparativo todavía no existe. Este capítulo queda parcialmente pendiente hasta producirlo. No afirmar ni estimar cifras que no salgan de esa evidencia y no presentar las hipótesis del plan como resultados.
 
 ### VIII. Conclusiones, impacto y trabajo futuro
 
@@ -153,27 +155,28 @@ Los seis objetivos que siguen son transcripciones reportadas como literales del 
 | **OE-01.** Analizar las características técnicas, mecanismos de integración y consideraciones de seguridad de las cuatro pasarelas seleccionadas. | Comparación técnica, lenguaje ubicuo y datos por pasarela: [`3-las-cuatro-pasarelas.md`](../01-producto/3-las-cuatro-pasarelas.md), [`ubiquitous-language.md`](../02-arquitectura/ubiquitous-language.md), [`docs/testing-data/`](../testing-data/README.md). | II–III y evidencia aplicada en IV–V. | El registro de objetivos marca la evidencia como implementada; verificar referencias y cobertura al cerrar la memoria. |
 | **OE-02.** Diseñar la arquitectura del framework aplicando la arquitectura hexagonal y patrones GoF. | Fundamentos y arquitectura implementada: [`1-arquitectura-hexagonal.md`](../02-arquitectura/1-arquitectura-hexagonal.md), [`2-hexagonal-en-kit-pagos.md`](../02-arquitectura/2-hexagonal-en-kit-pagos.md), [`layers-and-components.md`](../02-arquitectura/layers-and-components.md), [`architecture-log.md`](../architecture/architecture-log.md). | V. | Evidencia documentada; contrastar contra SAD y código final. |
 | **OE-03.** Desarrollar un prototipo funcional del framework que implemente la interfaz unificada y los mecanismos de comunicación segura. | SDK, ejemplos, pruebas y documentación: `sdk/`, `examples/`, [`docs/03-sdk/`](../03-sdk/). | V–VI–VII. | La fuente de objetivos marca evidencia implementada; validar con resultados de pruebas de la versión evaluada. |
-| **OE-04.** Implementar la API de simulación. | `simulator-api/`, [`3-api-de-simulacion.md`](../02-arquitectura/3-api-de-simulacion.md), RF-09 a RF-13 de la matriz. | V–VII. | El registro de objetivos lo marca en curso y la matriz muestra RF parciales/pendientes en su fotografía del 4 de octubre de 2026; actualizar contra HEAD/estado de entrega. |
+| **OE-04.** Implementar la API de simulación. | `simulator-api/`, [`3-api-de-simulacion.md`](../02-arquitectura/3-api-de-simulacion.md), RF-09 a RF-13 de la matriz. | V–VII. | Implementado: RF-09 a RF-13 y RF-16 están implementados; RF-13 declara siete operaciones sin esquema (punto 109). |
 | **OE-05.** Consolidar los datos de prueba por pasarela para su documentación. | README y documentos de Wompi, Mercado Pago, Kushki y Rapyd en [`docs/testing-data/`](../testing-data/README.md). | III–VI y anexos si procede. | Evidencia documentada; confirmar qué requisitos asociados siguen parciales. |
-| **OE-06.** Evaluar el framework mediante su aplicación en proyectos prototípicos usando las métricas WMC, CBO y RFC de Chidamber y Kemerer (1994), comparando los resultados frente a una integración directa con las APIs nativas. | Diseño: [`prototypes-evaluation-plan.md`](../project-management/prototypes-evaluation-plan.md), [`4-medir-los-prototipos.md`](../04-metricas-y-pruebas/4-medir-los-prototipos.md), fórmulas en metodología §6.1 y script `sdk/scripts/ck-metrics.ts`. | VII–VIII. | Pendiente de evidencia ejecutada en el repositorio revisado: localizar/crear prototipos, recopilar las variables y publicar el informe reproducible. |
+| **OE-06.** Evaluar el framework mediante su aplicación en proyectos prototípicos usando las métricas WMC, CBO y RFC de Chidamber y Kemerer (1994), comparando los resultados frente a una integración directa con las APIs nativas. | Diseño: [`prototypes-evaluation-plan.md`](../project-management/prototypes-evaluation-plan.md), [`4-medir-los-prototipos.md`](../04-metricas-y-pruebas/4-medir-los-prototipos.md), fórmulas en metodología §6.1 y script `sdk/scripts/ck-metrics.ts`. | VII–VIII. | Pendiente: los prototipos existen y la recolección sobre B y D está en `docs/evaluation/`; falta el informe comparativo de la Fase 5. |
 
 ## 5. Prototipos, patrones y límites que deben quedar explícitos
 
 | Prototipo | Caso, pasarelas y patrón | Propósito | Uso de resultados |
 |---|---|---|---|
-| A — checkout directo | Checkout mínimo; integración directa; Wompi y luego Mercado Pago. No usa P1/P2 del framework. | Grupo de control y línea base del costo de integración/migración. | Par experimental A/B de Fase 5. |
-| B — checkout con SDK | Mismo caso y alcance que A; Wompi y luego Mercado Pago; P1: backend hacia SDK. | Grupo de tratamiento y evaluación del SDK. | Par experimental A/B de Fase 5. |
-| C — checkout frontend–REST | Caso de checkout consumiendo `/v1/api`; las cuatro pasarelas según el diseño registrado; P2. | Demostrar la vía de integración REST/frontend. | Demostración del alcance; no se confunde con la comparación A/B formal. |
-| P3 — SDK unificado en frontend | Tokenización frontend de proveedores; investigado, no implementado. | Límite deliberado basado en la investigación de #110. | No crear un OE-07 ni afirmar que es un entregable. |
+| A — checkout con el SDK solo en el servidor | El mismo caso, con el SDK solo en el servidor y sin `KitPagosBrowser`; las cuatro pasarelas; P1. | Mostrar el SDK sin su módulo de navegador. | Demostración; no participa del experimento. |
+| B — checkout con SDK | Checkout mínimo con las cuatro pasarelas a través del SDK y el módulo de navegador; P1. | Grupo de tratamiento y evaluación del SDK. | Par experimental B/D de Fase 5. |
+| C — checkout frontend–REST | Caso de checkout consumiendo `/v1/api`; las cuatro pasarelas; P2. | Demostrar la vía de integración REST/frontend. | Demostración del alcance; no se confunde con la comparación formal. |
+| D — checkout directo | El mismo checkout que B, con las cuatro pasarelas integradas a mano. No usa el framework. | Grupo de control y línea base del costo de integración. | Par experimental B/D de Fase 5. |
+| P3 — SDK unificado en frontend | `KitPagosBrowser` tokeniza con Wompi, Mercado Pago y Kushki; Rapyd no tokeniza en el navegador. Implementado en parte. | Límite declarado (#110 y punto 106). | No crear un OE-07; presentarlo como patrón implementado en parte. |
 
-Las discrepancias del proyecto frente al SPMP deben discutirse, no resolverse editando los objetivos: la capa propia `/v1/api` no está descrita en el SPMP; P2 amplía el alcance y roza la exclusión aprobada de interfaces de pago; P3 quedó como investigación. La memoria debe describir esas decisiones y su aprobación o discusión con el director, sin darlas por autorizadas si no existe evidencia de esa conversación.
+Las diferencias entre la versión 1.0 del SPMP y lo construido (Rapyd por PayU, la capa propia `/v1/api`, P2 con el prototipo C y P3 implementado en parte) se presentan sin editar los objetivos. La versión 2.0 del SPMP (sección 1.2.2) y el SRS 2.0 las incorporan, y `thesis-objectives.md` (sección 4) las registra; el capítulo IV de la memoria las explica.
 
 ## 6. Referencias, anexos y registro de pendientes
 
 ### Fuentes principales
 
-- SPMP aprobado, sección 1.2.3 y alcance de componentes, en [`spmp/SPMP-original.pdf`](spmp/SPMP-original.pdf).
-- SAD aprobado, fuera del repositorio; discrepancias y decisiones registradas en [`docs/architecture/architecture-log.md`](../architecture/architecture-log.md).
+- SPMP 2.0 en [`spmp/`](spmp/), con el original de mayo de 2026 en [`spmp/SPMP-original.pdf`](spmp/SPMP-original.pdf); objetivos en la sección 1.2.3 y alcance en la 1.2.2.
+- SRS 2.0 en [`srs/`](srs/) y SAD 1.1 en [`sad/`](sad/); discrepancias y decisiones registradas en [`docs/architecture/architecture-log.md`](../architecture/architecture-log.md).
 - [`docs/project-management/methodology.md`](../project-management/methodology.md) y [`thesis-objectives.md`](../project-management/thesis-objectives.md).
 - [`docs/project-management/traceability-matrix.md`](../project-management/traceability-matrix.md).
 - [`docs/project-management/prototypes-evaluation-plan.md`](../project-management/prototypes-evaluation-plan.md) y [`docs/04-metricas-y-pruebas/4-medir-los-prototipos.md`](../04-metricas-y-pruebas/4-medir-los-prototipos.md).
@@ -181,13 +184,11 @@ Las discrepancias del proyecto frente al SPMP deben discutirse, no resolverse ed
 
 ### Pendientes que bloquean una versión final
 
-1. Confirmar con el director si la plantilla de `memoria/` es la institucional vigente y si sus encabezados pueden especializarse.
-2. Resolver la extensión autorizada del documento (la plantilla contiene indicaciones de 60 y 80 páginas) y seleccionar un estilo bibliográfico.
-3. Confirmar título oficial, autores, código, director, jurados y autoridades de portada.
-4. Revisar con el director las divergencias entre SPMP y alcance ejecutado, en particular `/v1/api` y P2; registrar la decisión aprobada.
-5. Verificar el estado vigente de cada RF/OE y enlazar la evidencia final reproducible.
-6. Incorporar el informe de Fase 5 solo cuando existan prototipos, commits de medición y datos verificables; conservar también amenazas a la validez y resultados adversos.
-7. Definir qué artefactos serán anexos descargables y compilar/revisar el PDF final.
+1. Confirmar si la plantilla de `memoria/` es la institucional vigente y si sus encabezados pueden especializarse.
+2. Confirmar título oficial, autores, código, director, jurados y autoridades de portada.
+3. Verificar el estado vigente de cada RF/OE y enlazar la evidencia final reproducible.
+4. Incorporar el informe comparativo de la Fase 5 cuando exista; conservar también amenazas a la validez y resultados adversos.
+5. Definir qué artefactos serán anexos descargables y compilar/revisar el PDF final, dentro de las 80 páginas sin anexos.
 
 ## 7. Convención de actualización
 
