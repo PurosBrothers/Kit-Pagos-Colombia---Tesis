@@ -28,6 +28,14 @@ import {
   WompiCreateTransactionRequestBody,
   WompiTokenizeCardRequestBody,
 } from "../gateways/wompi/types";
+import {
+  getWompiMerchantSchema,
+  getWompiPseInstitutionsSchema,
+  getWompiTransactionSchema,
+  postWompiTokenCardSchema,
+  postWompiTransactionsSchema,
+} from "./schemas/wompi.schemas";
+import { compileSchemasAsIs } from "./schemas/compileSchemasAsIs";
 import { rememberScenarioTarget } from "../state/scenarioTarget";
 import { wompiStateMachine } from "../state/wompiStateMachine";
 import { sendBankPage } from "../gateways/bankPage";
@@ -139,6 +147,7 @@ function sendsPrivateKey(request: FastifyRequest): boolean {
  * already fixed the outcome.
  */
 export async function wompiRoutes(app: FastifyInstance): Promise<void> {
+  compileSchemasAsIs(app);
   const scenarioEngine = new ScenarioEngine();
   const tokenMocks = new WompiTokenMockFactory();
   const errorBodies = new WompiErrorMockFactory();
@@ -147,31 +156,39 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   // ── POST /v1/sim/wompi/transactions ──────────────────────────────────────
   app.post(
     "/v1/sim/wompi/transactions",
+    {
+      schema: postWompiTransactionsSchema,
+      // Antes que el schema, que marca obligatorios el método de pago, el token de aceptación
+      // y la firma: así cada falta recibe la respuesta medida de Wompi y no el 400 de Fastify.
+      preValidation: async (request, reply) => {
+        const body = request.body as WompiCreateTransactionRequestBody | undefined;
+
+        /*
+         * Wompi no cobra sin método de pago, y el mock tampoco.
+         *
+         * Medido contra `sandbox.wompi.co`: un `POST /transactions` sin `payment_method`
+         * responde `422 UNPROCESSABLE "No se especificó método de pago o fuente de pago"`.
+         * El mock lo aceptaba, y por eso el SDK pudo pasar meses sin mandar el token de
+         * tarjeta con todas las pruebas en verde. Un mock que acepta más que la API real no
+         * es permisivo: es el lugar donde se esconden los defectos (puntos 48 y 50).
+         */
+        if (!body?.payment_method) {
+          return reply.code(422).send({
+            error: {
+              type: "UNPROCESSABLE",
+              reason: "No se especificó método de pago o fuente de pago",
+            },
+          });
+        }
+
+        const missingField = missingFieldRejection(body);
+        if (missingField !== undefined) {
+          return reply.code(422).send(missingField);
+        }
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const requestBody = request.body as WompiCreateTransactionRequestBody;
-
-      /*
-       * Wompi no cobra sin método de pago, y el mock tampoco.
-       *
-       * Medido contra `sandbox.wompi.co`: un `POST /transactions` sin `payment_method`
-       * responde `422 UNPROCESSABLE "No se especificó método de pago o fuente de pago"`.
-       * El mock lo aceptaba, y por eso el SDK pudo pasar meses sin mandar el token de
-       * tarjeta con todas las pruebas en verde. Un mock que acepta más que la API real no
-       * es permisivo: es el lugar donde se esconden los defectos (puntos 48 y 50).
-       */
-      if (!requestBody?.payment_method) {
-        return reply.code(422).send({
-          error: {
-            type: "UNPROCESSABLE",
-            reason: "No se especificó método de pago o fuente de pago",
-          },
-        });
-      }
-
-      const missingField = missingFieldRejection(requestBody);
-      if (missingField !== undefined) {
-        return reply.code(422).send(missingField);
-      }
 
       if (invalidCredentialRequested(request, ["authorization"])) {
         return reply.code(401).send(INVALID_KEY_ON_CREATE);
@@ -288,6 +305,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   // ── GET /v1/sim/wompi/transactions/:id ───────────────────────────────────
   app.get(
     "/v1/sim/wompi/transactions/:id",
+    { schema: getWompiTransactionSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { id } = request.params as { id: string };
 
@@ -366,6 +384,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   // tenga un solo camino de código y no una rama "modo simulador".
   app.get(
     "/v1/sim/wompi/merchants/:publicKey",
+    { schema: getWompiMerchantSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       // La llave va en la ruta y Wompi responde igual sin `Authorization` (medido el 6 de
       // octubre de 2026), así que la marca se lee de la ruta y no de la cabecera.
@@ -392,6 +411,7 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/wompi/pse/financial_institutions",
+    { schema: getWompiPseInstitutionsSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const failure = bankListFailure(request, reply, errorBodies, "wompi");
       if (failure !== undefined) {
@@ -443,20 +463,27 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
   registerTokenizationPreflight(app, "/v1/sim/wompi/tokens/cards", WOMPI_TOKENIZATION_PREFLIGHT_HEADERS);
   app.post(
     "/v1/sim/wompi/tokens/cards",
-    { onSend: allowAnyOrigin },
+    {
+      schema: postWompiTokenCardSchema,
+      onSend: allowAnyOrigin,
+      // Antes que el schema, que marca obligatoria `Authorization`: así su falta recibe la
+      // respuesta medida de Wompi y no el 400 genérico de Fastify.
+      preValidation: async (request, reply) => {
+        const authHeader = request.headers.authorization;
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+          return reply.code(401).send({
+            error: {
+              type: "UNAUTHORIZED",
+              code: "ACCESS_TOKEN_HEADER_NOT_PRESENT",
+              reason: "Header de autorización 'Authorization' no enviado.",
+            },
+          });
+        }
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const authHeader = request.headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return reply.code(401).send({
-          error: {
-            type: "UNAUTHORIZED",
-            code: "ACCESS_TOKEN_HEADER_NOT_PRESENT",
-            reason: "Header de autorización 'Authorization' no enviado.",
-          },
-        });
-      }
-
-      const publicKey = authHeader.slice(7).trim();
+      // `preValidation` ya respondió si faltaba `Authorization: Bearer`.
+      const publicKey = (request.headers.authorization as string).slice(7).trim();
       if (!publicKey) {
         return reply.code(401).send({
           error: {
@@ -568,5 +595,3 @@ export async function wompiRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 }
-
-

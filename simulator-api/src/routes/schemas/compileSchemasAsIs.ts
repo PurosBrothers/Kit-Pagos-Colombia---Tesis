@@ -7,7 +7,9 @@ import { FastifyInstance } from "fastify";
  * ni la respuesta. Fastify, por omisión, reescribe las dos, y en un mock eso cambia lo medido:
  *
  * - **La respuesta** se serializa con el schema (`fast-json-stringify`), que quita todo campo
- *   no declarado y convierte los valores al tipo declarado.
+ *   no declarado y convierte los valores al tipo declarado. Así se perdían `status_message` en
+ *   la consulta de Wompi y `external_reference` en la orden de Mercado Pago, y `details` pasaba
+ *   de lista a texto. Aquí sale lo que arma el handler, que es lo medido contra la pasarela.
  * - **La petición** se valida con Ajv convirtiendo tipos (`coerceTypes`), rellenando valores
  *   por omisión y quitando los campos que un `additionalProperties: false` no admite. Aquí una
  *   petición que no cumple el schema se rechaza, y una que lo cumple llega al handler como la
@@ -28,7 +30,25 @@ const validator = addFormats(
   }),
 );
 
+/**
+ * Un error que llega a Fastify sin respuesta propia (un JSON roto, una excepción del handler) se
+ * serializa con el schema de su código si la ruta lo declara, como `Object.create(error, …)` con
+ * `statusCode`, `error` y `message` no enumerables. `JSON.stringify` lo dejaría en `{}`; sale con
+ * el cuerpo que Fastify arma cuando la ruta no declara ese código.
+ */
+function serialize(data: unknown): string {
+  if (data instanceof Error) {
+    const { statusCode, code, error, message } = data as Error & {
+      statusCode?: number;
+      code?: string;
+      error?: string;
+    };
+    return JSON.stringify({ statusCode, code, error, message });
+  }
+  return JSON.stringify(data);
+}
+
 export function compileSchemasAsIs(app: FastifyInstance): void {
   app.setValidatorCompiler(({ schema }) => validator.compile(schema));
-  app.setSerializerCompiler(() => (data) => JSON.stringify(data));
+  app.setSerializerCompiler(() => serialize);
 }

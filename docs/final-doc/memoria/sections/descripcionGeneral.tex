@@ -1,49 +1,123 @@
 \setcounter{subsection}{0}
 \section{DESCRIPCIÓN DEL PROYECTO Y FORMULACIÓN DEL PROBLEMA}
-% Actualizar la propuesta aprobada con evidencia y referencias; narrar el trabajo terminado en pasado.
+\sloppy
 
 \subsection{Problema y oportunidad}
-% Presentar el contexto general y acotar el problema de integrar múltiples pasarelas en Colombia.
-% Fuente de partida: docs/01-producto/ y el SPMP aprobado. Respetar el máximo institucional confirmado.
 
-\subsubsection{Contexto del Problema}
-% Describir de lo general a lo específico: comercio, pagos, rol de las pasarelas y diferencias de integración.
+\subsubsection{Contexto del problema}
+Según la Cámara Colombiana de Comercio Electrónico, Colombia cerró 2025 con 9,3 millones de compradores digitales, y el comercio electrónico representó el 2,4\,\% del comercio minorista del país, medido sobre las empresas que contabiliza el DANE (Cámara Colombiana de Comercio Electrónico, s.~f.). Para un comercio que vende por internet, cobrar de forma segura y confiable es una condición para operar.
 
-\subsubsection{Formulación del Problema}
-% Transcribir o citar fielmente la formulación aprobada. No inventar una pregunta de investigación.
+En Colombia operan varias pasarelas de pago, locales y globales, como Wompi, Mercado Pago, Kushki y Rapyd. Además de la tarjeta, ofrecen PSE, el botón de ACH Colombia con el que el comprador paga debitando su cuenta bancaria (ACH Colombia, s.~f.). Un comercio que quiere ofrecer más de una pasarela, o cambiar de proveedor, tiene que integrarse con cada una por separado.
 
-\subsubsection{Propuesta de Solución}
-% Resumir SDK, API de Simulación y documentación de datos como componentes de un artefacto de software.
+Cada pasarela tiene su propia autenticación, sus formatos y su contrato de integración. Recibir pagos por internet no consiste en invocar un servicio web estándar: el comercio entra en una cadena transaccional en la que intervienen el pagador, la aplicación del comercio, la pasarela de recaudo, las entidades adquirentes, las redes de franquicias (Visa, Mastercard, American Express) y las instituciones financieras emisoras. Como no hay un estándar común entre las pasarelas, el desarrollador carga con el trabajo técnico de gestionar protocolos de autenticación disímiles, algoritmos criptográficos incompatibles de verificación de firmas, modelos inconsistentes de ciclo de vida de la transacción y representaciones no uniformes de montos y divisas.
 
-\subsubsection{Justificación de la Solución}
-% Justificar el enfoque con evidencia cualitativa y técnica; no presentar beneficios cuantitativos sin el experimento.
+\subsubsection{Formulación del problema}
+El SPMP formula el problema al presentar el proyecto (Equipo del Proyecto, 2026c, sección 1):
+
+\begin{quote}
+El proyecto Kit Pagos Colombia surge a partir de un problema recurrente en el desarrollo de software colombiano: integrar pasarelas de pago sigue siendo un proceso fragmentado, repetitivo y, en muchos casos, innecesariamente complejo. Plataformas como Wompi, Rapyd, Mercado Pago y Kushki ofrecen servicios similares, pero cada una maneja estructuras distintas para autenticación, respuestas HTTP, validaciones y notificaciones asíncronas. En la práctica, esto obliga a los equipos de desarrollo a implementar varias veces la misma lógica, aumentando el tiempo de integración y la probabilidad de errores.
+\end{quote}
+
+Su sección 1.2.1 fija el propósito del trabajo: construir un artefacto de software contra esa fragmentación y evaluarlo. La versión 1.0 del SPMP, de mayo de 2026, nombraba a PayU en lugar de Rapyd. Rapyd completó la adquisición de PayU GPO en América Latina en marzo de 2025 y la reemplazó en el proyecto (punto 15 del registro de arquitectura).
+
+Esta realidad técnica somete a los equipos de ingeniería a duplicar esfuerzos de implementación ante cada cambio de proveedor y aumenta la superficie de error en puntos críticos de seguridad, tales como la validación de webhooks y la tokenización de credenciales de pago.
+
+\subsubsection{Propuesta de solución}
+Para resolver ese problema, este trabajo desarrolló \textbf{Kit Pagos Colombia}, un artefacto de software con los cuatro componentes que describen el SRS v2.0 y el SPMP 2.0 (Equipo del Proyecto, 2026b, 2026c):
+
+\begin{enumerate}
+    \item \textbf{SDK de servidor en TypeScript (\texttt{kit-pagos-colombia}):} una biblioteca para Node.js con una interfaz común a las cuatro pasarelas para cobrar con tarjeta (crédito o débito) o con PSE, consultar el estado de un pago, listar los bancos PSE y verificar la firma de las notificaciones asíncronas (webhooks).
+    \item \textbf{Módulo de navegador (\texttt{kit-pagos-colombia/browser}):} tokeniza la tarjeta en la página del comprador con Wompi, Mercado Pago o Kushki, así que el servidor del comercio recibe un token y nunca el número. No aplica a Rapyd, que cobra en su página alojada.
+    \item \textbf{API de Simulación:} Un servidor HTTP de pruebas con dos superficies. Bajo \texttt{/v1/sim/*} imita las rutas y los formatos de las cuatro pasarelas a partir de lo medido en sus sandboxes, y permite elegir escenarios de aprobación, rechazo, expiración y tiempo de espera; las combinaciones sin evidencia de cómo responde la pasarela real devuelven \texttt{501}. Bajo \texttt{/v1/api} expone por HTTP las operaciones del SDK.
+    \item \textbf{Documentación de datos de prueba (\texttt{docs/testing-data/}):} reúne, para cada pasarela, las credenciales de sandbox, las tarjetas, los documentos, los bancos y los flujos medidos, con el nivel de evidencia de cada afirmación.
+\end{enumerate}
+
+\subsubsection{Justificación de la solución}
+La propuesta se apoya en la arquitectura hexagonal (Cockburn \& Garrido de Paz, 2024), que separa la lógica del dominio transaccional de las particularidades de transporte y formato de cada proveedor por medio de puertos y adaptadores. El comercio interactúa con contratos semánticos universales (como \texttt{createPayment}, \texttt{getPaymentStatus} o \texttt{validateWebhook}), mientras que los adaptadores específicos absorben y encapsulan las variaciones de red de cada pasarela.
+
+Asimismo, la solución mitiga riesgos críticos de seguridad y exactitud financiera:
+\begin{itemize}
+    \item \textbf{Prevención de vulnerabilidades de firma:} El SDK verifica la firma de cada pasarela con su algoritmo y la compara en tiempo constante (\texttt{crypto.timingSafeEqual}), para no filtrar la firma esperada por diferencias de tiempo. En Mercado Pago la firma no cubre el cuerpo, así que el evento se entrega como \texttt{PENDING} y el comercio confirma el estado con \texttt{getPaymentStatus()}.
+    \item \textbf{Exactitud y representación monetaria:} El tipo \texttt{number} de JavaScript sigue el formato binario de IEEE 754 (Institute of Electrical and Electronics Engineers, 2019) y redondea mal los montos decimales. El SDK los representa como cadenas decimales exactas dentro de objetos de valor inmutables.
+    \item \textbf{Reducción del bloqueo de proveedor (\textit{vendor lock-in}):} Las diferencias entre pasarelas quedan en los adaptadores, de modo que cambiar de pasarela o sumar una segunda no debería obligar a reescribir la lógica de negocio del comercio. Cuánto cambia en la práctica el código del comercio es una de las variables de la evaluación.
+\end{itemize}
+
+El efecto sobre el esfuerzo de integración se mide en la evaluación de la Fase 5, con las métricas WMC, CBO y RFC y las demás variables del plan de evaluación. Sus resultados se presentan en el capítulo VII; este capítulo no los anticipa.
 
 \subsection{Objetivos, alcance y entregables}
-% Describir qué se aprobó, qué se implementó y qué quedó fuera, distinguiendo esos estados.
 
-\subsubsection{Objetivo General}
-% Transcribir literalmente el objetivo general desde docs/project-management/thesis-objectives.md y citar el SPMP.
+\subsubsection{Objetivo general}
+El objetivo general del trabajo de grado, aprobado en el SPMP (sección 1.2.3) y transcrito en \path{docs/project-management/thesis-objectives.md}, es:
 
-\subsubsection{Objetivos Específicos}
-% Transcribir OE-01 a OE-06 literalmente desde docs/project-management/thesis-objectives.md.
-% Presentar evidencia de cumplimiento por separado; no reescribir objetivos para que coincidan con el resultado.
+\begin{quote}
+\textit{Desarrollar el Kit Pagos Colombia para simplificar la integración de múltiples pasarelas de pago en el contexto colombiano.}
+\end{quote}
+
+\subsubsection{Objetivos específicos}
+El SPMP estableció seis objetivos específicos (OE-01 a OE-06). A continuación se transcriben literalmente, con el estado de su evidencia en el repositorio según \path{thesis-objectives.md} (sección 2):
+
+\begin{itemize}
+    \item \textbf{OE-01:} \textit{Analizar las características técnicas, mecanismos de integración y consideraciones de seguridad de las cuatro pasarelas seleccionadas.} \\
+    \textbf{Evidencia:} Implementado y consolidado en la caracterización técnica del producto (\path{docs/01-producto/3-las-cuatro-pasarelas.md}), la matriz de lenguaje ubicuo (\path{docs/02-arquitectura/ubiquitous-language.md}) y el repositorio de datos de prueba clasificados (\path{docs/testing-data/}).
+    
+    \item \textbf{OE-02:} \textit{Diseñar la arquitectura del framework aplicando la arquitectura hexagonal y patrones GoF.} \\
+    \textbf{Evidencia:} Implementado mediante la especificación de puertos, entidades del dominio transaccional, adaptadores de infraestructura y registro histórico de decisiones arquitectónicas (\path{docs/architecture/architecture-log.md} y \path{docs/02-arquitectura/}).
+    
+    \item \textbf{OE-03:} \textit{Desarrollar un prototipo funcional del framework que implemente la interfaz unificada y los mecanismos de comunicación segura.} \\
+    \textbf{Evidencia:} Implementado en el paquete central del SDK (\texttt{sdk/}), con la fachada unificada \texttt{KitPagos}, factoría de pasarelas, adaptadores para Wompi, Mercado Pago, Kushki y Rapyd, módulo de navegador para tokenización segura y suite de pruebas unitarias y de integración.
+    
+    \item \textbf{OE-04:} \textit{Implementar la API de simulación.} \\
+    \textbf{Evidencia:} Implementado en \texttt{simulator-api/}: rutas de simulación de las cuatro pasarelas bajo \texttt{/v1/sim/*}, escenarios elegidos por cabecera (\texttt{x-simulator-scenario}), datos de prueba, montos reservados o marcas de credencial, y la capa REST propia \texttt{/v1/api}. La especificación OpenAPI (RF-13) cubre \texttt{/v1/api} y, desde el PR \#137, las rutas de simulación de las cuatro pasarelas; siete operaciones sin esquema quedan como límite declarado (punto 109 del registro de arquitectura).
+    
+    \item \textbf{OE-05:} \textit{Consolidar los datos de prueba por pasarela para su documentación.} \\
+    \textbf{Evidencia:} Implementado en el directorio \texttt{docs/testing-data/}, estructurado por pasarela, con tarjetas de prueba, credenciales sandbox validadas, listas de bancos PSE y categorización explícita del nivel de evidencia experimental.
+    
+    \item \textbf{OE-06:} \textit{Evaluar el framework mediante su aplicación en proyectos prototípicos usando las métricas WMC, CBO y RFC de Chidamber y Kemerer (1994), comparando los resultados frente a una integración directa con las APIs nativas.} \\
+    \textbf{Evidencia:} Pendiente: la ejecución es la Fase 5. El protocolo está en \path{docs/project-management/prototypes-evaluation-plan.md}, la herramienta de medición es \path{sdk/scripts/ck-metrics.ts} y las mediciones de los prototipos B y D están en \path{docs/evaluation/}. Sus resultados se presentan en el capítulo VII.
+\end{itemize}
+
+\subsubsection{Alcance y exclusiones}
+El alcance que describe el SPMP 2.0 (sección 1.2.2) es el que se construyó (Equipo del Proyecto, 2026c). Cubre cuatro pasarelas, Wompi, Rapyd, Mercado Pago y Kushki, y dos métodos de pago, tarjeta y PSE (punto 49). Las operaciones son crear un pago, consultar su estado, listar los bancos PSE y validar los webhooks. El framework admite tres patrones de integración, que el capítulo III describe: P1, desde el servidor del comercio con el SDK; P2, desde un navegador contra \texttt{/v1/api}, y P3, con el módulo de navegador. P3 quedó implementado en parte, porque Rapyd no tokeniza la tarjeta en el navegador.
+
+Para demostrar y medir esos patrones se construyeron cuatro proyectos prototípicos en \texttt{prototypes/}. A (\texttt{checkout-con-sdk-solo-back}) usa el SDK solo en el servidor, y B (\texttt{checkout-con-sdk-front-back}), el SDK y el módulo de navegador. C (\texttt{checkout-frontend-rest}) cobra desde el navegador contra \texttt{/v1/api}, y D (\texttt{checkout-sin-solucion}) integra las cuatro pasarelas a mano. B y D son el par del experimento de la Fase 5; A y C no participan en él (\path{thesis-objectives.md}, sección 5).
+
+Quedan fuera el efectivo, Nequi, Daviplata, las suscripciones y los reembolsos. Tampoco entran el procesamiento real de transacciones, el manejo del número de tarjeta en el servidor del comercio, otras pasarelas, la integración con sistemas contables o ERP, la conciliación financiera ni la continuidad de las APIs de los proveedores. Las tiendas de los prototipos y el cliente del prototipo C solo demuestran el kit contra los sandboxes: no son interfaces de pago para producción. La versión 1.0 del SPMP no contemplaba la API REST propia, el módulo de navegador, los prototipos A y C ni la página de presentación; el capítulo IV detalla esas diferencias.
+
+Los entregables están publicados. El paquete \texttt{kit-pagos-colombia} está en npm, con la 0.6.0 en \texttt{latest} y la 0.7.0-rc.2 en \texttt{next} al 7 de noviembre de 2026 (Kit Pagos Colombia, 2026). La API de Simulación corre en Render; la documentación de datos de prueba y los prototipos están en el repositorio, y la página de presentación, en GitHub Pages.
 
 \subsubsection{Metodología, entregables y criterios aplicados}
-% DSR es el marco de investigación; describir Scrum solo como práctica interna de desarrollo iterativo.
-% Revisar docs/project-management/methodology.md y el SPMP. Confirmar estándares aplicables antes de declararlos.
+El marco metodológico del proyecto es \textbf{Design Science Research (DSR)} (Peffers et al., 2007), porque el resultado del trabajo es un artefacto de software que hay que construir y evaluar frente al problema que lo motivó. Peffers et al. proponen seis actividades en un orden nominal, que admite iterar y empezar por varias de ellas. El SPMP las adapta en seis fases (\path{docs/project-management/methodology.md}, sección 1): separa el diseño del desarrollo y junta la demostración con la evaluación.
+\begin{enumerate}
+    \item \textbf{Identificación del problema:} Caracterización de la fragmentación de pasarelas en Colombia y levantamiento del repositorio de parámetros técnicos.
+    \item \textbf{Definición de objetivos:} Especificación de requisitos, criterios de evaluación y diseño experimental comparativo.
+    \item \textbf{Diseño:} Modelado del dominio transaccional, especificación de puertos de la arquitectura hexagonal y contratos de adaptadores.
+    \item \textbf{Desarrollo iterativo:} Construcción del artefacto en tres iteraciones sucesivas (Iteración 1: Núcleo del SDK; Iteración 2: Adaptadores de pasarela; Iteración 3: API de Simulación y soporte de validación), con prácticas de Scrum en ciclos semanales y una definición de terminado (DoD) que se verifica en cada pull request.
+    \item \textbf{Demostración y evaluación:} Construcción de los proyectos prototípicos y medición de las seis variables del plan de evaluación, entre ellas WMC, CBO y RFC.
+    \item \textbf{Comunicación:} Elaboración de la memoria académica final, manuales técnicos y publicación del repositorio de código abierto.
+\end{enumerate}
 
-\begin{table}[htbp]
+La Tabla~\ref{tab:entregables} sintetiza los entregables clave del artefacto, los criterios y estándares de ingeniería aplicados a cada uno y la evidencia técnica que respalda su ejecución.
+
+\begin{table}[H]
 \renewcommand{\arraystretch}{1.2}
 \centering
-\begin{tabular}{|p{3.1cm}|p{4.1cm}|p{5.8cm}|}
+\begin{tabular}{|p{3.0cm}|p{4.4cm}|p{6.8cm}|}
 \hline
 \textbf{Entregable} &
-  \textbf{Criterios / estándares aplicados} &
-  \textbf{Justificación y evidencia} \\ \hline
-SDK unificado & Completar desde SPMP/SRS y decisiones aprobadas & Código, pruebas y documentación del SDK. \\ \hline
-API de Simulación & Completar desde SAD/SRS; diferenciar `/v1/sim` de `/v1/api` & Código, contratos y pruebas reproducibles. \\ \hline
-Datos de prueba & Citar fuentes oficiales y nivel de evidencia por dato & Documentación de Wompi, Mercado Pago, Kushki y Rapyd. \\ \hline
-Prototipos y evaluación & Aplicar el protocolo aprobado de Fase 5, si está ejecutado & No registrar cifras hasta contar con informe y evidencia. \\ \hline
+  \textbf{Criterios y estándares aplicados} &
+  \textbf{Justificación y evidencia técnica} \\ \hline
+SDK unificado &
+  Arquitectura Hexagonal, TypeScript en modo estricto, inmutabilidad monetaria (ISO 4217), pruebas unitarias con Jest (cobertura $\ge 80\%$). &
+  Código fuente en \texttt{sdk/src/} y \texttt{sdk/src-browser/}: fachada unificada, adaptadores para las cuatro pasarelas y verificación de webhooks probada con vectores calculados de forma independiente. \\ \hline
+API de Simulación &
+  Fastify, esquemas OpenAPI 3.0 validados (\texttt{swagger-parser}), desacoplamiento de estado en memoria y escenarios elegidos por cabecera (\texttt{x-simulator-scenario} o \texttt{x-simulate-scenario}), datos de prueba o montos reservados. &
+  Servidor reproducible en \texttt{simulator-api/}, con doble superficie: simulación de proveedores (\texttt{/v1/sim/*}) y servicio REST unificado (\texttt{/v1/api}). \\ \hline
+Corpus de datos de prueba &
+  Nivel de evidencia declarado por dato: medido contra la API real con fecha, medido solo hasta cierto punto del flujo, o tomado de la documentación oficial sin comprobar (\path{docs/testing-data/README.md}, sección 3). &
+  Directorio \texttt{docs/testing-data/} con credenciales verificadas y conjuntos de datos para pruebas automatizadas y reproducibles. \\ \hline
+Proyectos prototípicos y evaluación &
+  Seis variables del plan de evaluación, entre ellas las métricas de Chidamber y Kemerer (1994) calculadas con \texttt{ts-morph} y adaptadas a nivel de archivo. &
+  Prototipos B (con el SDK) y D (integración directa) en \texttt{prototypes/}, medidos con \texttt{sdk/scripts/ck-metrics.ts}; mediciones en \texttt{docs/evaluation/}. \\ \hline
 \end{tabular}
 \caption{Entregables, criterios aplicados y evidencia}
 \label{tab:entregables}
