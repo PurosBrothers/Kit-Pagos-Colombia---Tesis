@@ -18,12 +18,12 @@ Lo que **no** hace está en [la sección 4](#4-los-límites-del-producto), y no 
 
 | Forma | Qué es | Cuándo usarla | Referencia |
 |---|---|---|---|
-| **SDK** | El paquete [`kit-pagos-colombia`](https://www.npmjs.com/package/kit-pagos-colombia) en Node.js | Va a integrar en su backend y quiere los tipos y el manejo de errores del SDK | [`sdk/README.md`](../../sdk/README.md) |
+| **SDK** | El paquete [`kit-pagos-colombia`](https://www.npmjs.com/package/kit-pagos-colombia) en Node.js | Va a integrar en su backend y quiere los tipos y el manejo de errores del SDK | [`referencia/sdk.md`](referencia/sdk.md) |
 | **Módulo de navegador** | `kit-pagos-colombia/browser`, el mismo paquete con otro punto de entrada | Necesita tokenizar la tarjeta sin que el número toque su servidor | [`sdk/README.md`](../../sdk/README.md), §2.1 |
 | **API REST** | `/v1/api` sobre HTTP | Quiere cobrar sin instalar nada, desde otro lenguaje o desde un servicio externo | [`referencia/api-rest.md`](referencia/api-rest.md) |
 | **API de Simulación** | `/v1/sim`, cuatro pasarelas simuladas | Necesita probar rechazos, pendientes y PSE de punta a punta, sin sandbox ni internet | [`referencia/api-simulacion.md`](referencia/api-simulacion.md) |
 
-Y una quinta pieza que no es código: los **datos de prueba**, que son lo que vuelve ejecutables a las otras cuatro. Sin saber qué tarjeta aprueba en Wompi o qué `bankId` acepta Kushki, no hay nada que probar: [`docs/testing-data/`](../testing-data/).
+Y una quinta pieza que no es código: los **datos de prueba**, que son lo que vuelve ejecutables a las otras cuatro. Sin saber qué tarjeta aprueba en Wompi o qué `bankId` acepta Kushki, no hay nada que probar: [`referencia/datos-de-prueba.md`](referencia/datos-de-prueba.md).
 
 ---
 
@@ -57,18 +57,17 @@ Esto es lo que Kit Pagos **no** resuelve. Verificado contra el código, no copia
 
 ---
 
-## 5. Estado del manual
+## 5. Qué hay escrito
 
-Este directorio se escribe por partes. Lo que sigue es el mapa de lo que tiene que existir, no una promesa de que ya existe.
+| Documento | Qué cubre |
+|---|---|
+| [Tutorial: primer pago](tutoriales/primero-pago-simulado.md) | De cero a un cobro aprobado, uno rechazado y un PSE, contra el simulador local |
+| [Referencia del SDK](referencia/sdk.md) | Construcción, las cuatro operaciones, los tipos del dominio, el módulo de navegador y los trece errores |
+| [Referencia de la API REST](referencia/api-rest.md) | Los cinco endpoints de `/v1/api`, las credenciales por cabecera y el mapeo de errores a estados HTTP |
+| [Referencia de la API de Simulación](referencia/api-simulacion.md) | Las 35 rutas, cómo se elige el escenario, los webhooks salientes y los límites de fidelidad |
+| [Referencia de datos de prueba](referencia/datos-de-prueba.md) | Qué tarjeta, qué banco y qué documento usar en cada pasarela, con su nivel de evidencia |
 
-| Tema | Cubre | Estado |
-|---|---|---|
-| **El SDK** | Instalación, configuración, las cuatro operaciones públicas, los trece códigos de error, la tokenización en el navegador | Pendiente. Hoy la referencia de facto es [`sdk/README.md`](../../sdk/README.md) |
-| **La API REST** | Cómo cobrar por HTTP sin instalar la librería, autenticación por cabeceras, mapeo de errores a códigos HTTP | **Escrito:** [`referencia/api-rest.md`](referencia/api-rest.md) |
-| **La API de Simulación** | Cómo levantarla, qué simula cada ruta, cómo se elige el escenario, hasta dónde llega su fidelidad | **Escrito:** [`referencia/api-simulacion.md`](referencia/api-simulacion.md) |
-| **Los datos de prueba** | Qué tarjeta, qué banco y qué documento usar en cada pasarela, y qué nivel de evidencia tiene cada dato | Pendiente como documento de producto. La fuente ya existe: [`testing-data/README.md`](../testing-data/README.md) |
-
-Mientras un tema diga «pendiente», el enlace de la derecha es la mejor fuente disponible, aunque esté escrita con voz de tesis.
+Los ejemplos de TypeScript de estos documentos **compilan en cada pull request**: `npm run check:readme` en `sdk/` los verifica contra el paquete construido, igual que hace con el README del SDK.
 
 ---
 

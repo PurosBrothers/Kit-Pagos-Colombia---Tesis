@@ -88,14 +88,18 @@ Tres reglas para el material nuevo:
 
 ---
 
-## 6. Qué falta, y en qué orden
+## 6. En qué orden se escribió
 
 | Orden | Tema | Por qué en ese orden |
 |---|---|---|
-| 1 | **La API REST** | Es el hueco más grande: hoy solo existe el OpenAPI generado, que dice qué campos acepta pero no cómo se usa. Es también lo que hace que el producto sirva fuera de Node.js |
-| 2 | **La API de Simulación** | Sin esto, quien integra no puede probar nada antes de tener credenciales de sandbox, y no hay ningún documento de producto que lo explique |
-| 3 | **El SDK** | Hay material y es bueno: [`sdk/README.md`](../../sdk/README.md) cubre instalación, las cuatro operaciones, los errores y los webhooks. Lo que falta es clasificarlo en los cuatro tipos y sacarlo de las 688 líneas que hoy lo mezclan todo |
-| 4 | **Los datos de prueba** | La fuente ya existe y está medida; lo que falta es la vista de producto sobre ella |
+| 1 | **La API REST** | Era el hueco más grande: solo existía el OpenAPI generado, que dice qué campos acepta pero no cómo se usa. Es también lo que hace que el producto sirva fuera de Node.js |
+| 2 | **La API de Simulación** | Sin esto, quien integra no puede probar nada antes de tener credenciales de sandbox, y no había ningún documento de producto que lo explicara |
+| 3 | **El SDK** | Había material y era bueno: [`sdk/README.md`](../../sdk/README.md) cubría instalación, las cuatro operaciones, los errores y los webhooks. Lo que faltaba era clasificarlo y sacarlo de las 688 líneas que mezclaban todo |
+| 4 | **Los datos de prueba** | La fuente ya existía y estaba medida; faltaba la vista de producto sobre ella |
+
+Los cinco documentos —incluido el tutorial— están escritos. Cuando se agregue uno nuevo, el orden de la tabla sigue sirviendo como criterio: primero lo que nadie puede deducir del código, después lo que reescribe material que ya existe.
+
+**Todo lo que se agregue con código entra en la guarda.** `npm run check:readme` recorre el README del SDK y todos los `.md` de este directorio, y compila sus bloques TypeScript contra el paquete construido; el `CI` lo ejecuta en cada pull request.
 
 ---
 

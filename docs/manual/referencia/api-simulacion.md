@@ -21,8 +21,10 @@ Escucha en `http://localhost:3000`. Desplegado, en [`https://kit-pagos-colombia.
 **Para que el SDK lo use:**
 
 ```typescript
+import { KitPagos, Gateway } from "kit-pagos-colombia";
+
 // Local: es el ambiente por omisión, no hace falta configurar nada.
-const sdk = new KitPagos({ gateway: Gateway.WOMPI, credentials: { /* ... */ } });
+const sdk = new KitPagos({ gateway: Gateway.WOMPI, credentials: {} });
 
 // Desplegado en Render: se apunta con baseUrl.
 const sdkRemoto = new KitPagos({
