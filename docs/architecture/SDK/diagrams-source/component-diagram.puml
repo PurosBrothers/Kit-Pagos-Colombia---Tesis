@@ -19,7 +19,7 @@ rectangle "SDK Kit Pagos Colombia (Paquete npm / TypeScript)\n[container]" as Sy
 
   rectangle "**Response Normalizer**\n<i>[Application Service]\nTypeScript</i>\n\nDespacha en un normalizador\npor pasarela, que mapea\nestados nativos a\nTransactionStatus y construye\nla entidad Transaction" as Normalizer #2E75B6
   rectangle "**Retry Handler**\n<i>[Resilience Utility]\nTypeScript</i>\n\nReintentos con backoff\nexponencial ante errores\ntransitorios" as Retry #2E75B6
-  rectangle "**Error Handler**\n<i>[Application Service]\nTypeScript</i>\n\nConvierte errores nativos\nen SdkError tipado con\nSdkErrorCode. Se divide por\nforma del error, no por\npasarela" as ErrorHandler #2E75B6
+  rectangle "**Error Handler**\n<i>[Application Service]\nTypeScript</i>\n\nConvierte errores nativos\nen KitPagosError tipado con\nKitPagosErrorCode. Se divide por\nforma del error, no por\npasarela" as ErrorHandler #2E75B6
   rectangle "**Webhook Verifier**\n<i>[Domain Service]\nTypeScript</i>\n\nDespacha en un manejador\npor pasarela, que verifica la\nfirma criptografica\n(SHA-256, HMAC) y construye\nel WebhookEvent" as Webhook #2E75B6
   rectangle "**Transaction Entity**\n<i>[Domain Entity]\nTypeScript</i>\n\nEncapsula estado unificado,\nmontos, autorizacion y\ndatos del pagador" as Transaction #FFE0B2
 
@@ -41,7 +41,6 @@ Facade --> Configurator : Usa entorno
 Facade --> Factory : Solicita adapter
 Facade --> Retry : Envuelve llamada
 Facade ..> Webhook : Valida webhook
-Facade --> Normalizer : Normaliza respuesta
 Factory ..> Port : Instancia
 
 WompiAdapter ..|> Port

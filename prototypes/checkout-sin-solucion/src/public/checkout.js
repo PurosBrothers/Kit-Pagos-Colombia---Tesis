@@ -2,7 +2,7 @@
 // ninguna pasarela: lo único de pagos que usa es `tokenizeCard()`, que pone el módulo de pagos
 // en /payments/client.js.
 
-const CART_KEY = "kit-pagos-prototipo-a:cart";
+const CART_KEY = "kit-pagos-prototipo-d:cart";
 const MAX_QUANTITY = 9;
 const POLL_INTERVAL_MS = 2500;
 const POLL_ATTEMPTS = 8;

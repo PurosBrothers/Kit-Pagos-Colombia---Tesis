@@ -13,9 +13,9 @@ rectangle "**Desarrollador Junior/Senior**\n\nIntegra pasarelas de pago\nen su a
 rectangle "**Tester / QA**\n\nValida flujos de pago en\nentornos controlados" as QA #1F4E79
 
 rectangle "Kit Pagos Colombia\n[system]" as System #FFFFFF {
-  rectangle "**SDK Kit Pagos Colombia**\n<i>[TypeScript / Node.js 18+\nPaquete npm]</i>\n\nExpone interfaz unificada\npara crear pagos, consultar\nestados y validar webhooks.\nImplementa arquitectura\nhexagonal con adaptadores\ninternos por pasarela\n(Wompi, Rapyd, Mercado\nPago, Kushki). En modo\nsimulacion redirige las\nsolicitudes a la API de\nSimulacion" as SDK #2E75B6
+  rectangle "**SDK Kit Pagos Colombia**\n<i>[TypeScript / Node.js 18+\nPaquete npm]</i>\n\nExpone interfaz unificada\npara crear pagos, consultar\nestados, listar bancos PSE\ny validar webhooks.\nImplementa arquitectura\nhexagonal con adaptadores\ninternos por pasarela\n(Wompi, Rapyd, Mercado\nPago, Kushki). En modo\nsimulacion redirige las\nsolicitudes a la API de\nSimulacion" as SDK #2E75B6
   rectangle "**Documentacion Centralizada**\n<i>[Markdown / GitHub Pages\nRepositorio publico]</i>\n\nCarpeta de archivos\nestaticos desplegada en\nGitHub Pages. Consolida\ndatos de prueba por\npasarela y la especificacion\nOpenAPI 3.0 de la API de\nSimulacion" as Docs #2E75B6
-  rectangle "**API de Simulacion**\n<i>[Fastify / Node.js 18+\nDesplegada en Render —\nURL publica HTTPS]</i>\n\nServicio REST desplegado de\nforma independiente que\nreplica el comportamiento de\nlas cuatro pasarelas de\nprueba para escenarios\ncontrolados. Incluye motor\nde escenarios, fabricas de\nrespuestas por pasarela,\ngenerador de firmas\ncriptograficas, endpoint de\ntrigger de webhooks y\ndocumentacion OpenAPI 3.0\nen /docs" as SimAPI #2E75B6
+  rectangle "**API de Simulacion**\n<i>[Fastify / Node.js 18+\nDesplegada en Render —\nURL publica HTTPS]</i>\n\nServicio REST desplegado de\nforma independiente que\nreplica las cuatro pasarelas\ny expone la API REST (/v1/api).\nIncluye fabricas de\nrespuestas, generador de\nfirmas criptograficas,\nendpoint de trigger de\nwebhooks y OpenAPI 3.0\nen /docs" as SimAPI #2E75B6
 }
 
 rectangle "**Wompi API**\nAPI REST de pagos —\nBancolombia" as WompiAPI #A9A9A9

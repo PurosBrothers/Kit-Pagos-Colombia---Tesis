@@ -8,25 +8,30 @@ skinparam LifeLineBorderColor #666666
 participant "Comercio\n(Backend)" as Comercio
 participant "SDK KitPagos" as SDK
 participant "Simulator API\n(Fastify)" as SimAPI
-participant "Scenario Engine" as Engine
+participant "GatewayMockFactory" as MockFactory
+participant "TransactionStore" as Store
 
 Comercio -> SDK : createPayment(CreatePaymentRequest)
-SDK -> SimAPI : POST /simulate/{gateway}/payments\n(GatewayCreateTransactionRequest)
-SimAPI -> Engine : resolveScenario(orderReference, gateway)
-note right of Engine
-  orderReference codifica el escenario,
-  ej. sufijo "-SUCCESS"
-end note
-Engine --> SimAPI : payload nativo de exito
-SimAPI --> SDK : GatewayCreateTransactionResult\n(rawStatus nativo + rawGatewayResponse)
-SDK -> SDK : normalizar rawStatus -> transactionStatus
-SDK --> Comercio : CreatePaymentResult{transactionStatus: APPROVED}
+SDK -> SimAPI : POST /v1/sim/{gateway}/payments\n(Auth + Body nativo de la pasarela)
+SimAPI -> MockFactory : buildApprovedResponse(gateway, request)
+MockFactory -> MockFactory : Genera payload nativo\n(Wompi: {data:{id,status:"APPROVED"}},\nMercado Pago: {id,status:"approved"},\nRapyd: {data:{id,status:"CLO",paid:true}},\nKushki: {ticketNumber,details:{transactionStatus:"APPROVAL"}})
+MockFactory -> Store : save(gatewayTransactionId, payload)
+Store --> MockFactory : OK
+MockFactory --> SimAPI : payload nativo
+SimAPI --> SDK : HTTP 201 / 200 (payload nativo)
+SDK -> SDK : ResponseNormalizer.normalize(payload, gateway)
+SDK --> Comercio : PaymentResult(TRANSACTION: status=APPROVED)
 
-note right of Engine
-  Wompi: data.transaction.status="APPROVED"
-  Rapyd: data.status="CLO" (data.paid=true)
-  Mercado Pago: status="approved" (minusculas)
-  Kushki: transaction_status="APPROVAL" (!) no "APPROVED"
+note over Comercio, Store
+  Para Wompi (punto 50): el simulador crea en PENDING
+  y resuelve a APPROVED en la primera consulta de estado,
+  reflejando el comportamiento asincrono de la pasarela real.
+  Para Mercado Pago con PSE: devuelve REDIRECT_REQUIRED
+  con redirectUrl; la consulta posterior por el id
+  ORD... devuelve APPROVED.
+  Para Rapyd con tarjeta: devuelve REDIRECT_REQUIRED
+  al hosted checkout; simula el pago y la consulta
+  devuelve APPROVED.
 end note
 
 @enduml

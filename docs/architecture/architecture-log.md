@@ -3656,6 +3656,71 @@ Capturas en `.cursor/evidencia/155-final/`.
 
 **Estado:** Resuelto. El workflow publicó la 0.6.0 como `latest` cuando el #155 llegó a `main`. El PR de la rama `109-sdk-060` pasó a ella el simulador, D, B y la tienda, con sus pruebas y el `check:sri` de la tienda en verde, y con él se cierra el #109. Render despliega `devops` con cada integración.
 
+### 109. Los schemas de las rutas de simulación validan y documentan, pero no reescriben la petición ni la respuesta (issue #106, PR #137)
+
+**Responsable:** David (issue #106, los schemas) y Orduz (la revisión y sus arreglos, en el mismo PR).
+
+**Contexto.** El #106 pide colgar un `schema` de Fastify de las rutas de simulación de Wompi y Mercado Pago, para que `/docs` las documente y Fastify rechace una petición malformada antes del handler, sin cambiar el comportamiento observable: `npx jest` completo, sin tocar las pruebas existentes. El PR #137 tenía un conflicto con `devops` en `routes/wompi.ts`, porque `devops` había quitado la página de banco propia de Wompi (#109) junto a un comentario que el PR borraba. Por el conflicto, la CI no corría sobre el PR. Sin la mezcla fallaban 15 de 1029 pruebas, y al día con `devops`, 27 de 1234.
+
+**Lo que encontró la revisión (19 de octubre de 2026).**
+
+1. **Fastify reescribe la respuesta con el schema.** Serializa con `fast-json-stringify`, que quita los campos no declarados y convierte los valores al tipo declarado. Se perdían `status_message` en la consulta de Wompi, y `external_reference`, `data`, `capture_mode` y `config` en las órdenes de Mercado Pago; `details` pasaba de lista a texto.
+2. **Fastify también reescribe la petición.** Ajv convierte tipos, rellena valores por omisión y quita los campos que un `additionalProperties: false` no admite. El cuerpo de la transacción de Wompi lo tenía.
+3. **Un `required` del schema se adelanta a la respuesta medida.** Fastify valida antes del handler y responde su `400 INVALID_REQUEST`. Así, una orden de tarjeta sin `payment_method.id` dejaba de recibir el `400 required_properties` de Mercado Pago. El schema de la orden se escribió cuando `/orders` solo atendía PSE; desde el punto 96 atiende también la tarjeta.
+4. **Cambió una regla medida.** `sendsPrivateKey` pasó de `Bearer prv_` a `Bearer priv_`. Las llaves privadas de Wompi empiezan por `prv_`, y la consulta con una llave privada inexistente respondía `200` en vez del `403` medido.
+5. **Las validaciones medidas estaban duplicadas** en un `preValidation` y en el handler de cuatro rutas. La copia de `/payments` se saltaba la credencial inválida, que el handler revisa antes del token.
+6. **Se habían borrado 37 líneas de comentarios** de `wompi.ts`, con lo medido en el sandbox.
+
+**Decisión de Joan (19 de octubre de 2026):** arreglarlo en la rama de David, en commits aparte del suyo.
+
+**Lo que cambió.**
+
+- **`routes/schemas/compileSchemasAsIs.ts`.** Cada plugin de rutas de simulación valida con un Ajv que no convierte tipos, no rellena valores y no quita campos, y serializa con `JSON.stringify`. Los compiladores quedan en el contexto del plugin, así que `/v1/api` conserva los de Fastify. `ajv` y `ajv-formats` pasan a ser dependencias declaradas del simulador; ya estaban instalados como dependencias de Fastify.
+- **Cada validación medida corre una vez, antes del schema y en el orden de antes.** Pasan del handler a `preValidation` las que el schema marca obligatorias:
+  - en `/payments`, la llave de idempotencia, la credencial, el token y las cuotas;
+  - en la tokenización de Wompi, `Authorization`, y en la de Mercado Pago, `public_key`;
+  - en la transacción de Wompi, el método de pago, el token de aceptación y la firma.
+- **En `POST /v1/sim/mercadopago/orders` el schema documenta y no rechaza** (`attachValidation`). Mercado Pago revisa primero la llave, después la credencial y la reserva de la llave, y el cuerpo al final. La reserva no puede pasar a un hook, porque se libera al terminar el cobro.
+- **`prv_` y los comentarios, restaurados.**
+- **La orden de tarjeta y sus dos lecturas, documentadas.** El schema de `/orders` describe PSE y tarjeta, con un ejemplo copiado del simulador. `GET /card_tokens/:id` y `GET /payment_methods/search` (punto 96) tienen schema.
+
+**Alternativas descartadas.**
+
+- *Declarar cada objeto de respuesta con `additionalProperties: true`.* `fast-json-stringify` seguiría convirtiendo tipos, y cada campo nuevo del handler tendría que entrar también al schema para no perderse.
+- *Que ninguna ruta de simulación valide (`attachValidation` en todas).* Es lo más simple, pero deja sin cumplir el criterio del #106 de que Fastify rechace una petición malformada. Solo `/orders` lo necesita.
+
+**Lo medido** (19 de octubre de 2026, sobre la rama al día con `devops`).
+
+- **Pruebas:** 53 suites y 1239 pruebas. Cinco son nuevas: tres de `compileSchemasAsIs` (dejarlo sin efecto pone dos en rojo), la de la orden de tarjeta en `/docs` y la validación de OpenAPI.
+- **Cobertura:** sentencias 97,14 % y ramas 88,98 %.
+- **Lint, tipos y métricas:** lint y tipos en verde, y las 28 clases dentro de los umbrales CK.
+- **Postman:** con Newman, 42 de 42 peticiones y 47 de 47 aserciones.
+- **OpenAPI:** la especificación de `/docs/json` es válida como OpenAPI 3.0.3. Una prueba de `openapi.test.ts` la valida con `@apidevtools/swagger-parser` 12 en cada corrida, y falla si un schema trae un `type` inválido.
+- **Cuántas rutas:** tienen schema 16 operaciones: las 10 del #106, las dos tokenizaciones con sus preflights y las dos lecturas nuevas. No lo tienen las tres páginas HTML que lee una persona: `/wompi/pse/redirect`, `/wompi/terms` y la página de banco de Mercado Pago.
+
+**Al integrar `devops` (4 de noviembre de 2026).** Después del #183, que agregó los schemas de Kushki y Rapyd con la misma `compileSchemasAsIs`, el PR volvió a tener conflictos con `devops` en cinco archivos. Se integró sin perder ningún lado: `compileSchemasAsIs.ts` lo habían creado los dos con el mismo código; `@apidevtools/swagger-parser` queda en la 10.0.3 que fijó el #183, y la validación de OpenAPI del PR pasa con ella; `openapi.test.ts` conserva las pruebas de los dos.
+
+**Lo que faltaba para cerrar el #106.** Una prueba nueva, `simulation-schemas-match-responses.test.ts`, pasa por cada ruta de Wompi y Mercado Pago las peticiones del SDK y del prototipo D, los rechazos, los escenarios y las fallas técnicas, y exige que cada respuesta tenga su código declarado y cumpla su schema sin campos de más. Sobre el merge fallaron 36 de sus 39 casos:
+
+1. **Faltaban códigos** que el handler responde. En Wompi, 401 y 409 en la creación, 403 en la consulta y 404 en `merchants`; en Mercado Pago, 401 en las consultas, en `/orders` y en `payment_methods`. En las dos, las fallas técnicas de la creación (429, 500, 502, 503 y 504, y el 200 de `MALFORMED_*`), las de la consulta que pide el monto (500, 503 y 504) y las de la lista de bancos (500 y 503).
+2. **Faltaban campos** que el simulador devuelve: `payment_method.installments` en Wompi, y `external_reference`, `capture_mode` y `config` en la consulta de la orden. Con `compileSchemasAsIs` llegaban al cliente; faltaban en `/docs`.
+3. **Los ejemplos de creación y consulta estaban escritos a mano**, contra el criterio del #106: los de Wompi sin `payment_method` y con el UUID de ejemplo del RFC 4122, y el del cuerpo sin la `signature` que su propio schema exige. Se reemplazaron por la salida del simulador, con la secuencia del PSE de Wompi: la creación sin URL, la primera consulta con la URL y la segunda resuelta.
+4. **Las etiquetas `Wompi Simulación` y `Mercado Pago Simulación` no estaban declaradas** en `register.ts`, y `/health` pasaba de `Diagnóstico` a una `Infraestructura` sin declarar.
+
+**Un defecto que apareció al declarar los códigos.** Con el 500 declarado en la creación de Wompi, `wompi.test.ts` falló: una excepción del motor respondía `500 {}`. Si la ruta declara el código, Fastify serializa el error que nadie respondió con el serializador de la ruta (`lib/error-handler.js`), y `JSON.stringify` lo deja vacío porque sus propiedades no son enumerables. Ya pasaba en el PR con el 400 de un JSON roto en `POST /payments`. Ahora `compileSchemasAsIs` serializa ese error con el cuerpo que Fastify arma cuando la ruta no declara el código, y una prueba compara las dos rutas.
+
+*Alternativa descartada:* no declarar los 5xx. Dejaba incompleta la documentación que pide el #106 y no arreglaba el 400 de `/payments`.
+
+**Lo medido** (4 de noviembre de 2026, sobre el árbol final, con Node 22.23.4).
+
+- **Pruebas:** 54 suites y 1301 pruebas. Quitar del schema el 409 de Wompi y el `external_reference` de la consulta de la orden pone cuatro casos de la prueba nueva en rojo; volver a `JSON.stringify` a secas pone en rojo la del serializador.
+- **Cobertura:** sentencias 97,25 % y ramas 89,16 %.
+- **Lint, tipos y métricas:** lint y tipos en verde, y las 28 clases del simulador dentro de los umbrales CK.
+- **OpenAPI:** válida con `@apidevtools/swagger-parser` 10.0.3. De 43 operaciones, 7 no tienen schema: las cinco páginas que lee una persona (bancos simulados y términos de Wompi), `POST /v1/sim/kushki/card/v1/tokens` y `POST /v1/sim/webhooks/trigger`.
+- **Node 20**, el de la CI, no se probó en local.
+
+**Estado:** Resuelto en el PR #137 para Wompi y Mercado Pago. Con el #105 y el #107, el RF-13 pasa a `Implementado`, con las 7 operaciones sin schema como límite declarado.
+
 ### 110. El prototipo D se presenta como «La Candelaria Cómics», y su vitrina queda fuera de la regla de paridad (issue #150, PR #161)
 
 **Responsable:** Orduz (la vitrina y la revisión del PR #161). El módulo de pagos de D es de David y no se toca.
@@ -4247,7 +4312,39 @@ Así, los paneles se configuran una sola vez. Se descartaron dos opciones:
 
 El plan está en `prototypes/README.md`, «Los webhooks reales, en vivo». Kushki se muestra con el simulador local, por decisión de Joan del mismo día.
 
-**Estado:** El origen nuevo quedó medido en las cuatro pasarelas, con B, C y D. Falta ensayar el plan de los webhooks en vivo: Joan crea la cuenta de ngrok y registra su dominio en los paneles de Wompi, Mercado Pago y Rapyd.
+**El ensayo del plan (#165).** Joan creó su cuenta gratuita de ngrok y registró el dominio en los tres paneles. Los ids de cada orden y la traza están en los comentarios de resultados del #165.
+
+- **ngrok sin Homebrew.** La máquina del ensayo no tenía Homebrew. Se instaló el binario oficial de ngrok.com para macOS en `~/bin`, sin `sudo`, y se comprobó la firma de Apple: «Developer ID Application: ngrok, Inc. (TEX8MHRDQ9)». La versión fue la 3.39.13.
+- **El dominio** asignado termina en `.ngrok-free.dev`, y no en `.ngrok-free.app` como decía el README. `ngrok http 4000` lo usa sin indicarlo.
+- **Kushki con el simulador local** (29 de octubre de 2026, hora de Colombia), en A, B y D:
+  - la tarjeta nace aprobada y el simulador solo emite cuando un pago cambia de estado, así que su aviso se disparó con `POST /v1/sim/webhooks/trigger`;
+  - el PSE pasó a `approvedTransaction` en la primera consulta, y el simulador avisó solo;
+  - los dos casos dejaron `webhook: APPROVED` con su estado nativo, y la tienda respondió 200.
+
+  El `.env` no traía `KUSHKI_WEBHOOK_SECRET`, que el simulador y las tiendas necesitan iguales para firmar y verificar. Ahora el `.env` de Joan lleva un valor.
+- **Los webhooks reales**, el 2 de noviembre de 2026 entre las 01:50 y las 02:28 (hora de Colombia), con cada prototipo en el puerto 4000 detrás del túnel:
+
+  | | Wompi, tarjeta | Mercado Pago, tarjeta | Rapyd, tarjeta en su página | Rapyd, PSE |
+  |---|---|---|---|---|
+  | B | `APPROVED` | `APPROVED (processed)` | un `PENDING (ACT)` y dos `APPROVED (CLO)` | `PENDING (ACT)` y `APPROVED (CLO)` |
+  | D | `APPROVED` | `APPROVED (processed)` | dos `PENDING (ACT)` y un `APPROVED (CLO)` | `PENDING (ACT)` y `APPROVED (CLO)` |
+  | A | `APPROVED` | `APPROVED (processed)` | un `PENDING (ACT)` y dos `APPROVED (CLO)` | no se probó |
+
+  El inspector de ngrok registró 19 avisos, todos con `200`. Las notificaciones de Mercado Pago vinieron de la aplicación del vendedor de prueba (`…0415`) y verificaron con la clave del `.env`. La página de advertencia del plan gratuito no se interpuso: los avisos llegaron con el agente de cada pasarela (`Faraday`, `MercadoPago WebHook v1.0 order`, `axios`), no con el de un navegador.
+- **En la red de la sustentación**, el mismo 2 de noviembre entre las 13:24 y las 13:28, con B, el mismo túnel y los mismos paneles:
+  - Wompi llegó como `APPROVED`, Mercado Pago como `APPROVED (processed)`, y la tarjeta de Rapyd como un `PENDING (ACT)` y dos `APPROVED (CLO)`;
+  - el inspector registró 5 avisos, todos con `200`;
+  - `localtest.me`, los sandboxes, Render y el agente de ngrok respondieron igual que en la red de Joan.
+
+Lo que no estaba en el plan:
+
+- **Desde la máquina del ensayo no se abre la URL pública.** `curl` a esa URL termina en `Connection reset by peer` durante el TLS. Desde afuera la misma URL responde, y los avisos entraron porque vienen de los servidores de cada pasarela. Pasó igual en la red de Joan y en la de la sustentación, así que lo más probable es que lo corten los controles corporativos de la máquina, y no la red. No se comprobó desde otra máquina. Mientras tanto, la URL pública no se puede abrir en el navegador de esa máquina.
+- **B y D precargan la tarjeta 4242 para las cuatro pasarelas.** Para Mercado Pago hay que escribir la suya (4013 5406 8274 6260, `APRO Ruiz`); A la cambia sola.
+- **El simulador escribía en su log las credenciales nativas de Kushki.** Su serializador solo ocultaba `authorization` y las cabeceras `x-gateway-*`, y Kushki manda las suyas como `Private-Merchant-Id` y `Public-Merchant-Id`: el log del ensayo las guardó con su valor. Joan decidió arreglarlo en el mismo PR con una lista de cabeceras permitidas (`LOGGABLE_HEADERS`): el log solo escribe con su valor las cabeceras inofensivas conocidas y oculta las demás, también las de una pasarela futura.
+  - Se descartó ampliar la lista de prohibidas, `SENSITIVE_HEADERS`. La ruta de webhooks de la API REST la usa para quitar las credenciales antes de verificar una firma, y agregar ahí `access_key` o `signature`, de Rapyd, habría roto esa verificación.
+  - Los logs de Render no se revisaron. Si alguien usó Render en modo simulador con las llaves de UAT de Kushki, pueden estar ahí, y también el `access_key` de Rapyd, que el log viejo tampoco ocultaba. La revisión queda en el #188, para Joshua, que tiene el acceso al panel de Render.
+
+**Estado:** El origen nuevo quedó medido en las cuatro pasarelas, con B, C y D. El plan de los webhooks en vivo quedó ensayado con A, B y D (#165), también en la red de la sustentación con B, y el log del simulador se corrigió en el mismo PR. Falta revisar los logs de Render (#188).
 
 ### 121. Las notificaciones de Mercado Pago en sandbox las firma la aplicación del vendedor de prueba (PR #162)
 
@@ -4434,7 +4531,13 @@ Los webhooks reales del sandbox no se midieron en A; en B y D sí (punto 121). S
 
 **Lo que agregó Joshua el 25 de octubre de 2026** (`3d48f31`): al elegir la pasarela, la página precarga su tarjeta aprobada, y en Mercado Pago, el titular `APRO Ruiz`, que es el que aprueba. La revisión le quitó un segundo `listener` del selector, que duplicaba el del formulario y pedía dos veces los bancos de PSE.
 
-**Estado:** Resuelto en la rama del #163 y medido. A entra en la matriz de prototipos de `.github/workflows/ci.yml` en el mismo PR, y lo aprueba Henao. Los webhooks reales de A quedan para el #165.
+**Estado:** Resuelto en la rama del #163 y medido. A entra en la matriz de prototipos de `.github/workflows/ci.yml` en el mismo PR, y lo aprueba Henao. Los webhooks reales de A se ensayaron el 2 de noviembre de 2026 por el dominio de ngrok (#165, punto 120), y A se comportó como B:
+
+- Wompi dejó `webhook: APPROVED`;
+- Mercado Pago dejó `webhook: APPROVED (processed)`;
+- la tarjeta de Rapyd dejó un `PENDING (ACT)` y dos `APPROVED (CLO)`, los tres encontrados por la referencia de la orden.
+
+Kushki se probó con el simulador local.
 
 ### 124. Las letras de los prototipos: A es el del SDK solo en el servidor, y D el que no usa la solución (PR #163)
 
@@ -4476,7 +4579,9 @@ Las listas de letras quedaron en orden («B y D»), salvo las que se emparejan c
   - el plan de evaluación, la guía de medición, la metodología y los objetivos de la tesis, cuya tabla de prototipos se reordenó de A a D y corrigió la fila de A, que seguía «por construir»;
   - este registro.
 
-**Estado:** Resuelto en el #163.
+**Lo que quedó cruzado** lo encontró el ensayo del #165: las claves del carrito en `localStorage`. A usaba `kit-pagos-prototipo-d:cart` y D usaba `kit-pagos-prototipo-a:cart`. No chocaban, porque son distintas, pero no correspondían a la letra. Se corrigieron en el PR del #165.
+
+**Estado:** Resuelto en el #163, y las claves del carrito en el #165.
 
 ### 125. La API de Simulación tiene dos superficies REST y tres patrones de integración (issue #108)
 

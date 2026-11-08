@@ -1,14 +1,16 @@
 # Documentos finales
 
-Fuentes LaTeX de los cuatro documentos que se entregan con el trabajo de grado. Los PDF no se
-versionan: se compilan con `latexmk` y pdfLaTeX, en local o en la CI.
+Fuentes LaTeX de los cinco documentos que se entregan con el trabajo de grado. Los PDF compilados
+(`/*/main.pdf`) no se versionan: se compilan con `latexmk` y pdfLaTeX, en local o en la CI. Los
+únicos PDF que se versionan son los originales.
 
 | Carpeta | Contenido |
 |---|---|
-| [`comun/`](comun/) | `estilo.tex`, el formato que comparten el SRS, el SAD y el plan de pruebas (portada, historial de cambios, índices, fuentes y leyendas), y `logo-javeriana.pdf`. |
+| [`comun/`](comun/) | `estilo.tex`, el formato que comparten el SRS, el SAD, el plan de pruebas y el SPMP (portada, historial de cambios, índices, fuentes y leyendas), y `logo-javeriana.pdf`. |
 | [`srs/`](srs/) | Especificación de Requisitos de Software. El contenido lo agrega el [#168](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/issues/168). |
 | [`sad/`](sad/) | Descripción de la Arquitectura del Software. El contenido lo agrega el [#170](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/issues/170). |
 | [`pruebas/`](pruebas/) | Plan de pruebas según la plantilla PTP. El contenido lo agrega el [#173](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/issues/173). |
+| [`spmp/`](spmp/) | Plan de gestión del proyecto (SPMP). `SPMP-original.pdf` es la exportación de Google Docs de mayo de 2026. El contenido lo agrega el [#190](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/issues/190). |
 | [`memoria/`](memoria/) | Memoria de grado, con su propia plantilla; no usa `comun/`. Qué va en cada capítulo está en [`estructura-documento-final.md`](estructura-documento-final.md). |
 
 ## El estilo común
@@ -60,16 +62,17 @@ Hace falta una distribución TeX Live con `latexmk`. Desde la raíz del reposito
 latexmk -pdf -interaction=nonstopmode -halt-on-error -cd docs/final-doc/srs/main.tex
 ```
 
-El PDF queda en `docs/final-doc/srs/main.pdf`, y lo mismo con `sad`, `pruebas` y `memoria`.
+El PDF queda en `docs/final-doc/srs/main.pdf`, y lo mismo con `sad`, `pruebas`, `spmp` y `memoria`.
 `latexmk -C -cd docs/final-doc/srs/main.tex` borra los archivos auxiliares. El `.gitignore` de
 esta carpeta ya los excluye, junto con los `main.pdf`.
 
 Con [TinyTeX](https://yihui.org/tinytex/), la variante por omisión (`TinyTeX-1`) no trae todo lo
 que usan estos documentos. Estos son los paquetes que hubo que agregar el 28 de octubre de 2026
-con TinyTeX v2026.10 (TeX Live 2026, `latexmk` 4.88):
+con TinyTeX v2026.10 (TeX Live 2026, `latexmk` 4.88), más `placeins` y `grfext`, que se sumaron
+después porque el SAD no compila sin ellos:
 
 ```bash
-tlmgr install babel-spanish caption carlisle enumitem fancyhdr hyphen-spanish setspace tex-gyre titlesec titling
+tlmgr install babel-spanish caption carlisle enumitem fancyhdr grfext hyphen-spanish placeins setspace tex-gyre titlesec titling
 fmtutil-sys --byfmt pdflatex
 ```
 
@@ -88,11 +91,11 @@ paquete; `tlmgr search --global --file /nombre.sty` dice cuál lo contiene.
 
 ## PDF de la CI
 
-El workflow [`final-doc.yml`](../../.github/workflows/final-doc.yml) compila los cuatro
+El workflow [`final-doc.yml`](../../.github/workflows/final-doc.yml) compila los cinco
 documentos con los mismos comandos cuando un PR hacia `devops` o `main`, o un push a esas ramas,
 cambia algo en `docs/final-doc/` o en el propio workflow. Un PR que no toca esas rutas no lo
-dispara. Los sube como el artefacto `final-doc-pdf`, con `srs.pdf`, `sad.pdf`, `pruebas.pdf` y
-`memoria.pdf`. Se descarga desde la página de la ejecución de «Final documents», en la sección
+dispara. Los sube como el artefacto `final-doc-pdf`, con `srs.pdf`, `sad.pdf`, `pruebas.pdf`,
+`spmp.pdf` y `memoria.pdf`. Se descarga desde la página de la ejecución de «Final documents», en la sección
 *Artifacts*, o con `gh run download <id-de-la-ejecución> -n final-doc-pdf`.
 
 ## Logo

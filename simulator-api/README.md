@@ -15,7 +15,7 @@ Servicio desplegado en vivo en Render: [https://kit-pagos-colombia.onrender.com]
 
 ## Documentación Interactiva OpenAPI 3.0
 
-El servicio implementa la especificación **OpenAPI 3.0.3** mediante los plugins oficiales `@fastify/swagger` y `@fastify/swagger-ui`. Los esquemas JSON validan estrictamente las peticiones antes de alcanzar los controladores y generan la documentación en tiempo de compilación/arranque sin riesgo de divergencia:
+El servicio implementa la especificación **OpenAPI 3.0.3** mediante los plugins oficiales `@fastify/swagger` y `@fastify/swagger-ui`. Los esquemas JSON validan las peticiones antes de alcanzar los controladores y generan la documentación al arrancar, sin riesgo de divergencia. En las rutas de simulación validan sin reescribir la petición ni la respuesta, para que el mock responda lo medido contra la pasarela; en `POST /v1/sim/mercadopago/orders` solo documentan (punto 109 del `architecture-log.md`):
 
 - **Swagger UI interactivo:** [`/docs`](https://kit-pagos-colombia.onrender.com/docs) (o `http://localhost:3000/docs` en local).
 - **Especificación OpenAPI en JSON:** [`/docs/json`](https://kit-pagos-colombia.onrender.com/docs/json).

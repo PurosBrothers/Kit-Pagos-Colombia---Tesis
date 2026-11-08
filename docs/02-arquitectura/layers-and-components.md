@@ -414,9 +414,9 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 con dos superficie
 ### 3.6. OpenAPI Documentation Provider (`simulator-api/src/kit-pagos-api/openapi/register.ts`, RF-13)
 
 - **Responsabilidad:** Registrar `@fastify/swagger` para generar una especificación OpenAPI 3.0.3 y `@fastify/swagger-ui` para servir la interfaz interactiva en `/docs`. La especificación también está disponible en `/docs/json` y `/docs/yaml`.
-- **Registro:** `buildApp()` registra el plugin para la aplicación Fastify completa. Las rutas de `/v1/api` declaran sus schemas en `kit-pagos-api/openapi/schemas.ts`, que Fastify usa tanto para validar solicitudes y respuestas como para generar OpenAPI. Un hook etiqueta las rutas de simulación existentes para distinguirlas en la documentación.
-- **Estado real:** la infraestructura de OpenAPI está implementada y sirve `/docs`, `/docs/json` y `/docs/yaml`; las rutas REST de Kit Pagos tienen schemas. La cobertura OpenAPI de las rutas de simulación sigue incompleta: los plugins existentes reciben etiquetas, pero no declaran schemas Fastify. Por tanto, RF-13 está parcialmente implementado mientras sigan abiertos los issues #106 y #107. La nota de la versión 1.0.0 que afirmaba que Swagger no estaba instalado ni registrado ya no describe el repositorio.
-- **Límite:** la especificación se genera a partir de los schemas y metadatos registrados en cada ruta; el plugin no sustituye la documentación manual de comportamiento que no esté expresada en ellos. En particular, los endpoints de simulación aún no tienen schemas Fastify y su documentación detallada está pendiente en #106 y #107.
+- **Registro:** `buildApp()` registra el plugin para la aplicación Fastify completa. Las rutas de `/v1/api` declaran sus schemas en `kit-pagos-api/openapi/schemas.ts`, que Fastify usa tanto para validar solicitudes y respuestas como para generar OpenAPI. Las rutas de `/v1/sim` declaran los suyos en `routes/schemas/`, uno por pasarela, con su etiqueta (`Wompi Simulación`, `Mercado Pago Simulación`, `Kushki Simulación`, `Rapyd Simulación`); un hook etiqueta `Simulación` las que no traen etiqueta propia.
+- **Estado real:** la infraestructura de OpenAPI está implementada y sirve `/docs`, `/docs/json` y `/docs/yaml`; las rutas REST de Kit Pagos y las de simulación de las cuatro pasarelas tienen schemas (#105, #106 y #107). En las rutas de simulación, `compileSchemasAsIs` valida sin convertir tipos ni quitar campos y responde lo que arma el handler (punto 109 del `architecture-log.md`). La nota de la versión 1.0.0 que afirmaba que Swagger no estaba instalado ni registrado ya no describe el repositorio.
+- **Límite:** la especificación se genera a partir de los schemas y metadatos registrados en cada ruta; el plugin no sustituye la documentación manual de comportamiento que no esté expresada en ellos. No tienen schema las páginas que lee una persona (los bancos simulados y los términos de Wompi), `POST /v1/sim/kushki/card/v1/tokens` ni `POST /v1/sim/webhooks/trigger`.
 - **Entregable formal:** la interfaz `/docs` y los documentos JSON/YAML hacen consultable la especificación de la API desde el mismo servicio.
 
 ### 3.7. Kit Pagos REST API (`simulator-api/src/kit-pagos-api/`)
@@ -425,7 +425,7 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 con dos superficie
 - **Frontera con el simulador:** el módulo vive separado de `simulator-api/src/routes/`, que conserva las rutas que imitan las APIs nativas bajo `/v1/sim/<pasarela>`. Ambos plugins se registran en la misma aplicación Fastify y comparten proceso, puerto y despliegue, pero mantienen prefijos y responsabilidades distintas.
 - **Llamada de regreso al simulador:** si el SDK no recibe un `baseUrl` explícito, su configuración de simulación apunta a `http://localhost:3000/v1/sim/<pasarela>`. Por eso una petición que entra por `/v1/api` puede salir del SDK por HTTP y volver al mismo proceso por `/v1/sim`. No es un ciclo de dependencias entre paquetes: el SDK consume el simulador por HTTP y no lo declara como dependencia. Este camino permite probar la integración completa sin instalar el SDK en un frontend ni tener credenciales de pasarela.
 - **Autenticación y credenciales:** el hook global aplica `API_AUTH_TOKEN` (o su alias `SIMULATOR_API_AUTH_TOKEN`) cuando está configurado; el resolvedor de credenciales combina las cabeceras `x-gateway-*` del cliente con el perfil del servidor según la política del módulo. `webhookSecret` no se acepta desde el cliente. CORS se registra dentro del plugin para no alterar las rutas `/v1/sim`.
-- **Schemas:** las rutas de `/v1/api` declaran schemas Fastify en `kit-pagos-api/openapi/schemas.ts`; son la fuente de validación y de la documentación OpenAPI generada. Las rutas de `/v1/sim` aún deben completar esa cobertura (#106 y #107).
+- **Schemas:** las rutas de `/v1/api` declaran schemas Fastify en `kit-pagos-api/openapi/schemas.ts`; son la fuente de validación y de la documentación OpenAPI generada. Las rutas de `/v1/sim` tienen los suyos en `routes/schemas/` (#106 y #107).
 
 ---
 
@@ -495,10 +495,14 @@ La API de Simulación es un servicio Fastify sobre Node.js 18 con dos superficie
 | **RF-09** Endpoints REST por pasarela | N/A | `HTTPRouter` (`/v1/sim/{pasarela}/*`) |
 | **RF-10** Escenarios controlados configurables | N/A: el SDK no envía cabeceras; el escenario sale de los datos que ya envía (monto, credencial, dato de prueba) | `HTTPRouter` → `resolveScenario()` → `ScenarioEngine` o la ruta de cada pasarela |
 | **RF-11** Estructura de error nativa por pasarela | `ResponseNormalizer` (campo `rawStatus`) | `GatewayMockFactory` (payload de error nativo) |
-| **RF-12** Webhook sintético hacia URL destino | `WebhookVerifier` (validación del receptor) | `webhookTriggerRoute` → `SignatureGenerator` → `WebhookDispatcher` (issue #122) |
-| **RF-13** Especificación OpenAPI 3.0 en `/docs` | `@fastify/swagger` y `@fastify/swagger-ui` | `kit-pagos-api/openapi/register.ts` y `schemas.ts`; cobertura de `/v1/sim` pendiente (#106, #107) |
+| **RF-12** Webhook sintético y emisión automática | `WebhookVerifier` (validación del receptor) | `webhookTriggerRoute` → `SignatureGenerator` → `WebhookDispatcher`; la emisión automática la dispara el estado final del pago (issue #122) |
+| **RF-13** Especificación OpenAPI 3.0 en `/docs` | `@fastify/swagger` y `@fastify/swagger-ui` | `kit-pagos-api/openapi/register.ts` y `schemas.ts`; `/v1/sim` en `routes/schemas/` (#106 en #137 y #107 en #183) |
 | **RF-14** Documentación de datos de prueba por pasarela | N/A | Documentación centralizada (repositorio) |
 | **RF-15** Comportamiento esperado por dato de prueba | `ResponseNormalizer` (mapeo de estados) | `GatewayMockFactory` (escenarios por dato) |
+| **RF-16** Exponer Kit Pagos por REST en `/v1/api` | `KitPagos` (fachada que consumen los routers) | `kit-pagos-api/` (`gateways`, `payments`, `pse-banks`, `webhooks`) → `KitPagos` |
+| **RF-17** Tokenizar la tarjeta en el navegador | `KitPagosBrowser` → `WompiTokenizer`, `MercadoPagoTokenizer` y `KushkiTokenizer`; Rapyd responde `UNSUPPORTED_OPERATION` | `tokenizationCors` y las rutas de tokenización de `/v1/sim/{wompi,mercadopago,kushki}` |
+| **RF-18** Motivo de rechazo con código y categoría | `ResponseNormalizer` → `RejectionReason` (`failureCode` + `category`) | `GatewayMockFactory` (payload nativo de rechazo por pasarela) |
+| **RF-19** Listar bancos PSE y traducir el código ACH | `KitPagos.getPseBanks()` → adaptadores; `PseBankCode` y `PseBank` | `GET /v1/api/pse-banks` → `GatewayMockFactory` (catálogo de bancos por pasarela) |
 
 ---
 

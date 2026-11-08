@@ -1,18 +1,44 @@
 \documentclass[10pt]{article}
 \input{../comun/estilo}
+\setlength{\emergencystretch}{3em}
+\usepackage{longtable}
+\usepackage[section]{placeins}
 
 \NombreDocumento{SAD}
-\VersionDocumento{0.1}
+\VersionDocumento{1.1}
 \FechaDocumento{octubre de 2026}
 
 \begin{document}
 
+\hypersetup{pageanchor=false}
 \Portada
 
 \begin{HistorialDeCambios}
   \Cambio{0.1}{28/10/2026}{Portada, historial de cambios e índices con el estilo común (issue \#167).}{Joan Emmanuel Orduz Chia}
+  \Cambio{1.0}{mayo de 2026}{Versión original del documento en Google Docs.}{Autores del proyecto}
+  \Cambio{1.1}{octubre de 2026}{Paso a LaTeX con el estilo común, sin cambios de contenido (issue SAD \#170).}{Autores del proyecto}
 \end{HistorialDeCambios}
+
+\hypersetup{pageanchor=true}
 
 \Indices
 
+
+\input{sections/01-introduccion}
+\input{sections/02-requisitos-funcionales}
+\input{sections/03-modelo-dominio}
+\input{sections/04-stakeholders-intereses}
+\input{sections/05-requisitos-arquitectonicos-significativos}
+\input{sections/06-restricciones}
+\input{sections/07-contexto-alcance}
+\input{sections/08-vista-contenedores}
+\input{sections/09-vista-componentes}
+\input{sections/10-vista-procesos}
+\input{sections/11-vista-fisica}
+\input{sections/12-modelo-datos}
+\input{sections/13-decisiones-arquitectonicas}
+\input{sections/14-riesgos-tecnicos}
+\input{sections/15-estructura-sistema}
+\input{sections/16-glosario}
+\input{sections/17-referencias}
 \end{document}
