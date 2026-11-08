@@ -55,7 +55,7 @@ npm run simulate:wompi
 
 Dos cosas que conviene entender de este arranque, porque explican casi todos los errores de la primera vez:
 
-- **`sdk/dist/` no está versionado.** Está en `.gitignore` y se genera con `npm run build`. Si acabás de clonar el repositorio, o si alguien cambió la superficie pública del SDK, hay que reconstruir antes de correr los ejemplos o el `typecheck`. Un `dist/` viejo hace que el `typecheck` de los ejemplos pase contra una API que ya no existe, y eso ya pasó.
+- **`sdk/dist/` no está versionado.** Está en `.gitignore` y se genera con `npm run build`. Si acaba de clonar el repositorio, o si alguien cambió la superficie pública del SDK, hay que reconstruir antes de correr los ejemplos o el `typecheck`. Un `dist/` viejo hace que el `typecheck` de los ejemplos pase contra una API que ya no existe, y eso ya pasó.
 - **El paquete de ejemplos depende del SDK por ruta de archivo** (`"kit-pagos-colombia": "file:../sdk"`) y lo importa **por su nombre público**, nunca por rutas relativas hacia `sdk/src`. Es deliberado: así cualquier tipo que falte en `sdk/src/index.ts` rompe la compilación de los ejemplos de inmediato. Fue así como se descubrió que faltaban cuatro tipos en la superficie pública (punto 21 del architecture-log).
 
 ---

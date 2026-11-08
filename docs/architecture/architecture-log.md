@@ -1374,7 +1374,7 @@ Y donde una decisión de diseño salió de un error medido, **la prueba afirma q
 
 | Prueba | Qué sostiene |
 | --- | --- |
-| Kushki responde `403` en `/charges` **igual que en una ruta inventada** | Por qué la ruta correcta vive en una constante y por qué un `403` de Kushki no distingue "no existe" de "no podés" |
+| Kushki responde `403` en `/charges` **igual que en una ruta inventada** | Por qué la ruta correcta vive en una constante y por qué un `403` de Kushki no distingue "no existe" de "no autorizado" |
 | Mercado Pago rechaza un cobro con token y sin `installments` | Por qué las cuotas están en `PaymentMethod` y no las inventa cada adaptador |
 | Rapyd rechaza cobrar un token de tarjeta en `/payments` | Por qué la tarjeta de Rapyd va por página alojada, que es la decisión más costosa del PR |
 | Wompi rechaza una transacción sin firma de integridad | El issue pendiente de exigir `integritySecret` |

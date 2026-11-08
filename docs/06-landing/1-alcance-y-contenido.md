@@ -24,11 +24,11 @@ Para las tres, el repositorio es la evidencia y no la presentación. La página 
 
 Toda la página existe para sostener esta afirmación:
 
-> **Integrás una vez. Cambiás de pasarela cambiando un valor.**
+> **Se integra una vez. Se cambia de pasarela cambiando un valor.**
 
 Y debajo, la aclaración honesta que la hace creíble en lugar de sonar a folleto:
 
-> Cuatro pasarelas colombianas, tarjeta y PSE, con los datos de prueba documentados para que puedas verificarlo vos.
+> Cuatro pasarelas colombianas, tarjeta y PSE, con los datos de prueba documentados, para poder verificarlo.
 
 Si una sección de la página no contribuye a sostener o a acotar esa frase, no va en la página.
 
