@@ -10,7 +10,7 @@ La estructura se basa en la plantilla [`memoria/main.tex`](memoria/main.tex), lo
 
 - **Confirmado:** existe una plantilla LaTeX en [`memoria/`](memoria/) con portadas, preliminares, capítulos, referencias y anexos.
 - **Pendiente de confirmar:** que esta sea la versión institucional vigente y obligatoria. Que esté en el repositorio no demuestra por sí solo su autoridad.
-- La plantilla contiene indicaciones que no coinciden sobre la extensión: la introducción menciona un máximo de 60 páginas y referencias menciona 80 páginas sin incluirlas. No se debe fijar ni recortar el documento con base en una de esas cifras hasta confirmar el límite aplicable.
+- La plantilla contiene indicaciones que no coinciden sobre la extensión: la introducción menciona un máximo de 60 páginas y referencias menciona 80 páginas sin incluirlas. El límite que aplica es de 80 páginas sin anexos.
 - Los nombres de capítulos se especializan para Kit Pagos Colombia, conservando el orden y los componentes académicos que ya exige la plantilla. Si los títulos institucionales resultan inmodificables, se conserva el título oficial y se usan los subtítulos propuestos.
 
 ### Ubicación y formato elegidos
@@ -185,11 +185,10 @@ Las diferencias entre la versión 1.0 del SPMP y lo construido (Rapyd por PayU, 
 ### Pendientes que bloquean una versión final
 
 1. Confirmar si la plantilla de `memoria/` es la institucional vigente y si sus encabezados pueden especializarse.
-2. Resolver la extensión autorizada del documento (la plantilla contiene indicaciones de 60 y 80 páginas).
-3. Confirmar título oficial, autores, código, director, jurados y autoridades de portada.
-4. Verificar el estado vigente de cada RF/OE y enlazar la evidencia final reproducible.
-5. Incorporar el informe comparativo de la Fase 5 cuando exista; conservar también amenazas a la validez y resultados adversos.
-6. Definir qué artefactos serán anexos descargables y compilar/revisar el PDF final.
+2. Confirmar título oficial, autores, código, director, jurados y autoridades de portada.
+3. Verificar el estado vigente de cada RF/OE y enlazar la evidencia final reproducible.
+4. Incorporar el informe comparativo de la Fase 5 cuando exista; conservar también amenazas a la validez y resultados adversos.
+5. Definir qué artefactos serán anexos descargables y compilar/revisar el PDF final, dentro de las 80 páginas sin anexos.
 
 ## 7. Convención de actualización
 
