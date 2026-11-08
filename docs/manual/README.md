@@ -20,7 +20,7 @@ Lo que **no** hace está en [la sección 4](#4-los-límites-del-producto), y no 
 |---|---|---|---|
 | **SDK** | El paquete [`kit-pagos-colombia`](https://www.npmjs.com/package/kit-pagos-colombia) en Node.js | Va a integrar en su backend y quiere los tipos y el manejo de errores del SDK | [`sdk/README.md`](../../sdk/README.md) |
 | **Módulo de navegador** | `kit-pagos-colombia/browser`, el mismo paquete con otro punto de entrada | Necesita tokenizar la tarjeta sin que el número toque su servidor | [`sdk/README.md`](../../sdk/README.md), §2.1 |
-| **API REST** | `/v1/api` sobre HTTP | Quiere cobrar sin instalar nada, desde otro lenguaje o desde un servicio externo | [OpenAPI en `/docs`](https://kit-pagos-colombia.onrender.com/docs) y [`simulator-api/README.md`](../../simulator-api/README.md) |
+| **API REST** | `/v1/api` sobre HTTP | Quiere cobrar sin instalar nada, desde otro lenguaje o desde un servicio externo | [`referencia/api-rest.md`](referencia/api-rest.md) |
 | **API de Simulación** | `/v1/sim`, cuatro pasarelas simuladas | Necesita probar rechazos, pendientes y PSE de punta a punta, sin sandbox ni internet | [`simulator-api/README.md`](../../simulator-api/README.md) |
 
 Y una quinta pieza que no es código: los **datos de prueba**, que son lo que vuelve ejecutables a las otras cuatro. Sin saber qué tarjeta aprueba en Wompi o qué `bankId` acepta Kushki, no hay nada que probar: [`docs/testing-data/`](../testing-data/).
@@ -64,7 +64,7 @@ Este directorio se escribe por partes. Lo que sigue es el mapa de lo que tiene q
 | Tema | Cubre | Estado |
 |---|---|---|
 | **El SDK** | Instalación, configuración, las cuatro operaciones públicas, los trece códigos de error, la tokenización en el navegador | Pendiente. Hoy la referencia de facto es [`sdk/README.md`](../../sdk/README.md) |
-| **La API REST** | Cómo cobrar por HTTP sin instalar la librería, autenticación por cabeceras, mapeo de errores a códigos HTTP | Pendiente. Hoy: OpenAPI en [`/docs`](https://kit-pagos-colombia.onrender.com/docs) y [`simulator-api/README.md`](../../simulator-api/README.md) |
+| **La API REST** | Cómo cobrar por HTTP sin instalar la librería, autenticación por cabeceras, mapeo de errores a códigos HTTP | **Escrito:** [`referencia/api-rest.md`](referencia/api-rest.md) |
 | **La API de Simulación** | Cómo levantarla, qué simula cada ruta, cómo se elige el escenario, hasta dónde llega su fidelidad | Pendiente. Hoy: [`simulator-api/README.md`](../../simulator-api/README.md) y [`02-arquitectura/3-api-de-simulacion.md`](../02-arquitectura/3-api-de-simulacion.md) |
 | **Los datos de prueba** | Qué tarjeta, qué banco y qué documento usar en cada pasarela, y qué nivel de evidencia tiene cada dato | Pendiente como documento de producto. La fuente ya existe: [`testing-data/README.md`](../testing-data/README.md) |
 
