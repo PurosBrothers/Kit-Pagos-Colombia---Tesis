@@ -3,8 +3,7 @@
 \section{CONCLUSIONES, IMPACTO Y TRABAJO FUTURO}
 \sloppy
 
-% Pendiente: enlazar cada conclusión con la evidencia del capítulo VII cuando exista (#176) y escribir
-% OE-06 con el informe comparativo de la Fase 5 (#135), con los resultados adversos tal como salieron.
+% Pendiente: enlazar cada conclusión con la evidencia del capítulo VII cuando exista (#176).
 
 \subsection{Cumplimiento de objetivos y contribuciones}
 Esta sección responde cada objetivo específico con la evidencia que hay en el repositorio. El estado de cada uno es el que registran \path{docs/project-management/thesis-objectives.md} (sección 2) y la matriz de trazabilidad, que da por implementados los diecinueve requisitos funcionales.
@@ -24,12 +23,14 @@ Esta sección responde cada objetivo específico con la evidencia que hay en el 
 
 \paragraph{OE-05 (datos de prueba).} Se cumplió. \path{docs/testing-data/} reúne, por pasarela, las credenciales de sandbox, las tarjetas, los documentos, los bancos y los flujos medidos. Cada dato declara su nivel de evidencia: medido contra la API real con fecha, medido hasta cierto punto del flujo o tomado de la documentación sin comprobar. La API de Simulación reproduce esos datos, salvo los de Rapyd y los del PSE de Mercado Pago, donde decide la página del banco o de la pasarela.
 
-% OE-06 (evaluación con los prototipos): pendiente del informe comparativo de la Fase 5 (#135) y del capítulo VII (#176).
+\paragraph{OE-06 (evaluación con los prototipos).} Se cumplió. El informe comparativo de la Fase 5 (\path{docs/evaluation/informe-comparativo-fase-5.md}) compara el prototipo B, que integra las cuatro pasarelas con el SDK, con el D, que las integra a mano, en las seis variables del plan, medidas sobre el commit \texttt{eabba18}. En el módulo de pagos, B tiene 310 líneas de integración frente a 1\,308 de D, un 76,30\,\% menos, y sumar las tres pasarelas nuevas le costó 67 líneas agregadas frente a 1\,042. Su WMC total baja de 375 a 66 y su complejidad máxima por función, de 19 a 10. B no expone ningún concepto nativo de pasarela, frente a 10 identificadores en D, alcanza las mismas cuatro pasarelas y cubre el 100\,\% de sus sentencias, frente al 90,03\,\% de D.
+
+Dos resultados no favorecen al kit, y el informe los reporta tal como salieron. El CBO promedio de B es mayor, 7,0 frente a 5,67, porque su módulo concentra más tipos por archivo. Y 9 de sus 67 líneas no son configuración: Kushki y Rapyd obligaron a ajustar el módulo común. Además, la medición cuenta el código del comercio y no el costo de construir el SDK, y es un estudio de caso de dos prototipos escritos por el mismo equipo.
 
 Además del artefacto, el trabajo deja dos prácticas que se pueden reutilizar. La primera es un registro de decisiones que separa, para cada pasarela, lo medido en el sandbox de lo que dice su documentación. La segunda son las métricas CK verificadas en la CI como parte de la definición de terminado, con cada excepción justificada por escrito.
 
 \subsection{Análisis de impacto del proyecto}
-Para un equipo que integra pagos en Colombia, el impacto inmediato es práctico. Un paquete de código abierto, con licencia Apache 2.0, cubre tarjeta y PSE en cuatro pasarelas, y la API de Simulación permite probar rechazos, pagos pendientes y webhooks sin credenciales reales. La documentación de datos de prueba sirve también a quien no use el kit, porque reúne lo que cada sandbox acepta y lo que no. Cuánto reduce el esfuerzo de integración es la pregunta de la evaluación, y su respuesta está en el capítulo VII.
+Para un equipo que integra pagos en Colombia, el impacto inmediato es práctico. Un paquete de código abierto, con licencia Apache 2.0, cubre tarjeta y PSE en cuatro pasarelas, y la API de Simulación permite probar rechazos, pagos pendientes y webhooks sin credenciales reales. La documentación de datos de prueba sirve también a quien no use el kit, porque reúne lo que cada sandbox acepta y lo que no. Cuánto reduce el esfuerzo de integración lo responde la evaluación: la conclusión de OE-06 y el capítulo VII.
 
 Para la Ingeniería de Sistemas, el proyecto muestra una forma de aplicar Design Science Research a un artefacto de software con la evidencia versionada junto al código: requisitos trazados hasta sus pruebas, decisiones registradas y documentos que compilan en la misma CI. No se evaluaron impactos económicos, ambientales ni sociales, y por eso no se afirman.
 
@@ -41,7 +42,5 @@ El trabajo futuro sale de los límites que el proyecto declaró:
     \item \textbf{Dar esquema a las siete operaciones de la API de Simulación que no lo tienen} (punto 109).
     \item \textbf{Ampliar los métodos de pago} a los que el alcance dejó fuera: efectivo, Nequi, Daviplata, suscripciones y reembolsos.
     \item \textbf{Probar de punta a punta los flujos que los sandboxes no permiten}, cuando las pasarelas lo habiliten, y reemplazar con evidencia medida las combinaciones que hoy responden \texttt{501}.
+    \item \textbf{Repetir la evaluación con autores distintos para B y D y con más de dos prototipos.} Un solo autor escribió las pasarelas nuevas en los dos, y dos prototipos no son una muestra (informe comparativo, secciones 5.3 y 5.7).
 \end{itemize}
-
-% Pendiente: agregar las conclusiones de la evaluación y el trabajo futuro que salga de sus amenazas a la
-% validez cuando exista el capítulo VII (#176).
