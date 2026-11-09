@@ -60,6 +60,11 @@ Jest (\texttt{openapi.test.ts}) y revisión de \texttt{/docs}, \texttt{/docs/jso
 API de Simulación local; navegador para la interfaz Swagger~UI. &
 El documento generado describe las rutas reales, los esquemas incluyen los campos que el cliente consume (en particular \texttt{rejectionCode} y \texttt{rejectionCategory} del rechazo) y las tres rutas de documentación responden. \\ \hline
 
+\textbf{Carga y rendimiento (API y SDK)} &
+Autocannon para la API Fastify; arnés de micro-benchmarks en Node.js para el SDK (alternativas contempladas: k6 y Artillery). &
+Local sobre Node.js 20. API en \texttt{http://localhost:3000}; SDK instanciado en memoria sin I/O de red externa. &
+La API procesa ráfagas concurrentes de peticiones sobre rutas representativas sin errores 5xx no simulados ni saturación del bucle de eventos. El SDK procesa firmas criptográficas HMAC y normalizaciones en memoria manteniendo estabilidad y tiempos deterministas sin acumulación de objetos no liberados. \\ \hline
+
 \textbf{Integración continua} &
 GitHub Actions con Node.js 20; jobs \texttt{sdk}, \texttt{examples}, \texttt{simulator-api}, \texttt{landing}, \texttt{prototypes}, \texttt{prototype-frontend-rest} y \texttt{prototypes-parity}. &
 \texttt{ubuntu-latest}; se dispara en \texttt{pull\_request} y \texttt{push} a \texttt{devops} y \texttt{main}. &
@@ -76,11 +81,56 @@ El PDF compila sin errores, las referencias cruzadas resuelven y no quedan instr
 
 \subsubsection{Pruebas unitarias}
 
-Verifican una unidad de código aislada: un objeto de valor, un adaptador con su cliente HTTP simulado, un normalizador de estados o una función de firma. No tocan la red ni necesitan credenciales, así que corren en cada cambio. Su valor no está en repetir lo que el código hace, sino en fijar las decisiones que el autor tomó y que un cambio posterior podría romper sin que nadie lo note.
+Verifican una unidad de código aislada: un objeto de valor, un adaptador con su cliente HTTP simulado, un normalizador de estados o una función de firma. No tocan la red ni necesitan credenciales, así que corren en cada cambio. Su valor no está en repetir lo que el código hace, sino en fijar las decisiones que el autor tomó y que un cambio posterior podría romper sin que nadie lo note. La Tabla~\ref{tab:pruebas-unitarias} desglosa los módulos y suites que componen este nivel en el SDK.
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.6cm}|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{2.8cm}|}
+    \hline
+    \textbf{Componente / Capa} & \textbf{Módulos / Archivos} & \textbf{Objetivo de la comprobación} & \textbf{Herramienta y suites} \\ \hline
+    Objetos de valor (\emph{Value Objects}) & \texttt{Amount}, \texttt{Currency}, \texttt{PaymentMethod}, \texttt{Customer}, \texttt{CardToken} & Inmutabilidad, validación de montos positivos con dos decimales, tipos de documento y códigos ISO de moneda. & Jest con \texttt{ts-jest}; 13 suites en \texttt{src/domain/value-objects/} \\ \hline
+    Adaptadores de pasarela (\emph{Adapters}) & \texttt{WompiAdapter}, \texttt{MercadoPagoAdapter}, \texttt{KushkiAdapter}, \texttt{RapydAdapter} & Mapeo de solicitudes nativas, armado de cabeceras de autenticación y manejo de clientes HTTP inyectados. & Jest con mocks HTTP; 16 suites en \texttt{src/infrastructure/adapters/} \\ \hline
+    Normalizadores de respuesta & Normalizadores de estado y respuesta por pasarela & Traducción bidireccional a \texttt{Transaction}, normalización a los seis estados canónicos y preservación de \texttt{rejectionReason}. & Jest; 7 suites en \texttt{src/application/normalizers/} \\ \hline
+    Servicios y fachada & \texttt{KitPagos}, \texttt{RetryHandler}, verificación de webhooks & Orquestación de llamadas, retroceso exponencial para operaciones idempotentes y verificación de firmas criptográficas. & Jest; 8 suites en \texttt{src/application/} y \texttt{src/infrastructure/facade/} \\ \hline
+    Configuración y errores & \texttt{KitPagosConfig}, \texttt{KitPagosError}, factorías & Validación de perfiles y credenciales requeridas, redacción de secretos y conversión tipada a \texttt{KitPagosErrorCode}. & Jest; 6 suites en \texttt{src/config/}, \texttt{src/domain/errors/} \\ \hline
+  \end{tabularx}
+  \caption{Desglose de pruebas unitarias del SDK}
+  \label{tab:pruebas-unitarias}
+\end{table}
 
 \subsubsection{Pruebas de integración}
 
-Verifican la colaboración entre piezas: el SDK contra la API de Simulación, la capa REST contra el SDK instalado, el prototipo contra el simulador. La suite de la API de Simulación usa \texttt{app.inject()} para recorrer la petición completa sin abrir un puerto, de modo que prueba el enrutamiento, la serialización y los esquemas, no solo el servicio. Los casos CP-01 a CP-07 son pruebas de integración de sistema: atraviesan varios componentes y observan el resultado desde afuera.
+Verifican la colaboración entre piezas: el SDK contra la API de Simulación, la capa REST contra el SDK instalado, el prototipo contra el simulador. La suite de la API de Simulación usa \texttt{app.inject()} de Fastify para recorrer la petición completa sin abrir un puerto de red, de modo que prueba el enrutamiento, la serialización y los esquemas JSON, no solo el servicio. Los casos CP-01 a CP-07 son pruebas de integración de sistema: atraviesan varios componentes y observan el resultado desde afuera. La Tabla~\ref{tab:pruebas-integracion} detalla los módulos evaluados en este nivel.
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.8cm}|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{2.6cm}|}
+    \hline
+    \textbf{Subsistema} & \textbf{Módulos / Rutas} & \textbf{Objetivo de la integración} & \textbf{Herramienta y suites} \\ \hline
+    Rutas nativas simuladas (\texttt{/v1/sim}) & Rutas de Wompi, Mercado Pago, Kushki y Rapyd (33 rutas) & Preservar formatos y esquemas nativos, soporte de páginas de banco PSE y transición de estados sin alterar datos reales. & Fastify \texttt{app.inject()}; 22 suites en \texttt{simulator-api/test/} \\ \hline
+    Capa REST propia (\texttt{/v1/api}) & \texttt{/gateways}, \texttt{/payments}, \texttt{/payments/:id}, \texttt{/pse-banks}, \texttt{/webhooks/:gateway} & Verificar la serialización exacta del monto como cadena, entrega de motivos de rechazo estructurados y consumo del SDK sin adaptación adicional. & Fastify \texttt{app.inject()}; 8 suites en \texttt{simulator-api/test/} \\ \hline
+    Motor de escenarios deterministas & Montos reservados (\texttt{10 100} a \texttt{10 604}) y marcas de credencial & Provocar de forma determinista caídas de red, límites de tasa, errores 5xx del servidor y recuperación tras reintentos sin depender de sandboxes reales. & Jest y Fastify; 12 suites en \texttt{simulator-api/test/} \\ \hline
+    Emisión y disparo de webhooks & Disparador \texttt{/v1/sim/webhooks/trigger} y receptores & Generación de cargas útiles firmadas con algoritmos nativos (HMAC-SHA256) y entrega a endpoints locales de prototipos. & Fastify y Jest; 6 suites en \texttt{simulator-api/test/} \\ \hline
+    Prototipos de comercio & Prototipos A, B, C y D & Flujo completo de compra (catálogo, carrito, tokenización, cobro y consulta) y verificación de paridad de esqueleto entre B y D. & Jest y script \texttt{check-skeleton-parity.sh} \\ \hline
+  \end{tabularx}
+  \caption{Desglose de pruebas de integración del sistema}
+  \label{tab:pruebas-integracion}
+\end{table}
+
+\subsubsection{Pruebas de carga y rendimiento}
+
+Tienen como propósito verificar la estabilidad, concurrencia y comportamiento del software bajo ráfagas intensivas de peticiones o procesamiento. Dado que el proyecto consta de una librería desacoplada (SDK) y un servicio web de apoyo (API de Simulación), la estrategia aborda la carga bajo dos dimensiones complementarias:
+
+\begin{itemize}
+  \item \textbf{Carga sobre la API de Simulación (Fastify):} Fastify es un framework concebido para un alto rendimiento y baja latencia. Para medir su comportamiento ante concurrencia se utiliza \textbf{Autocannon}, la herramienta de benchmarking HTTP nativa del ecosistema Fastify, ejecutando ráfagas continuas de peticiones sobre rutas representativas (\texttt{GET /health}, \texttt{GET /v1/api/gateways} y consultas de estado). La prueba evalúa que la API sostenga la carga sin provocar errores no controlados (500) ni degradación en el bucle de eventos (\emph{event loop}) de Node.js. Como alternativas viables dentro del diseño se contemplan herramientas como \textbf{k6} (orientada a flujos estructurados basados en escenarios en JavaScript) y \textbf{Artillery} (adecuada para definir perfiles de tráfico mediante manifiestos declarativos).
+  \item \textbf{Rendimiento computacional del SDK en memoria:} Al ser una librería sin servidor propio de escucha, la evaluación de carga del SDK se enfoca en el rendimiento en memoria de las operaciones más costosas: el cálculo intensivo de firmas criptográficas HMAC-SHA256, la validación de objetos de valor y la normalización de cargas útiles (\emph{payloads}) en ráfagas de miles de ejecuciones. Se verifica que el procesamiento conserve tiempos estables sin acumulación innecesaria en el recolector de basura (\emph{Garbage Collector}) de V8.
+\end{itemize}
+
+Dado que no se han fijado formalmente acuerdos de nivel de servicio (SLA) ni umbrales de latencia en un entorno de infraestructura controlada, el criterio de éxito en este nivel se define como \textbf{estabilidad operativa}: 0~\% de errores no intencionados, ausencia de caídas del proceso y consumo acotado de recursos bajo concurrencia.
 
 \subsubsection{Pruebas de contrato}
 

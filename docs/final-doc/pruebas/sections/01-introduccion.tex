@@ -24,7 +24,7 @@ El alcance cubre los tres componentes del artefacto y los cuatro prototipos de l
   \item Los prototipos A (\texttt{checkout-con-sdk-solo-back}), B (\texttt{checkout-con-sdk-front-back}), C (\texttt{checkout-frontend-rest}) y D (\texttt{checkout-sin-solucion}).
 \end{itemize}
 
-Quedan fuera del alcance las operaciones CRUD de la tienda, la seguridad de la aplicación anfitriona, la ayuda en línea y el rendimiento bajo carga. Tampoco se prueba el cumplimiento PCI~DSS de la página del comercio, que depende de la aplicación que integra el framework. Las pruebas de contrato contra los sandboxes reales se diseñan y se cuentan, pero su ejecución requiere credenciales y red, y por eso se reporta por separado.
+En cuanto a la estrategia de verificación, se cubren pruebas unitarias, de integración y pruebas de carga sobre el SDK y la API de Simulación. Quedan fuera del alcance las operaciones CRUD del catálogo y del carrito de la tienda anfitriona, la seguridad y autenticación propia del comercio, la ayuda en línea y el cumplimiento formal PCI~DSS de la aplicación externa, que depende de la infraestructura particular que integra el framework. Las pruebas de contrato contra los sandboxes reales se diseñan y se cuentan, pero su ejecución requiere credenciales y red, y por eso se reporta por separado.
 
 \subsection{Audiencia y convenciones}
 
