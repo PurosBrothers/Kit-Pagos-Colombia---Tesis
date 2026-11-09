@@ -145,7 +145,7 @@ De ahí sale el orden forzado de la Iteración 3: **escenarios del simulador →
 
 ## 5. Dónde va el resultado
 
-En `docs/evaluation/`, que está reservada para eso. El entregable ya escrito es el [informe comparativo de la Fase 5](../evaluation/informe-comparativo-fase-5.md), con la [recolección de las seis variables](../evaluation/recoleccion-seis-variables.md) y los reportes JSON que respaldan cada cifra. El informe contiene, según el plan de evaluación: el diseño resumido, la tabla con las seis variables para ambos prototipos, el costo de agregar cada pasarela citado textualmente, las métricas CK de cada uno, la discusión de amenazas a la validez, y la conclusión **tal como salió, incluso si contradice la hipótesis**.
+En `docs/evaluation/`. El entregable ya escrito es el [informe comparativo de la Fase 5](../evaluation/informe-comparativo-fase-5.md), con la [recolección de las seis variables](../evaluation/recoleccion-seis-variables.md) y los reportes JSON que respaldan cada cifra. El informe contiene, según el plan de evaluación: el diseño resumido, la tabla con las seis variables para ambos prototipos, el costo de agregar cada pasarela citado textualmente, las métricas CK de cada uno, la discusión de amenazas a la validez, y la conclusión **tal como salió, incluso si contradice la hipótesis**.
 
 La tabla de la variable 2 —el costo de agregar cada pasarela— es la que conviene proyectar primero en la sustentación.
 

@@ -12,7 +12,7 @@
 
 ## 1. Diseño experimental, resumido
 
-El experimento compara dos implementaciones del mismo checkout mínimo de comercio electrónico: mostrar un producto, cobrarlo, informar el resultado, recibir la notificación asíncrona y permitir consultar el estado. Las dos cubren las cuatro pasarelas —Wompi, Mercado Pago, Kushki y Rapyd— desde el 20 de octubre de 2026 (punto 117 del [`architecture-log.md`](../architecture/architecture-log.md)).
+El experimento compara dos implementaciones del mismo checkout mínimo de comercio electrónico: mostrar un producto, cobrarlo, informar el resultado, recibir la notificación asíncrona y permitir consultar el estado. Las dos cubren las cuatro pasarelas —Wompi, Mercado Pago, Kushki y Rapyd— desde el 22 de octubre de 2026, cuando entraron los commits de cada pasarela; la decisión de medir así es del 20 de octubre (punto 117 del [`architecture-log.md`](../architecture/architecture-log.md)).
 
 | | Prototipo D — control | Prototipo B — tratamiento |
 |---|---|---|
@@ -89,7 +89,7 @@ Jest con `collectCoverageFrom: ["src/payments/**"]` da, en D, **90.03 %** de sen
 | Rapyd | D | [`ccd54dd`](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/commit/ccd54dd) | +319 −1 | +287 −1 | Ninguno |
 | Rapyd | B | [`daad2aa`](https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis/commit/daad2aa) | +29 −8 | +121 −0 | Ninguno |
 
-Los totales de las tres pasarelas nuevas son **+1 042 / −5** en D y **+67 / −14** en B, con una reducción de **93.57 %** en líneas agregadas. En B, las 67 líneas agregadas se reparten así: **58 en `gateways.ts`** (la configuración de cada pasarela) y **9 en `index.ts`** (el registro). Esa descomposición es la del #134.
+Los totales de las tres pasarelas nuevas son **+1 042 / −5** en D y **+67 / −14** en B, con una reducción de **93.57 %** en líneas agregadas. En B, las 67 líneas agregadas se reparten así: **58 en `gateways.ts`**, la configuración de cada pasarela, y **9 en `index.ts`**, el módulo común; la descomposición es la del #134. Esas 9 líneas no son configuración. En Kushki (`2466495`), el webhook pasa a guardar el estado nativo (`event.rawStatus`). En Rapyd (`daad2aa`), `publicConfig` deja de entregar la llave pública cuando la pasarela cobra en su página, y el webhook pasa `orderReference`. El estado nativo y la referencia de la orden llegaron con la 0.7.0-rc.1 del SDK (punto 118).
 
 ### 3.2. La hipótesis, punto por punto
 
@@ -97,13 +97,13 @@ La hipótesis se escribió antes de medir y decía que en B agregar una pasarela
 
 **Mercado Pago.** En D costó **+385** líneas en `src/payments` y **+373** en pruebas: autenticación, mapeo de monto, traducción de estados, verificación de firma y consulta. En B costó **+18 / −1** en `src/payments` y **+51** en pruebas. Las 18 líneas de B son configuración de credenciales y registro; el mapeo, la firma y la consulta viven en el SDK. La parte de la hipótesis que dice que B no escribe ese mapeo **se cumple**.
 
-**Kushki.** En D costó **+338** en `src/payments` y **+296** en pruebas. En B costó **+20 / −5** en `src/payments` y **+65** en pruebas, más el cambio de versión del SDK en `package.json` y `package-lock.json`, que también hizo D. Ese cambio de versión es un costo real **fuera** de `src/payments` y el informe no lo esconde: la hipótesis hablaba del módulo de pagos y del esqueleto, y el `package.json` no es ninguna de las dos cosas, pero es parte del costo de agregar la pasarela. Dentro de `src/payments`, B vuelve a ser configuración.
+**Kushki.** En D costó **+338** en `src/payments` y **+296** en pruebas. En B costó **+20 / −5** en `src/payments` y **+65** en pruebas, más el cambio de versión del SDK en `package.json` y `package-lock.json`, que también hizo D. Ese cambio de versión es un costo real **fuera** de `src/payments` y el informe no lo esconde: la hipótesis hablaba del módulo de pagos y del esqueleto, y el `package.json` no es ninguna de las dos cosas, pero es parte del costo de agregar la pasarela. Dentro de `src/payments`, 18 de las 20 líneas son configuración en `gateways.ts`; las otras 2 cambian el webhook de `index.ts` para guardar el estado nativo.
 
-**Rapyd.** En D costó **+319** en `src/payments` y **+287** en pruebas. En B costó **+29 / −8** en `src/payments` y **+121** en pruebas. Rapyd cobra la tarjeta en su página alojada y firma cada petición con HMAC; nada de eso lo reescribe B en su módulo, lo absorbe el SDK. La parte de la hipótesis sobre el mapeo y la firma **se cumple**.
+**Rapyd.** En D costó **+319** en `src/payments` y **+287** en pruebas. En B costó **+29 / −8** en `src/payments` y **+121** en pruebas. Rapyd cobra la tarjeta en su página alojada y firma cada petición con HMAC; nada de eso lo reescribe B en su módulo, lo absorbe el SDK. La parte de la hipótesis sobre el mapeo y la firma **se cumple**. Pero 7 de sus 29 líneas cambian `index.ts`: la llave pública no se entrega cuando la tarjeta se cobra en la página de Rapyd, y el webhook pasa la referencia de la orden.
 
 ### 3.3. Veredicto sobre la hipótesis
 
-**La hipótesis se confirma en el eje que mide el experimento:** el código fuente que B agrega en `src/payments` para cada pasarela es configuración, no lógica de integración, y ningún commit de pasarela de B toca el esqueleto ni el modelo de datos. El diff de las tres pasarelas es **+67 / −14** frente a **+1 042 / −5** de D.
+**La hipótesis se confirma casi entera en el eje que mide el experimento.** De las 67 líneas que B agrega en `src/payments` para las tres pasarelas, 58 son configuración en `gateways.ts`. Ningún commit de pasarela de B toca el esqueleto ni el modelo de datos, ni escribe mapeo de monto, traducción de estados, verificación de firma o flujo de consulta. Las otras 9 líneas no son configuración: Kushki y Rapyd obligaron a ajustar el módulo común (`index.ts`), como detalla la §3.1. El diff de las tres pasarelas es **+67 / −14** frente a **+1 042 / −5** de D.
 
 **Pero «configuración» no significa «gratis».** Cada pasarela de B trae además su propia suite: **51**, **65** y **121** líneas en `test/payments`. Esas pruebas no contradicen la hipótesis —la hipótesis hablaba de lo que hay que escribir para integrar, no de lo que hay que probar—, pero sí acotan la lectura: B no paga el mapeo ni la firma, y sí paga la verificación de que su configuración funciona. Además, el costo de construir y mantener el SDK queda fuera del perímetro de esta medición (§5.9). Presentar el **-93.57 %** como si fuera el costo total del sistema sería una reinterpretación que este informe no hace.
 
@@ -139,7 +139,7 @@ Totales del #134 para D: **WMC 375**, **CBO promedio 5.67** (máximo 8), **RFC 2
 
 Totales del #134 para B: **WMC 66**, **CBO promedio 7.0** (máximo 14), **RFC 44**, **1 de 2 archivos** con al menos una violación.
 
-Los umbrales aplicados son los del DoD: **WMC ≤ 20, CBO ≤ 5, RFC ≤ 20, MAX_CC ≤ 10**. El único MAX_CC que cumple el umbral en el módulo de B es el 10 de `index.ts`; en D, la lógica de las cuatro pasarelas tiene MAX_CC 13 o 19, y solo los archivos de soporte `gateway.ts` (7) e `index.ts` (6) quedan por debajo. Las métricas se corren en modo medición, donde una violación se reporta y no cambia el código de salida, porque en este experimento el valor alto es el dato.
+Los umbrales aplicados son los del DoD: **WMC ≤ 20, CBO ≤ 5, RFC ≤ 20, MAX_CC ≤ 10**. En B, los dos archivos cumplen el umbral de MAX_CC (5 en `gateways.ts` y 10 en `index.ts`); en D, la lógica de las cuatro pasarelas tiene MAX_CC 13 o 19, y solo los archivos de soporte `gateway.ts` (7) e `index.ts` (6) quedan por debajo. Las métricas se corren en modo medición, donde una violación se reporta y no cambia el código de salida, porque en este experimento el valor alto es el dato.
 
 ### 4.3. Métricas CK por clase (medición complementaria)
 
@@ -237,14 +237,14 @@ Las variables 1 y 2 cuentan lo que escribe el comercio en su módulo de pagos. E
 
 ## 6. Conclusión, tal como salió
 
-**La hipótesis se confirma en el eje medido, con dos matices que hay que decir en la misma frase.** Todas las cifras de esta conclusión son las de la §2; su fila del #134 y su artefacto local están en la §7.1.
+**La hipótesis se confirma casi entera en el eje medido, con dos matices que hay que decir en la misma frase.** Todas las cifras de esta conclusión son las de la §2; su fila del #134 y su artefacto local están en la §7.1.
 
 En el módulo de pagos del comercio, el prototipo B escribe **310 LOC** frente a **1 308** de D (**-76.30 %**), agrega **+67 / −14** líneas para sumar las tres pasarelas nuevas frente a **+1 042 / −5** de D (**-93.57 %**), tiene un WMC total de **66** frente a **375** (**-82.40 %**), un RFC promedio de **22.00** frente a **36.17** (**-39.17 %**) y un MAX_CC de **10** frente a **19** (**-47.37 %**, dentro del umbral del DoD). No expone **ningún** concepto nativo de pasarela (**0** identificadores y **0** ocurrencias frente a **10** y **18**), alcanza **4 de 4** pasarelas igual que D, y cubre **100 %** de sentencias y **97.59 %** de ramas con **165** pruebas, frente a **90.03 %** y **81.08 %** con **239** pruebas (**+9.97** y **+16.51** puntos porcentuales).
 
 Los dos matices:
 
 1. **El CBO promedio de B es mayor:** **7.0** frente a **5.67** (**+23.53 %**). B concentra más tipos externos por archivo, sobre todo en `index.ts`, que declara 14 tipos importados en sus firmas. La abstracción reduce complejidad y tamaño, pero no reduce el acoplamiento por archivo; lo redistribuye. Presentar la variable 3 como una victoria completa sería ocultar ese dato.
-2. **La reducción de esfuerzo es del código del comercio, no del sistema completo.** B no reescribe el mapeo, la firma ni la consulta de cada pasarela, pero sí escribe la configuración, sí escribe sus pruebas (**51**, **65** y **121** líneas en `test/payments` para las tres pasarelas) y depende de un SDK cuyo costo de construcción queda fuera de la medición (§5.9).
+2. **La reducción de esfuerzo es del código del comercio, no del sistema completo.** B no reescribe el mapeo, la firma ni la consulta de cada pasarela, pero sí escribe la configuración, ajusta en 9 líneas su módulo común para Kushki y Rapyd, sí escribe sus pruebas (**51**, **65** y **121** líneas en `test/payments` para las tres pasarelas) y depende de un SDK cuyo costo de construcción queda fuera de la medición (§5.9).
 
 **En una frase:** para un comercio que integra cuatro pasarelas colombianas, usar el framework redujo drásticamente el código de integración, la complejidad, la exposición a conceptos nativos y el esfuerzo de agregar pasarelas, y aumentó la cobertura de pruebas con menos pruebas; no redujo el acoplamiento por archivo y no incluye en la cifra el costo de construir el framework. La conclusión es un resultado de estudio de caso, no una ley general (§5.7).
 
