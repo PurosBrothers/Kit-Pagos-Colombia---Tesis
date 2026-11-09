@@ -76,11 +76,11 @@ Se evaluaron cuatro lugares. La decisión es la opción C; las otras quedan desc
 
 ## 5. Cómo se evita que se desactualice
 
-Este es el problema central, no un detalle. Hoy la única defensa que el repositorio tiene contra la deriva es `npm run check:readme` en [`sdk/`](../../sdk/): extrae los bloques ```typescript del README, los concatena y los compila con `tsc --noEmit` **contra el paquete construido**, no contra el código fuente. Verifica que compilen, no que funcionen, y con eso alcanzó para que los diez errores que lo motivaron no volvieran.
+Este es el problema central, no un detalle. Hoy la única defensa que el repositorio tiene contra la deriva es `npm run check:readme` en [`sdk/`](../../sdk/): extrae los bloques ```typescript del README del SDK y de este manual y los compila con `tsc --noEmit` **contra el paquete construido**, no contra el código fuente. Verifica que compilen, no que funcionen, y con eso alcanzó para que los diez errores que lo motivaron no volvieran. Por eso el tutorial, además, se ejecutó contra el simulador.
 
 Tres reglas para el material nuevo:
 
-1. **Todo bloque de código compila o se justifica.** El script hoy lee un solo archivo, `sdk/README.md`. Cuando el manual tenga ejemplos ejecutables, la guarda se extiende para recorrer también `docs/manual/`, y un bloque que no pueda compilar se marca en el documento con el motivo. Esto no es opcional: un ejemplo de la documentación de producto es lo primero que copia un lector, y es el que más caro sale si está mal.
+1. **Todo bloque de código compila o se justifica.** El script compila los bloques TypeScript de `sdk/README.md` y de todos los `.md` de `docs/manual/`, un módulo por documento, y la CI lo corre en cada pull request. Un bloque que no pueda compilar se marca en el documento con el motivo. Esto no es opcional: un ejemplo de la documentación de producto es lo primero que copia un lector, y es el que más caro sale si está mal.
 2. **Toda afirmación sobre el comportamiento del código se verifica abriéndolo o corriéndolo.** No se hereda de otro documento, ni de la documentación oficial de la pasarela, ni de un issue. Varias afirmaciones que parecían obvias se cayeron al medirlas contra los sandboxes reales (punto 50 del `architecture-log.md`), y la sección 7 de este documento lista tres del propio issue #112 que no coinciden con el código.
 3. **Toda medición lleva fecha y, si existe, el punto del architecture-log.** Los números de este repositorio nunca se citan de memoria: el documento de arquitectura registra qué se midió, contra qué y qué resultó falso.
 

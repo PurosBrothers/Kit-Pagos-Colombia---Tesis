@@ -49,7 +49,7 @@ const sdkRemoto = new KitPagos({
 | **Webhooks** (1) | `POST /v1/sim/webhooks/trigger` |
 | **Salud** (1) | `GET /health` |
 
-El número de rutas no es arbitrario: cada pasarela necesita una cantidad distinta de llamadas para el mismo flujo. Rapyd tiene nueve porque su tarjeta va por checkout alojado y su PSE exige crear un cliente primero.
+Por qué cada pasarela tiene un número distinto de rutas está en [«Las rutas»](../../02-arquitectura/3-api-de-simulacion.md#3-las-rutas), en la documentación de arquitectura.
 
 **Tres rutas existen solo porque el simulador las necesita:**
 
@@ -76,7 +76,7 @@ curl -X POST http://localhost:3000/v1/sim/wompi/transactions \
 
 > **La cabecera solo funciona llamando a `/v1/sim` directamente.** El SDK no la envía y no tiene forma de enviarla, así que si integra con el SDK esta cabecera no le sirve. Para elegir el desenlace desde el SDK se usan los datos de prueba, el monto y la credencial —secciones 3.3 a 3.6—, que es lo que el comercio sí controla.
 
-Las dos cabeceras existen porque la primera se eligió tarde y el proyecto normalizó el nombre después. Ninguna está deprecada: reconocer ambas evita que un cliente que use la otra reciba un `APPROVED` silencioso, que es el peor resultado posible en una prueba.
+Se aceptan las dos y ninguna está deprecada; por qué hay dos está en [«Cómo se elige el escenario»](../../02-arquitectura/3-api-de-simulacion.md#4-cómo-se-elige-el-escenario).
 
 ### 3.2 El orden de precedencia
 
@@ -101,7 +101,7 @@ Son los mismos que usa el sandbox real, así que funcionan igual contra el simul
 | **Kushki, tarjeta** | Las tarjetas de rechazo de [`testing-data/kushki.md`](../../testing-data/kushki.md) §1 | `400` con el código del banco en `details` |
 | **Rapyd y el PSE de Mercado Pago** | Ningún dato llega al simulador: decide la página del banco | Montos reservados |
 
-El simulador recuerda, por token, el desenlace que se derivó de la tarjeta, y el cobro con ese token lo aplica. **Guarda el desenlace, nunca el número ni el nombre del titular**: el token existe justamente para que el número no viva en ningún servidor del comercio.
+Por cada token, el simulador guarda solo el desenlace que corresponde a la tarjeta y lo aplica al cobro que use ese token. **Nunca guarda el número ni el nombre del titular.**
 
 ### 3.4 Los montos reservados
 
@@ -135,11 +135,11 @@ Un monto con centavos distintos de cero no es un monto reservado.
 
 ### 3.5 Las fallas técnicas no crean estado
 
-Un `TIMEOUT`, un `NETWORK_ERROR` o un `SERVER_ERROR` se resuelven **antes** de construir nada y devuelven el error nativo sin tocar ningún almacén. Un error de transporte no es un cobro en estado de error: quien reintenta después de un `504` tiene que poder hacerlo sin chocar con un registro fantasma.
+Un `TIMEOUT`, un `NETWORK_ERROR` o un `SERVER_ERROR` devuelve el error nativo **sin guardar ningún cobro**, así que se puede reintentar después de un `504` sin encontrar un registro previo.
 
 ### 3.6 Las marcas en la credencial
 
-Una credencial que contenga `invalid`, `inexistente` o `not_found`, sin distinguir mayúsculas, recibe la respuesta de credencial inválida que se midió en su pasarela. Enviar el escenario `INVALID_CREDENTIALS` por cabecera produce lo mismo con una llave cualquiera.
+Si la credencial contiene `invalid`, `inexistente` o `not_found`, en mayúsculas o minúsculas, el simulador responde lo que respondió la pasarela a una credencial inválida cuando se midió. La cabecera con `INVALID_CREDENTIALS` produce lo mismo con cualquier llave.
 
 | Pasarela | Lo que devuelve |
 |---|---|
@@ -148,11 +148,10 @@ Una credencial que contenga `invalid`, `inexistente` o `not_found`, sin distingu
 | Kushki | `403` de AWS API Gateway en transferencias; `400 K004` en tarjeta |
 | Rapyd | `401 UNAUTHENTICATED_API_CALL` |
 
-Que la llave lleve la marca en el texto es convención del simulador: el sandbox real no tiene una llave de prueba que se rechace.
 
 ### 3.7 Lo que responde `501`, a propósito
 
-Si el escenario pedido no tiene evidencia de cómo lo responde la pasarela real, la ruta responde **`501 Not Implemented`** sin guardar nada. **Un `501` es mucho mejor que un `APPROVED` falso**: si el motor aprobara una petición que pidió `REJECTED`, una prueba de manejo de rechazos pasaría sin haber probado nada, y el defecto aparecería en producción.
+Si no hay evidencia de cómo responde la pasarela real al escenario pedido, la ruta responde **`501 Not Implemented`** y no guarda nada. Así una prueba de rechazos no pasa con un aprobado inventado; el razonamiento está en [«Lo que responde 501, a propósito»](../../02-arquitectura/3-api-de-simulacion.md#lo-que-responde-501-a-propósito).
 
 Las combinaciones que responden `501`:
 
@@ -164,10 +163,10 @@ Las combinaciones que responden `501`:
 
 ### 3.8 El escenario se fija al crear; las consultas no lo aceptan
 
-1. **El escenario de negocio se aplica en la creación.** El cobro nace con el estado que pidió la prueba.
-2. **Las consultas no leen un escenario de negocio.** Responden el estado que ya tiene el registro. Lo único que una consulta aplica es la falla técnica que la creación registró con un monto de consulta, y la respuesta de credencial inválida.
+1. **El escenario de negocio se decide al crear:** el cobro nace con el estado que pidió la prueba.
+2. **Las consultas no aceptan escenario.** Devuelven el estado guardado. Solo aplican la falla técnica que la creación dejó registrada con un monto de consulta y la respuesta de credencial inválida.
 
-Si una consulta aceptara el escenario, el mismo cobro sería aprobado y declinado según quién preguntara, y no habría forma de conciliar.
+Así un mismo cobro no puede salir aprobado en una consulta y rechazado en otra.
 
 ---
 
@@ -205,7 +204,7 @@ curl -X POST http://localhost:3000/v1/sim/webhooks/trigger \
 
 El cuerpo lleva **solo** `gateway` y `transactionId`. Cualquier otra clave —`url`, `targetUrl`— responde `400`: el destino no lo elige quien llama, porque eso convertiría al simulador en un proxy hacia cualquier host.
 
-Antes de firmar, la transacción avanza como en una consulta. La tarjeta `4111` de Wompi se notifica `DECLINED` sin que nadie haga un `GET`.
+El trigger primero hace avanzar la transacción igual que una consulta, y después firma. Por eso la tarjeta `4111` de Wompi llega al webhook como `DECLINED` aunque nadie la haya consultado.
 
 | HTTP | Cuándo |
 |---|---|
@@ -221,9 +220,9 @@ Antes de firmar, la transacción avanza como en una consulta. La tarjeta `4111` 
 
 ### 5.2 Emisión automática
 
-Con `SIMULATOR_WEBHOOK_AUTO=true` **y** un destino configurado, el simulador emite un webhook en cada cambio de estado, como haría la pasarela.
+Con `SIMULATOR_WEBHOOK_AUTO=true` **y** un destino configurado, cada cambio de estado produce un webhook, como en la pasarela. La opción viene apagada.
 
-El simulador **no tiene reloj**: las transiciones las dispara una consulta o la visita a la página de pago, así que el webhook automático sale en ese momento y no por el paso del tiempo. Está apagada por omisión.
+Como el simulador **no tiene reloj**, el cambio de estado, y con él su webhook, ocurre cuando llega una consulta o alguien visita la página de pago.
 
 ---
 
@@ -247,18 +246,18 @@ Gana el entorno sobre el `.env`, y el simulador no lee solo el de la raíz: tamb
 
 ## 7. Los límites de fidelidad
 
-Un simulador que no declare en qué se aparta de la realidad es una trampa. Estos son los apartamientos que importan al integrar:
+Estos son los puntos en que el simulador se aparta de las pasarelas y que importan al integrar. La lista completa, con la fecha y la fuente de cada uno, está en [«Los límites de fidelidad, declarados»](../../02-arquitectura/3-api-de-simulacion.md#5-los-límites-de-fidelidad-declarados):
 
-- **Las firmas de las peticiones se verifican como una sola cuenta de comercio.** Wompi exige su firma de integridad y Rapyd la suya; un cliente que firme con otro secreto recibe el rechazo de firma, como lo recibiría con otra cuenta. Sin perfil, usa los secretos por omisión `test_integrity_kit_pagos_simulator` y `rapyd_secret_kit_pagos_simulator`.
-- **Los montos reservados y las marcas en la credencial son convención del simulador**, no datos de prueba de ninguna pasarela.
+- **Las firmas de las peticiones se verifican como una sola cuenta de comercio.** Wompi exige su firma de integridad y Rapyd la suya; si el cliente firma con otro secreto, el simulador rechaza la firma, igual que haría una cuenta distinta. Sin perfil, usa los secretos por omisión `test_integrity_kit_pagos_simulator` y `rapyd_secret_kit_pagos_simulator`.
+- **Los montos reservados y las marcas de credencial solo existen en el simulador.** Ninguna pasarela los tiene.
 - **Wompi documenta que cualquier tarjeta distinta de la `4111` termina `ERROR`, y el simulador la aprueba.** Esa nota de Wompi es documentación oficial sin medir.
-- **Kushki documenta que cualquier otro documento termina `Failed`, y el simulador no lo imita**, para no cambiar los cobros que ya usan otros documentos.
-- **Un titular de Mercado Pago fuera de la tabla deja decidir al monto o a la cabecera.** La API real lo rechazó con `rejected_by_issuer`; imitarlo dejaría los montos reservados sin servir con tarjeta.
-- **El PSE aprobado de Wompi necesita dos consultas**, aunque el sandbox publica la URL y el desenlace juntos.
+- **Con un documento fuera de la tabla, Kushki documenta `Failed`; el simulador no lo imita**, para no alterar los cobros que ya usan otros documentos.
+- **Con un titular de Mercado Pago que no esté en la tabla, deciden el monto o la cabecera.** La API real lo rechazó con `rejected_by_issuer`, pero imitarla inutilizaría los montos reservados con tarjeta.
+- **En Wompi, el PSE aprobado tarda dos consultas en el simulador**, mientras que el sandbox entrega la URL y el desenlace a la vez.
 - **Las páginas de banco del PSE y el checkout de Rapyd son del simulador.** Avisan que la redirección es simulada y ofrecen «Volver al comercio». No mueven el pago: el desenlace lo fija el dato de prueba o el escenario al crearlo, y se lee consultando el pago.
 - **Los webhooks omiten lo que el simulador no conoce**, como `user_id` y `application_id` de Mercado Pago o `merchant_id` de Kushki.
 
-**La lección detrás de todo esto:** el simulador solo es tan fiel como lo que se midió. En un momento afirmaba que las cuatro pasarelas cobraban con tarjeta servidor a servidor, y al medir resultó que ninguna lo hacía como decía. Por eso el proyecto tiene además **pruebas de contrato contra los sandboxes reales**, que son las que detectan cuándo el simulador se volvió optimista.
+Las que detectan cuándo el simulador se aparta de una pasarela son las **pruebas de contrato contra los sandboxes reales** ([`3-pruebas-de-contrato.md`](../../04-metricas-y-pruebas/3-pruebas-de-contrato.md)).
 
 El detalle completo de cada apartamiento, con la fecha y la fuente de cada medición, está en [`02-arquitectura/3-api-de-simulacion.md`](../../02-arquitectura/3-api-de-simulacion.md) y en [`docs/testing-data/`](../../testing-data/).
 

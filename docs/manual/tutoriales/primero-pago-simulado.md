@@ -101,8 +101,12 @@ async function primerPago() {
     return;
   }
 
-  console.log("Estado:", result.transaction.getStatus());
-  console.log("Id en la pasarela:", result.transaction.gatewayTransactionId.value);
+  const id = result.transaction.gatewayTransactionId.value;
+  console.log("Estado al crear:", result.transaction.getStatus());
+
+  // En Wompi, el cobro con tarjeta nace PENDING: el desenlace se lee consultando.
+  const consultada = await sdk.getPaymentStatus(id);
+  console.log("Estado al consultar:", consultada.getStatus());
 }
 
 primerPago();
@@ -112,10 +116,11 @@ Ejecútelo:
 
 ```bash
 npx ts-node pago.ts
-# Estado: APPROVED
+# Estado al crear: PENDING
+# Estado al consultar: APPROVED
 ```
 
-**Ya cobró.** El monto `75000` no es un monto reservado, así que el simulador aprueba.
+**Ya cobró.** El monto `75000` no es un monto reservado, así que el simulador aprueba. Fíjese en que la creación devolvió `PENDING`: en Wompi, el cobro con tarjeta nace pendiente y el desenlace se lee al consultar, igual que en su sandbox ([`testing-data/wompi.md`](../../testing-data/wompi.md), sección 1.1). Un comercio que tomara el estado de la creación como final dejaría pagos aprobados sin registrar.
 
 ---
 
@@ -153,7 +158,15 @@ async function pagoRechazado() {
 }
 ```
 
-`10100` es el monto reservado del simulador para `DECLINED`. Nada más cambió.
+Llámela al final del archivo, en lugar de `primerPago()`, y ejecute de nuevo:
+
+```bash
+npx ts-node pago.ts
+# Estado: DECLINED
+# Motivo: undefined
+```
+
+`10100` es el monto reservado del simulador para `DECLINED`. Nada más cambió. El motivo queda vacío porque Wompi no envía un código de rechazo estable, solo un mensaje; Mercado Pago, Kushki y Rapyd sí lo traen (HU-11 del SRS).
 
 > Si integrara con una pasarela real, el rechazo llegaría con una tarjeta de prueba, no con un monto. Los montos reservados son una convención del simulador; las tarjetas de rechazo son datos de prueba reales y funcionan en los dos lados. Están en [la referencia de datos de prueba](../referencia/datos-de-prueba.md).
 

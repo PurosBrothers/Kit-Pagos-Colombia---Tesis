@@ -8,7 +8,7 @@ Documentación oficial del producto: la que le sirve a quien va a integrar pagos
 
 ## 1. Qué es Kit Pagos
 
-Cuatro pasarelas de pago colombianas —**Wompi**, **Mercado Pago**, **Kushki** y **Rapyd**— detrás de una sola interfaz en TypeScript. Cambiar de pasarela es cambiar una configuración y sus credenciales; el código que cobra, que consulta y que verifica el webhook no se toca.
+Cuatro pasarelas de pago colombianas —**Wompi**, **Mercado Pago**, **Kushki** y **Rapyd**— detrás de una sola interfaz en TypeScript. Cobrar, consultar y verificar un webhook se hacen con las mismas llamadas en las cuatro, y las diferencias de cada una quedan en su adaptador. Cambiar de pasarela cambia la configuración y las credenciales y, según la pasarela, la tokenización del navegador y los datos que se le piden al pagador ([sección 4](#4-los-límites-del-producto)).
 
 Lo que **no** hace está en [la sección 4](#4-los-límites-del-producto), y no es una nota al pie: un kit de pagos que promete más de lo que cumple falla cuando el comercio ya no tiene margen para corregirlo.
 
@@ -38,6 +38,8 @@ Sigue **Diátaxis**, que separa la documentación según lo que el lector está 
 | **Referencia** | «¿Qué parámetros acepta?» | La consulta exacta y sin prosa: las cuatro operaciones, los trece códigos de error, las rutas de `/v1/api`, las de `/v1/sim` |
 | **Explicación** | «¿Por qué funciona así?» | El criterio detrás de las decisiones: por qué el SDK no reintenta un cobro, por qué la redirección no se puede esquivar |
 
+Hoy el manual tiene un tutorial y cuatro referencias. Las guías y las explicaciones todavía no tienen documentos; mientras tanto, el porqué de cada decisión está en el [`architecture-log`](../architecture/architecture-log.md) y en la documentación de arquitectura que enlaza cada referencia.
+
 El estándar se eligió, se comparó contra las alternativas y se justificó en [`estructura.md`](estructura.md), que es también el documento para quien va a escribir acá.
 
 ---
@@ -53,7 +55,7 @@ Esto es lo que Kit Pagos **no** resuelve. Verificado contra el código, no copia
 - **El SDK no protege la página de pago ni decide el monto.** El número de la tarjeta no llega a su servidor, pero la página donde se escribe sí queda en su alcance: la defiende una cabecera `Content-Security-Policy` que manda su servidor. Y el monto lo calcula su servidor con su catálogo, nunca el navegador.
 - **Cada pasarela pide datos propios y el SDK no los inventa.** Mercado Pago exige IP del pagador, teléfono con indicativo y dirección para PSE; Wompi no. Si falta un dato, el SDK falla antes de salir a la red, con `INVALID_REQUEST` y la lista de lo que falta.
 - **La cabecera de escenario del simulador no llega por el SDK.** `x-simulate-scenario` y `x-simulator-scenario` las lee `/v1/sim` cuando se lo llama directamente; el SDK no las envía, así que un comercio que integra con el SDK elige el desenlace con los datos de prueba, el monto y la credencial.
-- **No hay cifras de comparación afirmadas.** El proyecto sostiene que integrar con el SDK cuesta menos trabajo, y la medición formal es el experimento de la Fase 5. Hasta que corra, lo que existe son argumentos, y así se dice.
+- **Este manual no afirma cifras de comparación.** La medición formal es el experimento de la Fase 5, y su resultado, con sus amenazas a la validez, está en el [informe comparativo](../evaluation/informe-comparativo-fase-5.md). El manual no repite sus cifras.
 
 ---
 
