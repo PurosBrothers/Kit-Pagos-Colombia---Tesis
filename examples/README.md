@@ -101,7 +101,7 @@ npm run simulate:mercadopago
   * Autenticación mediante token Bearer.
   * Normalización de respuestas manteniendo el estado nativo (`approved` en minúsculas en `rawStatus`) y el estado unificado (`TransactionStatus.APPROVED`).
   * Consulta del estado de la transacción (`kitPagos.getPaymentStatus(...)`) contra el endpoint HTTP `GET /v1/sim/mercadopago/payments/:id`.
-* **Qué esperar:** Verás en consola tanto la creación de la transacción como la consulta posterior con estado acreditado/aprobado.
+* **Qué esperar:** Verá en consola tanto la creación de la transacción como la consulta posterior con estado acreditado/aprobado.
 
 ---
 

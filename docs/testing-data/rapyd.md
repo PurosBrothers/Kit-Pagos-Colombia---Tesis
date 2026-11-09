@@ -253,7 +253,7 @@ Para simular rechazos o errores en el procesamiento de tarjetas en Sandbox:
 3. **Ingresar Tarjeta:** Completa la información en la página alojada de Rapyd utilizando la tarjeta `4111 1111 1111 1111` y haz clic en **Place Your Order**.
 
 
-4. **Autenticar:** Serás llevado automáticamente a la pantalla de 3DS. Ingresa el código **`123456`** y haz clic en **Continue** para completar el pago y disparar el webhook `PAYMENT_COMPLETED`.
+4. **Autenticar:** Será llevado automáticamente a la pantalla de 3DS. Ingrese el código **`123456`** y haga clic en **Continue** para completar el pago y disparar el webhook `PAYMENT_COMPLETED`.
 
 ### 4.1. Medido desde la tienda del prototipo C (17 de octubre de 2026)
 

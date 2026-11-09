@@ -40,6 +40,9 @@ jobs:
       - name: Build SDK
         run: npm run build
 
+      - name: Verify README and manual snippet compilation
+        run: npm run check:readme
+
       - name: Verify package tarball
         run: npm pack --dry-run
 
