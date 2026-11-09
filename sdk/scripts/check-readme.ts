@@ -17,9 +17,10 @@
  *
  * ## Qué hace, y qué no
  *
- * Extrae los bloques ```typescript del README, los concatena en un archivo temporal y lo
- * compila con `tsc --noEmit` contra `dist/`, o sea contra los tipos que de verdad se publican
- * y no contra el código fuente. Verifica que **compile**, no que funcione: un ejemplo puede
+ * Extrae los bloques ```typescript del README **y de todo `docs/manual/`**, los concatena por
+ * documento en un archivo temporal y lo compila con `tsc --noEmit` contra `dist/`, o sea contra
+ * los tipos que de verdad se publican y no contra el código fuente. La documentación oficial del
+ * producto vive en `docs/manual/`, y un ejemplo roto ahí cuesta lo mismo que uno roto en el README. Verifica que **compile**, no que funcione: un ejemplo puede
  * tipar bien y estar mal (los puntos 51 y 52 son justamente eso). Pero los diez errores que
  * motivaron el script eran todos de tipos.
  *
@@ -37,8 +38,36 @@ import * as path from "node:path";
 
 const sdkRoot = path.resolve(__dirname, "..");
 const readmePath = path.join(sdkRoot, "README.md");
+const manualRoot = path.resolve(sdkRoot, "..", "docs", "manual");
 
-/** Devuelve el contenido de cada bloque ```typescript (o ```ts) del README. */
+/**
+ * Los documentos del manual de producto.
+ *
+ * El manual vive fuera de `sdk/`, y sus ejemplos son tan copiables como los del README:
+ * un fragmento roto ahí se descubre al usarlo, igual que se descubrieron los diez del
+ * README el 19 de septiembre. Se recorren todos los `.md` del manual y los que no traen
+ * bloques ```typescript se ignoran solos.
+ */
+function manualDocuments(): string[] {
+  if (!fs.existsSync(manualRoot)) {
+    return [];
+  }
+  const found: string[] = [];
+  const walk = (directory: string): void => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const full = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.name.endsWith(".md")) {
+        found.push(full);
+      }
+    }
+  };
+  walk(manualRoot);
+  return found.sort();
+}
+
+/** Devuelve el contenido de cada bloque ```typescript (o ```ts) del documento. */
 function typeScriptBlocks(markdown: string): string[] {
   const blocks: string[] = [];
   const pattern = /```(?:typescript|ts)\r?\n([\s\S]*?)```/g;
@@ -130,23 +159,37 @@ function buildModule(blocks: string[]): string {
 }
 
 function main(): void {
-  const markdown = fs.readFileSync(readmePath, "utf8");
-  const blocks = typeScriptBlocks(markdown);
+  const documents = [readmePath, ...manualDocuments()]
+    .map((file) => ({ file, blocks: typeScriptBlocks(fs.readFileSync(file, "utf8")) }))
+    .filter((document) => document.blocks.length > 0);
 
-  if (blocks.length === 0) {
-    console.error("No se encontró ningún bloque ```typescript en el README.");
+  const totalBlocks = documents.reduce((sum, document) => sum + document.blocks.length, 0);
+
+  if (totalBlocks === 0) {
+    console.error("No se encontró ningún bloque ```typescript en el README ni en el manual.");
     process.exit(1);
   }
 
   const dist = path.join(sdkRoot, "dist", "index.d.ts");
   if (!fs.existsSync(dist)) {
-    console.error("Falta dist/. Corra `npm run build` antes de verificar el README.");
+    console.error("Falta dist/. Corra `npm run build` antes de verificar la documentación.");
     process.exit(1);
   }
 
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), "kit-pagos-readme-"));
-  const filePath = path.join(folder, "readme-snippets.ts");
-  fs.writeFileSync(filePath, buildModule(blocks));
+
+  /*
+   * Cada documento se compila por separado: dentro de uno sus bloques comparten variables,
+   * como en el README, pero dos documentos distintos no tienen por qué declarar los mismos
+   * nombres. Un archivo por documento conserva esa independencia y, si algo falla, el
+   * mensaje de `tsc` apunta a la carpeta generada con un archivo por página.
+   */
+  const generated: string[] = [];
+  documents.forEach((document, index) => {
+    const filePath = path.join(folder, `snippets-${index}.ts`);
+    fs.writeFileSync(filePath, buildModule(document.blocks));
+    generated.push(filePath);
+  });
 
   /*
    * `paths` solo se puede declarar en un tsconfig, no como bandera, así que se escribe uno
@@ -179,7 +222,7 @@ function main(): void {
             "kit-pagos-colombia/browser": [path.join(sdkRoot, "dist", "browser", "index.d.ts")],
           },
         },
-        files: [filePath],
+        files: generated,
       },
       null,
       2,
@@ -193,11 +236,13 @@ function main(): void {
       ["-p", configPath],
       { stdio: "inherit", shell: process.platform === "win32" },
     );
-    console.log(`Los ${blocks.length} ejemplos de TypeScript del README compilan.`);
+    console.log(
+      `Los ${totalBlocks} ejemplos de TypeScript de ${documents.length} documentos compilan.`,
+    );
   } catch {
     console.error(
-      "\nEl README no compila contra el SDK publicado. Los tipos de arriba son los que " +
-        "vería quien copie el ejemplo desde npm.",
+      "\nLa documentación no compila contra el SDK publicado. Los tipos de arriba son los " +
+        "que vería quien copie el ejemplo desde npm.",
     );
     process.exit(1);
   } finally {

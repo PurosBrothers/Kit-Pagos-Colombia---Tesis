@@ -293,13 +293,13 @@ La entrega final del proyecto (Hito H6: documento de grado y repositorio públic
 |---|---|---|---|---|---|
 | Iteración 1 – Núcleo del SDK | 2 semanas | 2 semanas (sin cambio) | 24 ago – 7 sep | 20 ago – 15 sep | H3 parcial |
 | Iteración 2 – Adaptadores de pasarela | 2 semanas | 2 semanas (sin cambio) | 8 sep – 21 sep | 7 sep – 21 sep | H3 completo |
-| Iteración 3 – API de simulación y soporte de validación | 2 semanas | 2 semanas (sin cambio) | 22 sep – 5 oct | 27 sep – 7 nov (#112 abierto) | H4 |
-| Fase 5 – Demostración y evaluación | 3 semanas | **2 semanas (comprimida)** | 5 oct – 19 oct | 22 oct – 2 nov (#135 abierto) | H5 |
+| Iteración 3 – API de simulación y soporte de validación | 2 semanas | 2 semanas (sin cambio) | 22 sep – 5 oct | 27 sep – 9 nov | H4 |
+| Fase 5 – Demostración y evaluación | 3 semanas | **2 semanas (comprimida)** | 5 oct – 19 oct | 22 oct – 9 nov | H5 |
 | Fase 6 – Comunicación | 2 semanas | **1 semana (comprimida)** | 19 oct – 26 oct | desde el 31 oct, en curso | H6 (contenido) |
 | Colchón de entrega | — | 2 semanas | 26 oct – 9 nov | — | — |
 | **Entrega final** | | | **9 nov 2026** | | H6 (entrega) |
 
-La columna de la ventana real se agregó el 7 de noviembre de 2026 con los hitos de GitHub, en hora de Colombia, y coincide con la carta Gantt del SPMP 2.0 (sección 4.3.2). La compresión no alcanzó a proteger las fases: la Iteración 3 cerró 14 issues después del 5 de octubre y se solapó con las Fases 5 y 6, que se hicieron dentro del colchón.
+La columna de la ventana real se agregó el 7 de noviembre de 2026 con los hitos de GitHub, en hora de Colombia, y se actualizó el 9 de noviembre, cuando cerraron la Iteración 3 y la Fase 5; coincide con la carta Gantt del SPMP 2.0 (sección 4.3.2). La compresión no alcanzó a proteger las fases: la Iteración 3 cerró 15 issues después del 5 de octubre y se solapó con las Fases 5 y 6, que se hicieron dentro del colchón.
 
 Este plan no le quita tiempo a la Fase 4: la única fase con margen cero para atrasarse es exactamente la que tiene más incertidumbre técnica (tres iteraciones de código real), así que cualquier atraso ahí consume directamente el colchón de la sección 10.1, no las fases posteriores.
 
