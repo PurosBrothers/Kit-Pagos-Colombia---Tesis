@@ -1,4 +1,5 @@
 \subsection{CP-07: reintentos con retroceso exponencial}
+\label{sec:cp07}
 \label{anexo:cp07}
 
 \FichaCaso
@@ -8,7 +9,7 @@
   {Reintentos con retroceso exponencial}
   {Pendiente (\#174)}
   {Pendiente (\#174)}
-  {Comprobar el atributo de confiabilidad del SDK: las operaciones idempotentes reintentan solo fallos transitorios, con retroceso exponencial y un tope, y las que no son idempotentes no se reintentan para no cobrar dos veces. El caso verifica los tiempos, el número de intentos, el error final con su causa y el comportamiento de \texttt{createPayment()} frente a una pasarela que falla y luego responde.}
+  {Comprobar el atributo de calidad de confiabilidad y resiliencia del SDK: las operaciones idempotentes reintentan solo fallos transitorios, con retroceso exponencial y un tope, y las que no son idempotentes no se reintentan para no cobrar dos veces. El caso verifica los tiempos, el número de intentos, el error final con su causa y el comportamiento de \texttt{createPayment()} frente a una pasarela que falla y luego responde.}
   {No funcional (confiabilidad). No es un CRUD ni una prueba de seguridad.}
   {\textbullet\ SDK compilado y dependencias de \texttt{examples/} instaladas.\newline
    \textbullet\ API de Simulación arriba en \texttt{http://localhost:3000} para los escenarios de integración.\newline
@@ -60,7 +61,7 @@ Comprobar que el SDK distingue un fallo transitorio de uno de negocio, que la es
   & & \\ \hline
   8 &
   Confirmar la asimetría en el código de la fachada. &
-  Revisión de \texttt{sdk/src/infrastructure/facade/KitPagos.ts}. &
+  Revisión de \url{sdk/src/infrastructure/facade/KitPagos.ts}. &
   \texttt{getPaymentStatus()} y \texttt{getPseBanks()} construyen un \texttt{RetryHandler}; \texttt{createPayment()} llama al adaptador directamente. La decisión está documentada para evitar un doble débito. &
   & & \\ \hline
   9 &
@@ -68,6 +69,7 @@ Comprobar que el SDK distingue un fallo transitorio de uno de negocio, que la es
   El mismo comando del paso 6. &
   La segunda corrida imprime las mismas filas \texttt{OK} y vuelve a terminar con código 0; los contadores de fallo del simulador se reinician al recuperarse. &
   & & \\ \hline
+\end{xltabular}
 \end{TablaPasos}
 
 \subsubsection{Criterio de aceptación}
@@ -84,9 +86,7 @@ Comprobar que el SDK distingue un fallo transitorio de uno de negocio, que la es
 
 \subsubsection{Observaciones de diseño}
 
-El caso separa dos niveles. Las pruebas unitarias fijan la política con un reloj inyectado y sin red, de modo que el resultado no depende de la latencia. Las pruebas de integración usan los montos reservados del simulador, que producen fallos deterministas: \texttt{10602} falla dos veces y se recupera, \texttt{10600} responde 500 siempre y \texttt{10604} no responde dentro del límite. El monto \texttt{10002} es el que distingue una creación idempotente de una que no lo es: falla dos veces y prospera en el tercer intento, así que un reintento automático de \texttt{createPayment()} cobraría después de un timeout que el comercio ya pudo haber reportado como fallido.
-
-El retardo real incluye un jitter de hasta 200~ms; la prueba exacta lo desactiva para poder afirmar 1000, 2000 y 4000. En la corrida real las pausas caen en \texttt{[1000,1200)}, \texttt{[2000,2200)} y \texttt{[4000,4200)}~ms, y por eso el criterio se enuncia como rango y no como valor exacto.
+El caso separa dos niveles: las pruebas unitarias fijan la política con un reloj inyectado y sin red, y las pruebas de integración usan los montos reservados del simulador, que producen fallos deterministas (\texttt{10602} falla dos veces y se recupera, \texttt{10600} responde 500 y \texttt{10604} produce timeout). El monto \texttt{10002} es el que distingue una creación idempotente de una que no lo es: falla dos veces y prospera en el tercer intento, garantizando que \texttt{createPayment()} no duplique cobros.
 
 \subsubsection{Trazabilidad}
 

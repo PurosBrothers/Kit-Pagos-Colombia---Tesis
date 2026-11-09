@@ -1,4 +1,5 @@
-\subsection{CP-03: motivo de rechazo normalizado}
+\subsection{CP-03: motivo de rechazo normalizado en Kushki y Mercado Pago}
+\label{sec:cp03}
 \label{anexo:cp03}
 
 \FichaCaso
@@ -29,27 +30,27 @@ Comprobar que el motivo de un rechazo llega completo al cliente con dos campos: 
   & & \\ \hline
   2 &
   Verificar el rechazo de Kushki por fondos insuficientes. &
-  Tarjeta \texttt{4349001210846432}, monto \texttt{50000.00 COP}, tokenización por \texttt{/v1/sim/kushki/card/v1/tokens}. &
-  \texttt{POST /v1/api/payments} responde 201; la transacción tiene estado \texttt{DECLINED} y \texttt{rejectionReason} igual a \texttt{\{ rejectionCode: "021", rejectionCategory: "INSUFFICIENT\_FUNDS" \}}. &
+  Tarjeta \texttt{4349001210846432}, monto \texttt{50000.00 COP}, tokenización por \url{/v1/sim/kushki/card/v1/tokens}. &
+  \texttt{POST}\ \url{/v1/api/payments} responde 201; la transacción tiene estado \texttt{DECLINED} y \texttt{rejectionReason} igual a \url{{ rejectionCode: "021", rejectionCategory: "INSUFFICIENT_FUNDS" }}. &
   & & \\ \hline
   3 &
   Verificar un segundo código de Kushki. &
   Tarjeta \texttt{4349008516656431}. &
-  Estado \texttt{DECLINED} y \texttt{rejectionReason} igual a \texttt{\{ rejectionCode: "019", rejectionCategory: "UNKNOWN" \}}. El código nativo se conserva aunque la categoría sea \texttt{UNKNOWN}. &
+  Estado \texttt{DECLINED} y \texttt{rejectionReason} igual a \url{{ rejectionCode: "019", rejectionCategory: "UNKNOWN" }}. El código nativo se conserva aunque la categoría sea \texttt{UNKNOWN}. &
   & & \\ \hline
   4 &
   Verificar el rechazo de Mercado Pago por fondos insuficientes. &
-  Titular \texttt{FUND Ruiz}; token de tarjeta creado en \texttt{/v1/sim/mercadopago/card\_tokens}. &
-  Estado \texttt{DECLINED} y \texttt{rejectionReason} igual a \texttt{\{ rejectionCode: "insufficient\_amount", rejectionCategory: "INSUFFICIENT\_FUNDS" \}}. &
+  Titular \texttt{FUND Ruiz}; token de tarjeta creado en \url{/v1/sim/mercadopago/card_tokens}. &
+  Estado \texttt{DECLINED} y \texttt{rejectionReason} igual a \url{{ rejectionCode: "insufficient_amount", rejectionCategory: "INSUFFICIENT_FUNDS" }}. &
   & & \\ \hline
   5 &
   Verificar el rechazo de Mercado Pago por emisor. &
   Titular \texttt{OTHE Ruiz}. &
-  Estado \texttt{DECLINED} y \texttt{rejectionReason} igual a \texttt{\{ rejectionCode: "rejected\_by\_issuer", rejectionCategory: "UNKNOWN" \}}. &
+  Estado \texttt{DECLINED} y \texttt{rejectionReason} igual a \url{{ rejectionCode: "rejected_by_issuer", rejectionCategory: "UNKNOWN" }}. &
   & & \\ \hline
   6 &
   Verificar que la consulta devuelve el mismo motivo. &
-  El identificador de una transacción rechazada, con \texttt{GET /v1/api/payments/:id?gateway=mercadopago}. &
+  El identificador de una transacción rechazada, con \texttt{GET}\ \url{/v1/api/payments/:id?gateway=mercadopago}. &
   Respuesta 200 con el mismo \texttt{rejectionReason} de la creación; el motivo no se pierde entre la creación y la consulta. &
   & & \\ \hline
   7 &
@@ -57,6 +58,7 @@ Comprobar que el motivo de un rechazo llega completo al cliente con dos campos: 
   Titular \texttt{APRO Ruiz}, tarjeta de Mercado Pago. &
   Estado \texttt{APPROVED} y la transacción no tiene la propiedad \texttt{rejectionReason}. &
   & & \\ \hline
+\end{xltabular}
 \end{TablaPasos}
 
 \subsubsection{Criterio de aceptación}

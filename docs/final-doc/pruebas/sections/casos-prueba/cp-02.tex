@@ -1,4 +1,5 @@
 \subsection{CP-02: PSE de Wompi, redirección y consulta de estado}
+\label{sec:cp02}
 \label{anexo:cp02}
 
 \FichaCaso
@@ -25,7 +26,7 @@ Comprobar que el resultado de la creación conserva la diferencia entre \texttt{
 \begin{TablaPasos}{Pasos del caso CP-02}
   1 &
   Verificar que el simulador responde. &
-  \texttt{cd simulator-api \&\& npm run dev}; luego \texttt{GET http://localhost:3000/health}. &
+  \texttt{cd simulator-api \&\& npm run dev}; luego \texttt{GET}\ \url{http://localhost:3000/health}. &
   Respuesta 200 con estado \texttt{ok}. &
   & & \\ \hline
   2 &
@@ -40,7 +41,7 @@ Comprobar que el resultado de la creación conserva la diferencia entre \texttt{
   & & \\ \hline
   4 &
   Consultar el estado después de la redirección. &
-  El identificador impreso en el paso 2, con \texttt{kitPagos.getPaymentStatus(id)}. &
+  El identificador impreso en el paso 2, con \url{kitPagos.getPaymentStatus(id)}. &
   La consulta devuelve el mismo identificador y estado normalizado \texttt{APPROVED}; el estado nativo es \texttt{APPROVED}. &
   & & \\ \hline
   5 &
@@ -53,6 +54,7 @@ Comprobar que el resultado de la creación conserva la diferencia entre \texttt{
   El mismo comando del paso 2. &
   La segunda corrida reproduce la redirección, el \texttt{PENDING} y el \texttt{APPROVED}; el proceso termina con código 0. &
   & & \\ \hline
+\end{xltabular}
 \end{TablaPasos}
 
 \subsubsection{Criterio de aceptación}
@@ -67,7 +69,7 @@ Comprobar que el resultado de la creación conserva la diferencia entre \texttt{
 
 \subsubsection{Observaciones de diseño}
 
-Contra el sandbox real de Wompi este flujo no se puede ejercitar: el sandbox publica la URL de redirección en el mismo instante en que resuelve el pago, así que cuando la URL existe ya no sirve y no hay ventana para redirigir. La API de Simulación reproduce el orden real —primero la redirección, después la consulta— y por eso es el único ambiente donde el caso tiene sentido. Esta limitación está documentada en el punto 43 del \texttt{architecture-log.md} y es una razón, no una comodidad, para ejecutar el caso contra el simulador.
+Contra el sandbox real de Wompi este flujo no se puede ejercitar: el sandbox publica la URL de redirección en el mismo instante en que resuelve el pago, así que cuando la URL existe ya no sirve y no hay ventana para redirigir. La API de Simulación reproduce el orden real —primero la redirección, después la consulta— y por eso es el único ambiente donde el caso tiene sentido. Esta limitación está documentada en el punto 43 del \texttt{architecture-log.md} y es una razón técnica para ejecutar el caso contra el simulador.
 
 \subsubsection{Trazabilidad}
 

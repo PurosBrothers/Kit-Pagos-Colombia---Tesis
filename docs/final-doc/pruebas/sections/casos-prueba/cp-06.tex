@@ -1,4 +1,5 @@
 \subsection{CP-06: API REST \texttt{/v1/api} de extremo a extremo}
+\label{sec:cp06}
 \label{anexo:cp06}
 
 \FichaCaso
@@ -31,39 +32,40 @@ Comprobar que un cliente sin SDK puede crear un pago, consultarlo y listar banco
   & & \\ \hline
   2 &
   Ejecutar la carpeta de la capa REST en Postman. &
-  Importar la colección y el ambiente \texttt{local}; correr la carpeta \texttt{01. Capa REST Kit Pagos (/v1/api)} en orden. Con Newman: \texttt{npx newman run simulator-api/postman/kit-pagos-simulator.postman\_collection.json -e simulator-api/postman/local.postman\_environment.json --folder "01. Capa REST Kit Pagos (/v1/api)"}. &
-  Las 4 peticiones responden 2xx y sus aserciones pasan. \texttt{GET /v1/api/gateways} devuelve \texttt{cardCapture} igual a \texttt{\{wompi:"BROWSER\_TOKEN", rapyd:"HOSTED\_PAGE", mercadopago:"BROWSER\_TOKEN", kushki:"BROWSER\_TOKEN"\}}. &
+  Importar la colección y el ambiente \texttt{local}; correr la carpeta \texttt{01. Capa REST Kit Pagos (/v1/api)} en orden. Con Newman: \texttt{npx newman run} \url{simulator-api/postman/kit-pagos-simulator.postman_collection.json} \texttt{-e} \url{simulator-api/postman/local.postman_environment.json} \texttt{--folder "01. Capa REST Kit Pagos (/v1/api)"}. &
+  Las 4 peticiones responden 2xx y sus aserciones pasan. \texttt{GET /v1/api/gateways} devuelve \texttt{cardCapture} igual a \url{{wompi:"BROWSER_TOKEN", rapyd:"HOSTED_PAGE", mercadopago:"BROWSER_TOKEN", kushki:"BROWSER_TOKEN"}}. &
   & & \\ \hline
   3 &
   Crear un pago de tarjeta de Wompi por REST. &
-  \texttt{POST /v1/api/payments} con \texttt{gateway:"WOMPI"}, \texttt{amount:50000}, \texttt{currency:"COP"}, \texttt{orderReference:"ORD-API-POSTMAN-<marca>"}, un pagador de prueba y \texttt{paymentMethod:\{type:"CARD", cardToken:"tok\_test\_card\_postman"\}}. &
+  \texttt{POST}\ \url{/v1/api/payments} con \texttt{gateway:"WOMPI"}, \texttt{amount:50000}, \texttt{currency:"COP"}, \url{orderReference:"ORD-API-POSTMAN-<marca>"}, un pagador de prueba y \url{paymentMethod:{type:"CARD", cardToken:"tok_test_card_postman"}}. &
   Respuesta 201 con \texttt{outcome:"TRANSACTION"}; \texttt{transaction.amount} es \texttt{"50000.00"} y no \texttt{50000}; \texttt{currency} es \texttt{COP}; la referencia se conserva; \texttt{status} y \texttt{rawStatus} son \texttt{PENDING}, porque Wompi crea la tarjeta pendiente. &
   & & \\ \hline
   4 &
   Consultar el estado con el identificador y la pasarela. &
-  \texttt{GET /v1/api/payments/\{gatewayTransactionId\}?gateway=wompi}. &
-  Respuesta 200 con \texttt{transaction.status:"APPROVED"} y \texttt{rawStatus:"APPROVED"}; el mismo identificador, monto y referencia del paso 3. El desenlace llega en la consulta, no en la creación. &
+  \texttt{GET}\ \url{/v1/api/payments/{gatewayTransactionId}?gateway=wompi}. &
+  Respuesta 200 con \url{transaction.status:"APPROVED"} y \url{rawStatus:"APPROVED"}; el mismo identificador, monto y referencia del paso 3. El desenlace llega en la consulta, no en la creación. &
   & & \\ \hline
   5 &
   Verificar que la consulta exige la pasarela. &
-  \texttt{GET /v1/api/payments/\{gatewayTransactionId\}} sin \texttt{?gateway=}, y luego con \texttt{?gateway=paypal}. &
+  \texttt{GET}\ \url{/v1/api/payments/{gatewayTransactionId}} sin \texttt{?gateway=}, y luego con \texttt{?gateway=paypal}. &
   Las dos peticiones responden 400 con \texttt{code:"INVALID\_REQUEST"}; la API no deduce la pasarela del identificador. &
   & & \\ \hline
   6 &
   Listar los bancos PSE de Wompi. &
-  \texttt{GET /v1/api/pse-banks?gateway=wompi}. &
+  \texttt{GET}\ \url{/v1/api/pse-banks?gateway=wompi}. &
   Respuesta 200 con \texttt{pseBanks} de un solo elemento: \texttt{gateway:"wompi"} y una lista de bancos con \texttt{code} y \texttt{name}. La lista no mezcla códigos de otras pasarelas. &
   & & \\ \hline
   7 &
   Cobrar con el prototipo C contra la API local. &
-  \texttt{cd prototypes/checkout-frontend-rest \&\& npm ci \&\& npm run build \&\& npm run start:local}; abrir \texttt{http://localhost:4100}, elegir Wompi y PSE, y pagar. &
+  \texttt{cd} \url{prototypes/checkout-frontend-rest} \texttt{\&\& npm ci \&\& npm run build \&\& npm run start:local}; abrir \url{http://localhost:4100}, elegir Wompi y PSE, y pagar. &
   La página cobra contra \texttt{/v1/api} sin un servidor de pagos propio: el SDK de servidor no se instala y el navegador solo carga \texttt{KitPagosBrowser} desde el CDN para tokenizar. La consola \texttt{[tienda C]} muestra las llamadas a \texttt{/v1/api}, la redirección al banco y la consulta posterior. El pago termina aprobado y el código del navegador no nombra pasarelas. &
   & & \\ \hline
   8 &
   Ejecutar el humo de Render. &
-  \texttt{GET https://kit-pagos-colombia.onrender.com/health}, \texttt{/v1/api/gateways} y \texttt{/docs}; si el servicio está dormido, esperar a que despierte. &
+  \texttt{GET}\ \url{https://kit-pagos-colombia.onrender.com/health}, \url{/v1/api/gateways} y \url{/docs}; si el servicio está dormido, esperar a que despierte. &
   \texttt{/health} responde 200; \texttt{/v1/api/gateways} devuelve las cuatro pasarelas y su \texttt{cardCapture}; \texttt{/docs} sirve la interfaz de Swagger~UI. Si Render no está disponible, el paso se registra como bloqueado y no invalida la corrida local. &
   & & \\ \hline
+\end{xltabular}
 \end{TablaPasos}
 
 \subsubsection{Criterio de aceptación}
@@ -82,9 +84,7 @@ Comprobar que un cliente sin SDK puede crear un pago, consultarlo y listar banco
 
 El caso elige la tarjeta de Wompi y no un PSE para la comprobación principal porque la creación con tarjeta devuelve \texttt{TRANSACTION} y obliga a consultar para ver el desenlace; así se ejercitan las dos rutas de lectura en una sola corrida. El PSE aparece en el prototipo C, donde el cliente sí necesita ver la redirección y la diferencia entre \texttt{TRANSACTION} y \texttt{REDIRECT\_REQUIRED}.
 
-El token \texttt{tok\_test\_card\_postman} es el que usa la colección versionada y no representa una tarjeta real. La verificación del monto no compara contra \texttt{50000} como número: el SDK conserva la escala de la moneda y la API serializa esa cadena, de modo que \texttt{"50000.00"} es el valor correcto.
-
-El humo de Render se mantiene separado de la aceptación local. Render es un servicio del nivel gratuito que puede tardar en despertar, y una caída del despliegue no dice nada sobre la corrección de \texttt{/v1/api}; por eso se marca como bloqueado, no como fallo del caso.
+El humo de Render se mantiene separado de la aceptación local. Render es un servicio del nivel gratuito que puede tardar en despertar, y una caída del despliegue no dice nada sobre la corrección funcional de \texttt{/v1/api}; por eso se marca como bloqueado, no como fallo del caso.
 
 \subsubsection{Trazabilidad}
 

@@ -87,14 +87,14 @@ Verifican una unidad de código aislada: un objeto de valor, un adaptador con su
   \centering
   \small
   \renewcommand{\arraystretch}{1.2}
-  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.6cm}|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{2.8cm}|}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.6cm}|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{3.8cm}|}
     \hline
     \textbf{Componente / Capa} & \textbf{Módulos / Archivos} & \textbf{Objetivo de la comprobación} & \textbf{Herramienta y suites} \\ \hline
-    Objetos de valor (\emph{Value Objects}) & \texttt{Amount}, \texttt{Currency}, \texttt{PaymentMethod}, \texttt{Customer}, \texttt{CardToken} & Inmutabilidad, validación de montos positivos con dos decimales, tipos de documento y códigos ISO de moneda. & Jest con \texttt{ts-jest}; 13 suites en \texttt{src/domain/value-objects/} \\ \hline
-    Adaptadores de pasarela (\emph{Adapters}) & \texttt{WompiAdapter}, \texttt{MercadoPagoAdapter}, \texttt{KushkiAdapter}, \texttt{RapydAdapter} & Mapeo de solicitudes nativas, armado de cabeceras de autenticación y manejo de clientes HTTP inyectados. & Jest con mocks HTTP; 16 suites en \texttt{src/infrastructure/adapters/} \\ \hline
-    Normalizadores de respuesta & Normalizadores de estado y respuesta por pasarela & Traducción bidireccional a \texttt{Transaction}, normalización a los seis estados canónicos y preservación de \texttt{rejectionReason}. & Jest; 7 suites en \texttt{src/application/normalizers/} \\ \hline
-    Servicios y fachada & \texttt{KitPagos}, \texttt{RetryHandler}, verificación de webhooks & Orquestación de llamadas, retroceso exponencial para operaciones idempotentes y verificación de firmas criptográficas. & Jest; 8 suites en \texttt{src/application/} y \texttt{src/infrastructure/facade/} \\ \hline
-    Configuración y errores & \texttt{KitPagosConfig}, \texttt{KitPagosError}, factorías & Validación de perfiles y credenciales requeridas, redacción de secretos y conversión tipada a \texttt{KitPagosErrorCode}. & Jest; 6 suites en \texttt{src/config/}, \texttt{src/domain/errors/} \\ \hline
+    Objetos de valor (\emph{Value Objects}) & \texttt{Amount}, \texttt{Currency}, \texttt{PaymentMethod}, \texttt{Customer}, \texttt{CardToken} & Inmutabilidad, validación de montos positivos con dos decimales, tipos de documento y códigos ISO de moneda. & Jest con \texttt{ts-jest}; 13 suites en \url{src/domain/value-objects/} \\ \hline
+    Adaptadores de pasarela (\emph{Adapters}) & \texttt{WompiAdapter}, \texttt{MercadoPagoAdapter}, \texttt{KushkiAdapter}, \texttt{RapydAdapter} & Mapeo de solicitudes nativas, armado de cabeceras de autenticación y manejo de clientes HTTP inyectados. & Jest con mocks HTTP; 16 suites en \url{src/infrastructure/adapters/} \\ \hline
+    Normalizadores de respuesta & Normalizadores de estado y respuesta por pasarela & Traducción bidireccional a \texttt{Transaction}, normalización a los seis estados canónicos y preservación de \texttt{rejectionReason}. & Jest; 7 suites en \url{src/application/normalizers/} \\ \hline
+    Servicios y fachada & \texttt{KitPagos}, \texttt{RetryHandler}, verificación de webhooks & Orquestación de llamadas, retroceso exponencial para operaciones idempotentes y verificación de firmas criptográficas. & Jest; 8 suites en \url{src/application/} y \url{src/infrastructure/facade/} \\ \hline
+    Configuración y errores & \texttt{KitPagosConfig}, \texttt{KitPagosError}, factorías & Validación de perfiles y credenciales requeridas, redacción de secretos y conversión tipada a \texttt{KitPagosErrorCode}. & Jest; 6 suites en \url{src/config/}, \url{src/domain/errors/} \\ \hline
   \end{tabularx}
   \caption{Desglose de pruebas unitarias del SDK}
   \label{tab:pruebas-unitarias}
@@ -108,14 +108,14 @@ Verifican la colaboración entre piezas: el SDK contra la API de Simulación, la
   \centering
   \small
   \renewcommand{\arraystretch}{1.2}
-  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.8cm}|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{2.6cm}|}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.8cm}|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{3.8cm}|}
     \hline
     \textbf{Subsistema} & \textbf{Módulos / Rutas} & \textbf{Objetivo de la integración} & \textbf{Herramienta y suites} \\ \hline
-    Rutas nativas simuladas (\texttt{/v1/sim}) & Rutas de Wompi, Mercado Pago, Kushki y Rapyd (33 rutas) & Preservar formatos y esquemas nativos, soporte de páginas de banco PSE y transición de estados sin alterar datos reales. & Fastify \texttt{app.inject()}; 22 suites en \texttt{simulator-api/test/} \\ \hline
-    Capa REST propia (\texttt{/v1/api}) & \texttt{/gateways}, \texttt{/payments}, \texttt{/payments/:id}, \texttt{/pse-banks}, \texttt{/webhooks/:gateway} & Verificar la serialización exacta del monto como cadena, entrega de motivos de rechazo estructurados y consumo del SDK sin adaptación adicional. & Fastify \texttt{app.inject()}; 8 suites en \texttt{simulator-api/test/} \\ \hline
-    Motor de escenarios deterministas & Montos reservados (\texttt{10 100} a \texttt{10 604}) y marcas de credencial & Provocar de forma determinista caídas de red, límites de tasa, errores 5xx del servidor y recuperación tras reintentos sin depender de sandboxes reales. & Jest y Fastify; 12 suites en \texttt{simulator-api/test/} \\ \hline
-    Emisión y disparo de webhooks & Disparador \texttt{/v1/sim/webhooks/trigger} y receptores & Generación de cargas útiles firmadas con algoritmos nativos (HMAC-SHA256) y entrega a endpoints locales de prototipos. & Fastify y Jest; 6 suites en \texttt{simulator-api/test/} \\ \hline
-    Prototipos de comercio & Prototipos A, B, C y D & Flujo completo de compra (catálogo, carrito, tokenización, cobro y consulta) y verificación de paridad de esqueleto entre B y D. & Jest y script \texttt{check-skeleton-parity.sh} \\ \hline
+    Rutas nativas simuladas (\texttt{/v1/sim}) & Rutas de Wompi, Mercado Pago, Kushki y Rapyd (33 rutas) & Preservar formatos y esquemas nativos, soporte de páginas de banco PSE y transición de estados sin alterar datos reales. & Fastify \texttt{app.inject()}; 22 suites en \url{simulator-api/test/} \\ \hline
+    Capa REST propia (\texttt{/v1/api}) & \texttt{/gateways}, \texttt{/payments}, \texttt{/payments/:id}, \texttt{/pse-banks}, \url{/webhooks/:gateway} & Verificar la serialización exacta del monto como cadena, entrega de motivos de rechazo estructurados y consumo del SDK sin adaptación adicional. & Fastify \texttt{app.inject()}; 8 suites en \url{simulator-api/test/} \\ \hline
+    Motor de escenarios deterministas & Montos reservados (\texttt{10 100} a \texttt{10 604}) y marcas de credencial & Provocar de forma determinista caídas de red, límites de tasa, errores 5xx del servidor y recuperación tras reintentos sin depender de sandboxes reales. & Jest y Fastify; 12 suites en \url{simulator-api/test/} \\ \hline
+    Emisión y disparo de webhooks & Disparador \url{/v1/sim/webhooks/trigger} y receptores & Generación de cargas útiles firmadas con algoritmos nativos (HMAC-SHA256) y entrega a endpoints locales de prototipos. & Fastify y Jest; 6 suites en \url{simulator-api/test/} \\ \hline
+    Prototipos de comercio & Prototipos A, B, C y D & Flujo completo de compra (catálogo, carrito, tokenización, cobro y consulta) y verificación de paridad de esqueleto entre B y D. & Jest y script \url{check-skeleton-parity.sh} \\ \hline
   \end{tabularx}
   \caption{Desglose de pruebas de integración del sistema}
   \label{tab:pruebas-integracion}
