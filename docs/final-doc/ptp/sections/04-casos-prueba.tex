@@ -1,0 +1,40 @@
+\section{Casos de prueba}
+\textbf{Propósito:} Desarrollar los casos de pruebas funcionales y no funcionales para el proyecto.
+
+\textbf{Contenido:}
+\begin{itemize}
+  \item Diseñe al menos 5 casos de pruebas para funcionalidades clave de su software.
+  \item No incluir CRUDs, seguridad o ayuda.
+  \item Muestre un ejemplo de un caso de prueba. Los demás pueden estar en un anexo.
+  \item Diseñe al menos una prueba para un atributo de calidad.
+  \item Puede utilizar la plantilla de la Figura~\ref{fig:plantilla-casos-prueba} para los casos de prueba u otra similar.
+\end{itemize}
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|}
+    \hline
+    \textbf{Id:} & \textbf{Author:} \\ \hline
+    \textbf{Date created:} & \textbf{Title:} \\ \hline
+    \textbf{Tester:} & \textbf{Date tested:} \\ \hline
+    \multicolumn{2}{|l|}{\textbf{Description:}} \\ \hline
+    \multicolumn{2}{|l|}{\textbf{Type:} (Functional, Usability, Performance, Reliability, Maintainability, Security, etc.)} \\ \hline
+    \multicolumn{2}{|l|}{\textbf{Preconditions:}} \\ \hline
+  \end{tabularx}
+  \vspace{3pt}
+
+  \setlength{\tabcolsep}{2pt}
+  \begin{tabularx}{\textwidth}{|c|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{1.1cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{1.4cm}|>{\raggedright\arraybackslash}p{1.1cm}|}
+    \hline
+    \textbf{Test} & \textbf{Steps} & \textbf{Data} & \textbf{Expected Result} & \textbf{Actual Result} & \textbf{Status} & \textbf{Notes} \\ \hline
+    1 & Invoke add operation & 5, 2 & 7 & 7 & Passed/Failed & \\ \hline
+    2 & Invoke operation with negative values & -9, 3 & -6 & & & \\ \hline
+    3 & Invoke 10000 times the add operation using a load testing tool & 5, 2 & All operations are processed & & & \\ \hline
+    4 & \dots & & & & & \\ \hline
+  \end{tabularx}
+  \caption{Plantilla de casos de prueba}
+  \label{fig:plantilla-casos-prueba}
+\end{table}
