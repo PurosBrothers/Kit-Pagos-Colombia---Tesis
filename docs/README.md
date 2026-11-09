@@ -1,8 +1,10 @@
 # Documentación de Kit Pagos Colombia
 
-Esta carpeta está organizada como un **camino de lectura**: si la recorrés en orden, de la sección 00 a la 06, entendés el proyecto de punta a punta sin necesitar contexto previo. Cada sección responde una pregunta distinta, y las secciones están numeradas porque el orden importa: la arquitectura no se entiende sin saber qué problema resuelve, y el SDK no se entiende sin la arquitectura.
+Esta carpeta está organizada como un **camino de lectura**: si se recorre en orden, de la sección 00 a la 06, se entiende el proyecto de punta a punta sin necesitar contexto previo. Cada sección responde una pregunta distinta, y las secciones están numeradas porque el orden importa: la arquitectura no se entiende sin saber qué problema resuelve, y el SDK no se entiende sin la arquitectura.
 
-Si ya conocés el proyecto y venís a buscar algo puntual, la tabla de la sección "Índice completo" te lleva directo.
+Si ya se conoce el proyecto y solo se busca algo puntual, el índice de «El camino de lectura» lleva directo.
+
+> **Para quien viene a usar Kit Pagos y no va a leer la tesis:** la documentación del producto —instalar el SDK, consumir la API REST, levantar la API de Simulación— está en [`manual/`](manual/README.md). Esta carpeta y esa son dos audiencias distintas; la frontera entre las dos, y dónde escribir cada cosa, está en [`manual/estructura.md`](manual/estructura.md).
 
 ---
 
@@ -24,7 +26,7 @@ El tercero no es un anexo: sin saber qué tarjeta aprueba en Wompi, qué `bankId
 
 ### [00 — Entorno de desarrollo](00-entorno-de-desarrollo.md)
 
-Cómo se instala, se levanta y se verifica el repositorio. Empezá acá si querés ejecutar algo hoy.
+Cómo se instala, se levanta y se verifica el repositorio. Empiece acá si quiere ejecutar algo hoy.
 
 ### [01 — Producto y lógica de negocio](01-producto/)
 
@@ -98,7 +100,7 @@ No son parte del camino de lectura: son artefactos que se consultan.
 | [`architecture/`](architecture/) | El [architecture-log](architecture/architecture-log.md) con más de 87 decisiones técnicas documentadas, el [análisis de representación de dinero](architecture/money-representation-analysis.md) y los diagramas C4 en PNG y PlantUML | **Su ruta no se puede mover:** hay comentarios en `sdk/src` y en `simulator-api/src` que citan `docs/architecture/architecture-log.md` por ruta completa |
 | [`testing-data/`](testing-data/) | El componente 3: datos de prueba de las cuatro pasarelas | Misma razón: el código y las pruebas citan estas rutas |
 | [`project-management/`](project-management/) | La [metodología DSR](project-management/methodology.md) con las fórmulas normativas de las métricas, la [matriz de trazabilidad](project-management/traceability-matrix.md) que cumple la condición 5 del DoD, los [objetivos específicos de la tesis](project-management/thesis-objectives.md), el [plan de evaluación](project-management/prototypes-evaluation-plan.md) de la Fase 5 y las [áreas de enfoque](project-management/team-focus-areas.md) del equipo | Es gestión del trabajo de grado, no documentación del artefacto |
-| `evaluation/` | Reservada para el informe comparativo de la Fase 5 | Todavía no existe; la crea la fase que la escribe |
+| [`evaluation/`](evaluation/) | El [informe comparativo de la Fase 5](evaluation/informe-comparativo-fase-5.md), la [recolección de las seis variables](evaluation/recoleccion-seis-variables.md) y los reportes CK y de conceptos nativos que respaldan cada cifra | Es el entregable experimental del Hito H5; se consulta, no se recorre |
 | [`final-doc/`](final-doc/README.md) | Las fuentes LaTeX del SRS, el SAD, el plan de pruebas y la memoria de grado, con el estilo común de los tres primeros y cómo compilarlas | Son los documentos de entrega del trabajo de grado; los PDF no se versionan |
 
 **El architecture-log merece un párrafo aparte.** Es el documento más valioso del repositorio y el más difícil de reemplazar: registra más de 87 decisiones con su contexto, sus alternativas y, sobre todo, lo que resultó falso al medirlo. Varias afirmaciones que parecían obvias se cayeron al probarlas contra los sandboxes reales, y eso quedó escrito ahí en lugar de corregirse en silencio. Cuando cualquier documento de este camino de lectura dice "medido el tal día", el detalle está en ese archivo.
@@ -114,7 +116,7 @@ Este es el mapa del estado de los cuatro entregables del ciclo de construcción:
 | **API de Simulación completa** | [`simulator-api/`](../simulator-api/) | [02-arquitectura/3-api-de-simulacion.md](02-arquitectura/3-api-de-simulacion.md) y [`simulator-api/README.md`](../simulator-api/README.md) | Completa, documentada con OpenAPI 3.0 en `/docs` y desplegada en Render |
 | **Documentación de datos completa** | — | [testing-data/README.md](testing-data/README.md) y los cuatro documentos por pasarela | Completa como tercer componente |
 | **Landing page** | [`landing/`](../landing/) | [06-landing/1-alcance-y-contenido.md](06-landing/1-alcance-y-contenido.md) | Construida, interactiva y desplegada |
-| **Proyectos prototípicos completos** | `prototypes/checkout-sin-solucion/` y `prototypes/checkout-con-sdk-front-back/` | [project-management/prototypes-evaluation-plan.md](project-management/prototypes-evaluation-plan.md) y [04-metricas-y-pruebas/4-medir-los-prototipos.md](04-metricas-y-pruebas/4-medir-los-prototipos.md) | Base lista para la medición de la Fase 5 |
+| **Proyectos prototípicos completos** | `prototypes/checkout-sin-solucion/` y `prototypes/checkout-con-sdk-front-back/` | [project-management/prototypes-evaluation-plan.md](project-management/prototypes-evaluation-plan.md), [04-metricas-y-pruebas/4-medir-los-prototipos.md](04-metricas-y-pruebas/4-medir-los-prototipos.md) y el [informe comparativo de la Fase 5](evaluation/informe-comparativo-fase-5.md) | Medición completa: el informe cierra la evaluación de la Fase 5 (OE-06) |
 
 ---
 

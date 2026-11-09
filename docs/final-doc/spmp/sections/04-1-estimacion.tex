@@ -4,7 +4,7 @@ La administración del proyecto define los mecanismos utilizados para planificar
 
 \subsection{Métodos y Herramientas de Estimación}
 
-La estimación del proyecto se realizó sobre dos dimensiones: el tamaño del software y el esfuerzo requerido para producirlo. Las estimaciones de tamaño y esfuerzo se consolidaron inicialmente en Google Spreadsheets, utilizando tablas de descomposición de componentes y distribución de carga por fase. GitHub Projects se utilizó complementariamente para hacer seguimiento al avance real frente a las estimaciones iniciales durante la ejecución del proyecto.
+La estimación del proyecto se realizó sobre dos dimensiones: el tamaño del software y el esfuerzo requerido para producirlo. Las estimaciones de tamaño y esfuerzo se hicieron con tablas de descomposición de componentes y de distribución de carga por fase. La versión 1.0 de este plan decía que se consolidaban en Google Spreadsheets y que GitHub Projects seguía el avance real. Según el equipo, no se usó ninguna de las dos herramientas; el avance se siguió con los hitos y los issues de GitHub.
 
 \subsubsection{Estimación del tamaño del software}
 
@@ -26,7 +26,7 @@ Se empleó estimación por conteo de componentes, partiendo de la arquitectura y
   \hline
   Adaptador Wompi & Implementación de puertos para Wompi & 4–6 \\
   \hline
-  Adaptador PayU & Implementación de puertos para PayU & 4–6 \\
+  Adaptador Rapyd & Implementación de puertos para Rapyd & 4–6 \\
   \hline
   Adaptador Mercado Pago & Implementación de puertos para Mercado Pago & 4–6 \\
   \hline
@@ -40,6 +40,8 @@ Se empleó estimación por conteo de componentes, partiendo de la arquitectura y
   \hline
 \end{longtable}
 \end{center}
+
+Lo construido es bastante más grande que lo estimado. Contado el 7 de noviembre de 2026 sobre \texttt{devops} (\texttt{c2c4107}) con \texttt{git ls-tree}, hay 83 archivos \texttt{.ts} que no son pruebas en \texttt{sdk/src} y \texttt{sdk/src-browser}, y 74 en \texttt{simulator-api/src}; de pruebas, 62 en \texttt{sdk/} y 54 en \texttt{simulator-api/}. La estimación tampoco contaba el módulo de navegador, los cuatro prototipos de \texttt{prototypes/}, los ejemplos de \texttt{examples/} ni la página de presentación de \texttt{landing/}.
 
 Estimación del esfuerzo del proyecto
 
@@ -80,4 +82,4 @@ El aumento en la complejidad frente al referente no se debe únicamente a que el
 \end{longtable}
 \end{center}
 
-El seguimiento del esfuerzo real frente al estimado se realiza en Google Spreadsheets, donde cada integrante registra sus horas al cierre de cada semana y el coordinador las compara con las horas proyectadas por fase. La tasa de completitud del backlog en GitHub Projects actúa como indicador proxy del avance: si el porcentaje de ítems completados es coherente con las horas consumidas, la estimación se considera válida. Una desviación superior al 20\% entre esfuerzo real y proyectado activa una revisión en la reunión semanal.
+La versión 1.0 de este plan preveía que cada integrante registrara sus horas al cierre de cada semana en Google Spreadsheets y que el coordinador las comparara con las proyectadas por fase. Una desviación superior al 20\% debía activar una revisión. Ese registro no se llevó. Según el equipo, cada integrante dedicó en promedio 8 horas a la semana, frente a las 12 que supone esta estimación. El avance se siguió con los issues cerrados de cada hito de GitHub (sección 3.1.3).

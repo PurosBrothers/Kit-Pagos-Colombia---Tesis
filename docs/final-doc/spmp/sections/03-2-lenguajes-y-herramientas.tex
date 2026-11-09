@@ -18,7 +18,7 @@ Las herramientas y lenguajes seleccionados para el proyecto responden a dos crit
   \caption{Lenguajes de Modelado.}
   \label{tab:lenguajes-modelado}\\
   \endlastfoot
-  UML & Es el lenguaje de modelado principal del proyecto. Se utiliza para los diagramas de clases del SDK, los diagramas de componentes de la arquitectura hexagonal y los diagramas de secuencia de las interacciones entre el framework y las pasarelas. \\
+  UML & Es el lenguaje de modelado principal del proyecto. Se utiliza para los diagramas de clases del SDK, los diagramas de componentes de la arquitectura hexagonal y los diagramas de secuencia de las interacciones entre el framework y las pasarelas. Se escribe en PlantUML, y las fuentes se versionan junto a sus imágenes (\path{docs/architecture/*/diagrams-source/}). \\
   \hline
   BPMN 2.0 & Se usa para los procesos de gestión del proyecto: administración de requerimientos, control de cambios, gestión de riesgos y control de calidad, todos referenciados en este documento. \\
   \hline
@@ -62,9 +62,13 @@ Las herramientas y lenguajes seleccionados para el proyecto responden a dos crit
   \caption{Herramientas de desarrollo y arquitectura}
   \label{tab:herramientas-desarrollo}\\
   \endlastfoot
-  Node.js & A través de Fastify, node.js actúa como servidor de la API de simulación. Fastify fue preferido sobre Express por su mejor desempeño y su soporte nativo de TypeScript con tipado explícito de rutas y esquemas. Jest es el framework de pruebas para el SDK y la API de simulación; se utiliza para pruebas unitarias sobre el núcleo y pruebas de integración sobre los adaptadores. Supertest complementa Jest para las pruebas de los endpoints de la API de simulación. \\
+  Node.js & A través de Fastify 5, Node.js actúa como servidor de la API de Simulación, y \texttt{@fastify/swagger} publica su especificación OpenAPI en \texttt{/docs} (\texttt{simulator-api/package.json}). Fastify fue preferido sobre Express por su mejor desempeño y su soporte nativo de TypeScript con tipado explícito de rutas y esquemas. Jest es el framework de pruebas para el SDK y la API de Simulación; se utiliza para pruebas unitarias sobre el núcleo y pruebas de integración sobre los adaptadores. Las rutas del simulador se prueban en memoria con \texttt{app.inject()} de Fastify, sin Supertest (issue \#6). \\
   \hline
-  Github & Mediante GitHub Actions constituye el sistema de control de versiones y la plataforma de integración continua. Cada pull request hacia la rama principal activa automáticamente la ejecución de las pruebas y la verificación de cobertura. npm es el gestor de paquetes y el canal de distribución del SDK como librería open source. \\
+  esbuild y ts-morph & esbuild empaqueta el módulo de navegador en un único archivo ES Module (\texttt{sdk/scripts/build-browser.js}). ts-morph recorre el árbol sintáctico de TypeScript para calcular las métricas CK (\texttt{sdk/scripts/ck-metrics.ts}). \\
+  \hline
+  GitHub & Es el sistema de control de versiones, y GitHub Actions es la plataforma de integración continua. Cada pull request hacia \texttt{devops} o \texttt{main} ejecuta las pruebas, la cobertura y las métricas CK (\texttt{ci.yml}); \texttt{final-doc.yml} compila los documentos en LaTeX, \texttt{publish.yml} publica el SDK y \texttt{deploy-landing.yml} publica la página de presentación en GitHub Pages. npm es el gestor de paquetes y el canal de distribución del SDK como librería open source. \\
+  \hline
+  Render y ngrok & Render aloja la API de Simulación en su plan gratuito, configurada con \texttt{render.yaml}. ngrok, en su plan gratuito, da un dominio fijo para recibir los webhooks reales de las pasarelas en las tiendas de los prototipos (punto 120 del registro de arquitectura). \\
   \hline
 \end{longtable}
 \end{center}
@@ -85,11 +89,9 @@ Las herramientas y lenguajes seleccionados para el proyecto responden a dos crit
   \caption{Herramientas de análisis, modelado y documentación}
   \label{tab:herramientas-documentacion}\\
   \endlastfoot
-  \href{http://draw.io}{Draw.io} & Draw.io es la herramienta principal para la creación de diagramas UML y BPMN. Todos los diagramas del proyecto se elaboran aquí y se exportan como imagen para su inclusión en los documentos. \\
+  PlantUML & Es la herramienta de los diagramas de arquitectura del repositorio: clases, componentes y secuencias. Las fuentes \texttt{.puml} se versionan y se exportan como imagen para los documentos. \\
   \hline
-  TypeDoc & Esta herramienta automáticamente la documentación de la API pública del SDK a partir de los comentarios JSDoc en el código fuente; esta documentación se publica en el repositorio como referencia para desarrolladores externos. \\
-  \hline
-  Notion & En esta plataforma se almacena la documentación viva del proyecto: actas de reunión, decisiones técnicas, ADRs y bitácoras de avance. \\
+  Markdown en el repositorio & La documentación viva del proyecto está en \texttt{docs/}: el registro de arquitectura (\texttt{docs/architecture/architecture-log.md}) guarda las decisiones técnicas y lo medido, y cada guía y documento técnico se versiona con el código. No se usó Notion ni se generó documentación con TypeDoc. \\
   \hline
 \end{longtable}
 \end{center}
@@ -110,13 +112,13 @@ Las herramientas y lenguajes seleccionados para el proyecto responden a dos crit
   \caption{Herramientas de gestión del proyecto y comunicación}
   \label{tab:herramientas-gestion}\\
   \endlastfoot
-  Github Projects & Se utiliza para la gestión del backlog y el seguimiento de tareas por fase del proyecto. La integración nativa con el repositorio facilita la trazabilidad entre tareas e issues de código. \\
+  GitHub (hitos, issues y pull requests) & Se utiliza para la gestión del backlog y el seguimiento de tareas: cada fase e iteración es un hito, cada tarea un issue y cada cambio un pull request. El tablero de GitHub Projects no se usó. \\
   \hline
   Microsoft Teams & Medio de contacto para la comunicación formal (reuniones con el director, revisiones de entregables). \\
   \hline
   Whatsapp & Coordinación diaria entre los integrantes. \\
   \hline
-  Postman & Se utiliza para documentar y ejecutar colecciones de pruebas sobre los endpoints de la API de simulación; las colecciones se versionan en el repositorio. \\
+  Postman y Newman & Postman documenta y ejecuta las colecciones de pruebas sobre los endpoints de la API de Simulación, versionadas en \texttt{simulator-api/postman/}; Newman las corre desde la línea de comandos contra el simulador local y contra Render. \\
   \hline
 \end{longtable}
 \end{center}
@@ -137,11 +139,9 @@ Las herramientas y lenguajes seleccionados para el proyecto responden a dos crit
   \caption{Herramientas de ofimática y presentación}
   \label{tab:herramientas-ofimatica}\\
   \endlastfoot
-  Google Docs & Se usa para los documentos entregables del trabajo de grado. \\
+  LaTeX con \texttt{latexmk} & Los documentos entregables del trabajo de grado (la memoria, el SRS, el SAD, el plan de pruebas y este SPMP) se escriben en LaTeX en \texttt{docs/final-doc/} y los compila la integración continua (\texttt{final-doc.yml}; issue \#167). Las versiones 1.0 de mayo de 2026 se escribieron en Word (el SRS) y en Google Docs (el SAD y este SPMP). La carta Gantt es una tabla de este documento. \\
   \hline
-  Google Spreadsheets & Se usa para la carta Gantt y la matriz de métricas CK. \\
-  \hline
-  Draw.io & Se usa para los diagramas mostrados en los documentos. \\
+  Hojas de cálculo & No se usaron: las métricas CK las calcula la integración continua y sus resultados quedan en el registro de arquitectura y en \texttt{docs/evaluation/}. \\
   \hline
 \end{longtable}
 \end{center}
@@ -170,4 +170,4 @@ Jenkins requiere servidor propio, configuración manual y mantenimiento continuo
 
 \textbf{Gestión de backlog}
 
-Jira es la herramienta más completa, pero tiene una curva de configuración alta y sus planes gratuitos tienen limitaciones para equipos que necesitan integración con GitHub. Linear es una alternativa moderna con buena integración con GitHub, pero introduce una herramienta externa adicional. GitHub Projects se integra directamente con los issues y pull requests del repositorio, lo que facilita la trazabilidad entre tareas y código sin salir del entorno de trabajo. Para un proyecto de esta escala, la integración nativa supera la funcionalidad adicional que ofrecen las alternativas.
+Jira es la herramienta más completa, pero tiene una curva de configuración alta y sus planes gratuitos tienen limitaciones para equipos que necesitan integración con GitHub. Linear es una alternativa moderna con buena integración con GitHub, pero introduce una herramienta externa adicional. GitHub se integra directamente con el código: los hitos, los issues y los pull requests del repositorio dan la trazabilidad entre tareas y cambios sin salir del entorno de trabajo, y el equipo no necesitó el tablero de GitHub Projects. Para un proyecto de esta escala, la integración nativa supera la funcionalidad adicional que ofrecen las alternativas.

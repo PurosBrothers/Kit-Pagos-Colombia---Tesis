@@ -145,7 +145,7 @@ De ahí sale el orden forzado de la Iteración 3: **escenarios del simulador →
 
 ## 5. Dónde va el resultado
 
-En `docs/evaluation/`, que está reservada para eso. El informe tiene que contener, según el plan de evaluación: el diseño resumido, la tabla con las seis variables para ambos prototipos, el costo de agregar cada pasarela citado textualmente, las métricas CK de cada uno, la discusión de amenazas a la validez, y la conclusión **tal como salió, incluso si contradice la hipótesis**.
+En `docs/evaluation/`. El entregable ya escrito es el [informe comparativo de la Fase 5](../evaluation/informe-comparativo-fase-5.md), con la [recolección de las seis variables](../evaluation/recoleccion-seis-variables.md) y los reportes JSON que respaldan cada cifra. El informe contiene, según el plan de evaluación: el diseño resumido, la tabla con las seis variables para ambos prototipos, el costo de agregar cada pasarela citado textualmente, las métricas CK de cada uno, la discusión de amenazas a la validez, y la conclusión **tal como salió, incluso si contradice la hipótesis**.
 
 La tabla de la variable 2 —el costo de agregar cada pasarela— es la que conviene proyectar primero en la sustentación.
 
@@ -168,5 +168,6 @@ Y una que no está en la lista de amenazas pero condiciona la recolección: **el
 ## 7. Qué sigue
 
 - Qué miden las métricas y por qué esas cuatro: [1-metricas-ck.md](1-metricas-ck.md).
+- El resultado de la medición: [informe-comparativo-fase-5.md](../evaluation/informe-comparativo-fase-5.md).
 - El diseño experimental completo: [prototypes-evaluation-plan.md](../project-management/prototypes-evaluation-plan.md).
 - La comparación cualitativa que sí se puede afirmar hoy: [03-sdk/5-comparacion-con-integracion-directa.md](../03-sdk/5-comparacion-con-integracion-directa.md).

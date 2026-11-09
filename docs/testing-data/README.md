@@ -97,9 +97,9 @@ Lo mismo aplica a [`architecture-log.md`](../architecture/architecture-log.md), 
 
 **Si vas a correr las pruebas de contrato**, las credenciales de los cuatro archivos son las que van en el `.env` del SDK. El mapeo variable por variable está en [03-sdk/4-guia-de-implementacion.md](../03-sdk/4-guia-de-implementacion.md) §2.
 
-**Si vas a probar un flujo específico**, buscá la sección del método en el archivo de la pasarela. Cada una trae el payload completo, no un fragmento.
+**Si va a probar un flujo específico**, busque la sección del método en el archivo de la pasarela. Cada una trae el payload completo, no un fragmento.
 
-**Si algo no funciona como dice acá**, revisá la fecha de la afirmación. Los sandboxes cambian, y una medición de septiembre de 2026 puede no valer hoy. Las 18 pruebas de contrato existen para detectar exactamente eso:
+**Si algo no funciona como dice acá**, revise la fecha de la afirmación. Los sandboxes cambian, y una medición de septiembre de 2026 puede no valer hoy. Las 18 pruebas de contrato existen para detectar exactamente eso:
 
 ```bash
 cd sdk && npm run test:sandbox

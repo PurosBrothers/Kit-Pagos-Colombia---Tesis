@@ -2,53 +2,57 @@
 
 El proyecto produce artefactos de varios tipos, código fuente, código de pruebas, documentación técnica, documentación académica y datos de configuración, que evolucionan a lo largo de los ciclos DSR. Para mantener trazabilidad, consistencia y la capacidad de retroceder a versiones anteriores si es necesario, se implementa un proceso riguroso de control de cambios.
 
-Los ítems de configuración principales son identificados explícitamente. El código fuente del SDK en TypeScript (directorio src/) y el código de la API de simulación Fastify (directorio api/) se versionan en GitHub utilizando versionamiento semántico (MAJOR.MINOR.PATCH). Las pruebas unitarias (directorio test/) se mantienen sincronizadas con cambios en src/. La rama principal es main (código estable listo para publicación), la rama de desarrollo es dev (integración de nuevas features), y cada feature individual tiene su propia rama feature/nombre-descriptivo que se fusiona en dev una vez completada. La documentación técnica se almacena en docs/ en formato Markdown: architecture.md (descripción de patrones y componentes), sandbox-data.md (especificación de escenarios de prueba por pasarela), integration-guide.md (tutorial para desarrollador externo), y CHANGELOG.md (historial de cambios por versión). La documentación de APIs se genera automáticamente mediante TypeDoc cada build. La documentación académica (documento de trabajo de grado, reportes de fase) se almacena en Google Drive con historial de cambios y versionamiento manual (v0.1, v0.2, etc.). Los datos de configuración se mantienen en Google Sheets: plan de riesgos (Anexo B), plan de mitigación (Anexo C), y matriz de trazabilidad (sección 1.3).
+Los ítems de configuración principales son identificados explícitamente. Todo el código se versiona en GitHub: el SDK de servidor en \texttt{sdk/src}, el módulo de navegador en \texttt{sdk/src-browser}, la API de Simulación en \texttt{simulator-api/src}, los prototipos en \texttt{prototypes/}, los ejemplos en \texttt{examples/} y la página de presentación en \texttt{landing/}. Las pruebas del SDK están junto al código (\texttt{*.test.ts} en \texttt{sdk/src}) y en \texttt{sdk/test}, y las del simulador en \texttt{simulator-api/test}. La rama \texttt{main} tiene lo publicado y \texttt{devops} es la rama de integración. Cada cambio se hace en una rama de trabajo que sale de \texttt{devops}, con el tipo de cambio y el número de su issue en el nombre (\texttt{CONTRIBUTING.md}). La versión 1.0 de este plan nombraba otros directorios (\texttt{src/}, \texttt{api/} y \texttt{test/}) y otras ramas (\texttt{dev} y \texttt{feature/*}).
 
-Para cambios en código, se sigue un proceso estructurado: el desarrollador crea una rama feature/nombre-descriptivo, implementa el cambio localmente, ejecuta pruebas unitarias (jest --coverage) asegurando cobertura mínima del 80\%, pushea el código a GitHub, y crea una Pull Request (PR) describiendo brevemente el cambio. El CI/CD pipeline automático (GitHub Actions) compila el código, ejecuta pruebas, verifica coverage y ejecuta análisis de estilo (ESLint). Si hay errores, el desarrollador los corrige localmente e itera. Una vez que el build es exitoso, el Líder arquitectura y núcleo SDK y al menos otro integrante revisan el código verificando lógica correcta, aplicación de patrones de diseño GoF, y métricas de complejidad (WMC $\leq$15, CBO $\leq$5, RFC $\leq$20). Si la revisión identifica mejoras necesarias, se registran como comentarios en el PR; el desarrollador las aborda e itera. Una vez aprobado, se fusiona (merge) en la rama dev. Para cambios en documentación, el proceso es similar pero sin rama de feature: el autor modifica el documento en GitHub (si es .md) o Google Docs, otro integrante revisa verificando gramática, claridad y validez de referencias cruzadas, y una vez aprobado se considera finalizado. Al cierre de cada fase DSR (fin de H1, H2, etc.), se consolida la rama dev en main, se genera un tag de versión (ej. v0.1.0, v0.2.0), se publica la versión estable en npm, y se actualiza CHANGELOG.md con descripción de cambios incluidos.
+La documentación técnica está en \texttt{docs/}, en Markdown: el registro de arquitectura (\texttt{docs/architecture/architecture-log.md}), los datos de prueba por pasarela (\texttt{docs/testing-data/}) y la guía de implementación del SDK (\path{docs/03-sdk/4-guia-de-implementacion.md}), entre otros. No existen los \texttt{architecture.md}, \texttt{sandbox-data.md}, \texttt{integration-guide.md} ni \texttt{CHANGELOG.md} que preveía la versión 1.0, ni se genera documentación con TypeDoc. La documentación académica (la memoria, el SRS, el SAD, el plan de pruebas y este SPMP) está en LaTeX en \texttt{docs/final-doc/}. Su historial de cambios es el de Git y la tabla de versiones de cada documento, no Google Drive. La matriz de trazabilidad es \path{docs/project-management/traceability-matrix.md}; la versión 1.0 la ubicaba en Google Sheets y le asignaba la «sección 1.3», que no es la matriz. Los anexos B y C del plan de riesgos y de mitigación no existen (sección 7.2).
 
-La tabla de evolución de artefactos (Tabla en sección 7) define cuándo cada artefacto se crea, se refina, se expande, se optimiza, se publica o se archiva durante los hitos H1 a H6. Por ejemplo, el SDK src/ se crea en H1, se refina en H2, se expande en H3, se optimiza en H4, se finaliza en H5 y se publica en H6. La API de simulación se crea en H2, se expande en H3-H4, se despliega en H5 y se finaliza en H6. La documentación del trabajo de grado se comienza en H1 con un outline, se elaboran capítulos en cada fase posterior, y se entrega versión final en H6. Este cronograma asegura que todos los artefactos estén listos en el momento correcto y evolucionen gradualmente a lo largo del proyecto.
+Para cambios en código, se sigue un proceso estructurado. El desarrollador crea una rama de trabajo desde \texttt{devops}, implementa el cambio y ejecuta las pruebas con cobertura (\texttt{npm test -- --coverage}). Luego sube la rama a GitHub y abre un pull request que describe el cambio y nombra su issue. La integración continua (\texttt{ci.yml}) ejecuta ESLint, las pruebas con su umbral de cobertura del 80\%, las métricas CK en modo guarda (WMC $\le 20$, CBO $\le 5$, RFC $\le 20$ y MAX\_CC $\le 10$) y la compilación. Si hay errores, el desarrollador los corrige e itera. Un integrante distinto al autor revisa el código, y las mejoras necesarias se registran como comentarios en el pull request. El autor las aborda y, una vez aprobado, el cambio se integra a \texttt{devops} y el issue se cierra a mano con un comentario. Los documentos siguen el mismo camino: el autor cambia el \texttt{.md} o el \texttt{.tex} en una rama, otro integrante revisa el pull request y \texttt{final-doc.yml} compila los documentos en LaTeX.
+
+Las versiones del SDK siguen el versionamiento semántico, en su etapa previa a la 1.0 (\texttt{0.x.y}). \texttt{publish.yml} publica en npm cuando un cambio en \texttt{sdk/} llega a \texttt{main} y la versión de \texttt{sdk/package.json} todavía no existe en el registro. Al 7 de noviembre de 2026 había 14 versiones publicadas, con la 0.6.0 en \texttt{latest} y la 0.7.0-rc.2 en \texttt{next}. La versión 1.0 de este plan preveía, al cierre de cada fase, consolidar la rama de desarrollo en \texttt{main}, crear una etiqueta de versión y actualizar el \texttt{CHANGELOG.md}; el repositorio no tiene etiquetas ni \texttt{CHANGELOG.md}.
+
+La Tabla~\ref{tab:artefactos-documentacion} describe dónde vive cada artefacto y en qué momento del proyecto se creó y se publicó.
 
 \begin{center}
 \renewcommand{\arraystretch}{1.2}
 \begin{longtable}{|P{0.243}|P{0.241}|P{0.241}|P{0.241}|}
   \hline
-  \textbf{Artefacto} & \textbf{Ubicación} & \textbf{Tipo} & \textbf{Ciclo de vida (Hitos H1-H6)} \\
+  \textbf{Artefacto} & \textbf{Ubicación} & \textbf{Tipo} & \textbf{Ciclo de vida} \\
   \hline
   \endfirsthead
   \hline
-  \textbf{Artefacto} & \textbf{Ubicación} & \textbf{Tipo} & \textbf{Ciclo de vida (Hitos H1-H6)} \\
+  \textbf{Artefacto} & \textbf{Ubicación} & \textbf{Tipo} & \textbf{Ciclo de vida} \\
   \hline
   \endhead
   \caption{Descripción de artefactos de documentación.}
   \label{tab:artefactos-documentacion}\\
   \endlastfoot
-  SDK TypeScript \newline /src & GitHub (main/dev) & Código fuente & H1: Crear \newline H2: Refinar \newline H3: Expandir \newline H4: Optimizar \newline H5: Finalizar \newline H6: Publicar \\
+  SDK de servidor & \texttt{sdk/src} & Código fuente & Núcleo en la Iteración 1, adaptadores en la 2; publicado en npm desde el 20 de septiembre de 2026 \\
   \hline
-  Pruebas unitarias \newline /test & GitHub (main/dev) & Código de pruebas & H1: Crear \newline H2-H4: Expandir \newline H5: Mantener \newline H6: Auditar \\
+  Módulo de navegador & \texttt{sdk/src-browser} & Código fuente & Iteración 3 (issues \#126 y \#127); se publica con el SDK \\
   \hline
-  API Fastify \newline /api & GitHub (main/dev & Código fuente & H2: Crear \newline H3-H4: Expandir \newline H5: Desplegar \newline H6: Finalizar \\
+  Pruebas del SDK & \texttt{sdk/src} (\texttt{*.test.ts}) y \texttt{sdk/test} & Código de pruebas & Crecen con cada cambio; la integración continua las corre en cada pull request \\
   \hline
-  Documento de arquitectura \newline /docs/architecture.md & GitHub & Documentación técnica & H1: Crear \newline H2-H5: Refinar \newline H6: Publicar \\
+  API de Simulación & \texttt{simulator-api/src} & Código fuente & Iteración 3; en Render desde el 5 de octubre de 2026 \\
   \hline
-  Datos de prueba (sandbox) \newline /docs/sandbox-data.md & GitHub & Documentación técnica & H2: Crear \newline H3-H4: Expandir \newline H5: Consolidar \newline H6: Publicar \\
+  Pruebas del simulador & \texttt{simulator-api/test} & Código de pruebas & Crecen con cada cambio; la integración continua las corre en cada pull request \\
   \hline
-  Guía de integración \newline /docs/integration-guide.md & GitHub & Documentación técnica & H3: Crear \newline H4-H5: Refinar \newline H6: Publicar \\
+  Prototipos A a D & \texttt{prototypes/} & Código fuente & B y D en la Iteración 3 (issues \#150 y \#151); C desde el 13 de octubre y A desde el 21 de octubre de 2026 \\
   \hline
-  Registro de cambios \newline /CHANGELOG.md & GitHub & Documentación técnica & H1: Crear \newline H2-H5: Actualizar \newline H6: Consolidar \\
+  Ejemplos de integración & \texttt{examples/} & Código fuente & Desde la Iteración 2; la integración continua los compila contra el SDK \\
   \hline
-  Documentación API (TypeDoc) \newline Generado automático & GitHub Pages & Documentación técnica & H1: Crear \newline H2-H5: Regenerar \newline H6: Publicar \\
+  Página de presentación & \texttt{landing/} & Código fuente & Iteración 3 (issue \#113); en GitHub Pages desde el 4 de octubre de 2026 \\
   \hline
-  Trabajo de grado \newline Documento final & Google Drive & Documentación académica & H1: Esbozo \newline H2-H4: Elaborar \newline H5: Revisar \newline H6: Entregar \\
+  Registro de arquitectura & \texttt{docs/\allowbreak architecture/\allowbreak architecture-log.md} & Documentación técnica & Durante todo el proyecto, con una entrada por decisión o medición \\
   \hline
-  Reportes de fase \newline Documento & Google Drive & Documentación académica & H1,H2,H3: Crear \newline H4,H5: Crear \newline H6: Crear \\
+  Datos de prueba & \texttt{docs/testing-data/} & Documentación técnica & Mediciones fechadas desde el 18 de septiembre de 2026 \\
   \hline
-  Matriz de trazabilidad \newline Google Sheets & Google Drive & Datos de configuración & H1: Crear \newline H2-H5: Actualizar \newline H6: Consolidar \\
+  Guía de implementación & \texttt{docs/\allowbreak 03-sdk/\allowbreak 4-guia-de-\allowbreak implementacion.md} & Documentación técnica & Se actualiza con cada versión del SDK \\
   \hline
-  Plan de riesgos \newline Anexo B & Google Sheets & Datos de configuración & H1: Crear \newline H2-H5: Mantener \newline H6: Archivar \\
+  Matriz de trazabilidad & \texttt{docs/\allowbreak project-management/\allowbreak traceability-\allowbreak matrix.md} & Datos de configuración & Cada pull request que toca un requerimiento actualiza su fila \\
   \hline
-  Plan de mitigación \newline Anexo C & Google Sheets & Datos de configuración & H1: Crear \newline H2-H5: Mantener \newline H6: Archivar \\
+  Documentos finales & \texttt{docs/final-doc/} & Documentación académica & En LaTeX desde octubre de 2026; versiones 1.0 de mayo en Word y Google Docs \\
   \hline
-  Métricas de complejidad (CK) \newline Google Sheets & Google Drive & Datos de configuración & H2: Crear \newline H3-H5: Recolectar \newline H6: Reportar \\
+  Métricas CK & \texttt{ci.yml} y \texttt{docs/evaluation/} & Datos de configuración & En cada pull request del SDK y del simulador; las de los prototipos, el 28 de octubre de 2026 \\
   \hline
 \end{longtable}
 \end{center}

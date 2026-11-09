@@ -1374,7 +1374,7 @@ Y donde una decisión de diseño salió de un error medido, **la prueba afirma q
 
 | Prueba | Qué sostiene |
 | --- | --- |
-| Kushki responde `403` en `/charges` **igual que en una ruta inventada** | Por qué la ruta correcta vive en una constante y por qué un `403` de Kushki no distingue "no existe" de "no podés" |
+| Kushki responde `403` en `/charges` **igual que en una ruta inventada** | Por qué la ruta correcta vive en una constante y por qué un `403` de Kushki no distingue "no existe" de "no autorizado" |
 | Mercado Pago rechaza un cobro con token y sin `installments` | Por qué las cuotas están en `PaymentMethod` y no las inventa cada adaptador |
 | Rapyd rechaza cobrar un token de tarjeta en `/payments` | Por qué la tarjeta de Rapyd va por página alojada, que es la decisión más costosa del PR |
 | Wompi rechaza una transacción sin firma de integridad | El issue pendiente de exigir `integritySecret` |
@@ -4635,6 +4635,27 @@ Las listas de letras quedaron en orden («B y D»), salvo las que se emparejan c
 TinyTeX necesitó diez paquetes además de los que trae (la lista está en el README). La imagen de la CI trae TeX Live completo y no los necesita. El workflow no se ha ejecutado en GitHub Actions: su YAML pasó `actionlint` 1.7.12.
 
 **Estado:** Implementado en el PR del #167. Faltan la primera ejecución de `final-doc.yml` en GitHub Actions y el visto bueno de David al cambio de `babel` en la memoria.
+
+### 127. El informe comparativo de la Fase 5 transcribe las seis variables del #134 y agrega el corte CK por clase (issue #135)
+
+**Responsable:** David.
+
+**Contexto.** El entregable de la Fase 5 es un informe comparativo en `docs/evaluation/` con el diseño resumido, las seis variables de B y D, el costo de agregar cada pasarela contra la hipótesis escrita antes de medir, las métricas CK, las amenazas a la validez y la conclusión tal como salió ([plan de evaluación](../project-management/prototypes-evaluation-plan.md), §6). El #134 ya había medido y versionado las seis variables sobre el commit `eabba18`, con sus reportes JSON y su comando de reproducción.
+
+**Decisión 1: no volver a medir.** `git diff eabba18 HEAD` sobre `src/payments/` y `test/payments/` de los dos prototipos no produce cambios, así que el informe transcribe las cifras del #134 sin redondearlas ni reinterpretarlas. Volver a correr los instrumentos sobre el mismo código solo habría abierto la puerta a que dos documentos del repositorio discrepen.
+
+**Decisión 2: la medición por archivo es la normativa, y el corte por clase es complementario.** El plan pide «las métricas CK de las clases de pago», pero el módulo de B no tiene clases y el #134 adaptó la variable 3 a la unidad de archivo (`--unit file`). Para cumplir las dos cosas sin cambiar la cifra del #134 se generaron dos reportes nuevos con `--unit all`:
+
+- [`ck-class-checkout-sin-solucion.json`](../evaluation/ck-class-checkout-sin-solucion.json): D tiene 4 clases y las 4 superan al menos un umbral (`KushkiPayments` 65/5/23/13, `MercadoPagoPayments` 57/5/28/19, `RapydPayments` 46/5/24/13 y `WompiPaymentsAdapter` 81/5/27/19, en el orden WMC/CBO/RFC/MAX_CC).
+- [`ck-class-checkout-con-sdk-front-back.json`](../evaluation/ck-class-checkout-con-sdk-front-back.json): B tiene `totalClasses: 0`, porque su unidad de diseño es el archivo y las funciones de módulo.
+
+El corte por clase no reemplaza al de archivo: deja fuera las funciones de módulo que el #134 sí suma, y por eso el WMC de `wompi.ts` es 94 por archivo y 81 en su clase. El informe lo explica para que las dos tablas no parezcan contradictorias.
+
+**Decisión 3: no se agregan variables ni cifras derivadas.** El informe se limita a las seis variables del plan. No calcula una reducción de líneas de prueba ni un «costo total del sistema», y declara dos límites que la comparación no autoriza a omitir: el CBO promedio de B es mayor que el de D (7.0 frente a 5.67, +23.53 %), y el costo de construir el SDK queda fuera de las variables 1 y 2, que solo cuentan lo que escribe el comercio.
+
+**Lo medido.** El informe recoge: 310 LOC de B frente a 1 308 de D (-76.30 %); +67/-14 líneas para las tres pasarelas nuevas frente a +1 042/-5 (-93.57 %); WMC total 66 frente a 375 (-82.40 %); RFC promedio 22.00 frente a 36.17 (-39.17 %); MAX_CC 10 frente a 19 (-47.37 %); 0 identificadores y 0 ocurrencias de conceptos nativos frente a 10 y 18; 4 de 4 pasarelas en los dos; y cobertura de 100 %/97.59 % frente a 90.03 %/81.08 % (+9.97 y +16.51 puntos porcentuales). La hipótesis se confirma en el código fuente que B agrega en `src/payments` —es configuración—, con dos matices declarados: B también escribe las pruebas de cada pasarela (51, 65 y 121 líneas) y el costo del SDK no entra en la medición.
+
+**Estado:** El informe está en [`docs/evaluation/informe-comparativo-fase-5.md`](../evaluation/informe-comparativo-fase-5.md), con la recolección de las seis variables, los dos reportes CK por archivo y los dos por clase. OE-06 pasó a `Implementado` en [`thesis-objectives.md`](../project-management/thesis-objectives.md), y el [`README`](../README.md) y la guía de medición apuntan al informe. El issue se cierra con el PR de esta entrega.
 
 ---
 
