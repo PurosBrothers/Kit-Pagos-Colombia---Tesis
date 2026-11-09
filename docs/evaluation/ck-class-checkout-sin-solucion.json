@@ -1,0 +1,162 @@
+{
+  "generatedAt": "2026-11-09T01:12:58.432Z",
+  "mode": "measure",
+  "roots": [
+    "prototypes/checkout-sin-solucion/src/payments"
+  ],
+  "tsconfig": "prototypes/checkout-sin-solucion/tsconfig.json",
+  "unit": "all",
+  "knownExceptionsApplied": false,
+  "thresholds": {
+    "WMC": 20,
+    "CBO": 5,
+    "RFC": 20,
+    "MAX_CC": 10
+  },
+  "totalClasses": 4,
+  "violatingClasses": 4,
+  "classes": [
+    {
+      "file": "kushki.ts",
+      "className": "KushkiPayments",
+      "WMC": 65,
+      "CBO": 5,
+      "RFC": 23,
+      "maxCC": 13,
+      "worstMethod": "chargeCard",
+      "violations": [
+        "WMC 65 exceeds threshold (≤ 20)",
+        "RFC 23 exceeds threshold (≤ 20)",
+        "MAX_CC 13 in chargeCard() exceeds threshold (≤ 10)"
+      ]
+    },
+    {
+      "file": "mercadopago.ts",
+      "className": "MercadoPagoPayments",
+      "WMC": 57,
+      "CBO": 5,
+      "RFC": 28,
+      "maxCC": 19,
+      "worstMethod": "verifyWebhook",
+      "violations": [
+        "WMC 57 exceeds threshold (≤ 20)",
+        "RFC 28 exceeds threshold (≤ 20)",
+        "MAX_CC 19 in verifyWebhook() exceeds threshold (≤ 10)"
+      ]
+    },
+    {
+      "file": "rapyd.ts",
+      "className": "RapydPayments",
+      "WMC": 46,
+      "CBO": 5,
+      "RFC": 24,
+      "maxCC": 13,
+      "worstMethod": "verifyWebhook",
+      "violations": [
+        "WMC 46 exceeds threshold (≤ 20)",
+        "RFC 24 exceeds threshold (≤ 20)",
+        "MAX_CC 13 in verifyWebhook() exceeds threshold (≤ 10)"
+      ]
+    },
+    {
+      "file": "wompi.ts",
+      "className": "WompiPaymentsAdapter",
+      "WMC": 81,
+      "CBO": 5,
+      "RFC": 27,
+      "maxCC": 19,
+      "worstMethod": "constructor",
+      "violations": [
+        "WMC 81 exceeds threshold (≤ 20)",
+        "RFC 27 exceeds threshold (≤ 20)",
+        "MAX_CC 19 in constructor() exceeds threshold (≤ 10)"
+      ]
+    }
+  ],
+  "totalFiles": 6,
+  "violatingFiles": 5,
+  "files": [
+    {
+      "file": "gateway.ts",
+      "WMC": 19,
+      "CBO": 2,
+      "RFC": 15,
+      "maxCC": 7,
+      "worstFunction": "fetchWithRetry()",
+      "functionCount": 6,
+      "violations": []
+    },
+    {
+      "file": "index.ts",
+      "WMC": 14,
+      "CBO": 3,
+      "RFC": 23,
+      "maxCC": 6,
+      "worstFunction": "createPayments()",
+      "functionCount": 8,
+      "violations": [
+        "RFC 23 exceeds threshold (≤ 20)"
+      ]
+    },
+    {
+      "file": "kushki.ts",
+      "WMC": 89,
+      "CBO": 7,
+      "RFC": 43,
+      "maxCC": 13,
+      "worstFunction": "chargeCard()",
+      "functionCount": 19,
+      "violations": [
+        "WMC 89 exceeds threshold (≤ 20)",
+        "CBO 7 exceeds threshold (≤ 5)",
+        "RFC 43 exceeds threshold (≤ 20)",
+        "MAX_CC 13 in chargeCard() exceeds threshold (≤ 10)"
+      ]
+    },
+    {
+      "file": "mercadopago.ts",
+      "WMC": 82,
+      "CBO": 7,
+      "RFC": 48,
+      "maxCC": 19,
+      "worstFunction": "verifyWebhook()",
+      "functionCount": 18,
+      "violations": [
+        "WMC 82 exceeds threshold (≤ 20)",
+        "CBO 7 exceeds threshold (≤ 5)",
+        "RFC 48 exceeds threshold (≤ 20)",
+        "MAX_CC 19 in verifyWebhook() exceeds threshold (≤ 10)"
+      ]
+    },
+    {
+      "file": "rapyd.ts",
+      "WMC": 77,
+      "CBO": 8,
+      "RFC": 48,
+      "maxCC": 13,
+      "worstFunction": "verifyWebhook()",
+      "functionCount": 19,
+      "violations": [
+        "WMC 77 exceeds threshold (≤ 20)",
+        "CBO 8 exceeds threshold (≤ 5)",
+        "RFC 48 exceeds threshold (≤ 20)",
+        "MAX_CC 13 in verifyWebhook() exceeds threshold (≤ 10)"
+      ]
+    },
+    {
+      "file": "wompi.ts",
+      "WMC": 94,
+      "CBO": 7,
+      "RFC": 40,
+      "maxCC": 19,
+      "worstFunction": "constructor()",
+      "functionCount": 14,
+      "violations": [
+        "WMC 94 exceeds threshold (≤ 20)",
+        "CBO 7 exceeds threshold (≤ 5)",
+        "RFC 40 exceeds threshold (≤ 20)",
+        "MAX_CC 19 in constructor() exceeds threshold (≤ 10)"
+      ]
+    }
+  ]
+}
