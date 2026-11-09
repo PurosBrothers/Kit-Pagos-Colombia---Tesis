@@ -1,10 +1,143 @@
 \section{Estrategia de pruebas}
-\textbf{Propósito:} Que el equipo de desarrollo sepa cuáles son los tipos de pruebas que se van a realizar y la estrategia general para llevar a cabo esas pruebas.
+\label{sec:estrategia}
 
-\textbf{Contenido:}
+La estrategia combina pruebas automatizadas que se repiten en cada cambio con pruebas exploratorias y de aceptación que se ejecutan manualmente y se documentan. El principio que la ordena es la separación de ambientes: cada tipo de prueba declara dónde corre y qué se puede concluir de su resultado. Una prueba que depende de un sandbox real no puede afirmar un desenlace concreto; una que corre contra el simulador sí, y por eso el simulador es la base de los casos funcionales.
+
+\subsection{Tipos de prueba y criterios de completitud}
+
+La Tabla~\ref{tab:estrategia} resume los diez tipos de comprobación que se aplican al artefacto. Cada fila declara la herramienta, el ambiente y el criterio objetivo que decide si el tipo de prueba se considera terminado.
+
+{\small
+\begin{longtable}{|>{\raggedright\arraybackslash}p{2.45cm}|>{\raggedright\arraybackslash}p{3.05cm}|>{\raggedright\arraybackslash}p{3.25cm}|>{\raggedright\arraybackslash}p{5.55cm}|}
+\caption{Estrategia por tipo de prueba}\label{tab:estrategia}\\
+\hline
+\textbf{Tipo} & \textbf{Herramienta} & \textbf{Ambiente} & \textbf{Criterio de completitud} \\ \hline
+\endfirsthead
+\caption[]{Estrategia por tipo de prueba (continuación)}\\
+\hline
+\textbf{Tipo} & \textbf{Herramienta} & \textbf{Ambiente} & \textbf{Criterio de completitud} \\ \hline
+\endhead
+\hline
+\endfoot
+
+\textbf{Unitarias del SDK} &
+Jest con \texttt{ts-jest}; \texttt{npm test}. &
+Node.js 20 en la máquina del tester y en GitHub Actions; sin red ni credenciales. &
+Las 58 suites y 1088 pruebas pasan, 0 fallos. La cobertura no baja del umbral configurado del 80~\% en cada dimensión (corrida del 09/11/2026: 97{,}95~\% de sentencias, 91{,}80~\% de ramas, 98{,}19~\% de funciones y 98{,}50~\% de líneas). \\ \hline
+
+\textbf{Integración de la API de Simulación} &
+Jest con \texttt{app.inject()} de Fastify; \texttt{npm test} en \texttt{simulator-api/}. &
+Node.js 20; el servidor se construye en memoria, sin abrir el puerto. &
+Las 54 suites y 1301 pruebas pasan, 0 fallos. La cobertura no baja del umbral configurado del 80~\% en cada dimensión (corrida del 09/11/2026: 97{,}25~\% de sentencias, 89{,}16~\% de ramas, 99{,}08~\% de funciones y 97{,}52~\% de líneas). \\ \hline
+
+\textbf{Contrato contra sandboxes} &
+Jest con \texttt{jest.sandbox.config.js}; \texttt{npm run test:sandbox}. Ejecución serial (\texttt{maxWorkers: 1}) y tiempo límite de 60~s por prueba. &
+Sandboxes reales de Wompi, Mercado Pago, Kushki y Rapyd, con credenciales en el \texttt{.env} de la raíz y acceso a Internet. Sin credenciales, las pruebas se omiten por diseño. &
+Las 25 pruebas de los 4 archivos se ejecutan y pasan, o cada omisión queda justificada por falta de credencial. Toda discrepancia entre la suposición del SDK y la respuesta real se registra como defecto. \\ \hline
+
+\textbf{Escenarios del simulador} &
+Jest para los escenarios de la suite y el ejemplo \texttt{npm run simulate:scenarios}. &
+API de Simulación local en \texttt{http://localhost:3000}; SDK compilado; sin credenciales reales. &
+El ejemplo termina con código de salida 0 y cada línea imprime \texttt{OK}. Se cubren los desenlaces de negocio y los reintentos de las cuatro pasarelas. \\ \hline
+
+\textbf{Intercambiabilidad} &
+Ejemplo \texttt{npm run simulate:interchangeability}. &
+API de Simulación local en el puerto 3000; SDK 0.7.0-rc.2 compilado. &
+Las cuatro pasarelas devuelven el mismo estado normalizado, el mismo monto y la misma referencia, y la reconsulta es estable. El proceso termina con código 0; si un mapeo se rompe, termina distinto de cero. \\ \hline
+
+\textbf{Prototipos y paridad de esqueleto} &
+Jest y \texttt{npm run typecheck} en cada prototipo; \texttt{check-skeleton-parity.sh} para B y D. &
+Node.js 20; ejecución local. B y D comparten esqueleto; A y C se verifican por separado. &
+Las pruebas de cada prototipo pasan, el typecheck compila y la paridad de esqueleto no reporta diferencias en servidor, contrato, webhooks, configuración ni dependencias. \\ \hline
+
+\textbf{Postman local y Render} &
+Postman o Newman con la colección \texttt{kit-pagos-simulator.postman\_collection.json}. &
+Dos ambientes versionados: \texttt{local} (\texttt{http://localhost:3000}) y \texttt{render} (\texttt{https://kit-pagos-colombia.onrender.com}). &
+Las 42 peticiones de las 7 carpetas responden con el código esperado y sus aserciones pasan. La orden de tarjeta con titular \texttt{OTHE} es la única que espera \texttt{402}. \\ \hline
+
+\textbf{OpenAPI} &
+Jest (\texttt{openapi.test.ts}) y revisión de \texttt{/docs}, \texttt{/docs/json} y \texttt{/docs/yaml}. &
+API de Simulación local; navegador para la interfaz Swagger~UI. &
+El documento generado describe las rutas reales, los esquemas incluyen los campos que el cliente consume (en particular \texttt{rejectionCode} y \texttt{rejectionCategory} del rechazo) y las tres rutas de documentación responden. \\ \hline
+
+\textbf{Integración continua} &
+GitHub Actions con Node.js 20; jobs \texttt{sdk}, \texttt{examples}, \texttt{simulator-api}, \texttt{landing}, \texttt{prototypes}, \texttt{prototype-frontend-rest} y \texttt{prototypes-parity}. &
+\texttt{ubuntu-latest}; se dispara en \texttt{pull\_request} y \texttt{push} a \texttt{devops} y \texttt{main}. &
+Todos los jobs terminan en verde. Un job rojo bloquea la integración y obliga a corregir o a justificar la omisión en el informe de resultados. \\ \hline
+
+\textbf{Documentación} &
+\texttt{latexmk -cd} con la plantilla común. &
+Máquina del autor; no se ejecuta en CI para este documento. &
+El PDF compila sin errores, las referencias cruzadas resuelven y no quedan instrucciones de plantilla ni marcadores sin reemplazar. \\ \hline
+\end{longtable}
+}
+
+\subsection{Niveles de prueba}
+
+\subsubsection{Pruebas unitarias}
+
+Verifican una unidad de código aislada: un objeto de valor, un adaptador con su cliente HTTP simulado, un normalizador de estados o una función de firma. No tocan la red ni necesitan credenciales, así que corren en cada cambio. Su valor no está en repetir lo que el código hace, sino en fijar las decisiones que el autor tomó y que un cambio posterior podría romper sin que nadie lo note.
+
+\subsubsection{Pruebas de integración}
+
+Verifican la colaboración entre piezas: el SDK contra la API de Simulación, la capa REST contra el SDK instalado, el prototipo contra el simulador. La suite de la API de Simulación usa \texttt{app.inject()} para recorrer la petición completa sin abrir un puerto, de modo que prueba el enrutamiento, la serialización y los esquemas, no solo el servicio. Los casos CP-01 a CP-07 son pruebas de integración de sistema: atraviesan varios componentes y observan el resultado desde afuera.
+
+\subsubsection{Pruebas de contrato}
+
+Verifican la suposición más frágil del proyecto: que la pasarela real acepta lo que el SDK cree que acepta. Se ejecutan contra los sandboxes oficiales, en serie y con un tiempo límite amplio, porque una prueba de contrato que falla por paralelismo o por un timeout corto no informa nada sobre el contrato. No afirman \texttt{APPROVED}: afirman que la petición fue aceptada y que la respuesta tiene la forma esperada, porque un sandbox real puede declinar cuando quiere. Cuando una prueba de contrato falla, el defecto está en la suposición del SDK o en un cambio de la pasarela, y en ambos casos se corrige el código o se documenta el límite.
+
+\subsubsection{Pruebas de sistema y aceptación}
+
+Los casos CP-01 a CP-07 son pruebas de sistema con criterio de aceptación: cada uno declara una precondición, unos pasos, unos datos y un resultado esperado observable. Se ejecutan contra el simulador para que el desenlace sea determinista y reproducible. La aceptación del usuario se apoya en los prototipos: B es el tratamiento y D el control del experimento de la Fase~5; A y C demuestran alcances adicionales.
+
+\subsection{Ambientes}
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.4cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{3.1cm}|}
+    \hline
+    \textbf{Ambiente} & \textbf{Qué incluye} & \textbf{Uso en este plan} \\ \hline
+    \textbf{Local sin red} & Node.js 20, dependencias instaladas, suites unitarias. & Unitarias del SDK y de la API de Simulación. \\ \hline
+    \textbf{Simulador local} & \texttt{simulator-api} en \texttt{http://localhost:3000}, SDK compilado, sin credenciales reales. & CP-01 a CP-07; escenarios e intercambiabilidad. \\ \hline
+    \textbf{Sandboxes reales} & APIs oficiales de las cuatro pasarelas, credenciales de prueba en el \texttt{.env}, Internet. & Pruebas de contrato y verificación puntual de supuestos. \\ \hline
+    \textbf{Render} & \texttt{https://kit-pagos-colombia.onrender.com}, desplegado desde \texttt{devops}; nivel gratuito, puede tardar en despertar. & Postman y humo de \texttt{/health}, \texttt{/v1/api} y \texttt{/docs}. \\ \hline
+    \textbf{Prototipos locales} & \texttt{http://localtest.me:4000}; el dominio resuelve a \texttt{127.0.0.1}. & CP-04 y CP-05; aceptación del flujo de comercio. \\ \hline
+    \textbf{Integración continua} & \texttt{ubuntu-latest}, Node.js 20, servicios locales del job. & Repetición automática de las suites y de la paridad. \\ \hline
+  \end{tabularx}
+  \caption{Ambientes de ejecución}
+  \label{tab:ambientes}
+\end{table}
+
+La elección de \texttt{localtest.me} en los prototipos no es cosmética: Mercado Pago no acepta volver a \texttt{localhost} al final de un PSE, y el dominio permite que el banco devuelva al comprador a la máquina sin túnel. Si la red no resuelve el dominio, se agrega \texttt{127.0.0.1 localtest.me} al archivo de hosts. En el simulador de Render la tarjeta de B no tokeniza, porque el catálogo de hosts de \texttt{KitPagosBrowser} es cerrado y en el ambiente \texttt{simulator} apunta a \texttt{localhost:3000}; por eso CP-05 se ejecuta con \texttt{npm run start:local} y no contra Render.
+
+\subsection{Datos de prueba}
+
+Los datos salen de \texttt{docs/testing-data/} y de la convención del simulador documentada en \texttt{docs/02-arquitectura/3-api-de-simulacion.md}. Se usan tres familias:
+
 \begin{itemize}
-  \item Explicar los tipos de pruebas (Funcionales y no funcionales) que se van a realizar a los distintos elementos que estarán bajo pruebas. Ejemplo: Pruebas unitarias, de integración, de sistema, de regresión, de rendimiento y de aceptación del usuario. Debe incluir al menos dos tipos de pruebas en su Plan de Pruebas.
-  \item Plantee la estrategia para realizar cada tipo de prueba. Especifique la(s) herramienta, ambiente, criterios de completitud y otra información que considere relevante. Incluya referencias a las herramientas utilizadas (e.g. JUnit, Selenium, Mockito, Bugzilla, etc.).
+  \item \textbf{Datos de pasarela.} La tarjeta \texttt{4111} de Wompi se declina al consultar; el titular \texttt{OTHE} de Mercado Pago produce un rechazo; el documento \texttt{100000002} de Kushki declina un PSE; las tarjetas de rechazo de Kushki devuelven su código nativo.
+  \item \textbf{Montos reservados.} El simulador interpreta el monto como una regla cuando cae en un valor reservado: \texttt{10 100} declina, \texttt{10 101} queda pendiente, \texttt{10 102} expira, \texttt{10 409} simula un duplicado, \texttt{10 429} un límite de tasa, \texttt{10 500}, \texttt{10 502}, \texttt{10 503} y \texttt{10 504} errores del servidor, y \texttt{10 001} a \texttt{10 006} fallas de red o de cuerpo. Las consultas usan \texttt{10 600} (falla siempre), \texttt{10 602} (falla dos veces y se recupera) y \texttt{10 604} (no responde).
+  \item \textbf{Marcas de credencial.} Las credenciales con las marcas \texttt{sim\_flapping}, \texttt{sim\_server\_error} y similares permiten provocar fallas transitorias en la lista de bancos sin depender del monto.
 \end{itemize}
 
-\textbf{Tamaño sugerido:} 3 páginas.
+Ningún dato de prueba es una credencial real. Las pruebas de contrato leen credenciales de un \texttt{.env} que no se versiona; si el archivo no existe, las pruebas se omiten y así se reporta.
+
+\subsection{Criterios de entrada y salida}
+
+\textbf{Entrada.} Una prueba puede ejecutarse cuando el repositorio está en la rama correcta, las dependencias están instaladas, el SDK compila y, si el caso lo requiere, la API de Simulación responde en el puerto 3000. Para las pruebas de contrato se necesita además el \texttt{.env} con credenciales vigentes.
+
+\textbf{Salida.} El plan se considera ejecutado cuando los siete casos tienen resultado registrado, las suites automatizadas de la corrida vigente están en verde, las pruebas de contrato se ejecutaron o se justificó su omisión, y no queda ningún defecto abierto de severidad alta sin decisión. Los defectos de severidad media o baja pueden quedar abiertos si se documentan con su impacto y su workaround.
+
+\subsection{Gestión de defectos}
+
+Cada defecto se registra en la tabla de la Sección~\ref{sec:resultados} con un identificador \texttt{DEF-nn}, el caso que lo detectó, la severidad, la descripción, el componente afectado y el estado. La severidad se asigna así:
+
+\begin{itemize}
+  \item \textbf{Alta.} Impide completar un flujo de pago, expone datos sensibles o produce un cobro incorrecto.
+  \item \textbf{Media.} Producen un resultado equivocado en un caso de borde, una omisión de un campo requerido o una diferencia de formato que obliga a un workaround.
+  \item \textbf{Baja.} Defecto de documentación, de mensaje o de presentación que no altera el resultado del pago.
+\end{itemize}
+
+Un defecto se cierra cuando la prueba que lo detectó vuelve a pasar en la misma corrida o en una posterior, y la evidencia queda enlazada en la fila correspondiente.

@@ -1,0 +1,91 @@
+\subsection{CP-04: un webhook firmado actualiza el historial de la orden}
+\label{anexo:cp04}
+
+\FichaCaso
+  {CP-04}
+  {Equipo Kit Pagos Colombia}
+  {09/11/2026}
+  {Un webhook firmado actualiza el historial de la orden}
+  {Pendiente (\#174)}
+  {Pendiente (\#174)}
+  {Crear una orden con tarjeta de Wompi en el prototipo B, disparar el webhook firmado del simulador y comprobar que la notificación se verifica, se registra en el historial con origen \texttt{webhook} y deja la orden en \texttt{DECLINED}. El caso verifica la función 4 del prototipo y la integración entre el simulador, el SDK y el esqueleto.}
+  {Funcional (sistema e integración).}
+  {\textbullet\ SDK compilado; \texttt{simulator-api} y el prototipo B con dependencias instaladas.\newline
+   \textbullet\ Secretos de webhook iguales en el \texttt{.env} de la raíz para el simulador y para B; \texttt{KUSHKI\_WEBHOOK\_SECRET} con un valor cualquiera, no vacío.\newline
+   \textbullet\ Variables del simulador: \texttt{SIMULATOR\_WEBHOOK\_TARGET\_URL=http://localhost:4000/webhooks/\{gateway\}} y \texttt{SIMULATOR\_WEBHOOK\_AUTO=true}.\newline
+   \textbullet\ Puerto 4000 libre y \texttt{localtest.me} resolviendo a \texttt{127.0.0.1}.}
+  {Local. Simulador en \texttt{http://localhost:3000}; prototipo B en \texttt{http://localtest.me:4000} con \texttt{npm run start:local}; SDK 0.7.0-rc.2; sin credenciales reales. Node.js 20.}
+
+\subsubsection{Objetivo}
+
+Comprobar que un webhook de Wompi firmado por el simulador llega a B, se verifica con el secreto del perfil, se registra en el historial de la orden con origen \texttt{webhook} y actualiza el estado a \texttt{DECLINED}. El caso falla si la firma se rechaza, si la orden no cambia, si el historial atribuye el cambio a una consulta o si un webhook repetido altera una orden ya resuelta.
+
+\subsubsection{Procedimiento}
+
+\begin{TablaPasos}{Pasos del caso CP-04}
+  1 &
+  Configurar los secretos compartidos. &
+  \texttt{.env} de la raíz: \texttt{WOMPI\_EVENTS\_SECRET}, \texttt{MERCADOPAGO\_WEBHOOK\_SECRET}, \texttt{KUSHKI\_WEBHOOK\_SECRET} y \texttt{RAPYD\_WEBHOOK\_URL} con los mismos valores para el simulador y para B. &
+  El simulador y B arrancan sin errores de configuración y leen los mismos secretos. &
+  & & \\ \hline
+  2 &
+  Levantar el simulador con el destino de webhooks. &
+  \texttt{cd simulator-api}; \texttt{SIMULATOR\_WEBHOOK\_TARGET\_URL=http://localhost:4000/webhooks/\{gateway\}} y \texttt{SIMULATOR\_WEBHOOK\_AUTO=true}; \texttt{npm run dev}. &
+  El simulador escucha en el puerto 3000 y anuncia el destino de webhooks configurado. &
+  & & \\ \hline
+  3 &
+  Levantar el prototipo B contra el simulador local. &
+  \texttt{cd prototypes/checkout-con-sdk-front-back \&\& npm run start:local}. &
+  La tienda responde en \texttt{http://localtest.me:4000} y usa el simulador local como ambiente de pagos. &
+  & & \\ \hline
+  4 &
+  Tokenizar la tarjeta de prueba \texttt{4111} de Wompi. &
+  \texttt{POST http://localhost:3000/v1/sim/wompi/tokens/cards} con \texttt{\{"number":"4111111111111111","cvc":"123","exp\_month":"12","exp\_year":"30","card\_holder":"COMPRADOR PRUEBA"\}}. &
+  Respuesta 2xx con un token de tarjeta; la tarjeta queda asociada al escenario \texttt{PENDING\_THEN\_DECLINED}. &
+  & & \\ \hline
+  5 &
+  Crear la orden con la tarjeta tokenizada. &
+  \texttt{POST http://localtest.me:4000/api/orders} con \texttt{gateway="wompi"}, el token del paso 4, \texttt{method=\{"type":"CARD","cardToken":"<token>","installments":1\}}, un pagador con nombre, correo, documento, teléfono y dirección, y el artículo \texttt{casillero-del-diablo-cabernet} con cantidad 1. &
+  Respuesta 201 con el identificador de la orden y un \texttt{transactionId}. La transacción nace \texttt{PENDING}, como toda tarjeta de Wompi. &
+  & & \\ \hline
+  6 &
+  Disparar el webhook firmado de la transacción. &
+  \texttt{POST http://localhost:3000/v1/sim/webhooks/trigger} con \texttt{\{"gateway":"wompi","transactionId":"<transactionId>"\}}. Si el simulador exige \texttt{API\_AUTH\_TOKEN}, enviar la cabecera de autorización correspondiente. &
+  Respuesta 200 con \texttt{delivered: true}, \texttt{receiverStatus} 200 o 204 y el webhook firmado en la respuesta. La transacción avanzó a \texttt{DECLINED} antes de firmarse. &
+  & & \\ \hline
+  7 &
+  Consultar el historial de la orden. &
+  \texttt{GET http://localtest.me:4000/api/orders/<id>}. &
+  La orden está en \texttt{DECLINED}; su historial contiene una entrada con \texttt{source: "webhook"}, estado \texttt{DECLINED} y \texttt{nativeStatus: "DECLINED"}. El monto y la referencia de la orden no cambian. &
+  & & \\ \hline
+  8 &
+  Repetir el webhook para verificar el orden de las notificaciones. &
+  El mismo cuerpo del paso 6. &
+  La segunda entrega responde 200 y la orden sigue en \texttt{DECLINED}; el historial conserva el registro sin volver a un estado anterior. &
+  & & \\ \hline
+  9 &
+  Verificar que la firma se comprobó y no se confió en el cuerpo. &
+  Revisión de la traza de B y del código de \texttt{src/routes/webhooks.ts}. &
+  B pasa el cuerpo crudo, las cabeceras y la query a \texttt{verifyWebhook()}; una firma inválida no actualiza la orden. La respuesta al simulador es 2xx solo después de verificar. &
+  & & \\ \hline
+\end{TablaPasos}
+
+\subsubsection{Criterio de aceptación}
+
+\begin{enumerate}
+  \item El webhook se entrega al destino configurado y el simulador recibe un \texttt{receiverStatus} 200 o 204.
+  \item La orden creada con la tarjeta \texttt{4111} cambia de \texttt{PENDING} a \texttt{DECLINED} por el webhook.
+  \item El historial registra el cambio con origen \texttt{webhook}, no con origen \texttt{query}.
+  \item La firma se verifica con el secreto del perfil; el cuerpo de la petición no decide el secreto ni el destino.
+  \item Un webhook repetido no revierte la orden ni duplica el cambio de estado.
+\end{enumerate}
+
+\subsubsection{Observaciones de diseño}
+
+El disparador del simulador no acepta una URL en el cuerpo: el destino sale de \texttt{SIMULATOR\_WEBHOOK\_TARGET\_URL}. Cualquier clave distinta de \texttt{gateway} y \texttt{transactionId} responde 400, y el \texttt{transactionId} tiene que ser el identificador nativo. Esa restricción es deliberada: impide que una prueba convierta al simulador en un proxy hacia una URL arbitraria y obliga a que el webhook se firme con los secretos del servidor, como en una pasarela real.
+
+La tarjeta \texttt{4111} se elige porque su desenlace está medido contra Wompi: nace \texttt{PENDING} y la consulta la muestra \texttt{DECLINED}. El trigger aprovecha esa misma transición y firma el estado ya avanzado, así que el webhook no depende de que alguien consulte antes. Si la página del prototipo consulta primero, el historial puede tener también una entrada de origen \texttt{query}; lo que el criterio exige es que exista la entrada de origen \texttt{webhook} y que el estado final sea \texttt{DECLINED}.
+
+\subsubsection{Trazabilidad}
+
+RF-04, RF-06 y RF-12; HU-03, HU-04 y HU-08.

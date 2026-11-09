@@ -1,0 +1,91 @@
+\subsection{CP-06: API REST \texttt{/v1/api} de extremo a extremo}
+\label{anexo:cp06}
+
+\FichaCaso
+  {CP-06}
+  {Equipo Kit Pagos Colombia}
+  {09/11/2026}
+  {API REST \texttt{/v1/api} de extremo a extremo}
+  {Pendiente (\#174)}
+  {Pendiente (\#174)}
+  {Ejercitar las cuatro rutas de la capa REST con un cliente que no instala el SDK de servidor y comprobar que conserva el monto exacto, discrimina la transacción de la redirección, exige la pasarela en la consulta y agrupa los bancos PSE por pasarela. El caso usa la colección de Postman en local, el prototipo C como cliente real y un humo de Render.}
+  {Funcional (sistema, caja negra) y de contrato de la API.}
+  {\textbullet\ SDK compilado y \texttt{simulator-api/} con dependencias instaladas.\newline
+   \textbullet\ Credenciales de prueba de Wompi en el \texttt{.env} de la raíz o en el entorno del simulador: \texttt{WOMPI\_PUBLIC\_KEY}, \texttt{WOMPI\_PRIVATE\_KEY} y \texttt{WOMPI\_INTEGRITY\_SECRET}.\newline
+   \textbullet\ Postman (o Newman) con la colección \texttt{kit-pagos-simulator.postman\_collection.json} y el ambiente \texttt{local}.\newline
+   \textbullet\ Para el prototipo C: \texttt{npm ci} y \texttt{npm run build} en \texttt{prototypes/checkout-frontend-rest/}; el puerto 4100 libre.\newline
+   \textbullet\ Para el humo de Render: acceso a Internet y el servicio despierto.}
+  {Local. API de Simulación en \texttt{http://localhost:3000}; prototipo C en \texttt{http://localhost:4100} con \texttt{npm run start:local}; Postman con el ambiente \texttt{local}. El humo de Render usa \texttt{https://kit-pagos-colombia.onrender.com}. Node.js 20; sin credenciales reales.}
+
+\subsubsection{Objetivo}
+
+Comprobar que un cliente sin SDK puede crear un pago, consultarlo y listar bancos PSE por REST con la misma semántica que el SDK: monto exacto como cadena, estado normalizado y nativo, resultado que distingue \texttt{TRANSACTION} de \texttt{REDIRECT\_REQUIRED}, pasarela obligatoria en la consulta y bancos agrupados por pasarela. El caso falla si la capa REST aplana esas diferencias, si redondea el monto o si una ruta acepta una petición incompleta.
+
+\subsubsection{Procedimiento}
+
+\begin{TablaPasos}{Pasos del caso CP-06}
+  1 &
+  Levantar el simulador con las credenciales de Wompi. &
+  \texttt{cd simulator-api}; exportar \texttt{WOMPI\_PUBLIC\_KEY}, \texttt{WOMPI\_PRIVATE\_KEY} y \texttt{WOMPI\_INTEGRITY\_SECRET} con los valores de prueba, o tenerlos en el \texttt{.env} de la raíz; \texttt{npm run dev}. &
+  El simulador escucha en el puerto 3000 y \texttt{GET /health} responde 200. &
+  & & \\ \hline
+  2 &
+  Ejecutar la carpeta de la capa REST en Postman. &
+  Importar la colección y el ambiente \texttt{local}; correr la carpeta \texttt{01. Capa REST Kit Pagos (/v1/api)} en orden. Con Newman: \texttt{npx newman run simulator-api/postman/kit-pagos-simulator.postman\_collection.json -e simulator-api/postman/local.postman\_environment.json --folder "01. Capa REST Kit Pagos (/v1/api)"}. &
+  Las 4 peticiones responden 2xx y sus aserciones pasan. \texttt{GET /v1/api/gateways} devuelve \texttt{cardCapture} igual a \texttt{\{wompi:"BROWSER\_TOKEN", rapyd:"HOSTED\_PAGE", mercadopago:"BROWSER\_TOKEN", kushki:"BROWSER\_TOKEN"\}}. &
+  & & \\ \hline
+  3 &
+  Crear un pago de tarjeta de Wompi por REST. &
+  \texttt{POST /v1/api/payments} con \texttt{gateway:"WOMPI"}, \texttt{amount:50000}, \texttt{currency:"COP"}, \texttt{orderReference:"ORD-API-POSTMAN-<marca>"}, un pagador de prueba y \texttt{paymentMethod:\{type:"CARD", cardToken:"tok\_test\_card\_postman"\}}. &
+  Respuesta 201 con \texttt{outcome:"TRANSACTION"}; \texttt{transaction.amount} es \texttt{"50000.00"} y no \texttt{50000}; \texttt{currency} es \texttt{COP}; la referencia se conserva; \texttt{status} y \texttt{rawStatus} son \texttt{PENDING}, porque Wompi crea la tarjeta pendiente. &
+  & & \\ \hline
+  4 &
+  Consultar el estado con el identificador y la pasarela. &
+  \texttt{GET /v1/api/payments/\{gatewayTransactionId\}?gateway=wompi}. &
+  Respuesta 200 con \texttt{transaction.status:"APPROVED"} y \texttt{rawStatus:"APPROVED"}; el mismo identificador, monto y referencia del paso 3. El desenlace llega en la consulta, no en la creación. &
+  & & \\ \hline
+  5 &
+  Verificar que la consulta exige la pasarela. &
+  \texttt{GET /v1/api/payments/\{gatewayTransactionId\}} sin \texttt{?gateway=}, y luego con \texttt{?gateway=paypal}. &
+  Las dos peticiones responden 400 con \texttt{code:"INVALID\_REQUEST"}; la API no deduce la pasarela del identificador. &
+  & & \\ \hline
+  6 &
+  Listar los bancos PSE de Wompi. &
+  \texttt{GET /v1/api/pse-banks?gateway=wompi}. &
+  Respuesta 200 con \texttt{pseBanks} de un solo elemento: \texttt{gateway:"wompi"} y una lista de bancos con \texttt{code} y \texttt{name}. La lista no mezcla códigos de otras pasarelas. &
+  & & \\ \hline
+  7 &
+  Cobrar con el prototipo C contra la API local. &
+  \texttt{cd prototypes/checkout-frontend-rest \&\& npm ci \&\& npm run build \&\& npm run start:local}; abrir \texttt{http://localhost:4100}, elegir Wompi y PSE, y pagar. &
+  La página cobra contra \texttt{/v1/api} sin un servidor de pagos propio: el SDK de servidor no se instala y el navegador solo carga \texttt{KitPagosBrowser} desde el CDN para tokenizar. La consola \texttt{[tienda C]} muestra las llamadas a \texttt{/v1/api}, la redirección al banco y la consulta posterior. El pago termina aprobado y el código del navegador no nombra pasarelas. &
+  & & \\ \hline
+  8 &
+  Ejecutar el humo de Render. &
+  \texttt{GET https://kit-pagos-colombia.onrender.com/health}, \texttt{/v1/api/gateways} y \texttt{/docs}; si el servicio está dormido, esperar a que despierte. &
+  \texttt{/health} responde 200; \texttt{/v1/api/gateways} devuelve las cuatro pasarelas y su \texttt{cardCapture}; \texttt{/docs} sirve la interfaz de Swagger~UI. Si Render no está disponible, el paso se registra como bloqueado y no invalida la corrida local. &
+  & & \\ \hline
+\end{TablaPasos}
+
+\subsubsection{Criterio de aceptación}
+
+\begin{enumerate}
+  \item Las cuatro peticiones de la carpeta \texttt{01} pasan en el ambiente \texttt{local}.
+  \item El monto se conserva como cadena exacta \texttt{"50000.00"}; la API no lo convierte a número ni lo redondea.
+  \item La creación distingue \texttt{TRANSACTION} de \texttt{REDIRECT\_REQUIRED} con el campo \texttt{outcome}, y la consulta devuelve el estado normalizado y el nativo.
+  \item La consulta sin \texttt{gateway} y con una pasarela desconocida responde 400 \texttt{INVALID\_REQUEST}.
+  \item \texttt{/v1/api/pse-banks?gateway=wompi} devuelve un solo grupo, con bancos que tienen \texttt{code} y \texttt{name}.
+  \item El prototipo C completa un pago PSE contra \texttt{/v1/api} sin un servidor de pagos propio y sin nombrar pasarelas en el código del navegador.
+  \item El humo de Render responde, o su indisponibilidad queda registrada como bloqueo ajeno al caso local.
+\end{enumerate}
+
+\subsubsection{Observaciones de diseño}
+
+El caso elige la tarjeta de Wompi y no un PSE para la comprobación principal porque la creación con tarjeta devuelve \texttt{TRANSACTION} y obliga a consultar para ver el desenlace; así se ejercitan las dos rutas de lectura en una sola corrida. El PSE aparece en el prototipo C, donde el cliente sí necesita ver la redirección y la diferencia entre \texttt{TRANSACTION} y \texttt{REDIRECT\_REQUIRED}.
+
+El token \texttt{tok\_test\_card\_postman} es el que usa la colección versionada y no representa una tarjeta real. La verificación del monto no compara contra \texttt{50000} como número: el SDK conserva la escala de la moneda y la API serializa esa cadena, de modo que \texttt{"50000.00"} es el valor correcto.
+
+El humo de Render se mantiene separado de la aceptación local. Render es un servicio del nivel gratuito que puede tardar en despertar, y una caída del despliegue no dice nada sobre la corrección de \texttt{/v1/api}; por eso se marca como bloqueado, no como fallo del caso.
+
+\subsubsection{Trazabilidad}
+
+RF-13 (OpenAPI), RF-16 (capa REST), RF-18 (motivo de rechazo serializado) y RF-19 (bancos PSE); HU-09, HU-11 y HU-12.

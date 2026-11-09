@@ -1,0 +1,93 @@
+\subsection{CP-05: tokenización de la tarjeta en el navegador}
+\label{anexo:cp05}
+
+\FichaCaso
+  {CP-05}
+  {Equipo Kit Pagos Colombia}
+  {09/11/2026}
+  {Tokenización de la tarjeta en el navegador}
+  {Pendiente (\#174)}
+  {Pendiente (\#174)}
+  {Pagar con tarjeta en el prototipo B y comprobar que \texttt{KitPagosBrowser} envía el número de la tarjeta directamente a la ruta de tokenización del simulador, que el servidor del comercio recibe solo un token opaco y que Rapyd no tokeniza porque cobra en su página alojada. El caso verifica la separación entre el navegador y el servidor que sostiene el alcance PCI de la página.}
+  {Funcional (sistema) y de seguridad de datos.}
+  {\textbullet\ SDK compilado; \texttt{simulator-api} y el prototipo B con dependencias instaladas.\newline
+   \textbullet\ Simulador local en el puerto 3000 y B en el puerto 4000 con \texttt{npm run start:local}.\newline
+   \textbullet\ \texttt{localtest.me} resuelve a \texttt{127.0.0.1}.\newline
+   \textbullet\ Navegador con herramientas de desarrollo (pestaña Network) y acceso a la consola.\newline
+   \textbullet\ Las tarjetas de prueba de \texttt{docs/testing-data/} disponibles.}
+  {Local. Navegador en \texttt{http://localtest.me:4000}; tokenización contra \texttt{http://localhost:3000}; SDK 0.7.0-rc.2; sin credenciales reales. Node.js 20.}
+
+\subsubsection{Objetivo}
+
+Comprobar que los datos de la tarjeta no pasan por el servidor de B en las pasarelas que tokenizan en el navegador, que el token que recibe el servidor es opaco, que el pago se completa con ese token y que Rapyd sigue el camino de página alojada. El caso falla si el número de la tarjeta aparece en una petición al servidor del comercio, en sus logs o en un mensaje de error.
+
+\subsubsection{Procedimiento}
+
+\begin{TablaPasos}{Pasos del caso CP-05}
+  1 &
+  Levantar el simulador y el prototipo B. &
+  \texttt{cd simulator-api \&\& npm run dev}; en otra terminal, \texttt{cd prototypes/checkout-con-sdk-front-back \&\& npm run start:local}. &
+  El simulador responde en el puerto 3000 y B en \texttt{http://localtest.me:4000}. &
+  & & \\ \hline
+  2 &
+  Abrir B con la pestaña Network y limpiar la captura. &
+  \texttt{http://localtest.me:4000}, herramientas de desarrollo, Network, filtro \texttt{Fetch/XHR}. &
+  La tienda carga el catálogo y el carrito sin errores. &
+  & & \\ \hline
+  3 &
+  Pagar con tarjeta de Wompi. &
+  Tarjeta \texttt{4242 4242 4242 4242}, vencimiento \texttt{12/30}, CVV \texttt{123}; cualquier nombre. &
+  La petición del navegador a \texttt{POST /v1/sim/wompi/tokens/cards} lleva el número de la tarjeta; la petición posterior a \texttt{POST /api/orders} lleva solo \texttt{cardToken}. El pago termina \texttt{APPROVED}. &
+  & & \\ \hline
+  4 &
+  Pagar con tarjeta de Mercado Pago. &
+  Tarjeta \texttt{4013 5406 8274 6260}, vencimiento \texttt{11/30}, titular \texttt{APRO Ruiz}. &
+  La petición a \texttt{POST /v1/sim/mercadopago/card\_tokens} lleva los datos de la tarjeta; \texttt{POST /api/orders} lleva solo \texttt{cardToken}. El pago termina \texttt{APPROVED}. &
+  & & \\ \hline
+  5 &
+  Pagar con tarjeta de Kushki. &
+  Tarjeta \texttt{4242 4242 4242 4242}, vencimiento \texttt{12/30}, CVV \texttt{123}. &
+  La petición a \texttt{POST /v1/sim/kushki/card/v1/tokens} lleva los datos y el monto; \texttt{POST /api/orders} lleva solo el token. El cobro termina \texttt{APPROVED}. &
+  & & \\ \hline
+  6 &
+  Verificar que el token es opaco y está atado a la pasarela y al monto. &
+  Inspección del cuerpo de \texttt{POST /api/orders} y, para Kushki, un intento de cobro con otro monto. &
+  El cuerpo no contiene el número, el CVV ni el vencimiento. El token no se puede interpretar como datos de tarjeta. En Kushki, cobrar el token por otro monto responde el error de monto (código \texttt{K220}) y no un cobro. &
+  & & \\ \hline
+  7 &
+  Pagar con tarjeta de Rapyd. &
+  En la página alojada: \texttt{4111 1111 1111 1111}, \texttt{12/30}, CVV \texttt{123}, código 3DS \texttt{123456}. &
+  B no llama a ninguna ruta de tokenización para Rapyd; redirige a la página alojada del simulador y el cobro se completa allí. \texttt{GET /api/gateways} reporta Rapyd con captura \texttt{HOSTED\_PAGE}. &
+  & & \\ \hline
+  8 &
+  Buscar el número de la tarjeta en el servidor del comercio. &
+  Terminal de B y cuerpos de las peticiones a \texttt{/api/orders}. &
+  Ningún log, mensaje de error ni cuerpo de petición al servidor contiene el número completo de la tarjeta. Solo aparecen tokens y, si acaso, prefijos de llaves. &
+  & & \\ \hline
+  9 &
+  Repetir con una tarjeta declinada. &
+  Wompi \texttt{4111 1111 1111 1111}. &
+  La tokenización ocurre igual en el navegador, el servidor recibe el token y el rechazo se muestra con su motivo; el número sigue sin aparecer en el servidor. &
+  & & \\ \hline
+\end{TablaPasos}
+
+\subsubsection{Criterio de aceptación}
+
+\begin{enumerate}
+  \item En Wompi, Mercado Pago y Kushki, el número de la tarjeta aparece solo en la petición del navegador a la ruta de tokenización del simulador.
+  \item La petición al servidor del comercio contiene un token opaco y no los datos de la tarjeta.
+  \item Los logs y los cuerpos del servidor no contienen el número completo, el CVV ni el vencimiento.
+  \item Los pagos con las tarjetas aprobadas terminan en \texttt{APPROVED} y el rechazo de \texttt{4111} conserva su motivo.
+  \item Rapyd no tokeniza en el navegador y usa su página alojada.
+  \item En Kushki, el token está atado al monto y cobrarlo por otro monto no produce un cobro.
+\end{enumerate}
+
+\subsubsection{Observaciones de diseño}
+
+En el ambiente \texttt{simulator}, el catálogo de hosts de \texttt{KitPagosBrowser} es cerrado y apunta a \texttt{localhost:3000}. Eso explica dos cosas: que la tokenización funcione aunque la tienda se abra en \texttt{localtest.me}, y que la tarjeta de B no tokenice contra el simulador de Render. Por eso el caso se ejecuta con \texttt{npm run start:local} y no contra Render.
+
+El prototipo A tokeniza la tarjeta con \texttt{fetch} contra la pasarela y no usa \texttt{KitPagosBrowser}; el prototipo C carga \texttt{KitPagosBrowser} desde el CDN y también tokeniza en el navegador, pero cobra contra \texttt{/v1/api} sin un servidor de pagos propio. Esas diferencias son el objeto del experimento de la Fase~5 y no se mezclan con este caso: aquí se verifica que el módulo de navegador de B cumple la separación, no que todos los prototipos la cumplan.
+
+\subsubsection{Trazabilidad}
+
+RF-08 y RF-17; HU-10; RNF de seguridad y restricción PCI~DSS de la Sección~7 del SRS.

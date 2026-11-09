@@ -1,6 +1,94 @@
 \section{Anexos}
-Agregue aquí cualquier información adicional relevante para este documento que no quepa en las secciones previas.
+\label{sec:anexos}
 
-Es importante tener en cuenta que, hasta antes de esta sección, el documento debe ser autocontenido, es decir, el lector no debe necesitar leer ningún documento adicional o archivo externo para entenderlo. La información que se coloque aquí es simplemente un complemento, en caso de que el lector requiriera más detalles sobre algún tema.
+Los anexos completan el documento con los seis casos restantes, la matriz de trazabilidad, un resumen de los comandos de la corrida y un glosario mínimo. Hasta antes de esta sección el documento es autocontenido: los anexos solo agregan detalle, no requisitos nuevos.
 
-Cualquier figura que sea referenciada en el documento debe ir en la sección respectiva. No deben colocarse como anexos.
+\subsection{Casos de prueba completos}
+
+Los casos CP-02 a CP-07 usan la misma ficha y la misma tabla de pasos que el CP-01. Se agrupan aquí para no interrumpir la lectura del caso de ejemplo, pero tienen el mismo nivel de detalle y el mismo criterio de aceptación.
+
+\input{sections/anexos/cp-02}
+\input{sections/anexos/cp-03}
+\input{sections/anexos/cp-04}
+\input{sections/anexos/cp-05}
+\input{sections/anexos/cp-06}
+\input{sections/anexos/cp-07}
+
+\subsection{Matriz de trazabilidad}
+
+La Tabla~\ref{tab:trazabilidad} relaciona los requisitos funcionales e historias de usuario del SRS con los casos de este plan. Un requisito sin caso es una brecha declarada; un caso sin requisito es una verificación que no nace de una necesidad del producto.
+
+{\small
+\begin{longtable}{|>{\raggedright\arraybackslash}p{1.3cm}|>{\raggedright\arraybackslash}p{7.7cm}|>{\raggedright\arraybackslash}p{2.6cm}|>{\raggedright\arraybackslash}p{3.2cm}|}
+\caption{Matriz de trazabilidad entre requisitos y casos}\label{tab:trazabilidad}\\
+\hline
+\textbf{ID} & \textbf{Requisito} & \textbf{Casos} & \textbf{Historias} \\ \hline
+\endfirsthead
+\caption[]{Matriz de trazabilidad entre requisitos y casos (continuación)}\\
+\hline
+\textbf{ID} & \textbf{Requisito} & \textbf{Casos} & \textbf{Historias} \\ \hline
+\endhead
+\hline
+\endfoot
+
+RF-01 & Crear una intención de pago con tarjeta o PSE mediante una interfaz unificada. & CP-01, CP-02, CP-04, CP-05 & HU-01 \\ \hline
+RF-02 & Normalizar la respuesta a una \texttt{Transaction} con estado y motivo. & CP-01, CP-03, CP-07 & HU-01, HU-02 \\ \hline
+RF-03 & Consultar el estado y mapearlo a los seis estados normalizados. & CP-01, CP-02, CP-07 & HU-02 \\ \hline
+RF-04 & Validar la firma criptográfica de un webhook. & CP-04 & HU-03 \\ \hline
+RF-05 & Convertir los fallos esperados en \texttt{KitPagosError}. & CP-03, CP-07 & HU-05, HU-11 \\ \hline
+RF-06 & Cambiar de pasarela sin cambiar el código de negocio. & CP-01, CP-04 & HU-04 \\ \hline
+RF-07 & Reintentar operaciones idempotentes con retroceso exponencial. & CP-07 & HU-05 \\ \hline
+RF-08 & Redactar credenciales y secretos de los errores. & CP-03, CP-07 & HU-05 \\ \hline
+RF-09 & Exponer las rutas nativas bajo \texttt{/v1/sim}. & CP-01 a CP-05, CP-07 & HU-06, HU-07 \\ \hline
+RF-10 & Elegir el escenario por cabecera, dato, monto o marca. & CP-02, CP-03, CP-07 & HU-06, HU-07 \\ \hline
+RF-11 & Replicar la estructura de error nativa. & CP-03, CP-07 & HU-07 \\ \hline
+RF-12 & Disparar y emitir webhooks firmados. & CP-04 & HU-08 \\ \hline
+RF-13 & Publicar la especificación OpenAPI 3.0. & CP-06 & HU-09 \\ \hline
+RF-14 & Documentar datos de prueba por pasarela. & CP-02, CP-03, CP-05 & HU-13 \\ \hline
+RF-15 & Indicar el comportamiento y la fuente de cada dato. & CP-03, CP-05 & HU-13 \\ \hline
+RF-16 & Exponer las operaciones por REST bajo \texttt{/v1/api}. & CP-06 & HU-09 \\ \hline
+RF-17 & Tokenizar la tarjeta en el navegador. & CP-05 & HU-10 \\ \hline
+RF-18 & Exponer el motivo de rechazo como código y categoría. & CP-03, CP-06 & HU-11 \\ \hline
+RF-19 & Listar los bancos PSE y traducir su código. & CP-01, CP-02, CP-06 & HU-12 \\ \hline
+\end{longtable}
+}
+
+\subsection{Comandos de la corrida}
+
+La Tabla~\ref{tab:comandos} reúne los comandos que ejecutan las suites y los ejemplos. Se escriben desde la raíz del repositorio salvo que la fila indique otra carpeta.
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{4.2cm}|}
+    \hline
+    \textbf{Comprobación} & \textbf{Comando} & \textbf{Resultado esperado} \\ \hline
+    Unitarias del SDK & \texttt{cd sdk \&\& npm test -- --coverage} & 58 suites y 1088 pruebas en verde. \\ \hline
+    Contrato & \texttt{cd sdk \&\& npm run test:sandbox} & 25 pruebas ejecutadas o omitidas por falta de \texttt{.env}. \\ \hline
+    API de Simulación & \texttt{cd simulator-api \&\& npm test -- --coverage} & 54 suites y 1301 pruebas en verde. \\ \hline
+    Escenarios & \texttt{cd examples \&\& npm run simulate:scenarios} & Cada línea con \texttt{OK}; código de salida 0. \\ \hline
+    Intercambiabilidad & \texttt{cd examples \&\& npm run simulate:interchangeability} & Cuatro pasarelas con el mismo resultado; código 0. \\ \hline
+    PSE de Wompi & \texttt{cd examples \&\& npm run simulate:wompi-pse} & Redirección \texttt{PENDING} y consulta \texttt{APPROVED}. \\ \hline
+    Typecheck de ejemplos & \texttt{cd examples \&\& npm run typecheck} & Compila contra la superficie pública del SDK. \\ \hline
+    Prototipos & \texttt{npm test -- --coverage} y \texttt{npm run typecheck} en cada carpeta & Suites y compilación en verde. \\ \hline
+    Paridad de esqueleto & \texttt{./check-skeleton-parity.sh} & Sin diferencias entre B y D. \\ \hline
+    Postman local & Importar la colección con el ambiente \texttt{local} & 42 peticiones con sus aserciones en verde. \\ \hline
+    Postman Render & Importar la colección con el ambiente \texttt{render} & 42 peticiones con sus aserciones en verde. \\ \hline
+    OpenAPI & \texttt{GET /docs}, \texttt{/docs/json} y \texttt{/docs/yaml} & Las tres rutas responden y el documento describe las rutas reales. \\ \hline
+  \end{tabularx}
+  \caption{Comandos de la corrida}
+  \label{tab:comandos}
+\end{table}
+
+\subsection{Glosario mínimo}
+
+\begin{description}
+  \item[Sandbox.] Ambiente de pruebas de una pasarela real. Acepta credenciales de prueba y puede declinar sin motivo aparente.
+  \item[Simulador.] API de Simulación local o desplegada en Render. Es determinista, no necesita credenciales reales y replica la forma de las rutas nativas.
+  \item[Token opaco.] Identificador que reemplaza los datos de la tarjeta. El comercio lo recibe del navegador o de la pasarela y no puede interpretarlo.
+  \item[Estado normalizado.] Uno de los seis valores de \texttt{TransactionStatus}: \texttt{APPROVED}, \texttt{DECLINED}, \texttt{PENDING}, \texttt{EXPIRED}, \texttt{VOIDED} o \texttt{ERROR}.
+  \item[Estado nativo.] El valor que devuelve la pasarela (\texttt{rawStatus}), conservado para auditoría.
+  \item[Paridad de esqueleto.] Comprobación de que los prototipos B y D comparten servidor, contrato, webhooks, configuración y dependencias; solo cambia el módulo de pagos.
+\end{description}

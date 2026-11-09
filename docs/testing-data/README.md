@@ -48,7 +48,7 @@ No todo lo que está acá tiene el mismo respaldo, y los archivos lo distinguen 
 
 Lo más fuerte. Hay una petición HTTP real y su respuesta. Las secciones `1.1` de los cuatro archivos son de este nivel, fechadas el 18 y 19 de septiembre de 2026, y también lo es el flujo completo de Transfer In de Kushki (§5.2.1).
 
-Esto es lo que las [pruebas de contrato](../04-metricas-y-pruebas/3-pruebas-de-contrato.md) mantienen vigente: 18 pruebas que corren contra los sandboxes reales y fallan si alguna pasarela cambia lo que estos archivos afirman.
+Esto es lo que las [pruebas de contrato](../04-metricas-y-pruebas/3-pruebas-de-contrato.md) mantienen vigente: 25 pruebas que corren contra los sandboxes reales y fallan si alguna pasarela cambia lo que estos archivos afirman.
 
 ### Nivel 2 — Medido, pero solo hasta cierto punto del flujo
 
@@ -99,7 +99,7 @@ Lo mismo aplica a [`architecture-log.md`](../architecture/architecture-log.md), 
 
 **Si vas a probar un flujo específico**, buscá la sección del método en el archivo de la pasarela. Cada una trae el payload completo, no un fragmento.
 
-**Si algo no funciona como dice acá**, revisá la fecha de la afirmación. Los sandboxes cambian, y una medición de septiembre de 2026 puede no valer hoy. Las 18 pruebas de contrato existen para detectar exactamente eso:
+**Si algo no funciona como dice acá**, revisá la fecha de la afirmación. Los sandboxes cambian, y una medición de septiembre de 2026 puede no valer hoy. Las 25 pruebas de contrato existen para detectar exactamente eso:
 
 ```bash
 cd sdk && npm run test:sandbox
