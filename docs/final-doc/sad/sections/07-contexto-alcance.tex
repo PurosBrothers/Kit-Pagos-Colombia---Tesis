@@ -49,6 +49,28 @@ En este diagrama el sistema aparece en su rol de simulador: recibe las solicitud
 \subsubsection{Pasarelas Reales (sistemas externos de referencia)}
 En el contexto de simulación, las pasarelas reales (Wompi, Rapyd, Mercado Pago y Kushki) aparecen fuera del alcance del flujo activo. No se establece ninguna conexión real con ellas durante las pruebas de simulación. Su presencia en el diagrama cumple un propósito documental: son la referencia a partir de la cual la API de simulación construye sus respuestas, replicando con exactitud los formatos, los campos y los valores que cada proveedor retornaría en un entorno productivo real.
 
+\subsection{Prototipos del experimento de la Fase 5}
+Para evaluar el valor del framework se construyeron cuatro implementaciones del mismo checkout mínimo de comercio electrónico: mostrar un producto, cobrarlo con tarjeta o PSE, informar el resultado, recibir la notificación asíncrona y consultar el estado. Las cuatro cobran con Wompi, Mercado Pago, Kushki y Rapyd; lo que cambia es cómo integran los pagos. El catálogo, el carrito, las órdenes en memoria, las rutas y el contrato \texttt{PaymentsPort} son comunes, de modo que la comparación aísla el módulo de pagos.
+
+\begin{table}[htbp]
+\centering
+\caption{Prototipos del experimento de la Fase 5}
+\label{tab:prototipos}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|c|>{\raggedright\arraybackslash}p{3.6cm}|X|c|}
+\hline
+\textbf{Letra} & \textbf{Prototipo} & \textbf{Cómo integra los pagos} & \textbf{Papel} \\ \hline
+A & \texttt{checkout-con-sdk-solo-back} & El SDK se usa solo en el servidor. La página tokeniza la tarjeta con \texttt{fetch} contra la API de cada pasarela, sin el módulo de navegador. & Demostración de alcance \\ \hline
+B & \texttt{checkout-con-sdk-front-back} & \texttt{KitPagos} en el servidor y \texttt{KitPagosBrowser} en la página. & Tratamiento \\ \hline
+C & \texttt{checkout-frontend-rest} & El navegador cobra contra \texttt{/v1/api}, sin servidor de pagos propio. & Demostración de alcance \\ \hline
+D & \texttt{checkout-sin-solucion} & Integración manual con \texttt{fetch} contra la API nativa de cada pasarela, como lo haría un comercio sin Kit Pagos. & Control \\ \hline
+\end{tabularx}
+\end{table}
+
+\textbf{Roles en el experimento.} La comparación formal se hace entre D (control) y B (tratamiento): ambas implementan el mismo checkout y comparten el esqueleto, y solo difieren en el módulo de pagos. A responde si el SDK le sirve a un comercio que no quiere adoptar su módulo de navegador, y C demuestra el patrón de integración frontend contra la API REST; ninguna de las dos entra en la comparación de métricas.
+
+\textbf{Límites declarados.} Los prototipos no son plantillas para producción. Ninguno de los cuatro envía una cabecera \textit{Content-Security-Policy} en la página donde se escribe la tarjeta, por lo que un script malicioso podría leer el número; en C, además, el monto lo decide el navegador. Estas decisiones fueron deliberadas: el experimento mide el código de pagos y una cabecera no cambia esa medición. Antes de reutilizar una de estas páginas en un comercio real deben agregarse las protecciones descritas en el ADR-09.
+
 \subsection{Alcance del sistema}
 El sistema abarca exclusivamente la capa de integración entre la aplicación del comercio y las pasarelas de pago. No forma parte de su alcance el procesamiento directo de datos de tarjeta de crédito, la gestión de cuentas de comercio en cada proveedor, la conciliación financiera de transacciones, ni ninguna operación administrativa sobre las APIs de los proveedores. La responsabilidad sobre el cumplimiento de PCI DSS recae en las pasarelas integradas y en las aplicaciones que consumen el framework, no en el framework mismo, que actúa exclusivamente como intermediario que delega cada operación hacia el proveedor correspondiente sin interceptar ni almacenar datos sensibles del proceso de pago.
 
