@@ -47,12 +47,12 @@ La nota del diagrama original quedó atrás en dos aspectos. Primero, la verific
 \subsubsection{Orquestación de código del SDK}
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.9\textwidth]{"../../architecture/SDK/Sequence Diagram - SDK Code Orchestration.png"}
+\includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{"../../architecture/SDK/Sequence Diagram - SDK Code Orchestration.pdf"}
 \caption{Diagrama de Secuencia de la orquestación de código del SDK}
 \label{fig:seq_sdk_orchestration}
 \end{figure}
 
-Este diagrama muestra cómo se coordinan las piezas internas del SDK desde que el comercio invoca la fachada hasta que recibe un resultado normalizado o un error tipado. \texttt{KitPagos} valida la solicitud y pide a \texttt{SdkConfigurator} la pasarela activa, las credenciales, la URL base y el plazo; \texttt{GatewayFactory} construye el adaptador correspondiente y lo envuelve con redacción de credenciales. El adaptador ejecuta la petición HTTP, delega la traducción de la respuesta en \texttt{ResponseNormalizer} y, si el fallo es técnico o de protocolo, en \texttt{ErrorHandler}. Las lecturas idempotentes pasan por \texttt{RetryHandler}, mientras que \texttt{createPayment()} no se reintenta para evitar cobros duplicados. El resultado llega al comercio como \texttt{PaymentResult} (\texttt{TRANSACTION} o \texttt{REDIRECT\_REQUIRED}) o como \texttt{KitPagosError} con un código de \texttt{KitPagosErrorCode}. La fuente PlantUML de esta figura está en \texttt{docs/architecture/SDK/diagrams-source/sequence-sdk-code-orchestration.puml}.
+Este diagrama muestra cómo se coordinan las piezas internas del SDK desde que el comercio invoca la fachada hasta que recibe un resultado normalizado o un error tipado. \texttt{KitPagos} pide a \texttt{SdkConfigurator} la pasarela activa, valida la solicitud y obtiene las credenciales, la URL base y el plazo; \texttt{GatewayFactory} construye el adaptador correspondiente y lo envuelve con redacción de credenciales. El adaptador ejecuta la petición HTTP, delega la traducción de la respuesta en \texttt{ResponseNormalizer} y, si el fallo es técnico o de protocolo, en \texttt{ErrorHandler}. Las lecturas idempotentes pasan por \texttt{RetryHandler}, mientras que \texttt{createPayment()} no se reintenta para evitar cobros duplicados. El cobro llega al comercio como \texttt{PaymentResult} (\texttt{TRANSACTION} o \texttt{REDIRECT\_REQUIRED}), la consulta como \texttt{Transaction} y cualquier fallo como \texttt{KitPagosError} con un código de \texttt{KitPagosErrorCode}. La validación de webhooks no se repite aquí: está en la Figura~\ref{fig:seq_webhook_sdk}. La fuente PlantUML de esta figura está en \texttt{docs/architecture/SDK/diagrams-source/sequence-sdk-code-orchestration.puml}.
 
 \subsection{Diagramas de Secuencia --- API de Simulación}
 
