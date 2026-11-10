@@ -8,9 +8,11 @@ Las responsabilidades en QA están claramente asignadas. El desarrollador/autor 
 
 Cabe resaltar que todos estos procesos de soporte, ambiente de trabajo, administración de riesgos, control de cambios, medición y QA, no funcionan de manera aislada, sino que están integrados en el ciclo de vida DSR del proyecto (sección 3). Los riesgos se monitorean y actualizan en cada ciclo; las métricas se recolectan continuamente y se utilizan para informar decisiones; los artefactos evolucionan según la tabla de hitos; y la calidad se asegura mediante revisiones realizadas justo antes de cada entrega planificada. Este enfoque holístico de procesos de soporte proporciona al equipo la estructura, visibilidad y mecanismos de control necesarios para ejecutar el proyecto de manera profesional y entregar resultados de calidad.
 
+La Figura~\ref{fig:bpmn-calidad} es el proceso de control de calidad y validación de entregables de la versión 1.0 de este plan, y numera los controles del 1 al 8 en el mismo orden en que se enumeran al comienzo de esta sección. El código y la documentación siguen caminos distintos hasta que el coordinador registra las revisiones, consolida las métricas y reporta las tendencias. El código pasa por las pruebas unitarias y, dentro del ciclo iterativo de desarrollo, por la revisión del pull request, el análisis CK, la validación de los datos de prueba y las pruebas de integración manual; la documentación pasa por la revisión de gramática, coherencia y referencias. En los dos caminos, las observaciones se corrigen y se responden en 24 horas. Después vienen la auditoría de configuración y la validación contra el Plan de Aceptación. Si se trata de la entrega final, el director revisa el documento de grado frente a los criterios de la Pontificia Universidad Javeriana y autoriza la entrega.
+
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\textwidth]{figuras/08-bpmn-calidad}
+  \includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{figuras/08-bpmn-calidad}
   \caption{Diagrama BPMN del proceso de control de calidad y validación de entregables}
   \label{fig:bpmn-calidad}
 \end{figure}

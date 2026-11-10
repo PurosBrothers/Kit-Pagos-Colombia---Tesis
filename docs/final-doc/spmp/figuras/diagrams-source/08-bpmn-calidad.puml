@@ -1,0 +1,97 @@
+@startuml 08-bpmn-calidad
+skinparam backgroundColor white
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam legendFontSize 10
+skinparam swimlaneTitleFontSize 10
+skinparam wrapWidth 200
+skinparam padding 2
+skinparam ArrowColor #333333
+skinparam activity {
+  BackgroundColor #FFF2CC
+  BorderColor #B7950B
+  DiamondBackgroundColor #FFF2CC
+  DiamondBorderColor #B7950B
+  StartColor #2E7D32
+  EndColor #C62828
+}
+skinparam partition {
+  BorderColor #5B7BA6
+  FontStyle plain
+}
+skinparam swimlane {
+  BorderColor #5B7BA6
+  TitleFontColor #1F3A6E
+  TitleFontStyle bold
+}
+skinparam legend {
+  BackgroundColor white
+  BorderColor #5B7BA6
+}
+
+title <b>7.5 CONTROL DE CALIDAD</b>\n<b>Proceso: Control de calidad y validación de entregables</b>
+
+|Equipo del Proyecto|
+start
+-> Inicio:\nArtefacto listo;
+:<&person> ¿Tipo de\nartefacto?;
+split
+  :Código TypeScript\no API REST;
+  :① Pruebas unitarias\nantes de integración;
+  -[hidden]->
+  partition "<&clock> Ciclo iterativo de desarrollo" #F3F6FA {
+    repeat
+      :<&cog> ② Revisión de código en PR\nArquitectura · Complejidad\nWMC ≤ 15 · CBO ≤ 5 · RFC ≤ 20;
+      if (¿Aprobado?) then (Sí)
+        :Merge a\nrama dev;
+        :③ Análisis CK\nal cierre de ciclo;
+        :<&cog> ⑤ Validación de datos de prueba\n4 escenarios × 4 pasarelas = 16;
+        :<&person> ⑥ Pruebas de integración\nmanual — verificación fin a fin;
+        if (¿OK?) then (Sí)
+          break
+        else (No)
+        endif
+      else (No)
+      endif
+    backward :<&person> Corregir y responder\ncomentarios ≤ 24 h;
+    repeat while ()
+  }
+split again
+  :Documentación técnica\no Trabajo de grado;
+  :Redactar documento\ncumpliendo estándares;
+  |Coordinador del Proyecto|
+  repeat :<&person> ④ Revisión de documentación\nGramática · Coherencia · Referencias;
+  backward :<&person> Corregir observaciones\n≤ 24 h;
+  repeat while (¿Aprobado?) is (No) not (Sí)
+end split
+|Coordinador del Proyecto|
+:<&person> Registrar revisiones\nConsolidar métricas ·\nReportar tendencias;
+:<&person> ⑧ Auditoría de configuración\nRepos públicos y organizados;
+:<&person> ⑦ Validación contra\nPlan de Aceptación;
+if (¿Entrega\nfinal?) then (No)
+  -> Continuar\nciclo DSR;
+  stop
+else (Sí)
+  |Director del Proyecto|
+  :<&person> Revisar documento\nfinal de grado;
+  if (¿Cumple\ncriterios PUJ?) then (Sí)
+    :<&person> Autorizar\nentrega final;
+    -> Entrega\naprobada;
+    stop
+  else (No)
+    :<&person> Corregir\nobservaciones\n≤ 24 h;
+    -[dashed]->
+    (A)
+    detach
+  endif
+endif
+
+legend bottom left
+  <&person> Tarea de Usuario   <&cog> Tarea de Servicio   <&clock> Recuadro: Subproceso
+  Rombo o hexágono: Exclusiva (Decisión)   Flecha continua: Flujo de Secuencia
+  Flecha discontinua: Flujo de Mensaje   (A): llega a «Corregir observaciones ≤ 24 h» del Coordinador
+endlegend
+@enduml

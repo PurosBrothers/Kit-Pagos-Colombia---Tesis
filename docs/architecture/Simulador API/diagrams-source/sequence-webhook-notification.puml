@@ -1,45 +1,57 @@
 @startuml Sequence Diagram - Webhook Notification
 title Escenario 4 - Notificacion Webhook (Simulator API)
 skinparam backgroundColor white
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam ParticipantFontSize 10
+skinparam ActorFontSize 10
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam SequenceGroupFontSize 10
+skinparam SequenceGroupHeaderFontSize 10
+skinparam SequenceDividerFontSize 10
+skinparam maxMessageSize 80
+hide footbox
 skinparam sequenceMessageAlign center
 skinparam ArrowColor #666666
 skinparam LifeLineBorderColor #666666
 
 participant "Tester / QA\n(o Trigger Interno)" as Tester
 participant "Simulator API\n(Fastify)" as SimAPI
-participant "SignatureGenerator" as Generator
-participant "WebhookDispatcher" as Dispatcher
+participant "Signature\nGenerator" as Generator
+participant "Webhook\nDispatcher" as Dispatcher
 participant "Comercio\n(Webhook Endpoint)" as Comercio
 participant "SDK KitPagos" as SDK
 
-Tester -> SimAPI : POST /v1/sim/webhooks/trigger\n{gateway, transactionId}
+Tester -> SimAPI : POST\n/v1/sim/webhooks/\ntrigger\n{gateway,\ntransactionId}
 SimAPI -> Generator : generate(subject)
 Generator --> SimAPI : OutgoingWebhook
 SimAPI -> Dispatcher : deliver(webhook)
-Dispatcher -> Comercio : POST {webhookUrl}(rawPayload, headers)
+Dispatcher -> Comercio : POST {webhookUrl}(\nrawPayload,\nheaders)
 
-Comercio -> SDK : validateWebhook(rawPayload, headers, options?)
+Comercio -> SDK : validateWebhook(\nrawPayload, headers,\noptions?)
 
 alt firma valida
   SDK --> Comercio : WebhookEvent
   opt Webhook liviano (Mercado Pago: solo ID)
-    Comercio -> SDK : getPaymentStatus(gatewayTransactionId)
+    Comercio -> SDK : getPaymentStatus(\ngatewayTransactionId)
     SDK --> Comercio : Transaction (estado consolidado)
   end
   Comercio -> Comercio : actualizar orden interna
 else firma invalida
-  SDK -->x Comercio : throw KitPagosError(WEBHOOK_SIGNATURE_INVALID)
+  SDK -->x Comercio : throw\nKitPagosError(\nWEBHOOK_SIGNATURE_\nINVALID)
   Comercio -->x Comercio : descartar evento
 end
 
-note over Dispatcher, SDK
+note over Tester, SDK
   Wompi: header X-Event-Checksum + body signature.checksum (SHA-256)
   Rapyd: header signature (Base64 HMAC-SHA256 sobre
-  url_path+salt+timestamp+access_key+secret_key+body);
-  salt/timestamp/access_key en headers separados
+  url_path+salt+timestamp+access_key+secret_key+body); salt/timestamp/access_key
+  en headers separados
   Mercado Pago: header x-signature ts=...,v1=... (HMAC-SHA256)
-  Kushki: mecanismo de firma no documentado en fuentes
-  oficiales; SDK y simulador informan esta limitacion.
+  Kushki: mecanismo de firma no documentado en fuentes oficiales; SDK y simulador
+  informan esta limitacion.
 end note
 
 @enduml

@@ -6,7 +6,7 @@ Esta sección describe el comportamiento dinámico de los flujos más críticos 
 \subsubsection{Creación de Pago (pendiente + webhook)}
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.85\textwidth]{"../../architecture/SDK/Sequence Diagram - Payment Creation.png"}
+\includegraphics{"../../architecture/SDK/Sequence Diagram - Payment Creation.pdf"}
 \caption{Diagrama de Secuencia del SDK de creación de pago}
 \label{fig:seq_create_payment}
 \end{figure}
@@ -18,7 +18,7 @@ Asimismo, desde la incorporación de PSE y de los flujos con redirección (punto
 \subsubsection{Pago Síncrono (Kushki --- Tarjeta)}
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.75\textwidth]{"../../architecture/SDK/Sequence Diagram - Synchronous Payment.png"}
+\includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{"../../architecture/SDK/Sequence Diagram - Synchronous Payment.pdf"}
 \caption{Diagrama de Secuencia del SDK de creación de pago síncrona}
 \label{fig:seq_create_payment_sync}
 \end{figure}
@@ -33,7 +33,7 @@ Este diagrama documenta la excepción al flujo asíncrono anterior: en cargos co
 \subsubsection{Conciliación por Webhook (asíncrono)}
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.75\textwidth]{"../../architecture/SDK/Sequence Diagram - Webhook Conciliation.png"}
+\includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{"../../architecture/SDK/Sequence Diagram - Webhook Conciliation.pdf"}
 \caption{Diagrama de Secuencia del SDK de conciliación por webhook}
 \label{fig:seq_webhook_sdk}
 \end{figure}
@@ -59,7 +59,7 @@ Este diagrama muestra cómo se coordinan las piezas internas del SDK desde que e
 \subsubsection{Pago Exitoso (Escenario 1)}
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.9\textwidth]{"../../architecture/Simulador API/Sequence Diagram - Successful Payment.png"}
+\includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{"../../architecture/Simulador API/Sequence Diagram - Successful Payment.pdf"}
 \caption{Diagrama de Secuencia de la API de Simulación de pago exitoso}
 \label{fig:seq_sim_success}
 \end{figure}
@@ -69,7 +69,7 @@ Muestra el flujo base de la API de Simulación: el Comercio invoca \texttt{creat
 \subsubsection{Pago Rechazado (Escenario 2)}
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.9\textwidth]{"../../architecture/Simulador API/Sequence Diagram - Denied Payment.png"}
+\includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{"../../architecture/Simulador API/Sequence Diagram - Denied Payment.pdf"}
 \caption{Diagrama de Secuencia de la API de Simulación de pago rechazado}
 \label{fig:seq_sim_declined}
 \end{figure}
@@ -79,7 +79,7 @@ Extiende el flujo anterior mostrando dos operaciones en secuencia: la creación 
 \subsubsection{Error de Red (Escenario 3)}
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.9\textwidth]{"../../architecture/Simulador API/Sequence Diagram - Network Error.png"}
+\includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{"../../architecture/Simulador API/Sequence Diagram - Network Error.pdf"}
 \caption{Diagrama de Secuencia de la API de Simulación de error de red}
 \label{fig:seq_sim_error}
 \end{figure}
@@ -89,7 +89,7 @@ Documenta el escenario más complejo de los cuatro, mediante un bloque alt con d
 \subsubsection{Notificación Webhook (Escenario 4)}
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.85\textwidth]{"../../architecture/Simulador API/Sequence Diagram - Webhook Notification.png"}
+\includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{"../../architecture/Simulador API/Sequence Diagram - Webhook Notification.pdf"}
 \caption{Diagrama de Secuencia de la API de Simulación de Notificación webhook}
 \label{fig:seq_sim_webhook}
 \end{figure}

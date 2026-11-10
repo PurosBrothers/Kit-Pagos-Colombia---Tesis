@@ -1,8 +1,15 @@
 @startuml Deploy Diagram - Simulador API
 title Diagrama de Despliegue — API de Simulación Kit Pagos Colombia
 skinparam backgroundColor white
-skinparam rectangleFontSize 12
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam rectangleFontSize 10
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
 skinparam wrapWidth 210
+skinparam nodesep 12
+skinparam ranksep 22
 skinparam rectangle {
   BorderColor #666666
   ArrowColor #666666
@@ -12,8 +19,8 @@ skinparam rectangle {
 rectangle "**Desarrollador / Tester QA**\n\nPrueba escenarios de pago y\nconsume la API durante la\nevaluacion" as Dev #1F4E79
 rectangle "**Aplicacion del Comercio (SDK embebido)**\n\nNode.js — Fuera de alcance\nde esta vista. El SDK se\ndistribuye via npm y no se\ndetalla a nivel de\ninfraestructura" as Comercio #A9A9A9
 
-rectangle "Plataforma Cloud (Render)\n[Platform as a Service]" as Cloud #FFFFFF {
-  rectangle "Instancia de Aplicacion\n[Node.js 18+ Runtime]" as Instance #FFFFFF {
+rectangle "Plataforma Cloud (Render)\n[Platform as a Service]" as Cloud #FFFFFF;text:black {
+  rectangle "Instancia de Aplicacion\n[Node.js 18+ Runtime]" as Instance #FFFFFF;text:black {
     rectangle "**API de Simulacion**\n<i>[Fastify / TypeScript]</i>\n\nReplica el comportamiento\nde Wompi, Rapyd, Mercado\nPago y Kushki. Expone\ndos superficies: /v1/sim\n(simulador pasarelas) y\n/v1/api (REST SDK).\nAdemas /v1/sim/webhooks/trigger\ny /docs (OpenAPI 3.0)" as API #2E75B6
   }
 }

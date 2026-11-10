@@ -1,0 +1,72 @@
+@startuml 01-ciclo-de-vida
+skinparam backgroundColor white
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam legendFontSize 10
+skinparam swimlaneTitleFontSize 10
+skinparam wrapWidth 230
+skinparam padding 2
+skinparam ArrowColor #333333
+skinparam activity {
+  BackgroundColor #FFF2CC
+  BorderColor #B7950B
+  DiamondBackgroundColor #FFF2CC
+  DiamondBorderColor #B7950B
+  StartColor #2E7D32
+  EndColor #C62828
+}
+skinparam partition {
+  BorderColor #5B7BA6
+  FontColor #1F3A6E
+  FontStyle bold
+}
+skinparam swimlane {
+  BorderColor #5B7BA6
+  TitleFontColor #1F3A6E
+  TitleFontStyle bold
+}
+skinparam legend {
+  BackgroundColor white
+  BorderColor #5B7BA6
+}
+
+title Modelo de Ciclo de Vida del Proyecto Kit Pagos Colombia
+
+|Equipo del Proyecto|
+start
+-> Inicio del Proyecto;
+:<color:#1F3A6E><b>1. Identificación y definición del problema</b></color>
+<&person> Comprensión del problema y del contexto;
+:<color:#1F3A6E><b>2. Definición de objetivos</b></color>
+Definición de objetivos y requisitos;
+:<color:#1F3A6E><b>3. Diseño</b></color>
+<&document> Diseño de la solución y arquitectura;
+repeat
+  partition "4. Desarrollo (Iterativo)\n<&clock> Ciclo iterativo de desarrollo" #F3F6FA {
+    repeat
+      :<&cog> Implementación del núcleo del SDK;
+      :<&cog> Implementación de adaptadores de pasarelas;
+      :<&cog> Construcción de API de simulación y datos de prueba;
+    repeat while (<&clock> Revisión interna y mejoras)
+  }
+  :<color:#1F3A6E><b>5. Demostración y evaluación</b></color>
+Demostración del artefacto y evaluación;
+  -[dashed]->
+  |Director del Proyecto|
+  :<&person> Revisión de entregables;
+repeat while () is (No aprobado) not (Aprobado)
+-[dashed]->
+|Equipo del Proyecto|
+:<color:#1F3A6E><b>6. Comunicación</b></color>
+Documentación del proyecto y difusión de resultados;
+-> Fin del Proyecto;
+stop
+
+legend bottom left
+  |= Símbolos |= Notas |
+  | <&person> Tarea de Usuario\n<&cog> Tarea de Servicio\n<&document> Tarea Manual\n<&clock> Evento Intermedio Temporal\nRecuadro con título: Subproceso\nRombo: Exclusiva (Decisión)\nFlecha continua: Flujo de Secuencia\nFlecha discontinua: Flujo de Mensaje | • El ciclo sigue las 6 fases del ciclo de vida DSR definido\n   en el componente 3.1.2 del SPMP.\n• La fase 4 (Desarrollo) es iterativa y contiene iteraciones\n   internas con revisiones y mejoras continuas.\n• La revisión de entregables por parte del Director puede\n   devolver el flujo a la fase de Desarrollo en caso de\n   no aprobación. |
+endlegend
+@enduml

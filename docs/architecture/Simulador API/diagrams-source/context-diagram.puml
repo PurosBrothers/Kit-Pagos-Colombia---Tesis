@@ -1,9 +1,15 @@
 @startuml Context Diagram - Simulador API
 title Diagrama de Contexto — API de Simulación Kit Pagos Colombia (Nivel 1)
-left to right direction
 skinparam backgroundColor white
-skinparam rectangleFontSize 12
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam rectangleFontSize 10
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
 skinparam wrapWidth 200
+skinparam nodesep 12
+skinparam ranksep 22
 skinparam rectangle {
   BorderColor #666666
   ArrowColor #666666
@@ -17,11 +23,12 @@ rectangle "**Pasarelas Reales**\n(Wompi · Rapyd · Mercado\nPago · Kushki)\n\n
 
 Dev --> Comercio : Configura escenarios de\nprueba en modo\nSandbox / Simulacion
 Comercio --> KitPagos : Frontend: llama a la API\nREST /v1/api\n[HTTPS / JSON]\nBackend: integra el SDK\ndirectamente
-KitPagos --> Comercio : Notifica cambios de\nestado asincronos\n[HTTP POST — Webhooks]
+Comercio <-- KitPagos : Notifica cambios de\nestado asincronos\n[HTTP POST — Webhooks]
 KitPagos --> Pasarelas : Referencia de formato\npara replica de respuestas\nnativas\n[Sin conexion real en\nmodo simulacion]
 
-note bottom of Pasarelas
-  "PayU" reemplazado por "Rapyd" tras la adquisicion
+note right of Pasarelas
+  "PayU" reemplazado por "Rapyd"
+  tras la adquisicion
   (ver architecture-log.md, punto 15/17).
 end note
 

@@ -1,8 +1,15 @@
 @startuml Component Diagram - SDK
 title Diagrama de Componentes — SDK Kit Pagos Colombia (Nivel 3)
 skinparam backgroundColor white
-skinparam rectangleFontSize 11
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam rectangleFontSize 10
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
 skinparam wrapWidth 190
+skinparam nodesep 6
+skinparam ranksep 18
 skinparam rectangle {
   BorderColor #666666
   ArrowColor #666666
@@ -11,44 +18,44 @@ skinparam rectangle {
 
 rectangle "**Desarrollador**\n\nConsume el SDK para\nintegrar pasarelas de pago" as Dev #1F4E79
 
-rectangle "SDK Kit Pagos Colombia (Paquete npm / TypeScript)\n[container]" as System #FFFFFF {
-  rectangle "**KitPagos**\n<i>[Facade Pattern]\nTypeScript</i>\n\nPunto de entrada unico.\ncreatePayment(),\ngetPaymentStatus(),\ngetPseBanks(),\nvalidateWebhook()" as Facade #1F4E79
-  rectangle "**SDK Configurator**\n<i>[Configuration Module]\nTypeScript</i>\n\nGestiona pasarela activa,\ncredenciales y modo\n(produccion/simulacion)" as Configurator #2E75B6
-  rectangle "**Gateway Factory**\n<i>[Factory Pattern]\nTypeScript</i>\n\nInstancia adaptador segun\nel enum Gateway\nconfigurado" as Factory #2E75B6
-  rectangle "**Payment Gateway Port**\n<i>[Interfaz / Puerto]\nTypeScript</i>\n\nContrato abstracto con las\noperaciones que debe\nimplementar cada adaptador" as Port #90CAF9
+rectangle "SDK Kit Pagos Colombia (Paquete npm / TypeScript)\n[container]" as System #FFFFFF;text:black {
+  rectangle "**KitPagos**\n<i>[Facade Pattern]</i>\n<i>TypeScript</i>\n\nPunto de entrada unico.\ncreatePayment(),\ngetPaymentStatus(),\ngetPseBanks(),\nvalidateWebhook()" as Facade #1F4E79
+  rectangle "**SDK Configurator**\n<i>[Configuration Module]</i>\n<i>TypeScript</i>\n\nGestiona pasarela\nactiva, credenciales\ny modo (produccion/\nsimulacion)" as Configurator #2E75B6
+  rectangle "**Gateway Factory**\n<i>[Factory Pattern]</i>\n<i>TypeScript</i>\n\nInstancia adaptador\nsegun el enum\nGateway configurado" as Factory #2E75B6
+  rectangle "**Payment Gateway Port**\n<i>[Interfaz / Puerto]</i>\n<i>TypeScript</i>\n\nContrato abstracto con\nlas operaciones que\ndebe implementar\ncada adaptador" as Port #90CAF9;text:black
 
-  rectangle "**Response Normalizer**\n<i>[Application Service]\nTypeScript</i>\n\nDespacha en un normalizador\npor pasarela, que mapea\nestados nativos a\nTransactionStatus y construye\nla entidad Transaction" as Normalizer #2E75B6
-  rectangle "**Retry Handler**\n<i>[Resilience Utility]\nTypeScript</i>\n\nReintentos con backoff\nexponencial ante errores\ntransitorios" as Retry #2E75B6
-  rectangle "**Error Handler**\n<i>[Application Service]\nTypeScript</i>\n\nConvierte errores nativos\nen KitPagosError tipado con\nKitPagosErrorCode. Se divide por\nforma del error, no por\npasarela" as ErrorHandler #2E75B6
-  rectangle "**Webhook Verifier**\n<i>[Domain Service]\nTypeScript</i>\n\nDespacha en un manejador\npor pasarela, que verifica la\nfirma criptografica\n(SHA-256, HMAC) y construye\nel WebhookEvent" as Webhook #2E75B6
-  rectangle "**Transaction Entity**\n<i>[Domain Entity]\nTypeScript</i>\n\nEncapsula estado unificado,\nmontos, autorizacion y\ndatos del pagador" as Transaction #FFE0B2
+  rectangle "**Response Normalizer**\n<i>[Application Service]</i>\n<i>TypeScript</i>\n\nDespacha en un\nnormalizador por\npasarela, que mapea\nestados nativos a\nTransactionStatus y\nconstruye la entidad\nTransaction" as Normalizer #2E75B6
+  rectangle "**Retry Handler**\n<i>[Resilience Utility]</i>\n<i>TypeScript</i>\n\nReintentos con\nbackoff exponencial\nante errores\ntransitorios" as Retry #2E75B6
+  rectangle "**Error Handler**\n<i>[Application Service]</i>\n<i>TypeScript</i>\n\nConvierte errores\nnativos en\nKitPagosError tipado\ncon KitPagosErrorCode.\nSe divide por forma\ndel error, no por\npasarela" as ErrorHandler #2E75B6
+  rectangle "**Webhook Verifier**\n<i>[Domain Service]</i>\n<i>TypeScript</i>\n\nDespacha en un\nmanejador por\npasarela, que verifica\nla firma criptografica\n(SHA-256, HMAC) y\nconstruye el\nWebhookEvent" as Webhook #2E75B6
+  rectangle "**Transaction Entity**\n<i>[Domain Entity]</i>\n<i>TypeScript</i>\n\nEncapsula estado\nunificado, montos,\nautorizacion y datos\ndel pagador" as Transaction #FFE0B2;text:black
 
   rectangle "**Wompi Adapter**\n<i>[Adapter Pattern]</i>\n\nTraduce a Wompi\n(Bearer, status)" as WompiAdapter #5B9BD5
-  rectangle "**Rapyd Adapter**\n<i>[Adapter Pattern]</i>\n\nTraduce a Rapyd\n(access_key/secret_key,\nHMAC-SHA256)" as RapydAdapter #5B9BD5
-  rectangle "**Mercado Pago Adapter**\n<i>[Adapter Pattern]</i>\n\nTraduce a Mercado Pago\n(Bearer, status_detail)" as MPAdapter #5B9BD5
-  rectangle "**Kushki Adapter**\n<i>[Adapter Pattern]</i>\n\nTraduce a Kushki\n(Private-Merchant-ID)" as KushkiAdapter #5B9BD5
+  rectangle "**Rapyd Adapter**\n<i>[Adapter Pattern]</i>\n\nTraduce a Rapyd\n(access_key/\nsecret_key,\nHMAC-SHA256)" as RapydAdapter #5B9BD5
+  rectangle "**Mercado Pago**\n**Adapter**\n<i>[Adapter Pattern]</i>\n\nTraduce a\nMercado Pago\n(Bearer,\nstatus_detail)" as MPAdapter #5B9BD5
+  rectangle "**Kushki Adapter**\n<i>[Adapter Pattern]</i>\n\nTraduce a Kushki\n(Private-\nMerchant-ID)" as KushkiAdapter #5B9BD5
 }
 
-rectangle "**Wompi API**\nBancolombia Sandbox" as WompiAPI #A9A9A9
+rectangle "**Wompi API**\nBancolombia\nSandbox" as WompiAPI #A9A9A9
 rectangle "**Rapyd API**\nLatam Sandbox" as RapydAPI #A9A9A9
-rectangle "**Mercado Pago API**\nMercado Libre Sandbox" as MPAPI #A9A9A9
+rectangle "**Mercado Pago**\n**API**\nMercado Libre\nSandbox" as MPAPI #A9A9A9
 rectangle "**Kushki API**\nUAT Sandbox" as KushkiAPI #A9A9A9
 rectangle "**API de Simulacion**\nSimulador desplegado\n(Render). Destino\nprincipal durante\nevaluacion" as SimAPI #808080
 
 Dev --> Facade : Invoca operaciones\nde pago\n[TypeScript]
 
 Facade --> Configurator : Usa entorno
-Facade --> Factory : Solicita adapter
-Facade --> Retry : Envuelve llamada
-Facade ..> Webhook : Valida webhook
+Facade --> Factory : Solicita\nadapter
+Facade --> Retry : Envuelve\nllamada
+Facade ..> Webhook : Valida\nwebhook
 Factory ..> Port : Instancia
 
-WompiAdapter ..|> Port
-RapydAdapter ..|> Port
-MPAdapter ..|> Port
-KushkiAdapter ..|> Port
+Port <|.. WompiAdapter
+Port <|.. RapydAdapter
+Port <|.. MPAdapter
+Port <|.. KushkiAdapter
 
-Retry --> ErrorHandler : MAX_RETRIES_EXCEEDED
+Retry --> ErrorHandler : MAX_RETRIES_\nEXCEEDED
 Normalizer --> Transaction : Construye
 
 WompiAdapter --> WompiAPI : Nativo\n[HTTPS]
@@ -56,27 +63,33 @@ RapydAdapter --> RapydAPI : Nativo\n[HTTPS]
 MPAdapter --> MPAPI : Nativo\n[HTTPS]
 KushkiAdapter --> KushkiAPI : Nativo\n[HTTPS]
 
-WompiAdapter ..> SimAPI : Modo simulacion
-RapydAdapter ..> SimAPI : Modo simulacion
-MPAdapter ..> SimAPI : Modo simulacion
-KushkiAdapter ..> SimAPI : Modo sandbox UAT
+WompiAdapter ..> SimAPI : Modo\nsimulacion
+RapydAdapter ..> SimAPI : Modo\nsimulacion
+MPAdapter ..> SimAPI : Modo\nsimulacion
+KushkiAdapter ..> SimAPI : Modo\nsandbox UAT
 
+Webhook -[hidden]down- Configurator
 note bottom of RapydAdapter
-  Reemplaza a "PayU Adapter" tras la adquisicion
-  (ver architecture-log.md, punto 15).
+  Reemplaza a "PayU Adapter"
+  tras la adquisicion (ver
+  architecture-log.md, punto 15).
 end note
 
-note right of Normalizer
-  Response Normalizer y Webhook Verifier son
-  despachadores: cada pasarela tiene su propia
-  implementacion detras de una interfaz
-  (GatewayResponseNormalizer y
-  GatewayWebhookHandler). No se dibujan como
-  componentes aparte porque, a diferencia de los
-  adaptadores, no hablan con ningun sistema
-  externo; el detalle de clases esta en el
-  Diagrama de Clases de la Arquitectura Hexagonal.
-  Ver architecture-log.md, punto 34.
+note top of Normalizer
+  Response Normalizer y Webhook
+  Verifier son despachadores: cada
+  pasarela tiene su propia
+  implementacion detras de una
+  interfaz (GatewayResponseNormalizer
+  y GatewayWebhookHandler). No se
+  dibujan como componentes aparte
+  porque, a diferencia de los
+  adaptadores, no hablan con ningun
+  sistema externo; el detalle de
+  clases esta en el Diagrama de
+  Clases de la Arquitectura
+  Hexagonal. Ver architecture-log.md,
+  punto 34.
 end note
 
 @enduml
