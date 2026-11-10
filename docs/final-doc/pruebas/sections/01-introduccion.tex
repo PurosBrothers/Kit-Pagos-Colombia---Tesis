@@ -1,0 +1,48 @@
+\section{Introducción}
+
+Este documento es el Plan de Pruebas del Proyecto (PTP) de Kit Pagos Colombia. Describe qué se va a probar, con qué estrategia, en qué ambientes y con qué criterios de terminación, y diseña los casos que se ejecutarán para verificar el comportamiento del framework. No sustituye al SRS ni al documento de arquitectura: los toma como fuente y convierte sus requisitos en verificaciones concretas.
+
+\subsection{Propósito}
+
+El propósito del documento es que cualquier integrante del equipo, o un evaluador externo, pueda responder cuatro preguntas sin consultar otro archivo:
+
+\begin{itemize}
+  \item \textbf{Qué se prueba.} Los componentes del framework y los productos que lo consumen, delimitados en la Sección~\ref{sec:items}.
+  \item \textbf{Cómo se prueba.} Los tipos de prueba, las herramientas, los ambientes y los criterios de completitud de cada tipo, descritos en la Sección~\ref{sec:estrategia}.
+  \item \textbf{Con qué casos.} Siete casos diseñados, seis funcionales y uno de confiabilidad. La Sección~\ref{sec:casos} los resume y desarrolla CP-01 como ejemplo; CP-02 a CP-07 están completos en los anexos (Sección~\ref{sec:anexos}).
+  \item \textbf{Cómo se reporta.} La estructura de resultados, el registro de defectos y las métricas que se llenarán al ejecutar las pruebas (Sección~\ref{sec:resultados}).
+\end{itemize}
+
+\subsection{Alcance}
+
+El alcance cubre los tres componentes del artefacto y los cuatro prototipos de la Fase~5:
+
+\begin{itemize}
+  \item El \textbf{SDK de servidor} \path{kit-pagos-colombia}, que unifica las cuatro pasarelas colombianas.
+  \item El módulo de navegador \path{kit-pagos-colombia/browser}, que tokeniza la tarjeta sin que el número pase por el servidor del comercio.
+  \item La \textbf{API de Simulación}, tanto las rutas que imitan a las pasarelas bajo \texttt{/v1/sim} como la capa REST propia bajo \texttt{/v1/api}.
+  \item Los cuatro prototipos: A (\path{checkout-con-sdk-solo-back}), B (\path{checkout-con-sdk-front-back}), C (\path{checkout-frontend-rest}) y D (\path{checkout-sin-solucion}).
+\end{itemize}
+
+La estrategia cubre pruebas unitarias, de integración, de contrato, de sistema y de carga. Las de carga se ejecutan solo contra una instancia de la API de Simulación levantada en el mismo proceso, sin red hacia ninguna pasarela (Sección~\ref{sec:carga}). Quedan fuera del alcance las operaciones CRUD del catálogo y del carrito de la tienda anfitriona, la seguridad y autenticación propia del comercio, la ayuda en línea y el cumplimiento formal PCI~DSS de la aplicación externa, que depende de la infraestructura particular que integra el framework. Las pruebas de contrato contra los sandboxes reales se diseñan y se cuentan, pero su ejecución requiere credenciales y red, y por eso se reporta por separado.
+
+\subsection{Audiencia y convenciones}
+
+El documento está dirigido al equipo de desarrollo, al director del trabajo de grado y a los evaluadores. Los comandos se escriben desde la raíz del repositorio salvo que se indique otra carpeta. Los nombres de archivos, rutas, clases y variables se conservan en su forma original en inglés o en el idioma del código; las explicaciones están en español.
+
+Cada caso de prueba declara de forma explícita su \textbf{ambiente}, porque el resultado de una prueba de pagos depende de dónde se ejecute: no es lo mismo el simulador local, que es determinista, que un sandbox real, que puede declinar cuando quiere. Esa distinción se mantiene en todo el documento y es la razón por la que los casos funcionales se ejecutan contra el simulador y las pruebas de contrato se reportan aparte.
+
+\subsection{Estructura del documento}
+
+\begin{description}
+  \item[Sección~\ref{sec:items}.] Ítems de prueba: los componentes, su descripción y el objetivo de probar cada uno.
+  \item[Sección~\ref{sec:estrategia}.] Estrategia: tipos de prueba, niveles con el desglose de las suites por archivo, pruebas de carga, ambientes, datos y criterios de completitud.
+  \item[Sección~\ref{sec:casos}.] Casos de prueba: resumen de los siete casos y especificación completa del caso de ejemplo CP-01.
+  \item[Sección~\ref{sec:resultados}.] Resultados: la estructura que se llenará en el issue \#174, con la escala de estados, el registro de defectos y las métricas.
+  \item[Sección~\ref{sec:referencias}.] Referencias bibliográficas en formato IEEE.
+  \item[Sección~\ref{sec:anexos}.] Anexos: los casos CP-02 a CP-07, la matriz de trazabilidad entre requisitos y casos, los comandos de la corrida y un glosario técnico.
+\end{description}
+
+\subsection{Relación con la ejecución}
+
+Este documento diseña las pruebas y deja preparada la estructura de resultados. La ejecución, las evidencias y el registro de defectos corresponden al issue \#174. Por esa razón, las columnas de resultado obtenido, estado y notas de las tablas de pasos aparecen vacías: se llenarán con la corrida real y no con una expectativa.

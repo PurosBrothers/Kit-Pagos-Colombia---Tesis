@@ -1,0 +1,114 @@
+\subsection{CP-04: un webhook firmado actualiza el historial de la orden}
+\label{sec:cp04}
+
+\FichaCaso
+  {CP-04}
+  {David Estevan Rodriguez Jurado}
+  {09/11/2026}
+  {Un webhook firmado actualiza el historial de la orden}
+  {Pendiente (\#174)}
+  {Pendiente (\#174)}
+  {Crear una orden con tarjeta de Wompi en el prototipo B, disparar el webhook firmado del simulador y comprobar que la notificación se verifica, se registra en el historial con origen \texttt{webhook} y deja la orden en \texttt{DECLINED}. El caso verifica la función 4 del prototipo y la integración entre el simulador, el SDK y el esqueleto.}
+  {Funcional (sistema e integración).}
+  {\textbullet\ SDK compilado; \path{simulator-api} y el prototipo B con dependencias instaladas.\newline
+   \textbullet\ En el \path{.env} de la raíz, que leen el simulador y B, \texttt{WOMPI\_EVENTS\_SECRET} con un valor no vacío; \texttt{KUSHKI\_WEBHOOK\_SECRET} también, con cualquier valor.\newline
+   \textbullet\ Puerto 4000 libre y \texttt{localtest.me} resolviendo a \texttt{127.0.0.1}.\newline
+   \textbullet\ Los archivos \emph{cp04-tarjeta.json} y \emph{cp04-orden.json} creados en la carpeta desde donde se ejecuta \texttt{curl}, con el contenido de la Tabla~\ref{tab:cp04-cuerpos}.}
+  {Local. Simulador en \texttt{http://localhost:3000}, con destino de webhooks y sin emisión automática; prototipo B en \texttt{http://localtest.me:4000} con \texttt{npm run start:local}; SDK 0.7.0-rc.2. Las llaves del \path{.env} solo viajan al simulador local. Node.js 20.}
+
+\subsubsection{Objetivo}
+
+Comprobar que un webhook de Wompi firmado por el simulador llega a B, se verifica con el secreto del perfil, se registra en el historial de la orden con origen \texttt{webhook} y actualiza el estado a \texttt{DECLINED}. El caso falla si la firma se rechaza, si la orden no cambia, si el historial atribuye el cambio a una consulta o si un webhook repetido devuelve la orden a un estado anterior.
+
+\subsubsection{Procedimiento}
+
+\begin{TablaPasos}{Pasos del caso CP-04}
+  1 &
+  Revisar los secretos compartidos. &
+  \path{.env} de la raíz: \path{WOMPI_EVENTS_SECRET} y \path{KUSHKI_WEBHOOK_SECRET} con valor. &
+  El simulador firma con \path{WOMPI_EVENTS_SECRET} y B verifica con el mismo valor, porque los dos leen el mismo archivo. &
+  & & \\ \hline
+  2 &
+  Levantar el simulador con el destino de webhooks. &
+  \texttt{cd simulator-api}; luego \path{SIMULATOR_WEBHOOK_TARGET_URL='http://localhost:4000/webhooks/{gateway}'} \texttt{npm run dev}, sin \path{SIMULATOR_WEBHOOK_AUTO}. &
+  El simulador escucha en el puerto 3000. Sin emisión automática, el único webhook del caso es el del paso 6. &
+  & & \\ \hline
+  3 &
+  Levantar el prototipo B contra el simulador local. &
+  \texttt{cd} \path{prototypes/checkout-con-sdk-front-back} \texttt{\&\& npm run start:local}. &
+  La tienda responde en \url{http://localtest.me:4000} y usa el simulador local como ambiente de pagos. &
+  & & \\ \hline
+  4 &
+  Tokenizar la tarjeta de prueba \texttt{4111} de Wompi. &
+  Petición~1 de la Tabla~\ref{tab:cp04-cuerpos}, con \emph{cp04-tarjeta.json}. &
+  Respuesta 201 con el token en \texttt{data.id}. El simulador asocia ese token al escenario \path{PENDING_THEN_DECLINED}. &
+  & & \\ \hline
+  5 &
+  Crear la orden con la tarjeta tokenizada. &
+  Escribir el token en \emph{cp04-orden.json}; luego, petición~2. &
+  Respuesta 201 con \texttt{order.id}, \texttt{order.transactionId} y \texttt{order.status} igual a \texttt{PENDING}, como toda tarjeta de Wompi al crearse. &
+  & & \\ \hline
+  6 &
+  Disparar el webhook firmado de la transacción. &
+  Petición~3, con el \texttt{order.transactionId} del paso 5. &
+  Respuesta 200 con \texttt{delivered: true}, \texttt{receiverStatus: 200} y el webhook firmado. La transacción avanzó a \texttt{DECLINED} antes de firmarse. &
+  & & \\ \hline
+  7 &
+  Consultar el historial de la orden. &
+  Petición~4, con el \texttt{order.id} del paso 5. &
+  La orden está en \texttt{DECLINED}. Su historial tiene la entrada de creación (\texttt{PENDING}) y una con \texttt{source: "webhook"}, estado \texttt{DECLINED} y \texttt{nativeStatus: "DECLINED"}. La consulta de B repite el mismo estado y no agrega una entrada. &
+  & & \\ \hline
+  8 &
+  Repetir el webhook. &
+  La petición~3 otra vez. &
+  Respuesta 200. La orden sigue en \texttt{DECLINED}; el historial suma una segunda entrada de webhook con el mismo estado y no vuelve a \texttt{PENDING}. &
+  & & \\ \hline
+  9 &
+  Verificar que la firma se comprobó y no se confió en el cuerpo. &
+  Revisión de \path{src/routes/webhooks.ts} de B y de su salida en la terminal. &
+  B pasa el cuerpo crudo, las cabeceras y la query a \texttt{verifyWebhook()}; una firma inválida responde 401 y no actualiza la orden. &
+  & & \\ \hline
+\end{xltabular}
+\end{TablaPasos}
+
+Cada petición es una sola línea de shell. El PDF la parte por el ancho de la página, así que para pegarla en la terminal se copia de \path{docs/final-doc/pruebas/sections/casos-prueba/cp-04.tex}, donde está en una línea. Los dos archivos JSON se crean antes del paso 4.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.6cm}|>{\raggedright\arraybackslash}X|}
+\hline
+\textbf{Petición o archivo} & \textbf{Contenido} \\ \hline
+\emph{cp04-tarjeta.json} & \path{{"number":"4111111111111111","cvc":"123","exp_month":"12","exp_year":"30","card_holder":"COMPRADOR PRUEBA"}} \\ \hline
+\emph{cp04-orden.json} & \path{{"gateway":"wompi","items":[{"productId":"casillero-del-diablo-cabernet","quantity":1}],"method":{"type":"CARD","cardToken":"<token>","installments":1},"payer":{"fullName":"Comprador Prueba","email":"comprador@example.com","documentType":"CC","documentNumber":"1000000001","phone":"3001234567","address":{"streetName":"Calle 10","streetNumber":"5-20","neighborhood":"Chapinero","city":"Bogota","zipCode":"110231"}}}} \\ \hline
+Petición~1 & \path{curl -s -X POST http://localhost:3000/v1/sim/wompi/tokens/cards -H 'Authorization: Bearer pub_test_cp04' -H 'Content-Type: application/json' -d @cp04-tarjeta.json} \\ \hline
+Petición~2 & \path{curl -s -X POST http://localtest.me:4000/api/orders -H 'Content-Type: application/json' -d @cp04-orden.json} \\ \hline
+Petición~3 & \path{curl -s -X POST http://localhost:3000/v1/sim/webhooks/trigger -H 'Content-Type: application/json' -d '{"gateway":"wompi","transactionId":"<transactionId>"}'} \\ \hline
+Petición~4 & \path{curl -s http://localtest.me:4000/api/orders/<id>} \\ \hline
+\end{tabularx}
+\caption{Archivos y peticiones del caso CP-04}
+\label{tab:cp04-cuerpos}
+\end{table}
+
+\subsubsection{Criterio de aceptación}
+
+\begin{enumerate}
+  \item El webhook se entrega al destino configurado y el simulador recibe un \texttt{receiverStatus} 200.
+  \item La orden creada con la tarjeta \texttt{4111} cambia de \texttt{PENDING} a \texttt{DECLINED} por el webhook.
+  \item El historial registra el cambio con origen \texttt{webhook}, no con origen \texttt{query}.
+  \item La firma se verifica con el secreto del perfil; el cuerpo de la petición no decide el secreto ni el destino.
+  \item Un webhook repetido no devuelve la orden a un estado anterior.
+\end{enumerate}
+
+\subsubsection{Observaciones de diseño}
+
+El disparador del simulador no acepta una URL en el cuerpo: el destino sale de \path{SIMULATOR_WEBHOOK_TARGET_URL}. Cualquier clave distinta de \texttt{gateway} y \texttt{transactionId} responde 400, y el \texttt{transactionId} tiene que ser el identificador nativo. Esa restricción es deliberada: impide que una prueba convierta al simulador en un proxy hacia una URL arbitraria y obliga a que el webhook se firme con los secretos del servidor, como en una pasarela real.
+
+El caso deja apagada la emisión automática (\path{SIMULATOR_WEBHOOK_AUTO}). Encendida, el simulador también enviaría un webhook propio cuando la transacción cambia de estado, y el historial tendría una entrada de webhook más que lo que esperan los pasos 7 y 8.
+
+La tarjeta \texttt{4111} se elige porque su desenlace está medido contra Wompi: nace \texttt{PENDING} y la consulta la muestra \texttt{DECLINED}. El disparador aprovecha esa misma transición y firma el estado ya avanzado, así que el webhook no depende de que alguien consulte antes.
+
+\subsubsection{Trazabilidad}
+
+RF-04, RF-06 y RF-12; HU-03, HU-04 y HU-08.

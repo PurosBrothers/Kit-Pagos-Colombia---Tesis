@@ -1,0 +1,72 @@
+\subsection{CP-01: un mismo pago de tarjeta por las cuatro pasarelas}
+\label{sec:cp01}
+
+\FichaCaso
+  {CP-01}
+  {David Estevan Rodriguez Jurado}
+  {09/11/2026}
+  {Un mismo pago de tarjeta por las cuatro pasarelas}
+  {Pendiente (\#174)}
+  {Pendiente (\#174)}
+  {El mismo pago, descrito una sola vez con \texttt{CreatePaymentRequest} y ejecutado con \texttt{kitPagos.createPayment()}, se cobra por Wompi, Mercado Pago, Kushki y Rapyd. El caso verifica que el SDK normaliza el estado, conserva el estado nativo, mantiene el monto exacto y la referencia de la orden, y que la reconsulta es estable. Es el argumento de intercambiabilidad del proyecto convertido en una verificación ejecutable.}
+  {Funcional (sistema, caja negra). No es un CRUD ni una prueba de seguridad.}
+  {\textbullet\ SDK compilado en \path{sdk/} con \texttt{npm install} y \texttt{npm run build}.\newline
+   \textbullet\ Dependencias de \path{examples/} instaladas.\newline
+   \textbullet\ API de Simulación arriba en \texttt{http://localhost:3000} (\texttt{cd simulator-api \&\& npm run dev}), con \texttt{GET /health} respondiendo 200.\newline
+   \textbullet\ Puerto 3000 libre y sin otro proceso que lo ocupe.}
+  {Local. El SDK apunta al simulador local y el comercio no conoce ninguna URL de pasarela. Las credenciales del ejemplo son ficticias, salvo los dos secretos con que el simulador verifica las firmas, que \path{examples/simulator-secrets.ts} toma del \path{.env} si existe; todo viaja solo a \texttt{localhost:3000}. Node.js 20; SDK 0.7.0-rc.2. Monto \texttt{150000.00 COP}; token opaco \path{tok_test_interchange}.}
+
+\subsubsection{Objetivo}
+
+Comprobar que las cuatro pasarelas producen el mismo resultado normalizado para el mismo pago y que el código del comercio no contiene ninguna rama por pasarela. El caso falla si una pasarela devuelve un estado normalizado distinto, un monto distinto, una referencia distinta o si la reconsulta cambia el desenlace.
+
+\subsubsection{Procedimiento}
+
+\begin{TablaPasos}{Pasos del caso CP-01}
+  1 &
+  Compilar el SDK y levantar la API de Simulación. &
+  \texttt{cd sdk \&\& npm install \&\& npm run build}; en otra terminal, \texttt{cd simulator-api \&\& npm install \&\& npm run dev}. &
+  La compilación termina con código 0; el simulador escucha en el puerto 3000 y \texttt{GET /health} responde 200 con estado \texttt{ok}. &
+  & & \\ \hline
+  2 &
+  Ejecutar el ejemplo de intercambiabilidad. &
+  \texttt{cd examples \&\& npm install \&\& npm run} \path{simulate:interchangeability}. &
+  El proceso imprime una tabla con las cuatro pasarelas. Las cuatro filas muestran estado normalizado \texttt{APPROVED}, monto \texttt{150000.00 COP} y reconsulta \texttt{APPROVED}. El estado nativo es \texttt{APPROVED} en Wompi, \texttt{CLO} en Rapyd, \texttt{approved} en Mercado Pago y \texttt{APPROVAL} en Kushki. Al final imprime «Las 4 pasarelas coinciden en estado normalizado, monto y referencia.» &
+  & & \\ \hline
+  3 &
+  Verificar cómo llega cada pago a su estado final. &
+  La salida del paso 2 y \path{examples/gateway-interchangeability.ts}. &
+  Wompi se consulta porque nace \texttt{PENDING}; Rapyd redirige, y el ejemplo visita la \texttt{redirectUrl} y consulta; Mercado Pago y Kushki traen el desenlace en la creación. Las dos ramas dependen del resultado (\texttt{outcome} e \texttt{isFinal()}), no de la pasarela. &
+  & & \\ \hline
+  4 &
+  Repetir la corrida para descartar un resultado accidental. &
+  El mismo comando del paso 2. &
+  La segunda corrida produce el mismo estado normalizado, el mismo monto y la misma línea de verificación; el código de salida vuelve a ser 0. &
+  & & \\ \hline
+  5 &
+  Verificar que el código del comercio no tiene ramas por pasarela. &
+  Revisión de \path{examples/gateway-interchangeability.ts}. &
+  El pago se describe una sola vez y lo cobra la misma función \texttt{charge()} para las cuatro pasarelas, sin \texttt{switch} ni \texttt{if} sobre \texttt{Gateway}. Lo que cambia por pasarela es el valor de \texttt{gateway}, su credencial en \texttt{CREDENTIALS} y su URL en \texttt{SIMULATOR\_ENDPOINTS}. El token \path{tok_test_interchange} es el mismo para las cuatro. &
+  & & \\ \hline
+\end{xltabular}
+\end{TablaPasos}
+
+\subsubsection{Criterio de aceptación}
+
+El caso se considera aprobado si y solo si:
+
+\begin{enumerate}
+  \item Las cuatro pasarelas devuelven \texttt{APPROVED} como estado normalizado.
+  \item Cada una conserva su estado nativo en \texttt{rawStatus} sin que el SDK lo traduzca de vuelta al vocabulario del comercio.
+  \item El monto es el mismo en las cuatro. El ejemplo lo compara con \texttt{Amount.equals()}, que compara el valor y no la cadena.
+  \item La referencia de la orden es idéntica en las cuatro; el ejemplo la compara por código.
+  \item La reconsulta no cambia el desenlace y el proceso termina con código 0.
+\end{enumerate}
+
+\subsubsection{Observaciones de diseño}
+
+El caso usa un token opaco de prueba, \path{tok_test_interchange}, porque quien responde es el simulador. No ejercita \texttt{KitPagosBrowser}: la tokenización real en el navegador se prueba en CP-05. Esta separación es deliberada; mezclar la tokenización con la intercambiabilidad haría que un fallo de tokenización pareciera un fallo de normalización. La comprobación se ejecuta por código, y el proceso termina con código 1 si alguna pasarela discrepa o si la reconsulta cambia el resultado.
+
+\subsubsection{Trazabilidad}
+
+RF-01 (creación unificada), RF-02 (normalización de la transacción), RF-03 (estados normalizados) y RF-06 (cambio de pasarela sin cambiar el código de negocio). HU-01, HU-02 y HU-04.

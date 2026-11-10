@@ -1,0 +1,114 @@
+\subsection{CP-06: API REST \texttt{/v1/api} de extremo a extremo}
+\label{sec:cp06}
+
+\FichaCaso
+  {CP-06}
+  {David Estevan Rodriguez Jurado}
+  {09/11/2026}
+  {API REST \texttt{/v1/api} de extremo a extremo}
+  {Pendiente (\#174)}
+  {Pendiente (\#174)}
+  {Ejercitar las rutas de la capa REST con un cliente que no instala el SDK de servidor y comprobar que conserva el monto exacto, discrimina la transacción de la redirección, exige la pasarela en la consulta y agrupa los bancos PSE por pasarela. El caso usa la colección de Postman en local, peticiones con \texttt{curl}, el prototipo C como cliente real y un humo de Render.}
+  {Funcional (sistema, caja negra) y de contrato de la API.}
+  {\textbullet\ SDK compilado y \path{simulator-api/} con dependencias instaladas.\newline
+   \textbullet\ Newman disponible con \texttt{npx newman}, o Postman con la colección y el ambiente \texttt{local}.\newline
+   \textbullet\ El archivo \emph{cp06-pago.json} creado en la raíz del repositorio con el contenido de la Tabla~\ref{tab:cp06-peticiones}.\newline
+   \textbullet\ Para el prototipo C: \texttt{npm ci} y \texttt{npm run build} en \path{prototypes/checkout-frontend-rest/}; el puerto 4100 libre.\newline
+   \textbullet\ Para el humo de Render: acceso a Internet, el servicio despierto y el token de la API de Render.}
+  {Local. API de Simulación en \texttt{http://localhost:3000}; prototipo C en \texttt{http://localtest.me:4100} con \texttt{npm run start:local}. Los pasos 1 a 6 usan credenciales ficticias de cliente; el paso 7 usa el perfil del \path{.env}, cuyas llaves solo viajan al simulador local. El humo de Render usa \url{https://kit-pagos-colombia.onrender.com} y no cobra. Node.js 20.}
+
+\subsubsection{Objetivo}
+
+Comprobar que un cliente sin SDK puede crear un pago, consultarlo y listar bancos PSE por REST con la misma semántica que el SDK: monto exacto como cadena, estado normalizado y nativo, resultado que distingue \texttt{TRANSACTION} de \texttt{REDIRECT\_REQUIRED}, pasarela obligatoria en la consulta y bancos agrupados por pasarela. El caso falla si la capa REST aplana esas diferencias, si redondea el monto o si una ruta acepta una petición incompleta.
+
+\subsubsection{Procedimiento}
+
+\begin{TablaPasos}{Pasos del caso CP-06}
+  1 &
+  Levantar el simulador sin el perfil de Wompi del \path{.env}. &
+  \texttt{cd simulator-api}; luego \path{WOMPI_PUBLIC_KEY= WOMPI_PRIVATE_KEY= WOMPI_INTEGRITY_SECRET= npm run dev}. &
+  El simulador escucha en el puerto 3000 y \texttt{GET /health} responde 200. Con esas tres variables vacías, verifica la firma de integridad con el secreto por omisión, el mismo del ambiente \texttt{local} de Postman. &
+  & & \\ \hline
+  2 &
+  Ejecutar la carpeta de la capa REST con Newman. &
+  Desde la raíz, la petición~1 de la Tabla~\ref{tab:cp06-peticiones}. &
+  Las 4 peticiones de la carpeta \texttt{01. Capa REST Kit Pagos (/v1/api)} responden 2xx, pasa la aserción de \texttt{GET /v1/api/gateways} y Newman termina con código 0. &
+  & & \\ \hline
+  3 &
+  Crear un pago de tarjeta de Wompi por REST. &
+  Petición~2, con \emph{cp06-pago.json}. &
+  Respuesta 201 con \texttt{outcome: "TRANSACTION"}; \texttt{transaction.amount} es \texttt{"50000.00"}, una cadena y no un número; \texttt{currency} es \texttt{COP}; la referencia se conserva; \texttt{status} y \texttt{rawStatus} son \texttt{PENDING}, porque Wompi crea la tarjeta pendiente. &
+  & & \\ \hline
+  4 &
+  Consultar el estado con el identificador y la pasarela. &
+  Petición~3, con el \path{transaction.gatewayTransactionId} del paso 3. &
+  Respuesta 200 con \texttt{status} y \texttt{rawStatus} en \texttt{APPROVED}; el mismo identificador y el mismo monto del paso 3. El desenlace llega en la consulta, no en la creación. &
+  & & \\ \hline
+  5 &
+  Verificar que la consulta exige la pasarela. &
+  Petición~3 sin \path{?gateway=wompi}, y luego con \path{?gateway=paypal}. &
+  Las dos responden 400 con \texttt{code: "INVALID\_REQUEST"}; la API no deduce la pasarela del identificador. &
+  & & \\ \hline
+  6 &
+  Listar los bancos PSE de Wompi. &
+  Petición~4. &
+  Respuesta 200 con \texttt{pseBanks} de un solo elemento, \texttt{gateway: "wompi"}, y una lista de bancos con \texttt{code} y \texttt{name}; el primero es \texttt{\{ code: "1", name: "Banco que aprueba" \}}. &
+  & & \\ \hline
+  7 &
+  Cobrar con el prototipo C contra la API local. &
+  Detener el simulador y levantarlo con \texttt{npm run dev}, con el perfil del \path{.env}; luego \texttt{cd} \path{prototypes/checkout-frontend-rest} \texttt{\&\& npm run start:local}, abrir \url{http://localtest.me:4100}, elegir Wompi y PSE, y pagar. &
+  La página cobra contra \texttt{/v1/api} sin un servidor de pagos propio. La consola del navegador, con el prefijo \texttt{[tienda C]}, muestra las llamadas a \texttt{/v1/api}, la redirección al banco y la consulta posterior. El pago termina aprobado. &
+  & & \\ \hline
+  8 &
+  Ejecutar el humo de Render. &
+  Peticiones~5, 6 y 7, con el token de la API de Render en lugar de \texttt{<token>}; si el servicio está dormido, esperar a que despierte. Fuera de \texttt{/health} y \texttt{/v1/sim}, la API exige ese token cuando \texttt{API\_AUTH\_TOKEN} está definido, y \path{render.yaml} lo declara. &
+  \texttt{/health} responde 200; \texttt{/v1/api/gateways} devuelve las cuatro pasarelas y su \texttt{cardCapture}; \texttt{/docs/json} devuelve el documento OpenAPI con su campo \texttt{openapi} en 3.0. Si Render no está disponible, el paso se registra como bloqueado y no invalida la corrida local. &
+  & & \\ \hline
+\end{xltabular}
+\end{TablaPasos}
+
+Cada petición es una sola línea de shell. El PDF la parte por el ancho de la página, así que para pegarla en la terminal se copia de \path{docs/final-doc/pruebas/sections/casos-prueba/cp-06.tex}, donde está en una línea.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.6cm}|>{\raggedright\arraybackslash}X|}
+\hline
+\textbf{Petición o archivo} & \textbf{Contenido} \\ \hline
+\emph{cp06-pago.json} & \path{{"gateway":"WOMPI","amount":50000,"currency":"COP","description":"Pago de prueba CP-06","orderReference":"ORD-API-CP06-1","payer":{"email":"postman.tester@example.com","fullName":"Tester Postman","documentType":"CC","documentNumber":"123456789","phoneNumber":"3001234567"},"paymentMethod":{"type":"CARD","cardToken":"tok_test_card_postman"}}} \\ \hline
+Petición~1 & \path{npx newman run simulator-api/postman/kit-pagos-simulator.postman_collection.json -e simulator-api/postman/local.postman_environment.json --folder "01. Capa REST Kit Pagos (/v1/api)"} \\ \hline
+Petición~2 & \path{curl -s -X POST http://localhost:3000/v1/api/payments -H 'Content-Type: application/json' -H 'x-gateway-public-key: pub_test_wompi_key' -H 'x-gateway-private-key: prv_test_wompi_key' -H 'x-gateway-integrity-secret: test_integrity_kit_pagos_simulator' -d @cp06-pago.json} \\ \hline
+Petición~3 & \path{curl -s 'http://localhost:3000/v1/api/payments/<id>?gateway=wompi' -H 'x-gateway-public-key: pub_test_wompi_key' -H 'x-gateway-private-key: prv_test_wompi_key'} \\ \hline
+Petición~4 & \path{curl -s 'http://localhost:3000/v1/api/pse-banks?gateway=wompi' -H 'x-gateway-public-key: pub_test_wompi_key' -H 'x-gateway-private-key: prv_test_wompi_key'} \\ \hline
+Petición~5 & \path{curl -s https://kit-pagos-colombia.onrender.com/health} \\ \hline
+Petición~6 & \path{curl -s https://kit-pagos-colombia.onrender.com/v1/api/gateways -H 'Authorization: Bearer <token>'} \\ \hline
+Petición~7 & \path{curl -s https://kit-pagos-colombia.onrender.com/docs/json -H 'Authorization: Bearer <token>'} \\ \hline
+\end{tabularx}
+\caption{Archivo y peticiones del caso CP-06}
+\label{tab:cp06-peticiones}
+\end{table}
+
+\subsubsection{Criterio de aceptación}
+
+\begin{enumerate}
+  \item Las cuatro peticiones de la carpeta \texttt{01} pasan en el ambiente \texttt{local}.
+  \item El monto se conserva como cadena exacta \texttt{"50000.00"}; la API no lo convierte a número ni lo redondea.
+  \item La creación distingue \texttt{TRANSACTION} de \texttt{REDIRECT\_REQUIRED} con el campo \texttt{outcome}, y la consulta devuelve el estado normalizado y el nativo.
+  \item La consulta sin \texttt{gateway} y con una pasarela desconocida responde 400 \texttt{INVALID\_REQUEST}.
+  \item \path{/v1/api/pse-banks?gateway=wompi} devuelve un solo grupo, con bancos que tienen \texttt{code} y \texttt{name}.
+  \item El prototipo C completa un pago PSE contra \texttt{/v1/api} sin un servidor de pagos propio.
+  \item El humo de Render responde, o su indisponibilidad queda registrada como bloqueo ajeno al caso local.
+\end{enumerate}
+
+\subsubsection{Observaciones de diseño}
+
+El caso elige la tarjeta de Wompi y no un PSE para la comprobación principal porque la creación con tarjeta devuelve \texttt{TRANSACTION} y obliga a consultar para ver el desenlace; así se ejercitan las dos rutas de lectura en una sola corrida. El PSE aparece en el prototipo C, donde el cliente sí necesita ver la redirección y la diferencia entre \texttt{TRANSACTION} y \texttt{REDIRECT\_REQUIRED}.
+
+El paso 1 vacía las tres variables de Wompi porque, con un perfil completo en el \path{.env}, el simulador verifica la firma de integridad con el secreto de ese perfil y no con el valor por omisión que trae el ambiente \texttt{local} de Postman (\path{simulator-api/postman/README.md}). Así el caso no necesita copiar un secreto real en ningún comando. El paso 7 vuelve al perfil del \path{.env}, porque C no envía credenciales y la API usa las del servidor.
+
+El humo de Render se mantiene separado de la aceptación local. Render es un servicio del nivel gratuito que puede tardar en despertar, y una caída del despliegue no dice nada sobre la corrección funcional de \texttt{/v1/api}; por eso se marca como bloqueado, no como fallo del caso. Render no se usa para la carga.
+
+\subsubsection{Trazabilidad}
+
+RF-13 (OpenAPI), RF-16 (capa REST), RF-18 (motivo de rechazo serializado) y RF-19 (bancos PSE); HU-09, HU-11 y HU-12.
