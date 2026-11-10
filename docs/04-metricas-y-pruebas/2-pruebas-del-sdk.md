@@ -1,6 +1,6 @@
 # Las pruebas del SDK
 
-Qué se prueba, con qué, qué corre en CI y qué no. Los números son de la corrida del 9 de noviembre de 2026; la cifra vigente la imprime cada suite al ejecutarse.
+Qué se prueba, con qué, qué corre en CI y qué no. Los números son de la corrida del 9 de noviembre de 2026, entre las 20:15 y las 20:17, sobre `4189075`; la cifra vigente la imprime cada suite al ejecutarse. El desglose por archivo, separado en pruebas unitarias y de integración, está en la §3.2 del plan de pruebas (`docs/final-doc/pruebas/`).
 
 ---
 
@@ -8,8 +8,8 @@ Qué se prueba, con qué, qué corre en CI y qué no. Los números son de la cor
 
 | Suite | Dónde | Qué corre | Necesita |
 |---|---|---|---|
-| **Unitarias del SDK** | `sdk/src/**/*.test.ts` | 58 archivos, **1088 pruebas** | Nada: ni red, ni credenciales |
-| **De la API de Simulación** | `simulator-api/test/*.test.ts` | 54 archivos, **1301 pruebas** | Nada: usan `app.inject()` |
+| **Del SDK** | `sdk/src/**/*.test.ts` y `sdk/test/{browser,scripts}/*.test.ts` | 58 archivos, **1088 pruebas** | Nada: ni red, ni credenciales |
+| **De la API de Simulación** | `simulator-api/test/*.test.ts` | 54 archivos, **1301 pruebas** | Nada: usan `app.inject()` y, algunas, un puerto efímero en `127.0.0.1` |
 | **De contrato** | `sdk/test/sandbox/*.sandbox.test.ts` | 4 archivos, **25 pruebas** | Credenciales reales y red |
 
 Más una cuarta comprobación que no es una suite de pruebas pero cumple la misma función: `cd examples && npm run typecheck` compila los ejemplos contra los tipos publicados del SDK.
@@ -70,7 +70,7 @@ Por cada pasarela: una firma válida verifica, una firma alterada no, un timesta
 
 Las pruebas del simulador llaman a la aplicación real de Fastify sin abrir un socket. Eso las hace rápidas, pero el beneficio principal es otro: **no pueden quedarse colgadas esperando la red ni fallar porque el puerto esté ocupado.** Y prueban la misma instancia que corre en producción, no una versión especial para pruebas.
 
-La excepción es `test/payments.test.ts`. `POST /v1/api/payments` cobra a través del SDK, y el SDK llama por HTTP a los mocks de `/v1/sim`, así que la prueba levanta la misma aplicación en un puerto que asigna el sistema operativo (`port: 0`). Sigue sin depender de la red externa y no puede chocar con un puerto ocupado.
+Las excepciones son once suites que abren un puerto que asigna el sistema operativo (`port: 0`) en `127.0.0.1`. Nueve lo hacen porque `/v1/api` cobra a través del SDK, y el SDK llama por HTTP a los mocks de `/v1/sim`: `card-capture`, `invalid-credentials`, `kushki-k220-through-api`, `mercadopago`, `payments`, `read-endpoints`, `rejection-reason`, `scenario-through-sdk` y `wompi`. Las otras dos, `webhook-trigger` y `webhook-trigger-auth`, envían y reciben webhooks por HTTP. Ninguna depende de la red externa ni puede chocar con un puerto ocupado.
 
 ---
 
@@ -80,18 +80,17 @@ El CI ([.github/workflows/ci.yml](../../.github/workflows/ci.yml)) tiene un trab
 
 | Trabajo | Pasos |
 |---|---|
-| **sdk** | `npm ci` → `lint` → `test -- --coverage` → métricas CK → `build` → `npm pack --dry-run` |
+| **sdk** | `npm ci` → `lint` → `test -- --coverage` → métricas CK → `build` → `check:readme` → `npm pack --dry-run` |
 | **simulator-api** | `npm ci` → `lint` → `test -- --coverage` → métricas CK |
 
-Además, los trabajos `examples`, `landing`, `prototypes`, `prototype-frontend-rest` y `prototypes-parity` compilan los ejemplos, la landing y los prototipos, y el de paridad comprueba que el esqueleto de los prototipos solo difiera en el módulo de pagos.
+Además, los trabajos `examples`, `landing`, `prototypes`, `prototype-frontend-rest` y `prototypes-parity` compilan los ejemplos, la landing y los prototipos, y el de paridad comprueba que el esqueleto de los prototipos solo difiera en el módulo de pagos. Un segundo workflow, [final-doc.yml](../../.github/workflows/final-doc.yml), compila los cinco documentos finales con `latexmk` en cada PR que toque `docs/final-doc/`.
 
 `npm pack --dry-run` está ahí por una razón puntual: verifica que lo que se publicaría a npm contenga lo que debe. Un `dist/` mal configurado produce un paquete que se instala y no importa nada, y eso no lo detecta ninguna prueba.
 
-**Estas cosas quedan fuera de CI**, y hay que correrlas a mano. `npm run metrics` estaba en la lista hasta el issue #153; desde entonces lo corren el job del SDK y el del simulador (ver [1-metricas-ck.md](1-metricas-ck.md), sección 7).
+**Estas cosas quedan fuera de CI**, y hay que correrlas a mano. `npm run metrics` estaba en la lista hasta el issue #153; desde entonces lo corren el job del SDK y el del simulador (ver [1-metricas-ck.md](1-metricas-ck.md), sección 7). `npm run check:readme` también salió de la lista: hoy lo corre el job del SDK, después del `build`.
 
 | Fuera de CI | Por qué | Consecuencia |
 |---|---|---|
-| `npm run check:readme` | — | Un PR puede estar verde con el README roto |
 | `npm run test:sandbox` | Necesita credenciales y red | Los defectos que solo aparecen contra las APIs reales no se detectan en el PR |
 | `npm run check:published` | Verifica el registro de npm, que va por detrás de la rama | Un paquete publicado que no se pueda instalar no se detecta hasta que alguien lo intente |
 | **Ejecutar** los ejemplos | Necesita el simulador levantado | Un ejemplo puede compilar y fallar al correr, que es lo que pasó con el estado de la creación en Wompi |

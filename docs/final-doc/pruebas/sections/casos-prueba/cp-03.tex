@@ -1,20 +1,19 @@
 \subsection{CP-03: motivo de rechazo normalizado en Kushki y Mercado Pago}
 \label{sec:cp03}
-\label{anexo:cp03}
 
 \FichaCaso
   {CP-03}
-  {Equipo Kit Pagos Colombia}
+  {David Estevan Rodriguez Jurado}
   {09/11/2026}
   {Motivo de rechazo normalizado en Kushki y Mercado Pago}
   {Pendiente (\#174)}
   {Pendiente (\#174)}
   {Provocar rechazos con datos de prueba de Kushki y Mercado Pago y comprobar que el SDK devuelve el código nativo y la categoría normalizada en \texttt{rejectionReason}, que una transacción aprobada no tiene ese campo y que el motivo no se pierde al pasar por la ruta REST \texttt{/v1/api}. El caso cubre el defecto que producía un objeto \texttt{\{\}} cuando el esquema de serialización descartaba los campos.}
   {Funcional (sistema, caja negra sobre la ruta real).}
-  {\textbullet\ Dependencias de \texttt{simulator-api/} instaladas, incluido el paquete \texttt{kit-pagos-colombia} que usa la suite.\newline
-   \textbullet\ No se necesita \texttt{.env}: la suite levanta la app en memoria y usa credenciales ficticias.\newline
-   \textbullet\ La suite no abre un puerto externo; usa \texttt{app.inject()}.}
-  {Local, en memoria. Node.js 20; API de Simulación construida con \texttt{buildApp()}; sin red externa ni credenciales reales. Los datos de la tarjeta y del titular son ficticios.}
+  {\textbullet\ Dependencias de \path{simulator-api/} instaladas, incluido el paquete \path{kit-pagos-colombia} que usa la suite.\newline
+   \textbullet\ No se necesita \path{.env}: la suite arma la app con credenciales ficticias.\newline
+   \textbullet\ La suite abre un puerto efímero en \texttt{127.0.0.1}, para que el SDK que usa \texttt{/v1/api} cobre contra la misma app por \texttt{/v1/sim}, y recorre las rutas con \texttt{app.inject()}.}
+  {Local, en memoria. Node.js 20; API de Simulación construida con \texttt{buildApp()} en \texttt{127.0.0.1} con un puerto que asigna el sistema; sin red externa ni credenciales reales. Los datos de la tarjeta y del titular son ficticios.}
 
 \subsubsection{Objetivo}
 
@@ -22,41 +21,43 @@ Comprobar que el motivo de un rechazo llega completo al cliente con dos campos: 
 
 \subsubsection{Procedimiento}
 
+Los pasos 2 a 7 se leen en la salida del paso 1: con \texttt{--verbose}, Jest lista cada prueba con su nombre.
+
 \begin{TablaPasos}{Pasos del caso CP-03}
   1 &
   Ejecutar la suite de motivo de rechazo. &
-  \texttt{cd simulator-api \&\& npx jest rejection-reason --coverage=false}. &
-  La suite reporta 5 pruebas en 1 archivo, todas en verde, y termina con código 0. &
+  \texttt{cd simulator-api \&\& npx jest rejection-reason --coverage=false --verbose}. &
+  La suite reporta 7 pruebas en 1 archivo, todas en verde, y termina con código 0. &
   & & \\ \hline
   2 &
   Verificar el rechazo de Kushki por fondos insuficientes. &
-  Tarjeta \texttt{4349001210846432}, monto \texttt{50000.00 COP}, tokenización por \url{/v1/sim/kushki/card/v1/tokens}. &
-  \texttt{POST}\ \url{/v1/api/payments} responde 201; la transacción tiene estado \texttt{DECLINED} y \texttt{rejectionReason} igual a \url{{ rejectionCode: "021", rejectionCategory: "INSUFFICIENT_FUNDS" }}. &
+  Tarjeta \texttt{4349001210846432}, monto \texttt{50000.00 COP}, tokenización por \path{/v1/sim/kushki/card/v1/tokens}. &
+  Pasa «a Kushki card declined with the test card 4349001210846432»: \texttt{POST /v1/api/payments} devuelve \texttt{DECLINED} y \texttt{rejectionReason} igual a \path{{ rejectionCode: "021", rejectionCategory: "INSUFFICIENT_FUNDS" }}. &
   & & \\ \hline
   3 &
   Verificar un segundo código de Kushki. &
   Tarjeta \texttt{4349008516656431}. &
-  Estado \texttt{DECLINED} y \texttt{rejectionReason} igual a \url{{ rejectionCode: "019", rejectionCategory: "UNKNOWN" }}. El código nativo se conserva aunque la categoría sea \texttt{UNKNOWN}. &
+  Pasa la misma prueba con esa tarjeta: \texttt{DECLINED} y \path{{ rejectionCode: "019", rejectionCategory: "UNKNOWN" }}. El código nativo se conserva aunque la categoría sea \texttt{UNKNOWN}. &
   & & \\ \hline
   4 &
   Verificar el rechazo de Mercado Pago por fondos insuficientes. &
-  Titular \texttt{FUND Ruiz}; token de tarjeta creado en \url{/v1/sim/mercadopago/card_tokens}. &
-  Estado \texttt{DECLINED} y \texttt{rejectionReason} igual a \url{{ rejectionCode: "insufficient_amount", rejectionCategory: "INSUFFICIENT_FUNDS" }}. &
+  Titular \texttt{FUND Ruiz}; token de tarjeta creado en \path{/v1/sim/mercadopago/card_tokens}. &
+  Pasa «a Mercado Pago card declined for cardholder FUND Ruiz»: \texttt{DECLINED} y \path{{ rejectionCode: "insufficient_amount", rejectionCategory: "INSUFFICIENT_FUNDS" }}. &
   & & \\ \hline
   5 &
   Verificar el rechazo de Mercado Pago por emisor. &
   Titular \texttt{OTHE Ruiz}. &
-  Estado \texttt{DECLINED} y \texttt{rejectionReason} igual a \url{{ rejectionCode: "rejected_by_issuer", rejectionCategory: "UNKNOWN" }}. &
+  Pasa la misma prueba con ese titular: \texttt{DECLINED} y \path{{ rejectionCode: "rejected_by_issuer", rejectionCategory: "UNKNOWN" }}. &
   & & \\ \hline
   6 &
   Verificar que la consulta devuelve el mismo motivo. &
-  El identificador de una transacción rechazada, con \texttt{GET}\ \url{/v1/api/payments/:id?gateway=mercadopago}. &
-  Respuesta 200 con el mismo \texttt{rejectionReason} de la creación; el motivo no se pierde entre la creación y la consulta. &
+  El identificador de cada cobro rechazado de Mercado Pago, con \texttt{GET} \path{/v1/api/payments/:id?gateway=mercadopago}. &
+  Pasa «GET /v1/api/payments/:id returns the same rejection reason» para los dos titulares: respuesta 200 con el mismo \texttt{rejectionReason} de la creación. &
   & & \\ \hline
   7 &
   Verificar que una transacción aprobada no tiene motivo. &
   Titular \texttt{APRO Ruiz}, tarjeta de Mercado Pago. &
-  Estado \texttt{APPROVED} y la transacción no tiene la propiedad \texttt{rejectionReason}. &
+  Pasa «an approved transaction has no rejectionReason»: estado \texttt{APPROVED} y la transacción no tiene la propiedad \texttt{rejectionReason}. &
   & & \\ \hline
 \end{xltabular}
 \end{TablaPasos}
@@ -64,7 +65,7 @@ Comprobar que el motivo de un rechazo llega completo al cliente con dos campos: 
 \subsubsection{Criterio de aceptación}
 
 \begin{enumerate}
-  \item Las 5 pruebas de la suite pasan y el proceso termina con código 0.
+  \item Las 7 pruebas de la suite pasan y el proceso termina con código 0.
   \item Los cuatro rechazos devuelven exactamente el par \texttt{rejectionCode}/\texttt{rejectionCategory} esperado, no un objeto vacío ni un campo ausente.
   \item La consulta por identificador conserva el motivo de la creación.
   \item Una transacción aprobada no expone \texttt{rejectionReason}.
@@ -73,10 +74,10 @@ Comprobar que el motivo de un rechazo llega completo al cliente con dos campos: 
 
 \subsubsection{Observaciones de diseño}
 
-La suite existe por un defecto concreto: \texttt{fast-json-stringify} serializa la respuesta con el esquema de la ruta y descarta lo que el esquema no declara. Con \texttt{code}, \texttt{category} y \texttt{message} en el esquema y \texttt{rejectionCode} y \texttt{rejectionCategory} en el objeto del SDK, el motivo llegaba como \texttt{\{\}} a cualquier cliente. Por eso la prueba atraviesa la ruta real y el SDK instalado: una prueba de la función de serialización aislada no habría reproducido el problema.
+La suite existe por un defecto concreto: \path{fast-json-stringify} serializa la respuesta con el esquema de la ruta y descarta lo que el esquema no declara. Con \texttt{code}, \texttt{category} y \texttt{message} en el esquema y \texttt{rejectionCode} y \texttt{rejectionCategory} en el objeto del SDK, el motivo llegaba como \texttt{\{\}} a cualquier cliente. Por eso la prueba atraviesa la ruta real y el SDK instalado: una prueba de la función de serialización aislada no habría reproducido el problema.
 
 El caso también comprueba que la categoría \texttt{UNKNOWN} es válida: el SDK no inventa una categoría cuando el código nativo no tiene un equivalente conocido, y conserva el código para que el comercio pueda mostrarlo. Es preferible un \texttt{UNKNOWN} con código que un motivo inventado.
 
 \subsubsection{Trazabilidad}
 
-RF-02, RF-05, RF-08, RF-11 y RF-18; HU-05, HU-07 y HU-11.
+RF-02, RF-05, RF-11 y RF-18; HU-05, HU-07 y HU-11.

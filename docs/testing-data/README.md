@@ -99,7 +99,7 @@ Lo mismo aplica a [`architecture-log.md`](../architecture/architecture-log.md), 
 
 **Si va a probar un flujo específico**, busque la sección del método en el archivo de la pasarela. Cada una trae el payload completo, no un fragmento.
 
-**Si algo no funciona como dice acá**, revisá la fecha de la afirmación. Los sandboxes cambian, y una medición de septiembre de 2026 puede no valer hoy. Las 25 pruebas de contrato existen para detectar exactamente eso:
+**Si algo no funciona como dice acá**, revise la fecha de la afirmación. Los sandboxes cambian, y una medición de septiembre de 2026 puede no valer hoy. Las 25 pruebas de contrato existen para detectar exactamente eso:
 
 ```bash
 cd sdk && npm run test:sandbox

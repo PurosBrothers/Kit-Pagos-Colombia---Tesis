@@ -3,42 +3,44 @@
 
 Los ítems de prueba son los elementos del artefacto cuyos requisitos se verifican en este plan. Se agrupan en tres componentes y cuatro prototipos. Cada fila de la Tabla~\ref{tab:items-prueba} declara qué es el ítem y qué se busca comprobar al probarlo; la columna de trazabilidad remite a los requisitos funcionales (RF) e historias de usuario (HU) del SRS que ese ítem materializa.
 
-\begin{table}[H]
-  \centering
-  \small
-  \renewcommand{\arraystretch}{1.25}
-  \setlength{\tabcolsep}{4pt}
-  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.9cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|}
-    \hline
-    \textbf{Ítem} & \textbf{Descripción} & \textbf{Objetivo de la prueba} \\ \hline
-    \textbf{SDK de servidor} \newline \texttt{kit-pagos-colombia} &
-    Paquete de TypeScript con arquitectura hexagonal que expone \texttt{KitPagos} y unifica la creación de pagos, la consulta de estado, la lista de bancos PSE y la verificación de webhooks de Wompi, Mercado Pago, Kushki y Rapyd. &
-    Comprobar que cada adaptador traduce la petición y la respuesta sin filtrar el vocabulario nativo, que los estados se normalizan a los seis valores de \texttt{TransactionStatus} y que los errores esperados se convierten en \texttt{KitPagosError} con su código. Trazabilidad: RF-01 a RF-08, RF-18 y RF-19; HU-01 a HU-05, HU-11 y HU-12. \\ \hline
-    \textbf{Módulo de navegador} \newline \texttt{kit-pagos-colombia/browser} &
-    Módulo que tokeniza la tarjeta en el navegador contra Wompi, Mercado Pago y Kushki. Rapyd se rechaza con \texttt{UNSUPPORTED\_OPERATION} porque cobra la tarjeta en su página alojada. &
-    Verificar que el número de la tarjeta viaja del navegador directamente a la pasarela, que el servidor del comercio recibe solo un token opaco, que el token queda atado al monto y a la pasarela, y que el módulo no depende de APIs de Node.js. Trazabilidad: RF-17; HU-10; RNF de seguridad. \\ \hline
-    \textbf{API de Simulación: rutas \texttt{/v1/sim}} &
-    Servidor Fastify con 33 rutas que replican las APIs nativas de las cuatro pasarelas, más el disparador de webhooks y \texttt{/health}. Responde de forma determinista sin credenciales reales y elige el escenario con cabeceras, datos de prueba, montos reservados o marcas de credencial. &
-    Comprobar que las rutas conservan la forma nativa, que cada escenario produce el desenlace declarado, que los errores replican el código y el mensaje del proveedor, que los webhooks se firman con el secreto de cada pasarela y que una consulta no altera el escenario fijado en la creación. Trazabilidad: RF-09 a RF-12; HU-06 a HU-08. \\ \hline
-    \textbf{API de Simulación: capa REST \texttt{/v1/api}} &
-    Cinco rutas propias que exponen las operaciones de Kit Pagos sin instalar el SDK: \texttt{GET /gateways}, \texttt{POST /payments}, \texttt{GET /payments/:id}, \texttt{GET /pse-banks} y \texttt{POST /webhooks/:gateway}. &
-    Verificar que la capa REST conserva el monto como cadena exacta, serializa el motivo de rechazo con sus campos \texttt{rejectionCode} y \texttt{rejectionCategory}, acepta el gateway por query o por cuerpo y responde con los códigos HTTP documentados. Trazabilidad: RF-13, RF-16 y RF-18; HU-09 y HU-13. \\ \hline
-    \textbf{Prototipo A} \newline \texttt{checkout-con-sdk-solo-back} &
-    Checkout de comercio electrónico que usa el SDK solo en el servidor; la página tokeniza la tarjeta con \texttt{fetch} contra la API de la pasarela. Es una demostración de alcance, fuera de la comparación del experimento. &
-    Comprobar que el SDK sirve a un comercio que no adopta el módulo de navegador, que el flujo de tarjeta y PSE funciona con el SDK en el servidor y que la página no depende de \texttt{kit-pagos-colombia/browser}. Trazabilidad: RF-01, RF-06 y RF-17 (contraejemplo). \\ \hline
-    \textbf{Prototipo B} \newline \texttt{checkout-con-sdk-front-back} &
-    Checkout que usa \texttt{KitPagos} en el servidor y \texttt{KitPagosBrowser} en la página. Es el tratamiento del experimento de la Fase~5. &
-    Comprobar el flujo completo del comercio: catálogo, carrito, creación del pago, tokenización en el navegador, recepción del webhook, actualización del historial de la orden y consulta de estado. Trazabilidad: RF-01 a RF-06, RF-12 y RF-17; HU-01 a HU-04, HU-08 y HU-10. \\ \hline
-    \textbf{Prototipo C} \newline \texttt{checkout-frontend-rest} &
-    Página estática que cobra desde el navegador contra \texttt{/v1/api}, sin servidor de pagos propio. Demuestra el patrón de integración REST. &
-    Comprobar que un cliente sin SDK puede crear un pago, consultarlo y listar bancos PSE por REST, y que la interfaz distingue una transacción resuelta de una redirección al banco. Trazabilidad: RF-16; HU-09. \\ \hline
-    \textbf{Prototipo D} \newline \texttt{checkout-sin-solucion} &
-    Checkout que integra cada pasarela a mano con \texttt{fetch} contra su API nativa, como lo haría un comercio sin Kit Pagos. Es el control del experimento. &
-    Comprobar que el flujo de control es funcionalmente equivalente al de B y sirve de línea base para comparar líneas de código, métodos y conceptos nativos expuestos. Trazabilidad: RF-01 a RF-06 (implementación nativa); HU-01 a HU-04. \\ \hline
-  \end{tabularx}
-  \caption{Ítems de prueba del PTP}
-  \label{tab:items-prueba}
-\end{table}
+{\small
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{4pt}
+\begin{xltabular}{\textwidth}{|>{\raggedright\arraybackslash}p{3.1cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|}
+\caption{Ítems de prueba del PTP}\label{tab:items-prueba}\\
+\hline
+\textbf{Ítem} & \textbf{Descripción} & \textbf{Objetivo de la prueba} \\ \hline
+\endfirsthead
+\caption[]{Ítems de prueba del PTP (continuación)}\\
+\hline
+\textbf{Ítem} & \textbf{Descripción} & \textbf{Objetivo de la prueba} \\ \hline
+\endhead
+\textbf{SDK de servidor} \newline \path{kit-pagos-colombia} &
+Paquete de TypeScript con arquitectura hexagonal que expone \texttt{KitPagos} y unifica la creación de pagos, la consulta de estado, la lista de bancos PSE y la verificación de webhooks de Wompi, Mercado Pago, Kushki y Rapyd. &
+Comprobar que cada adaptador traduce la petición y la respuesta sin filtrar el vocabulario nativo, que los estados se normalizan a los seis valores de \texttt{TransactionStatus} y que los errores esperados se convierten en \texttt{KitPagosError} con su código. Trazabilidad: RF-01 a RF-08, RF-18 y RF-19; HU-01 a HU-05, HU-11 y HU-12. \\ \hline
+\textbf{Módulo de navegador} \newline \path{kit-pagos-colombia/browser} &
+Módulo que tokeniza la tarjeta en el navegador contra Wompi, Mercado Pago y Kushki. Rapyd se rechaza con \texttt{UNSUPPORTED\_OPERATION} porque cobra la tarjeta en su página alojada. &
+Verificar que el número de la tarjeta viaja del navegador directamente a la pasarela, que el servidor del comercio recibe solo un token opaco, que el token queda atado al monto y a la pasarela, y que el módulo no depende de APIs de Node.js. Trazabilidad: RF-17; HU-10; RNF de seguridad. \\ \hline
+\textbf{API de Simulación: rutas \texttt{/v1/sim}} &
+Servidor Fastify con 33 rutas bajo \texttt{/v1/sim/<pasarela>}: 7 de Wompi, 9 de Mercado Pago, 8 de Kushki y 9 de Rapyd, entre la API nativa y las páginas de pago simuladas. Se suman el disparador de webhooks y \texttt{/health}. Responde de forma determinista sin credenciales reales y elige el escenario con cabeceras, datos de prueba, montos reservados o marcas de credencial. &
+Comprobar que las rutas conservan la forma nativa, que cada escenario produce el desenlace declarado, que los errores replican el código y el mensaje del proveedor, que los webhooks se firman con el secreto de cada pasarela y que una consulta no altera el escenario fijado en la creación. Trazabilidad: RF-09 a RF-12; HU-06 a HU-08. \\ \hline
+\textbf{API de Simulación: capa REST \texttt{/v1/api}} &
+Cinco rutas propias que exponen las operaciones de Kit Pagos sin instalar el SDK: \texttt{GET /gateways}, \texttt{POST /payments}, \texttt{GET /payments/:id}, \texttt{GET /pse-banks} y \texttt{POST /webhooks/:gateway}. &
+Verificar que la capa REST conserva el monto como cadena exacta, serializa el motivo de rechazo con sus campos \texttt{rejectionCode} y \texttt{rejectionCategory}, acepta el gateway por query o por cuerpo y responde con los códigos HTTP documentados. Trazabilidad: RF-13, RF-16 y RF-18; HU-09 y HU-13. \\ \hline
+\textbf{Prototipo A} \newline \path{checkout-con-sdk-solo-back} &
+Tienda que deja el SDK en el servidor y no carga el módulo de navegador: su página obtiene el token de la tarjeta con llamadas \texttt{fetch} directas a cada pasarela. Muestra un alcance adicional y no entra en la comparación del experimento. &
+Comprobar que el SDK sirve a un comercio que no adopta el módulo de navegador, que el flujo de tarjeta y PSE funciona con el SDK en el servidor y que la página no depende de \path{kit-pagos-colombia/browser}. Trazabilidad: RF-01, RF-06 y RF-17 (contraejemplo). \\ \hline
+\textbf{Prototipo B} \newline \path{checkout-con-sdk-front-back} &
+Checkout que usa \texttt{KitPagos} en el servidor y \texttt{KitPagosBrowser} en la página. Es el tratamiento del experimento de la Fase~5. &
+Comprobar el flujo completo del comercio: catálogo, carrito, creación del pago, tokenización en el navegador, recepción del webhook, actualización del historial de la orden y consulta de estado. Trazabilidad: RF-01 a RF-06, RF-12 y RF-17; HU-01 a HU-04, HU-08 y HU-10. \\ \hline
+\textbf{Prototipo C} \newline \path{checkout-frontend-rest} &
+Página estática servida por \path{server.mjs}. Sin un servidor de pagos propio, crea y consulta los cobros llamando a \texttt{/v1/api} desde el navegador, y así muestra cómo se integra un cliente que solo habla REST. &
+Comprobar que un cliente sin SDK puede crear un pago, consultarlo y listar bancos PSE por REST, y que la interfaz distingue una transacción resuelta de una redirección al banco. Trazabilidad: RF-16; HU-09. \\ \hline
+\textbf{Prototipo D} \newline \path{checkout-sin-solucion} &
+Checkout que integra cada pasarela a mano con \texttt{fetch} contra su API nativa, como lo haría un comercio sin Kit Pagos. Es el control del experimento. &
+Comprobar que el flujo de control es funcionalmente equivalente al de B y sirve de línea base para comparar líneas de código, métodos y conceptos nativos expuestos. Trazabilidad: RF-01 a RF-06 (implementación nativa); HU-01 a HU-04. \\ \hline
+\end{xltabular}
+}
 
 \subsection{Componentes de apoyo}
 
@@ -47,8 +49,8 @@ No son ítems bajo prueba en sí mismos, pero condicionan la validez de las prue
 \begin{itemize}
   \item \textbf{Especificación OpenAPI 3.0.} Las rutas de \texttt{/v1/api} y las que declaran esquema en \texttt{/v1/sim} deben aparecer en \texttt{/docs}, \texttt{/docs/json} y \texttt{/docs/yaml}. La prueba comprueba que el documento generado describe las rutas reales y que los esquemas de respuesta no descartan campos que el cliente necesita.
   \item \textbf{Colección de Postman.} Versiona 42 peticiones en 7 carpetas con dos ambientes, local y Render. Se usa como prueba exploratoria reproducible y como contrato de forma de las rutas, no como sustituto de las suites automatizadas.
-  \item \textbf{Documentación de datos de prueba.} Los archivos de \texttt{docs/testing-data/} son la fuente de las tarjetas, montos, documentos y credenciales que usan los casos. Un dato mal documentado invalida la prueba que lo usa, así que se revisa junto con los casos.
-  \item \textbf{Integración continua.} El flujo de GitHub Actions es el mecanismo que repite las suites en cada cambio y el criterio objetivo de que el plan sigue vigente.
+  \item \textbf{Documentación de datos de prueba.} Los archivos de \path{docs/testing-data/} son la fuente de las tarjetas, montos, documentos y credenciales que usan los casos. Un dato mal documentado invalida la prueba que lo usa, así que se revisa junto con los casos.
+  \item \textbf{Integración continua.} Los flujos de GitHub Actions repiten las suites en cada cambio y son el criterio objetivo de que el plan sigue vigente.
 \end{itemize}
 
 \subsection{Cobertura de los ítems}
@@ -61,15 +63,15 @@ La Tabla~\ref{tab:cobertura-items} resume qué casos de este plan ejercitan cada
   \renewcommand{\arraystretch}{1.2}
   \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.1cm}|>{\raggedright\arraybackslash}X|}
     \hline
-    \textbf{Ítem} & \textbf{Casos que lo ejercitan} \\ \hline
-    SDK de servidor & CP-01, CP-02, CP-03, CP-04, CP-06, CP-07 y las suites unitarias \\ \hline
-    Módulo de navegador & CP-05 y las pruebas de contrato de Kushki y Mercado Pago \\ \hline
-    API de Simulación \texttt{/v1/sim} & CP-01, CP-02, CP-03, CP-04, CP-05, CP-07 y la suite de simulación \\ \hline
-    API de Simulación \texttt{/v1/api} & CP-03, CP-06 y la suite de la API \\ \hline
-    Prototipo A & Arranque y \texttt{typecheck}; contraste cualitativo en CP-05 \\ \hline
-    Prototipo B & CP-04 y CP-05 \\ \hline
-    Prototipo C & CP-06 \\ \hline
-    Prototipo D & Paridad de esqueleto y \texttt{typecheck}; no se ejecuta en un caso funcional \\ \hline
+    \textbf{Ítem} & \textbf{Casos y suites que lo ejercitan} \\ \hline
+    SDK de servidor & CP-01, CP-02, CP-03, CP-04, CP-06 y CP-07; las suites del SDK (Tabla~\ref{tab:pruebas-unitarias}) \\ \hline
+    Módulo de navegador & CP-05; las 6 suites de \path{sdk/test/browser/} y las pruebas de contrato de Wompi, Mercado Pago y Kushki que tokenizan con \texttt{KitPagosBrowser} \\ \hline
+    API de Simulación \texttt{/v1/sim} & CP-01, CP-02, CP-03, CP-04, CP-05 y CP-07; las suites del simulador (Tablas~\ref{tab:pruebas-unitarias} y~\ref{tab:pruebas-integracion}) \\ \hline
+    API de Simulación \texttt{/v1/api} & CP-03 y CP-06; las 9 suites de la capa REST (Tabla~\ref{tab:pruebas-integracion}) y la carga (Sección~\ref{sec:carga}) \\ \hline
+    Prototipo A & Sus suites y su \texttt{typecheck}; contraste cualitativo en CP-05 \\ \hline
+    Prototipo B & CP-04 y CP-05; sus suites \\ \hline
+    Prototipo C & CP-06; sus suites \\ \hline
+    Prototipo D & Sus suites, su \texttt{typecheck} y la paridad de esqueleto; no se ejecuta en un caso funcional \\ \hline
   \end{tabularx}
   \caption{Cobertura de los ítems por caso de prueba}
   \label{tab:cobertura-items}

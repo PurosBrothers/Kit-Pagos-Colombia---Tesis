@@ -1,11 +1,11 @@
 \section{Estrategia de pruebas}
 \label{sec:estrategia}
 
-La estrategia combina pruebas automatizadas que se repiten en cada cambio con pruebas exploratorias y de aceptación que se ejecutan manualmente y se documentan. El principio que la ordena es la separación de ambientes: cada tipo de prueba declara dónde corre y qué se puede concluir de su resultado. Una prueba que depende de un sandbox real no puede afirmar un desenlace concreto; una que corre contra el simulador sí, y por eso el simulador es la base de los casos funcionales.
+La estrategia combina pruebas automatizadas que se repiten en cada cambio con pruebas exploratorias y de aceptación que se ejecutan manualmente y se documentan. El principio que la ordena es la separación de ambientes: cada tipo de prueba declara dónde corre y qué se puede concluir de su resultado. Una prueba que depende de un sandbox real no puede afirmar un desenlace concreto; una que corre contra el simulador sí, y por eso el simulador es la base de los casos funcionales y el único ambiente de la carga.
 
 \subsection{Tipos de prueba y criterios de completitud}
 
-La Tabla~\ref{tab:estrategia} resume los diez tipos de comprobación que se aplican al artefacto. Cada fila declara la herramienta, el ambiente y el criterio objetivo que decide si el tipo de prueba se considera terminado.
+La Tabla~\ref{tab:estrategia} resume los once tipos de comprobación que se aplican al artefacto. Cada fila declara la herramienta, el ambiente y el criterio objetivo que decide si el tipo de prueba se considera terminado. Las cifras de las suites son de la corrida del 09/11/2026 entre las 20:15 y las 20:23, sobre el commit \texttt{4189075}, con Node.js 22.23.4.
 
 {\small
 \begin{longtable}{|>{\raggedright\arraybackslash}p{2.45cm}|>{\raggedright\arraybackslash}p{3.05cm}|>{\raggedright\arraybackslash}p{3.25cm}|>{\raggedright\arraybackslash}p{5.55cm}|}
@@ -20,121 +20,206 @@ La Tabla~\ref{tab:estrategia} resume los diez tipos de comprobación que se apli
 \hline
 \endfoot
 
-\textbf{Unitarias del SDK} &
-Jest con \texttt{ts-jest}; \texttt{npm test}. &
-Node.js 20 en la máquina del tester y en GitHub Actions; sin red ni credenciales. &
-Las 58 suites y 1088 pruebas pasan, 0 fallos. La cobertura no baja del umbral configurado del 80~\% en cada dimensión (corrida del 09/11/2026: 97{,}95~\% de sentencias, 91{,}80~\% de ramas, 98{,}19~\% de funciones y 98{,}50~\% de líneas). \\ \hline
+\textbf{Suite del SDK} &
+Jest con \texttt{ts-jest}; \texttt{npm test} en \path{sdk/}. &
+Node.js 20 en GitHub Actions; en local, Node.js 20.19 o superior. Sin red externa ni credenciales; dos suites abren un servidor en \texttt{127.0.0.1} con un puerto efímero. &
+Las 58 suites y 1088 pruebas pasan, 0 fallos: 56 unitarias (Tabla~\ref{tab:pruebas-unitarias}) y 2 de integración (Tabla~\ref{tab:pruebas-integracion}). La cobertura no baja del 80~\% configurado en cada dimensión; la corrida dio 97{,}95~\% de sentencias, 91{,}80~\% de ramas, 98{,}19~\% de funciones y 98{,}50~\% de líneas. \\ \hline
 
-\textbf{Integración de la API de Simulación} &
-Jest con \texttt{app.inject()} de Fastify; \texttt{npm test} en \texttt{simulator-api/}. &
-Node.js 20; el servidor se construye en memoria, sin abrir el puerto. &
-Las 54 suites y 1301 pruebas pasan, 0 fallos. La cobertura no baja del umbral configurado del 80~\% en cada dimensión (corrida del 09/11/2026: 97{,}25~\% de sentencias, 89{,}16~\% de ramas, 99{,}08~\% de funciones y 97{,}52~\% de líneas). \\ \hline
+\textbf{Suite de la API de Simulación} &
+Jest con \texttt{ts-jest} y \texttt{app.inject()} de Fastify; \texttt{npm test} en \path{simulator-api/}. &
+Node.js 20, sin \path{.env} en la raíz, como en la CI. La app se construye en memoria; 11 suites abren además puertos efímeros en \texttt{127.0.0.1}. &
+Las 54 suites y 1301 pruebas pasan, 0 fallos: 13 unitarias y 41 de integración. La cobertura no baja del 80~\% en cada dimensión; la corrida dio 97{,}25~\% de sentencias, 89{,}16~\% de ramas, 99{,}08~\% de funciones y 97{,}52~\% de líneas. \\ \hline
 
 \textbf{Contrato contra sandboxes} &
-Jest con \texttt{jest.sandbox.config.js}; \texttt{npm run test:sandbox}. Ejecución serial (\texttt{maxWorkers: 1}) y tiempo límite de 60~s por prueba. &
-Sandboxes reales de Wompi, Mercado Pago, Kushki y Rapyd, con credenciales en el \texttt{.env} de la raíz y acceso a Internet. Sin credenciales, las pruebas se omiten por diseño. &
+Jest con \path{jest.sandbox.config.js}; \texttt{npm run test:sandbox} en \path{sdk/}. Ejecución serial (\texttt{maxWorkers: 1}) y 60~s de límite por prueba. &
+Sandboxes reales de Wompi, Mercado Pago, Kushki y Rapyd, con credenciales en el \path{.env} de la raíz y acceso a Internet. Sin credenciales, las pruebas se omiten por diseño. &
 Las 25 pruebas de los 4 archivos se ejecutan y pasan, o cada omisión queda justificada por falta de credencial. Toda discrepancia entre la suposición del SDK y la respuesta real se registra como defecto. \\ \hline
 
 \textbf{Escenarios del simulador} &
-Jest para los escenarios de la suite y el ejemplo \texttt{npm run simulate:scenarios}. &
-API de Simulación local en \texttt{http://localhost:3000}; SDK compilado; sin credenciales reales. &
+Jest para los escenarios de la suite y el ejemplo \path{npm run simulate:scenarios} en \path{examples/}. &
+API de Simulación local en \url{http://localhost:3000}; SDK compilado; sin red externa. &
 El ejemplo termina con código de salida 0 y cada línea imprime \texttt{OK}. Se cubren los desenlaces de negocio y los reintentos de las cuatro pasarelas. \\ \hline
 
-\textbf{Intercambiabilidad} &
-Ejemplo \texttt{npm run simulate:interchangeability}. &
+\textbf{\hspace{0pt}Intercambiabilidad} &
+Ejemplo \path{npm run simulate:interchangeability} en \path{examples/}. &
 API de Simulación local en el puerto 3000; SDK 0.7.0-rc.2 compilado. &
 Las cuatro pasarelas devuelven el mismo estado normalizado, el mismo monto y la misma referencia, y la reconsulta es estable. El proceso termina con código 0; si un mapeo se rompe, termina distinto de cero. \\ \hline
 
 \textbf{Prototipos y paridad de esqueleto} &
-Jest y \texttt{npm run typecheck} en cada prototipo; \texttt{check-skeleton-parity.sh} para B y D. &
-Node.js 20; ejecución local. B y D comparten esqueleto; A y C se verifican por separado. &
-Las pruebas de cada prototipo pasan, el typecheck compila y la paridad de esqueleto no reporta diferencias en servidor, contrato, webhooks, configuración ni dependencias. \\ \hline
+Jest en A, B y D; Vitest en C; \texttt{npm run typecheck} en los cuatro; \path{prototypes/check-skeleton-parity.sh} para B y D. &
+Node.js 20; ejecución local o en la CI. B y D comparten esqueleto; A y C se verifican por separado. &
+Pasan las suites de cada prototipo (Tabla~\ref{tab:pruebas-prototipos}), el \texttt{typecheck} compila y la paridad no reporta diferencias en servidor, contrato, webhooks, configuración ni dependencias. \\ \hline
 
 \textbf{Postman local y Render} &
-Postman o Newman con la colección \texttt{kit-pagos-simulator.postman\_collection.json}. &
-Dos ambientes versionados: \texttt{local} (\texttt{http://localhost:3000}) y \texttt{render} (\texttt{https://kit-pagos-colombia.onrender.com}). &
+Postman o Newman con \path{kit-pagos-simulator.postman_collection.json}. &
+Dos ambientes versionados: \texttt{local} (\url{http://localhost:3000}) y \texttt{render} (\url{https://kit-pagos-colombia.onrender.com}). En \texttt{render}, el token y los secretos del servicio se pasan al correr la colección. &
 Las 42 peticiones de las 7 carpetas responden con el código esperado y sus aserciones pasan. La orden de tarjeta con titular \texttt{OTHE} es la única que espera \texttt{402}. \\ \hline
 
 \textbf{OpenAPI} &
-Jest (\texttt{openapi.test.ts}) y revisión de \texttt{/docs}, \texttt{/docs/json} y \texttt{/docs/yaml}. &
+Jest (\path{openapi.test.ts}) y revisión de \texttt{/docs}, \texttt{/docs/json} y \texttt{/docs/yaml}. &
 API de Simulación local; navegador para la interfaz Swagger~UI. &
 El documento generado describe las rutas reales, los esquemas incluyen los campos que el cliente consume (en particular \texttt{rejectionCode} y \texttt{rejectionCategory} del rechazo) y las tres rutas de documentación responden. \\ \hline
 
-\textbf{Carga y rendimiento (API y SDK)} &
-Autocannon para la API Fastify; arnés de micro-benchmarks en Node.js para el SDK (alternativas contempladas: k6 y Artillery). &
-Local sobre Node.js 20. API en \texttt{http://localhost:3000}; SDK instanciado en memoria sin I/O de red externa. &
-La API procesa ráfagas concurrentes de peticiones sobre rutas representativas sin errores 5xx no simulados ni saturación del bucle de eventos. El SDK procesa firmas criptográficas HMAC y normalizaciones en memoria manteniendo estabilidad y tiempos deterministas sin acumulación de objetos no liberados. \\ \hline
+\textbf{Carga y rendimiento} &
+Autocannon, usado como biblioteca desde un script de Node.js (Sección~\ref{sec:carga}). &
+Una instancia de la API de Simulación levantada en el mismo proceso en \texttt{127.0.0.1}, desde un checkout sin \path{.env}, con un guardián que bloquea toda salida que no sea de loopback. &
+Las 30 corridas del perfil terminan con 0 errores, 0 respuestas que no sean 2xx y 0 bloqueos del guardián, y el proceso sigue vivo. Las latencias se informan sin umbral. \\ \hline
 
 \textbf{Integración continua} &
-GitHub Actions con Node.js 20; jobs \texttt{sdk}, \texttt{examples}, \texttt{simulator-api}, \texttt{landing}, \texttt{prototypes}, \texttt{prototype-frontend-rest} y \texttt{prototypes-parity}. &
-\texttt{ubuntu-latest}; se dispara en \texttt{pull\_request} y \texttt{push} a \texttt{devops} y \texttt{main}. &
-Todos los jobs terminan en verde. Un job rojo bloquea la integración y obliga a corregir o a justificar la omisión en el informe de resultados. \\ \hline
+GitHub Actions: \path{.github/workflows/ci.yml} y \path{.github/workflows/final-doc.yml}. &
+\texttt{ubuntu-latest}; se dispara en \texttt{pull\_request} y \texttt{push} hacia \texttt{devops} y \texttt{main}. &
+Todos los jobs terminan en verde: en \path{ci.yml}, \texttt{sdk} (lint, pruebas con cobertura, métricas CK, build, \texttt{check:readme} y \texttt{npm pack --dry-run}), \texttt{examples}, \path{simulator-api}, \texttt{landing}, \texttt{prototypes}, \path{prototype-frontend-rest} y \path{prototypes-parity}; en \path{final-doc.yml}, la compilación de los cinco documentos finales. Un job rojo bloquea la integración. \\ \hline
 
 \textbf{Documentación} &
-\texttt{latexmk -cd} con la plantilla común. &
-Máquina del autor; no se ejecuta en CI para este documento. &
-El PDF compila sin errores, las referencias cruzadas resuelven y no quedan instrucciones de plantilla ni marcadores sin reemplazar. \\ \hline
+\texttt{latexmk} con la plantilla común. &
+El job de \path{final-doc.yml}, en el contenedor \path{texlive/texlive:latest}, en cada PR que toque \path{docs/final-doc/}; en local, tres pasadas de \texttt{pdflatex}. &
+El PDF compila sin errores, sin referencias indefinidas y sin cajas desbordadas, y no quedan instrucciones de plantilla ni marcadores sin reemplazar. \\ \hline
 \end{longtable}
 }
 
 \subsection{Niveles de prueba}
 
+Las suites de cada paquete se reparten en dos niveles con un criterio que se puede comprobar en el código de cada archivo. Una suite es \textbf{unitaria} si prueba un módulo sin red ni puertos: sustituye \texttt{fetch}, inyecta el reloj o prueba funciones puras, y no construye la app. Es \textbf{de integración} si cruza un límite real entre piezas: construye la app de Fastify con \texttt{buildApp()} y la recorre con \texttt{app.inject()}, o abre un servidor HTTP en \texttt{127.0.0.1} con un puerto que asigna el sistema operativo (\texttt{port: 0}). Con ese criterio, en el simulador basta \texttt{grep -l buildApp} sobre \path{simulator-api/test/*.test.ts} para separar los dos grupos.
+
 \subsubsection{Pruebas unitarias}
 
-Verifican una unidad de código aislada: un objeto de valor, un adaptador con su cliente HTTP simulado, un normalizador de estados o una función de firma. No tocan la red ni necesitan credenciales, así que corren en cada cambio. Su valor no está en repetir lo que el código hace, sino en fijar las decisiones que el autor tomó y que un cambio posterior podría romper sin que nadie lo note. La Tabla~\ref{tab:pruebas-unitarias} desglosa los módulos y suites que componen este nivel en el SDK.
+Verifican una unidad de código aislada: un objeto de valor, un adaptador con \texttt{fetch} sustituido, un normalizador de estados o una función de firma. No tocan la red ni necesitan credenciales, así que corren en cada cambio. Su valor no está en repetir lo que el código hace, sino en fijar las decisiones que el autor tomó y que un cambio posterior podría romper sin que nadie lo note. La Tabla~\ref{tab:pruebas-unitarias} lista los archivos de cada fila; las filas suman 56 suites y 1052 pruebas en el SDK, y 13 suites y 200 pruebas en el simulador.
 
-\begin{table}[H]
-  \centering
-  \small
-  \renewcommand{\arraystretch}{1.2}
-  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.6cm}|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{3.8cm}|}
-    \hline
-    \textbf{Componente / Capa} & \textbf{Módulos / Archivos} & \textbf{Objetivo de la comprobación} & \textbf{Herramienta y suites} \\ \hline
-    Objetos de valor (\emph{Value Objects}) & \texttt{Amount}, \texttt{Currency}, \texttt{PaymentMethod}, \texttt{Customer}, \texttt{CardToken} & Inmutabilidad, validación de montos positivos con dos decimales, tipos de documento y códigos ISO de moneda. & Jest con \texttt{ts-jest}; 13 suites en \url{src/domain/value-objects/} \\ \hline
-    Adaptadores de pasarela (\emph{Adapters}) & \texttt{WompiAdapter}, \texttt{MercadoPagoAdapter}, \texttt{KushkiAdapter}, \texttt{RapydAdapter} & Mapeo de solicitudes nativas, armado de cabeceras de autenticación y manejo de clientes HTTP inyectados. & Jest con mocks HTTP; 16 suites en \url{src/infrastructure/adapters/} \\ \hline
-    Normalizadores de respuesta & Normalizadores de estado y respuesta por pasarela & Traducción bidireccional a \texttt{Transaction}, normalización a los seis estados canónicos y preservación de \texttt{rejectionReason}. & Jest; 7 suites en \url{src/application/normalizers/} \\ \hline
-    Servicios y fachada & \texttt{KitPagos}, \texttt{RetryHandler}, verificación de webhooks & Orquestación de llamadas, retroceso exponencial para operaciones idempotentes y verificación de firmas criptográficas. & Jest; 8 suites en \url{src/application/} y \url{src/infrastructure/facade/} \\ \hline
-    Configuración y errores & \texttt{KitPagosConfig}, \texttt{KitPagosError}, factorías & Validación de perfiles y credenciales requeridas, redacción de secretos y conversión tipada a \texttt{KitPagosErrorCode}. & Jest; 6 suites en \url{src/config/}, \url{src/domain/errors/} \\ \hline
-  \end{tabularx}
-  \caption{Desglose de pruebas unitarias del SDK}
-  \label{tab:pruebas-unitarias}
-\end{table}
+{\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{3pt}
+\begin{xltabular}{\textwidth}{|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{4.2cm}|>{\centering\arraybackslash}p{1.45cm}|}
+\caption{Desglose de las pruebas unitarias}\label{tab:pruebas-unitarias}\\
+\hline
+\textbf{Componente} & \textbf{Archivos} & \textbf{Qué fija} & \textbf{Suites / pruebas} \\ \hline
+\endfirsthead
+\caption[]{Desglose de las pruebas unitarias (continuación)}\\
+\hline
+\textbf{Componente} & \textbf{Archivos} & \textbf{Qué fija} & \textbf{Suites / pruebas} \\ \hline
+\endhead
+\multicolumn{4}{|l|}{\textbf{SDK} (\path{sdk/})} \\ \hline
+Objetos de valor & En \path{src/domain/value-objects/}: \texttt{Amount}, \texttt{Currency}, \texttt{Environment}, \texttt{GatewayTransactionId}, \texttt{OrderReference}, \texttt{Payer}, \texttt{PaymentMethod}, \texttt{PaymentResult}, \texttt{PseBankCode}, \texttt{RejectionReason}, \texttt{ReturnUrlConfig}, \texttt{TaxBreakdown} y \texttt{WebhookEvent}, cada uno con su archivo de prueba. & Validación en el constructor, escala del monto, códigos ISO, tipos de documento e inmutabilidad. & 13 / 123 \\ \hline
+Entidad, error y servicio de dominio & \path{src/domain/entities/Transaction.test.ts}, \path{src/domain/errors/KitPagosError.test.ts} y \path{src/domain/services/WebhookVerifier.test.ts}. & Estados de la transacción, códigos de error y verificación de firmas de webhook por pasarela. & 3 / 108 \\ \hline
+Servicios de aplicación & En \path{src/application/services/}: \path{ErrorHandler.test.ts}, \path{RetryHandler.test.ts}, \path{ResponseNormalizer.test.ts} y \path{gateway-error-detail.test.ts}. & Conversión a \texttt{KitPagosError}, política de reintentos con reloj inyectado y despacho de la normalización. & 4 / 119 \\ \hline
+Normalizadores & En \path{src/application/services/normalizers/}: \path{kushki-card.test.ts}, \path{kushki-rejection.test.ts}, \path{kushki-transfer.test.ts}, \path{mercadopago-rejection.test.ts}, \path{payload-utils.test.ts}, \path{rapyd-redirect.test.ts} y \path{rapyd-rejection.test.ts}. & Traducción a los seis estados canónicos y conservación de \texttt{rejectionReason}. & 7 / 71 \\ \hline
+Adaptadores & Los 16 archivos de \path{src/infrastructure/adapters/}: uno por adaptador (\path{WompiAdapter.test.ts}, \path{MercadoPagoAdapter.test.ts}, \path{KushkiAdapter.test.ts}, \path{RapydAdapter.test.ts}), los de PSE y bancos (\path{wompi-pse.test.ts}, \path{mercadopago-pse.test.ts}, \path{kushki-pse.test.ts}, \path{rapyd-pse.test.ts}, \path{rapyd-pse-banks.test.ts}, \path{pse-banks.test.ts}, \path{pse-bank-code.test.ts}), \path{kushki-charge.test.ts}, \path{rapyd-checkout.test.ts}, \path{payment-method-support.test.ts}, \path{http-failure.test.ts} y \path{redacting-gateway.test.ts}. & Petición nativa enviada (método, ruta, cabeceras y cuerpo), autenticación de cada pasarela y redacción de secretos en los errores. & 16 / 354 \\ \hline
+Configuración, fábrica y fachada & En \path{src/infrastructure/}: \path{config/SDKConfigurator.test.ts}, \path{config/gateway-urls.test.ts}, \path{config/request-timeout.test.ts}, \path{factories/GatewayFactory.test.ts} y \path{facade/KitPagos.test.ts}. & Catálogo cerrado de URL por ambiente, \texttt{SDKOptions}, límite de tiempo y orquestación de la fachada. & 5 / 83 \\ \hline
+Módulo de navegador & Los 6 archivos de \path{test/browser/}: \path{WompiTokenizer.test.ts}, \path{MercadoPagoTokenizer.test.ts}, \path{KushkiTokenizer.test.ts}, \path{KitPagosBrowser.test.ts}, \path{tokenizer-timeout.test.ts} y \path{bundle.test.ts}. & Tokenización por pasarela, rechazo de Rapyd, límite de tiempo y que el bundle no use módulos de Node.js. & 6 / 140 \\ \hline
+Scripts de calidad & \path{test/scripts/ck-metrics.test.ts} y \path{test/scripts/native-concepts.test.ts}. & El cálculo de las métricas CK y el conteo de conceptos nativos. & 2 / 54 \\ \hline
+\multicolumn{3}{|r|}{\textbf{Subtotal del SDK}} & \textbf{56 / 1052} \\ \hline
+\multicolumn{4}{|l|}{\textbf{API de Simulación} (\path{simulator-api/test/})} \\ \hline
+Máquinas de estado & \path{state-machine.test.ts}, \path{wompi-state-machine.test.ts}, \path{mercadopago-state-machine.test.ts}, \path{kushki-state-machine.test.ts} y \path{rapyd-state-machine.test.ts}. & Transiciones medidas de cada pasarela y estados finales. & 5 / 98 \\ \hline
+Credenciales, ambiente y puerto & \path{CredentialResolver.test.ts}, \path{KitPagosProvider.test.ts}, \path{targetEnvironment.test.ts} y \path{serverAddress.test.ts}. & Perfil del servidor frente a cabeceras del cliente, catálogo de ambientes y puerto de escucha. & 4 / 48 \\ \hline
+Firmas, páginas, registro y esquemas & \path{webhook-signatures.test.ts}, \path{bank-pages.test.ts}, \path{redactSerializer.test.ts} y \path{compile-schemas-as-is.test.ts}. & Firmas de webhook, páginas de banco, redacción del registro y compilación de esquemas. & 4 / 54 \\ \hline
+\multicolumn{3}{|r|}{\textbf{Subtotal del simulador}} & \textbf{13 / 200} \\ \hline
+\end{xltabular}
+}
 
 \subsubsection{Pruebas de integración}
 
-Verifican la colaboración entre piezas: el SDK contra la API de Simulación, la capa REST contra el SDK instalado, el prototipo contra el simulador. La suite de la API de Simulación usa \texttt{app.inject()} de Fastify para recorrer la petición completa sin abrir un puerto de red, de modo que prueba el enrutamiento, la serialización y los esquemas JSON, no solo el servicio. Los casos CP-01 a CP-07 son pruebas de integración de sistema: atraviesan varios componentes y observan el resultado desde afuera. La Tabla~\ref{tab:pruebas-integracion} detalla los módulos evaluados en este nivel.
+Verifican la colaboración entre piezas: el SDK contra un servidor HTTP, las rutas de la API de Simulación con su enrutamiento, su serialización y sus esquemas JSON, y la capa REST contra el SDK instalado. En el simulador, \texttt{app.inject()} recorre la petición completa sin abrir un puerto. Hay 11 suites que, además, abren puertos efímeros en \texttt{127.0.0.1}: nueve, para que el SDK que usa \texttt{/v1/api} cobre contra la misma app por \texttt{/v1/sim} (\path{card-capture.test.ts}, \path{invalid-credentials.test.ts}, \path{kushki-k220-through-api.test.ts}, \path{mercadopago.test.ts}, \path{payments.test.ts}, \path{read-endpoints.test.ts}, \path{rejection-reason.test.ts}, \path{scenario-through-sdk.test.ts} y \path{wompi.test.ts}), y dos, para enviar y recibir webhooks por HTTP (\path{webhook-trigger.test.ts} y \path{webhook-trigger-auth.test.ts}). Ninguna sale de la máquina. La Tabla~\ref{tab:pruebas-integracion} lista los archivos de cada fila: suman 2 suites y 36 pruebas en el SDK, y 41 suites y 1101 pruebas en el simulador.
+
+{\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{3pt}
+\begin{xltabular}{\textwidth}{|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{4.2cm}|>{\centering\arraybackslash}p{1.45cm}|}
+\caption{Desglose de las pruebas de integración}\label{tab:pruebas-integracion}\\
+\hline
+\textbf{Subsistema} & \textbf{Archivos} & \textbf{Qué verifica} & \textbf{Suites / pruebas} \\ \hline
+\endfirsthead
+\caption[]{Desglose de las pruebas de integración (continuación)}\\
+\hline
+\textbf{Subsistema} & \textbf{Archivos} & \textbf{Qué verifica} & \textbf{Suites / pruebas} \\ \hline
+\endhead
+\multicolumn{4}{|l|}{\textbf{SDK} (\path{sdk/src/infrastructure/facade/})} \\ \hline
+SDK contra un servidor HTTP local & \path{KitPagos.timeout.test.ts} y \path{KitPagos.http-errors.test.ts}. & Límite de tiempo por petición, reintento de la consulta y traducción de los errores HTTP. & 2 / 36 \\ \hline
+\multicolumn{4}{|l|}{\textbf{API de Simulación} (\path{simulator-api/test/})} \\ \hline
+Rutas de Wompi & \path{wompi.test.ts}, \path{wompi-pse.test.ts}, \path{wompi-integrity-signature.test.ts} y \path{wompi-measured-6-oct.test.ts}. & Forma nativa, firma de integridad y PSE con redirección. & 4 / 68 \\ \hline
+Rutas de Mercado Pago & \path{mercadopago.test.ts}, \path{mercadopago-card-orders.test.ts}, \path{mercadopago-card-token-holder.test.ts}, \path{mercadopago-idempotency.test.ts} y \path{mercadopago-pse.test.ts}. & Órdenes de tarjeta, titulares de prueba, idempotencia y PSE. & 5 / 98 \\ \hline
+Rutas de Kushki & \path{kushki.test.ts} y \path{kushki-card-tokens.test.ts}. & Tokenización atada al monto, cobro y transferencias. & 2 / 45 \\ \hline
+Rutas de Rapyd & \path{rapyd.test.ts}, \path{rapyd-checkout.test.ts} y \path{rapyd-request-signature.test.ts}. & Firma de la petición, página de pago y PSE. & 3 / 55 \\ \hline
+Capa REST \texttt{/v1/api} & \path{kitPagosApi.test.ts}, \path{payments.test.ts}, \path{read-endpoints.test.ts}, \path{rejection-reason.test.ts}, \path{card-capture.test.ts}, \path{kushki-k220-through-api.test.ts}, \path{gatewayClient.test.ts}, \path{environment-catalog.test.ts} y \path{payer-ip.test.ts}. & Monto como cadena exacta, motivo de rechazo serializado, regla de credenciales y cabecera de ambiente. & 9 / 148 \\ \hline
+Escenarios y flujos & \path{resilience-scenarios.test.ts}, \path{scenario-at-creation.test.ts}, \path{scenario-by-test-data.test.ts}, \path{scenario-through-sdk.test.ts}, \path{invalid-credentials.test.ts} y \path{pse-end-to-end.test.ts}. & Caídas de red, límites de tasa, errores 5xx, recuperación tras reintentos y PSE de punta a punta. & 6 / 486 \\ \hline
+Webhooks & \path{webhooks.test.ts}, \path{webhook-trigger.test.ts}, \path{webhook-trigger-auth.test.ts}, \path{webhook-auto-emission.test.ts} y \path{webhook-generator-edges.test.ts}. & Firma con el secreto de cada pasarela, disparo, entrega y emisión automática. & 5 / 102 \\ \hline
+Transversales & \path{appIntegration.test.ts}, \path{authHook.test.ts}, \path{health.test.ts}, \path{openapi.test.ts}, \path{public-origin.test.ts}, \path{simulation-schemas-match-responses.test.ts} y \path{tokenization-cors.test.ts}. & Token de la API, CORS, OpenAPI, salud y que los esquemas declaren lo que las rutas responden. & 7 / 99 \\ \hline
+\multicolumn{3}{|r|}{\textbf{Subtotal del simulador}} & \textbf{41 / 1101} \\ \hline
+\end{xltabular}
+}
+
+Los prototipos tienen sus propias suites, que corren en sus jobs de la CI. Mezclan pruebas de módulos y pruebas de la app del comercio con \texttt{inject()}; la Tabla~\ref{tab:pruebas-prototipos} las cuenta por prototipo, sin separarlas por nivel.
 
 \begin{table}[H]
   \centering
   \small
   \renewcommand{\arraystretch}{1.2}
-  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.8cm}|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{3.8cm}|}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.6cm}|>{\raggedright\arraybackslash}p{2cm}|>{\raggedright\arraybackslash}X|>{\centering\arraybackslash}p{1.8cm}|}
     \hline
-    \textbf{Subsistema} & \textbf{Módulos / Rutas} & \textbf{Objetivo de la integración} & \textbf{Herramienta y suites} \\ \hline
-    Rutas nativas simuladas (\texttt{/v1/sim}) & Rutas de Wompi, Mercado Pago, Kushki y Rapyd (33 rutas) & Preservar formatos y esquemas nativos, soporte de páginas de banco PSE y transición de estados sin alterar datos reales. & Fastify \texttt{app.inject()}; 22 suites en \url{simulator-api/test/} \\ \hline
-    Capa REST propia (\texttt{/v1/api}) & \texttt{/gateways}, \texttt{/payments}, \texttt{/payments/:id}, \texttt{/pse-banks}, \url{/webhooks/:gateway} & Verificar la serialización exacta del monto como cadena, entrega de motivos de rechazo estructurados y consumo del SDK sin adaptación adicional. & Fastify \texttt{app.inject()}; 8 suites en \url{simulator-api/test/} \\ \hline
-    Motor de escenarios deterministas & Montos reservados (\texttt{10 100} a \texttt{10 604}) y marcas de credencial & Provocar de forma determinista caídas de red, límites de tasa, errores 5xx del servidor y recuperación tras reintentos sin depender de sandboxes reales. & Jest y Fastify; 12 suites en \url{simulator-api/test/} \\ \hline
-    Emisión y disparo de webhooks & Disparador \url{/v1/sim/webhooks/trigger} y receptores & Generación de cargas útiles firmadas con algoritmos nativos (HMAC-SHA256) y entrega a endpoints locales de prototipos. & Fastify y Jest; 6 suites en \url{simulator-api/test/} \\ \hline
-    Prototipos de comercio & Prototipos A, B, C y D & Flujo completo de compra (catálogo, carrito, tokenización, cobro y consulta) y verificación de paridad de esqueleto entre B y D. & Jest y script \url{check-skeleton-parity.sh} \\ \hline
+    \textbf{Prototipo} & \textbf{Herramienta} & \textbf{Comando} & \textbf{Suites / pruebas} \\ \hline
+    A, \path{checkout-con-sdk-solo-back} & Jest & \texttt{npm test} (\texttt{jest --runInBand}) & 5 / 60 \\ \hline
+    B, \path{checkout-con-sdk-front-back} & Jest & \texttt{npm test} & 6 / 165 \\ \hline
+    C, \path{checkout-frontend-rest} & Vitest & \texttt{npm test} (\texttt{vitest run}) & 6 / 139 \\ \hline
+    D, \path{checkout-sin-solucion} & Jest & \texttt{npm test} & 10 / 239 \\ \hline
   \end{tabularx}
-  \caption{Desglose de pruebas de integración del sistema}
-  \label{tab:pruebas-integracion}
+  \caption{Suites de los prototipos (corrida del 09/11/2026, 20:23)}
+  \label{tab:pruebas-prototipos}
 \end{table}
 
 \subsubsection{Pruebas de carga y rendimiento}
+\label{sec:carga}
 
-Tienen como propósito verificar la estabilidad, concurrencia y comportamiento del software bajo ráfagas intensivas de peticiones o procesamiento. Dado que el proyecto consta de una librería desacoplada (SDK) y un servicio web de apoyo (API de Simulación), la estrategia aborda la carga bajo dos dimensiones complementarias:
+\paragraph{Objetivo.} Medir cómo responde la API de Simulación bajo concurrencia y comprobar que no falla: ni errores, ni respuestas inesperadas, ni caída del proceso. El SDK se carga en la misma corrida, porque cada petición a \texttt{/v1/api} pasa por \texttt{KitPagos} y por las rutas de \texttt{/v1/sim} que este llama; no se mide por separado. El SRS no fija umbrales de latencia porque no se midieron en un entorno controlado. Por eso las latencias se informan, pero no deciden el resultado.
+
+\paragraph{Herramienta.} Autocannon~[\ref{ref:autocannon}], usado como biblioteca desde un script de Node.js; es la herramienta con la que Fastify publica sus propias mediciones~[\ref{ref:fastify-benchmarks}]. El script lo escribe y lo ejecuta el issue \#174, como \emph{scripts/carga.ts} dentro de \path{simulator-api/}, con autocannon como dependencia de desarrollo y su versión fijada en el \path{package-lock.json}. Se corre con \texttt{npx ts-node --transpile-only} sobre ese archivo, desde \path{simulator-api/}. Este plan fija lo que el script debe cumplir.
+
+\paragraph{Reglas de aislamiento.} La carga nunca llega a una pasarela, a su sandbox ni a Render. Hay cuatro caminos por los que podría salir: la cabecera \path{x-kit-pagos-environment} con \texttt{sandbox} o \texttt{production}, que hace que \texttt{/v1/api} cobre contra los hosts reales (\path{simulator-api/src/services/KitPagosProvider.ts}); el \path{.env} de la raíz, que \texttt{loadServerEnv()} lee si existe y que en la máquina de quien ejecuta tiene las llaves de sandbox (\path{simulator-api/src/auth/CredentialResolver.ts}); Render, que tiene esas llaves; y los prototipos B y C, que con \texttt{npm start} arrancan en \texttt{sandbox}. Las reglas cierran los cuatro:
+
+\begin{enumerate}
+  \item \textbf{Instancia en el mismo proceso.} El script construye la app con \texttt{buildApp()}, con un \texttt{CredentialResolver} y un \texttt{KitPagosProvider} creados sobre un entorno de credenciales ficticias escrito en el script, \texttt{webhooks: \{\}} y \texttt{logger: false}, y la pone a escuchar con \texttt{app.listen(\{ port: 0, host: "127.0.0.1" \})}. La variable \texttt{SIMULATOR\_SDK\_BASE\_URL} de ese entorno toma la dirección que devuelve \texttt{listen()}, así que el SDK interno de \texttt{/v1/api} cobra contra la misma instancia.
+  \item \textbf{Sin \path{.env}.} El script se corre desde un checkout o un worktree sin \path{.env} en la raíz. Aborta antes de construir la app si encuentra ese archivo o si el entorno del proceso define variables que empiecen por \texttt{WOMPI\_}, \texttt{MERCADOPAGO\_}, \texttt{KUSHKI\_} o \texttt{RAPYD\_}, o las variables \texttt{SIMULATOR\_SDK\_BASE\_URL} o \texttt{API\_AUTH\_TOKEN}.
+  \item \textbf{Solo el ambiente \texttt{simulator}.} Las peticiones no llevan \path{x-kit-pagos-environment}, y \path{resolveTargetEnvironment()} resuelve \texttt{simulator} cuando la cabecera falta. El script rechaza cualquier escenario que la defina con otro valor.
+  \item \textbf{Guardián de red.} Antes de construir la app, el script envuelve \texttt{globalThis.fetch}: toda petición a un host distinto de \texttt{127.0.0.1}, \texttt{localhost} o \texttt{::1} lanza un error y se cuenta. Antes de cargar, el guardián se autoprueba con una petición a \path{example.invalid}, un dominio reservado que nunca resuelve~[\ref{ref:rfc2606}]; si no la bloquea, el script se detiene. El SDK y el emisor de webhooks del simulador usan \texttt{fetch} global, así que el guardián cubre las salidas de los dos.
+  \item \textbf{Destino fijo.} El script no acepta una URL de destino: carga siempre la dirección de la regla~1 y comprueba que sea de loopback. Nunca se cargan Render ni los prototipos.
+  \item \textbf{Corrida nula.} Si el contador del guardián termina distinto de cero, si la autoprueba falla o si la regla~2 aborta, la corrida no vale y no se reporta ninguna cifra.
+\end{enumerate}
+
+El 09/11/2026 se comprobó este aislamiento con un sondeo desechable. Primero, desviando el SDK interno a \path{example.invalid}: el guardián bloqueó la petición y la API respondió 500 sin salir de la máquina. Después, con los cinco escenarios de la Tabla~\ref{tab:escenarios-carga} durante 3~s cada uno: todas las respuestas fueron 2xx y el guardián terminó en 0. Esas cifras no son un resultado: la medición formal es la del \#174.
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|>{\centering\arraybackslash}p{0.8cm}|>{\raggedright\arraybackslash}p{5.2cm}|>{\raggedright\arraybackslash}X|}
+    \hline
+    \textbf{Id} & \textbf{Petición} & \textbf{Qué ejercita} \\ \hline
+    E1 & \texttt{GET /health} & La línea base del servidor, sin SDK. \\ \hline
+    E2 & \texttt{GET /v1/api/gateways} & Una ruta REST que no llama al SDK hacia afuera. \\ \hline
+    E3 & \texttt{GET} \path{/v1/api/pse-banks?gateway=wompi} & \texttt{/v1/api}, el SDK con su \texttt{RetryHandler} y \texttt{/v1/sim/wompi} por loopback. \\ \hline
+    E4 & \texttt{GET} \path{/v1/api/payments/:id?gateway=wompi} & La consulta de un cobro de tarjeta de Wompi creado antes de medir; la primera consulta lo resuelve y las siguientes repiten el mismo estado. \\ \hline
+    E5 & \texttt{POST /v1/api/payments} & El cobro de tarjeta de Wompi de 50~000 COP, con un token de prueba y una referencia única por petición (opción \emph{setupRequest} de autocannon). El almacén en memoria crece con cada cobro, y por eso se registra la memoria. \\ \hline
+  \end{tabularx}
+  \caption{Escenarios de carga}
+  \label{tab:escenarios-carga}
+\end{table}
+
+\paragraph{Perfil.} Por cada escenario hay un calentamiento de 5~s, que se descarta, y una medición de 30~s. Se usan dos niveles de concurrencia, 10 y 50 conexiones, sin \emph{pipelining}, y tres repeticiones por combinación: 30 corridas en total, unos 18 minutos. Se usa Node.js 20, la versión de la CI; si se usa otra, se declara.
+
+\paragraph{Métricas.} Por escenario, nivel y repetición se registran:
 
 \begin{itemize}
-  \item \textbf{Carga sobre la API de Simulación (Fastify):} Fastify es un framework concebido para un alto rendimiento y baja latencia. Para medir su comportamiento ante concurrencia se utiliza \textbf{Autocannon}, la herramienta de benchmarking HTTP nativa del ecosistema Fastify, ejecutando ráfagas continuas de peticiones sobre rutas representativas (\texttt{GET /health}, \texttt{GET /v1/api/gateways} y consultas de estado). La prueba evalúa que la API sostenga la carga sin provocar errores no controlados (500) ni degradación en el bucle de eventos (\emph{event loop}) de Node.js. Como alternativas viables dentro del diseño se contemplan herramientas como \textbf{k6} (orientada a flujos estructurados basados en escenarios en JavaScript) y \textbf{Artillery} (adecuada para definir perfiles de tráfico mediante manifiestos declarativos).
-  \item \textbf{Rendimiento computacional del SDK en memoria:} Al ser una librería sin servidor propio de escucha, la evaluación de carga del SDK se enfoca en el rendimiento en memoria de las operaciones más costosas: el cálculo intensivo de firmas criptográficas HMAC-SHA256, la validación de objetos de valor y la normalización de cargas útiles (\emph{payloads}) en ráfagas de miles de ejecuciones. Se verifica que el procesamiento conserve tiempos estables sin acumulación innecesaria en el recolector de basura (\emph{Garbage Collector}) de V8.
+  \item \textbf{Latencia p50, p95 y p99.} El resumen de autocannon no sirve tal como viene. Su histograma de latencia no distingue valores por debajo de 1~ms, solo cuenta las respuestas 2xx y entrega los percentiles 50, 75, 90, 97,5 y 99, sin el 95~[\ref{ref:autocannon}]. Una ruta que responde en menos de 1~ms aparece allí con 0 o 1~ms. Por eso el script guarda la duración de cada respuesta que entrega el evento \texttt{response} de autocannon, que viene en milisegundos con decimales, y calcula p50, p95 y p99 sobre todas las respuestas. Los percentiles del resumen se guardan como contraste.
+  \item \textbf{Rendimiento.} Peticiones por segundo (promedio y desviación estándar del resumen) y bytes por segundo.
+  \item \textbf{Tasa de errores.} La suma de errores, timeouts y respuestas que no son 2xx, dividida por el total de peticiones.
+  \item \textbf{Recursos.} El RSS del proceso antes y después de cada escenario, y el p99 del retardo del bucle de eventos, medido con la función \emph{monitorEventLoopDelay} del módulo \emph{perf\_hooks} de Node.js~[\ref{ref:node-perf-hooks}].
+  \item \textbf{Contexto.} El commit, la versión de Node.js, el sistema operativo, el procesador y la salida de la autoprueba del guardián. Las cifras dependen de la máquina y solo se comparan entre corridas de la misma.
 \end{itemize}
 
-Dado que no se han fijado formalmente acuerdos de nivel de servicio (SLA) ni umbrales de latencia en un entorno de infraestructura controlada, el criterio de éxito en este nivel se define como \textbf{estabilidad operativa}: 0~\% de errores no intencionados, ausencia de caídas del proceso y consumo acotado de recursos bajo concurrencia.
+\paragraph{Criterio de completitud.} La prueba de carga se da por completada cuando la autoprueba bloqueó \path{example.invalid}, las 30 corridas terminaron, cada una con 0 errores, 0 respuestas que no sean 2xx y el contador del guardián en 0, el proceso siguió vivo y las evidencias quedaron guardadas. Las latencias no tienen umbral.
+
+\paragraph{Evidencia.} En la carpeta de evidencias de la Sección~\ref{sec:resultados}, una subcarpeta \emph{carga} con un JSON por corrida (el resumen de autocannon y los percentiles calculados), la salida de consola con la autoprueba y el contador del guardián, y el resumen en la Tabla~\ref{tab:metricas-corrida}.
 
 \subsubsection{Pruebas de contrato}
 
-Verifican la suposición más frágil del proyecto: que la pasarela real acepta lo que el SDK cree que acepta. Se ejecutan contra los sandboxes oficiales, en serie y con un tiempo límite amplio, porque una prueba de contrato que falla por paralelismo o por un timeout corto no informa nada sobre el contrato. No afirman \texttt{APPROVED}: afirman que la petición fue aceptada y que la respuesta tiene la forma esperada, porque un sandbox real puede declinar cuando quiere. Cuando una prueba de contrato falla, el defecto está en la suposición del SDK o en un cambio de la pasarela, y en ambos casos se corrige el código o se documenta el límite.
+Verifican la suposición más frágil del proyecto: que la pasarela real acepta lo que el SDK cree que acepta. Se ejecutan contra los sandboxes oficiales, en serie y con un tiempo límite amplio, porque una prueba de contrato que falla por paralelismo o por un timeout corto no informa nada sobre el contrato. No afirman \texttt{APPROVED}: afirman que la petición fue aceptada y que la respuesta tiene la forma esperada, porque un sandbox real puede declinar cuando quiere. Cuando una prueba de contrato falla, el defecto está en la suposición del SDK o en un cambio de la pasarela, y en ambos casos se corrige el código o se documenta el límite. Son las únicas pruebas del plan que salen a Internet, y nunca se usan como carga.
 
 \subsubsection{Pruebas de sistema y aceptación}
 
@@ -146,47 +231,48 @@ Los casos CP-01 a CP-07 son pruebas de sistema con criterio de aceptación: cada
   \centering
   \small
   \renewcommand{\arraystretch}{1.2}
-  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.4cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{3.1cm}|}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.1cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{3.6cm}|}
     \hline
     \textbf{Ambiente} & \textbf{Qué incluye} & \textbf{Uso en este plan} \\ \hline
-    \textbf{Local sin red} & Node.js 20, dependencias instaladas, suites unitarias. & Unitarias del SDK y de la API de Simulación. \\ \hline
-    \textbf{Simulador local} & \texttt{simulator-api} en \texttt{http://localhost:3000}, SDK compilado, sin credenciales reales. & CP-01 a CP-07; escenarios e intercambiabilidad. \\ \hline
-    \textbf{Sandboxes reales} & APIs oficiales de las cuatro pasarelas, credenciales de prueba en el \texttt{.env}, Internet. & Pruebas de contrato y verificación puntual de supuestos. \\ \hline
-    \textbf{Render} & \texttt{https://kit-pagos-colombia.onrender.com}, desplegado desde \texttt{devops}; nivel gratuito, puede tardar en despertar. & Postman y humo de \texttt{/health}, \texttt{/v1/api} y \texttt{/docs}. \\ \hline
-    \textbf{Prototipos locales} & \texttt{http://localtest.me:4000}; el dominio resuelve a \texttt{127.0.0.1}. & CP-04 y CP-05; aceptación del flujo de comercio. \\ \hline
-    \textbf{Integración continua} & \texttt{ubuntu-latest}, Node.js 20, servicios locales del job. & Repetición automática de las suites y de la paridad. \\ \hline
+    \textbf{Local sin red} & Node.js 20, dependencias instaladas, sin \path{.env} en la raíz. & Suites del SDK y de la API de Simulación. \\ \hline
+    \textbf{Simulador local} & \path{simulator-api} en \texttt{http://localhost:3000}, SDK compilado. Las llaves del \path{.env} de la raíz, si existen, solo viajan a este proceso. & CP-01 a CP-07; escenarios e intercambiabilidad. \\ \hline
+    \textbf{Carga aislada} & La app de la API de Simulación en el mismo proceso del script, en \texttt{127.0.0.1} con un puerto efímero, credenciales ficticias y el guardián de red (Sección~\ref{sec:carga}). & Pruebas de carga y rendimiento. \\ \hline
+    \textbf{Sandboxes reales} & APIs oficiales de las cuatro pasarelas, credenciales de prueba en el \path{.env}, Internet. & Solo las pruebas de contrato. Nunca carga. \\ \hline
+    \textbf{Render} & \url{https://kit-pagos-colombia.onrender.com}, desplegado desde \texttt{devops}; nivel gratuito, puede tardar en despertar. Exige el token de la API fuera de \texttt{/health} y \texttt{/v1/sim}. & Postman y humo de \texttt{/health}, \texttt{/v1/api} y \texttt{/docs}. Nunca carga. \\ \hline
+    \textbf{Prototipos locales} & \texttt{http://localtest.me:4000} para B y \texttt{http://localhost:4100} para C, con \texttt{npm run start:local}; el dominio resuelve a \texttt{127.0.0.1}. & CP-04, CP-05 y CP-06; aceptación del flujo de comercio. Nunca carga. \\ \hline
+    \textbf{Integración continua} & \texttt{ubuntu-latest}, Node.js 20, servicios locales del job. & Repetición automática de las suites, de la paridad y de la compilación de los documentos. \\ \hline
   \end{tabularx}
   \caption{Ambientes de ejecución}
   \label{tab:ambientes}
 \end{table}
 
-La elección de \texttt{localtest.me} en los prototipos no es cosmética: Mercado Pago no acepta volver a \texttt{localhost} al final de un PSE, y el dominio permite que el banco devuelva al comprador a la máquina sin túnel. Si la red no resuelve el dominio, se agrega \texttt{127.0.0.1 localtest.me} al archivo de hosts. En el simulador de Render la tarjeta de B no tokeniza, porque el catálogo de hosts de \texttt{KitPagosBrowser} es cerrado y en el ambiente \texttt{simulator} apunta a \texttt{localhost:3000}; por eso CP-05 se ejecuta con \texttt{npm run start:local} y no contra Render.
+La elección de \texttt{localtest.me} en los prototipos no es cosmética. Mercado Pago no acepta volver a \texttt{localhost} al final de un PSE, y ese dominio público, que apunta a \texttt{127.0.0.1}, deja que el banco devuelva al comprador a la misma máquina sin un túnel. Si la red no resuelve el dominio, se agrega \texttt{127.0.0.1 localtest.me} al archivo de hosts. En el simulador de Render la tarjeta de B no tokeniza, porque el catálogo de hosts de \texttt{KitPagosBrowser} es cerrado y en el ambiente \texttt{simulator} apunta a \texttt{localhost:3000}; por eso CP-05 se ejecuta con \texttt{npm run start:local} y no contra Render.
 
 \subsection{Datos de prueba}
 
-Los datos salen de \texttt{docs/testing-data/} y de la convención del simulador documentada en \texttt{docs/02-arquitectura/3-api-de-simulacion.md}. Se usan tres familias:
+Los datos salen de \path{docs/testing-data/} y de la convención del simulador documentada en \path{docs/02-arquitectura/3-api-de-simulacion.md}. Se usan tres familias:
 
 \begin{itemize}
   \item \textbf{Datos de pasarela.} La tarjeta \texttt{4111} de Wompi se declina al consultar; el titular \texttt{OTHE} de Mercado Pago produce un rechazo; el documento \texttt{100000002} de Kushki declina un PSE; las tarjetas de rechazo de Kushki devuelven su código nativo.
-  \item \textbf{Montos reservados.} El simulador interpreta el monto como una regla cuando cae en un valor reservado: \texttt{10 100} declina, \texttt{10 101} queda pendiente, \texttt{10 102} expira, \texttt{10 409} simula un duplicado, \texttt{10 429} un límite de tasa, \texttt{10 500}, \texttt{10 502}, \texttt{10 503} y \texttt{10 504} errores del servidor, y \texttt{10 001} a \texttt{10 006} fallas de red o de cuerpo. Las consultas usan \texttt{10 600} (falla siempre), \texttt{10 602} (falla dos veces y se recupera) y \texttt{10 604} (no responde).
+  \item \textbf{Montos reservados.} El simulador interpreta el monto como una regla cuando cae en un valor reservado. \texttt{10100} declina, \texttt{10101} queda pendiente y \texttt{10102} expira. \texttt{10409} simula un duplicado y \texttt{10429}, un límite de tasa. \texttt{10500}, \texttt{10502}, \texttt{10503} y \texttt{10504} son errores del servidor, y \texttt{10001} a \texttt{10006}, fallas de red o de cuerpo. Las consultas usan \texttt{10600} (falla siempre), \texttt{10602} (falla dos veces y se recupera) y \texttt{10604} (no responde).
   \item \textbf{Marcas de credencial.} Las credenciales con las marcas \texttt{sim\_flapping}, \texttt{sim\_server\_error} y similares permiten provocar fallas transitorias en la lista de bancos sin depender del monto.
 \end{itemize}
 
-Ningún dato de prueba es una credencial real. Las pruebas de contrato leen credenciales de un \texttt{.env} que no se versiona; si el archivo no existe, las pruebas se omiten y así se reporta.
+Ningún dato de prueba es una credencial real. Las pruebas de contrato leen credenciales de un \path{.env} que no se versiona; si el archivo no existe, las pruebas se omiten y así se reporta.
 
 \subsection{Criterios de entrada y salida}
 
-\textbf{Entrada.} Una prueba puede ejecutarse cuando el repositorio está en la rama correcta, las dependencias están instaladas, el SDK compila y, si el caso lo requiere, la API de Simulación responde en el puerto 3000. Para las pruebas de contrato se necesita además el \texttt{.env} con credenciales vigentes.
+\textbf{Entrada.} Una prueba puede ejecutarse cuando el repositorio está en la rama correcta, las dependencias están instaladas, el SDK compila y, si el caso lo requiere, la API de Simulación responde en el puerto 3000. Las pruebas de contrato necesitan además el \path{.env} con credenciales vigentes; las de carga necesitan lo contrario, un checkout sin \path{.env}.
 
-\textbf{Salida.} El plan se considera ejecutado cuando los siete casos tienen resultado registrado, las suites automatizadas de la corrida vigente están en verde, las pruebas de contrato se ejecutaron o se justificó su omisión, y no queda ningún defecto abierto de severidad alta sin decisión. Los defectos de severidad media o baja pueden quedar abiertos si se documentan con su impacto y su workaround.
+\textbf{Salida.} El plan se considera ejecutado cuando se cumplen cinco condiciones: los siete casos tienen resultado registrado; las suites automatizadas de la corrida vigente están en verde; las pruebas de contrato se ejecutaron o se justificó su omisión; la carga cumplió su criterio de completitud; y no queda ningún defecto abierto de severidad alta sin decisión. Los defectos de severidad media o baja pueden quedar abiertos si se documentan con su impacto y su workaround.
 
 \subsection{Gestión de defectos}
 
 Cada defecto se registra en la tabla de la Sección~\ref{sec:resultados} con un identificador \texttt{DEF-nn}, el caso que lo detectó, la severidad, la descripción, el componente afectado y el estado. La severidad se asigna así:
 
 \begin{itemize}
-  \item \textbf{Alta.} Impide completar un flujo de pago, expone datos sensibles o produce un cobro incorrecto.
-  \item \textbf{Media.} Producen un resultado equivocado en un caso de borde, una omisión de un campo requerido o una diferencia de formato que obliga a un workaround.
+  \item \textbf{Alta.} Impide completar un flujo de pago, expone datos sensibles, produce un cobro incorrecto o deja salir una petición de la carga hacia fuera de la máquina.
+  \item \textbf{Media.} Produce un resultado equivocado en un caso de borde, una omisión de un campo requerido o una diferencia de formato que obliga a un workaround.
   \item \textbf{Baja.} Defecto de documentación, de mensaje o de presentación que no altera el resultado del pago.
 \end{itemize}
 

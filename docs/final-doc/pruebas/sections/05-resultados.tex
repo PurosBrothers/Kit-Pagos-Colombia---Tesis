@@ -77,35 +77,36 @@ Cada defecto debe incluir la severidad según la escala de la Sección~\ref{sec:
   \renewcommand{\arraystretch}{1.25}
   \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.8cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|}
     \hline
-    \textbf{Suite} & \textbf{Resultado de la corrida} & \textbf{Cobertura y duración} \\ \hline
-    Unitarias del SDK & Pendiente & Pendiente \\ \hline
-    API de Simulación & Pendiente & Pendiente \\ \hline
+    \textbf{Suite} & \textbf{Resultado de la corrida} & \textbf{Cobertura, duración y otras métricas} \\ \hline
+    Suite del SDK & Pendiente & Pendiente \\ \hline
+    Suite de la API de Simulación & Pendiente & Pendiente \\ \hline
     Contrato contra sandboxes & Pendiente & Pendiente \\ \hline
     Ejemplos y escenarios & Pendiente & Pendiente \\ \hline
     Prototipos y paridad & Pendiente & Pendiente \\ \hline
     Postman local y Render & Pendiente & No aplica \\ \hline
     OpenAPI & Pendiente & No aplica \\ \hline
-    Carga y rendimiento (API y SDK) & Pendiente & Pendiente \\ \hline
+    Carga y rendimiento & Pendiente: corridas completadas, tasa de errores y contador del guardián & Pendiente: p50, p95 y p99 propios y del resumen de autocannon, peticiones por segundo, RSS y retardo del bucle de eventos, por escenario y nivel \\ \hline
     Integración continua & Pendiente & No aplica \\ \hline
   \end{tabularx}
   \caption{Métricas de la corrida}
   \label{tab:metricas-corrida}
 \end{table}
 
-La corrida de referencia del diseño, del 09/11/2026, registró 58 suites y 1088 pruebas en el SDK, 54 suites y 1301 pruebas en la API de Simulación, y 25 pruebas de contrato en 4 archivos. Esas cifras son la línea base; la tabla anterior debe reflejar la corrida del \#174 y, si cambian, la diferencia se explica en las notas.
+La corrida de referencia del diseño, del 09/11/2026 entre las 20:15 y las 20:23, sobre el commit \texttt{4189075} y con Node.js 22.23.4, registró 58 suites y 1088 pruebas en el SDK y 54 suites y 1301 pruebas en la API de Simulación. En los prototipos fueron 5 y 60 en A, 6 y 165 en B, 6 y 139 en C y 10 y 239 en D. El contrato tiene 25 pruebas en 4 archivos, contadas en el código y no ejecutadas. Esas cifras son la línea base; la tabla anterior debe reflejar la corrida del \#174 y, si cambian, la diferencia se explica en las notas.
 
 \subsection{Evidencias}
 
-Las evidencias se guardan en \texttt{docs/final-doc/pruebas/evidencias/} con un subdirectorio por caso:
+Las evidencias se guardan en \path{docs/final-doc/pruebas/evidencias/}, con una subcarpeta por tipo:
 
 \begin{itemize}
-  \item \texttt{cp-01/} a \texttt{cp-07/}: salida de consola, código de salida y, cuando aplique, captura de la interfaz.
-  \item \texttt{suites/}: salida resumida de Jest con el número de suites, pruebas y cobertura.
-  \item \texttt{postman/}: reporte de la colección en local y en Render, con el código de cada petición.
-  \item \texttt{defectos/}: evidencia específica de cada \texttt{DEF-nn}, si no está ya en la carpeta del caso.
+  \item \emph{cp-01} a \emph{cp-07}: salida de consola, código de salida y, cuando aplique, captura de la interfaz.
+  \item \emph{suites}: salida resumida de Jest y Vitest con el número de suites, pruebas y cobertura.
+  \item \emph{postman}: reporte de la colección en local y en Render, con el código de cada petición.
+  \item \emph{carga}: un JSON por corrida y la salida de consola con la autoprueba y el contador del guardián (Sección~\ref{sec:carga}).
+  \item \emph{defectos}: evidencia específica de cada \texttt{DEF-nn}, si no está ya en la carpeta del caso.
 \end{itemize}
 
-Cada archivo de evidencia debe indicar en su nombre la fecha de la corrida en formato \texttt{AAAA-MM-DD}, por ejemplo \texttt{2026-11-09-cp-01-salida.txt}. No se versionan credenciales, tokens completos ni datos personales; los valores sensibles se redactan.
+Cada archivo de evidencia lleva en su nombre la fecha de la corrida en formato \texttt{AAAA-MM-DD}, por ejemplo \emph{2026-11-09-cp-01-salida.txt}. No se versionan credenciales, tokens completos ni datos personales; los valores sensibles se redactan.
 
 \subsection{Criterio de cierre}
 
@@ -114,6 +115,7 @@ La ejecución del \#174 se considera cerrada cuando:
 \begin{enumerate}
   \item Los siete casos tienen estado registrado y evidencia enlazada.
   \item Las suites unitarias, de integración y de escenarios de la corrida vigente están en verde.
+  \item La carga cumplió su criterio de completitud, con el contador del guardián en 0 en todas las corridas.
   \item Las 25 pruebas de contrato se ejecutaron, o su omisión quedó justificada por falta de credenciales.
   \item No queda ningún defecto de severidad alta abierto sin decisión documentada.
   \item Las métricas de la Tabla~\ref{tab:metricas-corrida} están completas y son consistentes con la salida de las suites.

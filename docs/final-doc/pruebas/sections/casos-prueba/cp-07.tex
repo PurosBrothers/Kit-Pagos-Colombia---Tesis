@@ -1,21 +1,20 @@
 \subsection{CP-07: reintentos con retroceso exponencial}
 \label{sec:cp07}
-\label{anexo:cp07}
 
 \FichaCaso
   {CP-07}
-  {Equipo Kit Pagos Colombia}
+  {David Estevan Rodriguez Jurado}
   {09/11/2026}
   {Reintentos con retroceso exponencial}
   {Pendiente (\#174)}
   {Pendiente (\#174)}
   {Comprobar el atributo de calidad de confiabilidad y resiliencia del SDK: las operaciones idempotentes reintentan solo fallos transitorios, con retroceso exponencial y un tope, y las que no son idempotentes no se reintentan para no cobrar dos veces. El caso verifica los tiempos, el número de intentos, el error final con su causa y el comportamiento de \texttt{createPayment()} frente a una pasarela que falla y luego responde.}
   {No funcional (confiabilidad). No es un CRUD ni una prueba de seguridad.}
-  {\textbullet\ SDK compilado y dependencias de \texttt{examples/} instaladas.\newline
+  {\textbullet\ SDK compilado y dependencias de \path{examples/} instaladas.\newline
    \textbullet\ API de Simulación arriba en \texttt{http://localhost:3000} para los escenarios de integración.\newline
-   \textbullet\ Las pruebas unitarias de timeout y de errores HTTP levantan un servidor local efímero y no necesitan el simulador.\newline
+   \textbullet\ Las suites de timeout y de errores HTTP del SDK levantan su propio servidor en \texttt{127.0.0.1} con un puerto efímero y no necesitan el simulador.\newline
    \textbullet\ Sin credenciales reales.}
-  {Local. Node.js 20. Las pruebas unitarias corren contra un servidor HTTP local en un puerto efímero; los escenarios corren contra la API de Simulación en \texttt{http://localhost:3000}. No se usa red externa ni credenciales de sandbox.}
+  {Local. Node.js 20. Las suites del SDK corren contra un servidor HTTP local en un puerto efímero; los escenarios corren contra la API de Simulación en \texttt{http://localhost:3000}. No se usa red externa ni credenciales de sandbox.}
 
 \subsubsection{Objetivo}
 
@@ -25,43 +24,43 @@ Comprobar que el SDK distingue un fallo transitorio de uno de negocio, que la es
 
 \begin{TablaPasos}{Pasos del caso CP-07}
   1 &
-  Ejecutar las pruebas unitarias de reintentos, timeout y errores HTTP. &
-  \texttt{cd sdk \&\& npx jest RetryHandler KitPagos.timeout KitPagos.http-errors --coverage=false}. &
-  Los 3 archivos pasan, 0 fallos. Con \texttt{jitterMs:0}, \texttt{calculateDelay(0..2)} da 1000, 2000 y 4000, y el tope de 4000 se repite en los intentos siguientes. &
+  Ejecutar las suites de reintentos, timeout y errores HTTP. &
+  \texttt{cd sdk \&\& npx jest RetryHandler} \path{KitPagos.timeout} \path{KitPagos.http-errors} \texttt{--coverage=false --verbose}. &
+  Los 3 archivos y sus 55 pruebas pasan, 0 fallos. Con \texttt{jitterMs:0}, \texttt{calculateDelay(0..2)} da 1000, 2000 y 4000, y el tope de 4000 se repite en los intentos siguientes. &
   & & \\ \hline
   2 &
   Verificar el número de intentos y las pausas. &
-  La prueba \emph{retries up to the configured limit before succeeding on the last attempt} de \texttt{RetryHandler.test.ts}. &
+  La prueba \emph{retries up to the configured limit before succeeding on the last attempt} de \path{RetryHandler.test.ts}. &
   La operación se llama 4 veces (1 intento inicial y 3 reintentos), \texttt{sleep} se llama 3 veces y las pausas son \texttt{[1000, 2000, 4000]}. Solo se reintentan los códigos transitorios. &
   & & \\ \hline
   3 &
   Verificar que un error de negocio no se reintenta. &
-  La prueba \emph{rethrows non-transient errors immediately} de \texttt{RetryHandler.test.ts}. &
+  La prueba \emph{rethrows non-transient errors immediately without retrying or pausing} de \path{RetryHandler.test.ts}. &
   \texttt{INVALID\_CREDENTIALS} se relanza en el primer intento, la operación se llama una vez y no hay pausa. &
   & & \\ \hline
   4 &
   Verificar el error final y su causa. &
-  La prueba \emph{exhausts the retries and throws MAX\_RETRIES\_EXCEEDED} de \texttt{RetryHandler.test.ts}. &
+  La prueba \emph{exhausts the retries and throws MAX\_\allowbreak RETRIES\_\allowbreak EXCEEDED with the last error as cause} de \path{RetryHandler.test.ts}. &
   Se lanza \texttt{MAX\_RETRIES\_EXCEEDED}; el mensaje dice \texttt{4 attempts (1 initial + 3 retries)}; \texttt{cause} es el último error y \texttt{originalPayload} se conserva. &
   & & \\ \hline
   5 &
   Verificar el límite por petición y su reintento. &
-  \texttt{KitPagos.timeout.test.ts}. &
+  \path{KitPagos.timeout.test.ts}. &
   \texttt{getPaymentStatus()} corta a los 30~s por omisión con \texttt{GATEWAY\_TIMEOUT}; con un reintento termina en \texttt{MAX\_RETRIES\_EXCEEDED} y la causa es \texttt{GATEWAY\_TIMEOUT}. El servidor recibe exactamente 2 peticiones. &
   & & \\ \hline
   6 &
   Levantar el simulador y ejecutar el recorrido de escenarios. &
-  \texttt{cd simulator-api \&\& npm run dev}; en otra terminal, \texttt{cd examples \&\& npm run simulate:scenarios}. &
+  \texttt{cd simulator-api \&\& npm run dev}; en otra terminal, \texttt{cd examples \&\& npm run} \path{simulate:scenarios}. &
   Cada línea del recorrido imprime \texttt{OK} y el proceso termina con código 0. Entre otras filas: consulta \texttt{10602} se recupera tras dos fallos, consulta \texttt{10600} termina en \texttt{MAX\_RETRIES\_EXCEEDED}, consulta \texttt{10604} termina en \texttt{GATEWAY\_TIMEOUT} sin reintentos, y la lista de bancos con \texttt{sim\_flapping} se recupera. &
   & & \\ \hline
   7 &
   Verificar que la creación no se reintenta. &
-  \texttt{cd simulator-api \&\& npx jest scenario-through-sdk --coverage=false}. &
-  La fila del monto \texttt{10002} (\texttt{FLAPPING, creation is not retried}) pasa: \texttt{POST /v1/api/payments} responde 502 con \texttt{GATEWAY\_SERVER\_ERROR}. Si el SDK reintentara, el tercer intento crearía el cobro y la respuesta sería 2xx. &
+  \texttt{cd simulator-api \&\& npx jest} \path{scenario-through-sdk} \texttt{--coverage=false --verbose}. &
+  La suite pasa sus 147 pruebas, entre ellas la del monto \texttt{10002} (\emph{FLAPPING, creation is not retried}): \texttt{POST /v1/api/payments} responde 502 con \texttt{GATEWAY\_SERVER\_ERROR}. Si el SDK reintentara, el tercer intento crearía el cobro y la respuesta sería 2xx. &
   & & \\ \hline
   8 &
   Confirmar la asimetría en el código de la fachada. &
-  Revisión de \url{sdk/src/infrastructure/facade/KitPagos.ts}. &
+  Revisión de \path{sdk/src/infrastructure/facade/KitPagos.ts}. &
   \texttt{getPaymentStatus()} y \texttt{getPseBanks()} construyen un \texttt{RetryHandler}; \texttt{createPayment()} llama al adaptador directamente. La decisión está documentada para evitar un doble débito. &
   & & \\ \hline
   9 &
@@ -75,7 +74,7 @@ Comprobar que el SDK distingue un fallo transitorio de uno de negocio, que la es
 \subsubsection{Criterio de aceptación}
 
 \begin{enumerate}
-  \item Las pruebas de \texttt{RetryHandler}, \texttt{KitPagos.timeout} y \texttt{KitPagos.http-errors} pasan sin fallos.
+  \item Las 55 pruebas de \path{RetryHandler.test.ts}, \path{KitPagos.timeout.test.ts} y \path{KitPagos.http-errors.test.ts} pasan sin fallos.
   \item La espera es exponencial con tope: 1000, 2000 y 4000~ms sin jitter, y nunca supera los 4000~ms más el jitter configurado.
   \item Una operación que falla tres veces se intenta cuatro veces; un error no transitorio se relanza en el primer intento sin pausa.
   \item Al agotar los reintentos se lanza \texttt{MAX\_RETRIES\_EXCEEDED} con el último error como \texttt{cause}.
@@ -86,8 +85,8 @@ Comprobar que el SDK distingue un fallo transitorio de uno de negocio, que la es
 
 \subsubsection{Observaciones de diseño}
 
-El caso separa dos niveles: las pruebas unitarias fijan la política con un reloj inyectado y sin red, y las pruebas de integración usan los montos reservados del simulador, que producen fallos deterministas (\texttt{10602} falla dos veces y se recupera, \texttt{10600} responde 500 y \texttt{10604} produce timeout). El monto \texttt{10002} es el que distingue una creación idempotente de una que no lo es: falla dos veces y prospera en el tercer intento, garantizando que \texttt{createPayment()} no duplique cobros.
+El caso separa dos niveles: las pruebas unitarias fijan la política con un reloj inyectado y sin red, y las pruebas de integración usan los montos reservados del simulador, que producen fallos deterministas (\texttt{10602} falla dos veces y se recupera, \texttt{10600} responde 500 y \texttt{10604} produce timeout). El monto \texttt{10002} es el que distingue una creación idempotente de una que no lo es: falla dos veces y prospera en el tercer intento, así que una respuesta 502 prueba que \texttt{createPayment()} no reintentó ni duplicó el cobro.
 
 \subsubsection{Trazabilidad}
 
-RF-05 (errores esperados), RF-07 (reintentos idempotentes), RF-08 (redacción de secretos), RF-10 y RF-11 (escenarios y errores del simulador); HU-05, HU-07 y HU-11.
+RF-05 (errores esperados), RF-07 (reintentos idempotentes), RF-10 y RF-11 (escenarios y errores del simulador); HU-05, HU-07 y HU-11.

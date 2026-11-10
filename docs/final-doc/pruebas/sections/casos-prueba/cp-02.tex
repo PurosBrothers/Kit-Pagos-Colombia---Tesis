@@ -1,21 +1,20 @@
 \subsection{CP-02: PSE de Wompi, redirección y consulta de estado}
 \label{sec:cp02}
-\label{anexo:cp02}
 
 \FichaCaso
   {CP-02}
-  {Equipo Kit Pagos Colombia}
+  {David Estevan Rodriguez Jurado}
   {09/11/2026}
   {PSE de Wompi: redirección y consulta de estado}
   {Pendiente (\#174)}
   {Pendiente (\#174)}
   {Crear un pago con PSE en Wompi y comprobar que el SDK distingue una redirección requerida de una transacción resuelta: la creación devuelve la URL del banco y el identificador de la pasarela con estado nativo \texttt{PENDING}; la consulta posterior devuelve \texttt{APPROVED}. El caso verifica además que el código de banco se obtiene con \texttt{getPseBanks()} y no está escrito a mano.}
   {Funcional (sistema, caja negra).}
-  {\textbullet\ SDK compilado y dependencias de \texttt{examples/} instaladas.\newline
+  {\textbullet\ SDK compilado y dependencias de \path{examples/} instaladas.\newline
    \textbullet\ API de Simulación arriba en \texttt{http://localhost:3000}.\newline
    \textbullet\ El ejemplo pide la lista de bancos con \texttt{getPseBanks()} y usa la primera entidad; no fija un código.\newline
    \textbullet\ Documento del pagador disponible, porque PSE lo exige.}
-  {Local, sin credenciales reales. Simulador local en el puerto 3000; SDK 0.7.0-rc.2; monto \texttt{150000.00 COP}; banco elegido de la lista del simulador (primera entidad, código \texttt{1}, ``Banco que aprueba''). Node.js 20.}
+  {Local. Simulador local en el puerto 3000; SDK 0.7.0-rc.2; monto \texttt{150000.00 COP}; banco elegido de la lista del simulador (primera entidad, código \texttt{1}, «Banco que aprueba»). Node.js 20.}
 
 \subsubsection{Objetivo}
 
@@ -26,28 +25,28 @@ Comprobar que el resultado de la creación conserva la diferencia entre \texttt{
 \begin{TablaPasos}{Pasos del caso CP-02}
   1 &
   Verificar que el simulador responde. &
-  \texttt{cd simulator-api \&\& npm run dev}; luego \texttt{GET}\ \url{http://localhost:3000/health}. &
+  \texttt{cd simulator-api \&\& npm run dev}; luego \texttt{GET} \url{http://localhost:3000/health}. &
   Respuesta 200 con estado \texttt{ok}. &
   & & \\ \hline
   2 &
   Ejecutar el ejemplo de PSE de Wompi. &
-  \texttt{cd examples \&\& npm run simulate:wompi-pse}. &
-  La salida imprime la solicitud con el documento del pagador y el código de banco elegido; luego muestra una redirección pendiente con la URL del banco, el identificador de la pasarela y estado nativo \texttt{PENDING}. No imprime una transacción resuelta en este paso. &
+  \texttt{cd examples \&\& npm run} \path{simulate:wompi-pse}. &
+  La salida imprime «Elegido: Banco que aprueba (1)», la solicitud con el documento del pagador y el banco, y un bloque «Redirección pendiente:» con la URL del banco, el identificador en la pasarela y «Estado nativo: PENDING». &
   & & \\ \hline
   3 &
   Verificar el discriminante del resultado. &
-  Inspección de la salida y del código de \texttt{simulate-wompi-pse.ts}. &
+  Inspección de la salida y del código de \path{simulate-wompi-pse.ts}. &
   El ejemplo entra por la rama \texttt{result.outcome === "REDIRECT\_REQUIRED"} y lee \texttt{result.redirect}; el compilador no permite tratarlo como una transacción sin comprobar la rama. &
   & & \\ \hline
   4 &
-  Consultar el estado después de la redirección. &
-  El identificador impreso en el paso 2, con \url{kitPagos.getPaymentStatus(id)}. &
-  La consulta devuelve el mismo identificador y estado normalizado \texttt{APPROVED}; el estado nativo es \texttt{APPROVED}. &
+  Verificar la consulta posterior. &
+  La misma salida del paso 2, después de «Consultando el estado después de la redirección...». El ejemplo llama a \texttt{getPaymentStatus()} con el identificador de la redirección. &
+  «Estado normalizado: APPROVED», «Estado nativo: APPROVED» y «¿Estado final? true». &
   & & \\ \hline
   5 &
   Verificar el origen del código de banco. &
-  Revisión de \texttt{simulate-wompi-pse.ts}. &
-  El código sale de \texttt{kitPagos.getPseBanks()} y se usa el primero de la lista; no hay un código numérico escrito a mano. &
+  Revisión de \path{simulate-wompi-pse.ts}. &
+  El código sale de \path{kitPagos.getPseBanks()} y se usa el primero de la lista; no hay un código numérico escrito a mano. &
   & & \\ \hline
   6 &
   Repetir la corrida. &
@@ -69,7 +68,7 @@ Comprobar que el resultado de la creación conserva la diferencia entre \texttt{
 
 \subsubsection{Observaciones de diseño}
 
-Contra el sandbox real de Wompi este flujo no se puede ejercitar: el sandbox publica la URL de redirección en el mismo instante en que resuelve el pago, así que cuando la URL existe ya no sirve y no hay ventana para redirigir. La API de Simulación reproduce el orden real —primero la redirección, después la consulta— y por eso es el único ambiente donde el caso tiene sentido. Esta limitación está documentada en el punto 43 del \texttt{architecture-log.md} y es una razón técnica para ejecutar el caso contra el simulador.
+Este flujo no se puede ejercitar contra el sandbox real de Wompi. Allí la URL de redirección aparece cuando el pago ya está resuelto, de modo que no queda un momento en que redirigir al pagador tenga sentido. La API de Simulación conserva el orden de un pago real ---primero la redirección y después la consulta---, y por eso es el único ambiente donde el caso tiene sentido. La limitación está documentada en el punto 43 del \path{architecture-log.md}.
 
 \subsubsection{Trazabilidad}
 
