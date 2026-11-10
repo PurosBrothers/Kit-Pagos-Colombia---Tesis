@@ -60,10 +60,10 @@ Para evaluar el valor del framework se construyeron cuatro implementaciones del 
 \begin{tabularx}{\textwidth}{|c|>{\raggedright\arraybackslash}p{3.6cm}|X|c|}
 \hline
 \textbf{Letra} & \textbf{Prototipo} & \textbf{Cómo integra los pagos} & \textbf{Papel} \\ \hline
-A & \texttt{checkout-con-sdk-solo-back} & El SDK se usa solo en el servidor. La página tokeniza la tarjeta con \texttt{fetch} contra la API de cada pasarela, sin el módulo de navegador. & Demostración de alcance \\ \hline
-B & \texttt{checkout-con-sdk-front-back} & \texttt{KitPagos} en el servidor y \texttt{KitPagosBrowser} en la página. & Tratamiento \\ \hline
-C & \texttt{checkout-frontend-rest} & El navegador cobra contra \texttt{/v1/api}, sin servidor de pagos propio. & Demostración de alcance \\ \hline
-D & \texttt{checkout-sin-solucion} & Integración manual con \texttt{fetch} contra la API nativa de cada pasarela, como lo haría un comercio sin Kit Pagos. & Control \\ \hline
+A & \texttt{checkout-\allowbreak{}con-\allowbreak{}sdk-\allowbreak{}solo-\allowbreak{}back} & El SDK se usa solo en el servidor. La página tokeniza la tarjeta con \texttt{fetch} contra la API de cada pasarela, sin el módulo de navegador. & Demostración de alcance \\ \hline
+B & \texttt{checkout-\allowbreak{}con-\allowbreak{}sdk-\allowbreak{}front-\allowbreak{}back} & \texttt{KitPagos} en el servidor y \texttt{KitPagosBrowser} en la página. & Tratamiento \\ \hline
+C & \texttt{checkout-\allowbreak{}frontend-\allowbreak{}rest} & El navegador cobra contra \texttt{/v1/api}, sin servidor de pagos propio. & Demostración de alcance \\ \hline
+D & \texttt{checkout-\allowbreak{}sin-\allowbreak{}solucion} & Integración manual con \texttt{fetch} contra la API nativa de cada pasarela, como lo haría un comercio sin Kit Pagos. & Control \\ \hline
 \end{tabularx}
 \end{table}
 

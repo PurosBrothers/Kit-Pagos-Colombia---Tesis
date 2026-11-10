@@ -95,7 +95,7 @@ Los puntos 4, 8, 9, 11, 12, 29, 30, 31, 32 y 35 de la Sección B, y toda la Secc
 
 **Decisión:** Se mantiene la versión de la sección 15.1 (`code`, `gateway`, `originalPayload`), ya implementada.
 
-**Estado:** Resuelto en código. **Resuelto en el SAD (v2.0) en el texto de la sección 3:** la tabla de conceptos ya usa `KitPagosError` con `code`, `gateway` y `originalPayload`. **Pendiente en el `Domain Class Diagram.png`:** la imagen sigue mostrando `SdkError`, por lo que falta regenerarla para que coincida con la tabla.
+**Estado:** Resuelto en código. **Resuelto en el SAD (v2.0) en el texto de la sección 3:** la tabla de conceptos ya usa `KitPagosError` con `code`, `gateway` y `originalPayload`. **Resuelto en el `Domain Class Diagram.png`:** se regeneró desde `domain-class-diagram.puml` y muestra `KitPagosError` con `code`, `gateway`, `originalPayload` y `cause`.
 
 ### 3. Mutabilidad de `Transaction` y campo `authorizationCode`
 
@@ -105,7 +105,7 @@ Los puntos 4, 8, 9, 11, 12, 29, 30, 31, 32 y 35 de la Sección B, y toda la Secc
 
 **Decisión:** `Transaction` se mantiene inmutable. Cuando llega un webhook de conciliación, el `Response Normalizer` construye una instancia nueva en lugar de mutar la existente. El campo `authorizationCode` sí se incorpora, como atributo opcional fijado en el constructor.
 
-**Estado:** Resuelto en código. **Resuelto en el SAD (v2.0):** la sección 15.1 aclara que la reconciliación por webhook reconstruye la entidad y no la muta. **Pendiente en el `Domain Class Diagram.png`:** la imagen aún muestra `updateStatus(...)`; debe regenerarse para reflejar la entidad inmutable.
+**Estado:** Resuelto en código. **Resuelto en el SAD (v2.0):** la sección 15.1 aclara que la reconciliación por webhook reconstruye la entidad y no la muta. **Resuelto en el `Domain Class Diagram.png`:** se regeneró desde `domain-class-diagram.puml`, sin `updateStatus(...)`, y muestra la entidad inmutable con su constructor y `getStatus()`.
 
 ### 4. Mayúsculas y minúsculas en el enum `Gateway`
 
@@ -192,7 +192,7 @@ La mitad de empaquetado del punto 2 (el `tsconfig.build.json`, el campo `files` 
 2. **Comparación criptográfica en tiempo constante (`timingSafeEqual`):** `WebhookVerifier` comparaba las firmas usando igualdad estricta (`===`), vulnerable a ataques de temporización (*timing attacks*) donde un atacante puede inferir la firma carácter por carácter midiendo diferencias en el tiempo de respuesta. Se adoptó una función segura a nivel de archivo (`safeCompare`) que utiliza `crypto.timingSafeEqual` sobre buffers de igual longitud, evitando exponer nuevos métodos en la clase que alteren el diagrama de clases del SAD.
 3. **Privacidad y prevención de fuga de datos en logs y errores:** cuando la verificación de firma falla, el SDK **nunca** debe registrar en logs ni adjuntar en el atributo `originalPayload` de `SdkError` el cuerpo de la notificación ni la firma recibida, ya que estos datos podrían contener información sensible o vectores de inyección. Se registra únicamente el identificador de la pasarela afectada y el hecho de que la firma falló.
 
-**Estado:** Resuelto en código (`KitPagos.ts`, `WebhookVerifier.ts`). **Resuelto en el SAD (v2.0):** la sección 15.2 aclara que `validateWebhook()` retorna `WebhookEvent` ante firmas válidas y lanza `KitPagosError` con código `WEBHOOK_SIGNATURE_INVALID` cuando la firma no coincide o es inválida, en lugar de retornar un booleano.
+**Estado:** Resuelto en código (`KitPagos.ts`, `WebhookVerifier.ts`). **Resuelto en el SAD (v2.0):** las secciones 9.1 y 10 aclaran que `validateWebhook()` retorna `WebhookEvent` ante firmas válidas y lanza `KitPagosError` con código `WEBHOOK_SIGNATURE_INVALID` cuando la firma no coincide o es inválida, en lugar de retornar un booleano.
 
 ### 23. Renombrado y reemplazo total de `SdkError` a `KitPagosError` y `SdkErrorCode` a `KitPagosErrorCode`
 
@@ -206,7 +206,7 @@ La mitad de empaquetado del punto 2 (el `tsconfig.build.json`, el campo `files` 
 3. Se eliminaron por completo los archivos obsoletos (`SdkErrorCode.ts`, `SdkError.ts` y `SdkError.test.ts`) para evitar duplicidad de fuentes de verdad en el árbol del dominio y asegurar consistencia limpia tanto en exportaciones de `sdk/src/index.ts` como en la futura defensa de tesis y el SAD.
 4. Todos los componentes internos (`KitPagos`, `WompiAdapter`, `GatewayFactory`, `SDKConfigurator`, `ResponseNormalizer`, `ErrorHandler`), sus respectivas pruebas unitarias y ejemplos externos (`simulate-wompi-payment.ts`) se migraron exclusivamente a los identificadores canónicos `KitPagosError` y `KitPagosErrorCode`.
 
-**Estado:** Resuelto en código y pruebas (`sdk/src/`). **Resuelto en el SAD (v2.0):** la sección 3 y la sección 15.1 usan `KitPagosError` y `KitPagosErrorCode`. **Pendiente en el `Domain Class Diagram.png`:** la imagen todavía rotula `SdkError` y `SdkErrorCode`, así que debe regenerarse.
+**Estado:** Resuelto en código y pruebas (`sdk/src/`). **Resuelto en el SAD (v2.0):** la sección 3 y la sección 15.1 usan `KitPagosError` y `KitPagosErrorCode`. **Resuelto en el `Domain Class Diagram.png`:** se regeneró desde `domain-class-diagram.puml` y rotula `KitPagosError` y `KitPagosErrorCode`, con sus trece códigos.
 
 ### 24. Centralización del mapeo de excepciones en `ErrorHandler`, clasificación `RETRIABLE`/`FINAL` y sanitización (issue #51)
 
@@ -247,7 +247,7 @@ Conviene registrar con precisión **qué motivó la reversión y qué no**, porq
 6. **Nuevo objeto de valor `TaxBreakdown`** (`sdk/src/domain/value-objects/TaxBreakdown.ts`) para el monto descompuesto que exige Kushki, con constructores `exempt()`, `fromTaxIncluded()`, `fromTaxExcluded()` y `fromComponents()`. Vive en el dominio y no en el `KushkiAdapter` porque descomponer un precio en base e impuesto es una regla de dinero, no un detalle de una pasarela; Kushki solo es la única de las cuatro que la necesita explícita. Su invariante es que los cuatro componentes sumen exactamente el total, garantizada calculando un lado y derivando el otro **por resta**. Se agregó como campo opcional `taxBreakdown` en `CreatePaymentRequest`.
 7. **La conversión a `number` queda visible en el Adapter.** `WompiAdapter` hace `Number(request.amount.toMinorUnits(request.currency))` con un comentario que explica por qué: JSON solo tiene el tipo `number`, así que la frontera de cable es inevitable, y es segura porque el valor ya es un entero de centavos muy por debajo de `Number.MAX_SAFE_INTEGER`. Lo que el dominio garantiza es que ese entero se calculó sin punto flotante.
 
-**Estado:** Resuelto en código y pruebas (`Amount.ts`, `Currency.ts`, `TaxBreakdown.ts`, `ResponseNormalizer.ts`, `WompiAdapter.ts`, `PaymentGatewayPort.ts`, `index.ts` y el ejemplo de `examples/`). **Resuelto en el SAD (v2.0):** la sección 15.1 documenta el string decimal de `Amount`, `toMinorUnits`, `fromMinorUnits`, `toFixedScale`, las operaciones con escala explícita y `RoundingMode`; la sección 3 agrega `TaxBreakdown` y `PseBank`. **Pendiente en el `Domain Class Diagram.png`:** la imagen debe reflejar el tipo `string` de `Amount` y la relación con `Currency`.
+**Estado:** Resuelto en código y pruebas (`Amount.ts`, `Currency.ts`, `TaxBreakdown.ts`, `ResponseNormalizer.ts`, `WompiAdapter.ts`, `PaymentGatewayPort.ts`, `index.ts` y el ejemplo de `examples/`). **Resuelto en el SAD (v2.0):** la sección 15.1 documenta el string decimal de `Amount`, `toMinorUnits`, `fromMinorUnits`, `toFixedScale`, las operaciones con escala explícita y `RoundingMode`; la sección 3 agrega `TaxBreakdown` y `PseBank`. **Resuelto en el `Domain Class Diagram.png`:** se regeneró desde `domain-class-diagram.puml` y muestra el valor `string` de `Amount` y su dependencia de `Currency`.
 
 ### 26. Conciliación de Webhooks en Dos Pasos y Normalización de Notificaciones de Mercado Pago (issue #56)
 
@@ -5011,10 +5011,9 @@ responder `200 OK` con el error en el body, Rapyd sí usa códigos HTTP distinto
 `401`, etc.) para errores de solicitud y autenticación. El `Sequence Diagram - Network Error`
 regenerado documenta esta diferencia explícitamente en su nota final.
 
-**Pendiente, fuera del alcance de este punto:** `docs/architecture/SDK/Domain Class Diagram.png`
-sigue sin fuente PlantUML en el repo y sigue mostrando "PAYU", `SdkError`, `SdkErrorCode` y
-`updateStatus(...)`; permanece a cargo de Henao según la tabla de la Sección A (fila 3), para
-corregirse con la herramienta original con la que se dibujó. El `Component Diagram - C4.png` del
+**Resuelto en el SAD (v2.0):** `docs/architecture/SDK/Domain Class Diagram.png` ya tiene fuente
+PlantUML (`diagrams-source/domain-class-diagram.puml`) y se regeneró contra `sdk/src`: muestra
+`RAPYD`, `KitPagosError` y `KitPagosErrorCode`, y una `Transaction` inmutable, sin `updateStatus(...)`. El `Component Diagram - C4.png` del
 SDK ya cuenta con `component-diagram.puml` y muestra `Rapyd Adapter`.
 
 **Resuelto en el SAD (v2.0):** las figuras embebidas en el SAD ya son los PNG regenerados, porque

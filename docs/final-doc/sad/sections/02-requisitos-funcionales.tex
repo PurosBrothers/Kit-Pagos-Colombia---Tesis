@@ -1,14 +1,17 @@
 \section{Visión general de los requisitos funcionales}
 En la tabla 1 se presenta el listado consolidado de requisitos funcionales del framework, organizados por componente. Las prioridades se clasifican en Alta (esencial para el MVP), Media (importante pero no bloqueante) y Baja (deseable en versiones futuras).
 
-\begin{table}[htbp]
-\centering
-\caption{Requisitos funcionales}
-\label{tab:req_func}
+\begingroup
 \renewcommand{\arraystretch}{1.3}
-\begin{tabularx}{\textwidth}{|l|X|l|l|}
+\begin{longtable}{|l|>{\raggedright\arraybackslash}p{0.53\textwidth}|>{\raggedright\arraybackslash}p{0.17\textwidth}|l|}
+\caption{Requisitos funcionales}
+\label{tab:req_func}\\
 \hline
 \textbf{ID} & \textbf{Descripción del requisito} & \textbf{Componente} & \textbf{Prioridad} \\ \hline
+\endfirsthead
+\hline
+\textbf{ID} & \textbf{Descripción del requisito} & \textbf{Componente} & \textbf{Prioridad} \\ \hline
+\endhead
 RF-01 & El sistema debe permitir crear una intención de pago con tarjeta o PSE mediante una interfaz unificada, especificando pasarela, monto, moneda, referencia de orden, datos del pagador y método de pago. El resultado debe distinguir entre una transacción resuelta y una redirección requerida. & SDK & Alta \\ \hline
 RF-02 & El sistema debe normalizar la respuesta de creación y consulta a una \texttt{Transaction} con identificador, monto, moneda, pagador, estado normalizado, estado nativo (\texttt{rawStatus}) y, cuando exista, motivo de rechazo. & SDK & Alta \\ \hline
 RF-03 & El sistema debe permitir consultar el estado de una transacción por identificador y pasarela, mapeándolo a los seis estados normalizados \texttt{APPROVED}, \texttt{DECLINED}, \texttt{PENDING}, \texttt{EXPIRED}, \texttt{VOIDED} y \texttt{ERROR}. & SDK & Alta \\ \hline
@@ -28,6 +31,6 @@ RF-16 & El sistema debe exponer las operaciones de Kit Pagos por REST bajo \text
 RF-17 & El sistema debe tokenizar la tarjeta en el navegador con \texttt{kit-pagos-colombia/browser} contra Wompi, Mercado Pago y Kushki, sin que el número pase por el servidor del comercio; Rapyd se rechaza con \texttt{UNSUPPORTED\_OPERATION}. & SDK (navegador) & Alta \\ \hline
 RF-18 & El sistema debe exponer el motivo de rechazo como código nativo y categoría normalizada (\texttt{INSUFFICIENT\_FUNDS}, \texttt{INVALID\_CARD\_DATA}, \texttt{CARD\_RESTRICTED}, \texttt{FRAUD\_SUSPICION}, \texttt{NETWORK\_ERROR}, \texttt{AUTHENTICATION\_FAILED}, \texttt{DUPLICATED\_PAYMENT} o \texttt{UNKNOWN}). & SDK & Media \\ \hline
 RF-19 & El sistema debe listar los bancos PSE disponibles por pasarela y traducir el código de compensación de ACH Colombia (\texttt{PseBankCode}) al código que exige cada proveedor. & SDK & Media \\ \hline
-\end{tabularx}
-\end{table}
+\end{longtable}
+\endgroup
 

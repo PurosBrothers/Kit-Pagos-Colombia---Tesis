@@ -2,7 +2,7 @@
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\textwidth]{"../../architecture/SDK/Domain Class Diagram.png"}
+\includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{"../../architecture/SDK/Domain Class Diagram.pdf"}
 \caption{Diagrama de clases del dominio del SDK}
 \label{fig:domain_classes_SDK}
 \end{figure}
@@ -21,7 +21,7 @@
 \hline
 \endfoot
 \endlastfoot
-Transaction (Entidad) & Representa una transacción de pago de principio a fin: agrupa el monto, la moneda, la referencia del comercio y los datos del pagador, y una vez que la pasarela responde, también el identificador nativo y el estado. Es la única clase con identidad propia; todas las demás son objetos de valor sin identidad. \\ \hline
+Transaction (Entidad) & Representa una transacción de pago tal como la reporta la pasarela: agrupa el identificador nativo, la referencia del comercio, el monto, la moneda, los datos del pagador, el estado normalizado y el nativo y, cuando lo hay, el motivo de rechazo. Es inmutable: cuando el estado cambia, el SDK construye una instancia nueva en lugar de modificar la existente (punto 3 del registro de arquitectura). Es la única clase con identidad propia; todas las demás son objetos de valor sin identidad. \\ \hline
 Amount (Objeto de Valor) & Encapsula el monto en unidades monetarias con hasta dos decimales — la representación canónica del SDK. Cada adaptador es responsable de convertirla al formato nativo de su pasarela (centavos, objeto descompuesto, etc.). \\ \hline
 Currency (Objeto de Valor) & Encapsula el código ISO 4217 de la moneda (por defecto "COP") y valida que tenga exactamente tres letras mayúsculas. \\ \hline
 OrderReference (Objeto de Valor) & Es la referencia que el comercio asigna a la transacción para correlacionarla con sus propios sistemas. El SDK valida que no esté vacía, pero nunca la genera ni garantiza su unicidad — eso es responsabilidad del comercio. \\ \hline
@@ -33,7 +33,7 @@ WebhookVerifier (Servicio de Dominio) & Verifica que un evento de webhook realme
 KitPagosError (Error de Dominio) & El único tipo de error que el SDK expone hacia afuera, sin importar qué pasarela lo originó. Extiende el Error nativo y añade \texttt{code: KitPagosErrorCode}, \texttt{gateway: Gateway}, \texttt{originalPayload: unknown} y una causa opcional, de modo que el comercio pueda reaccionar al fallo sin interpretar excepciones nativas ni payloads crudos. \\ \hline
 TransactionStatus (Enumeración) & Los seis estados posibles de una transacción, ya normalizados entre las cuatro pasarelas: APPROVED, DECLINED, PENDING, EXPIRED, VOIDED, ERROR. Es el único vocabulario de estado que el código del comercio debe conocer. \\ \hline
 RejectionCategory (Enumeración) & Clasifica el motivo de un rechazo en ocho categorías de negocio (fondos insuficientes, datos inválidos, tarjeta restringida, fraude, error de red, autenticación fallida, pago duplicado, desconocido), para que la lógica de reintento no dependa de interpretar strings distintos por pasarela. \\ \hline
-KitPagosErrorCode (Enumeración) & Códigos de error técnico normalizados (timeout, credenciales inválidas, límite de solicitudes, operación no soportada, etc.), independientes de qué pasarela los causó. Cada uno tiene un mensaje amigable asociado en el catálogo centralizado del SDK. \\ \hline
+KitPagosErrorCode (Enumeración) & Códigos de error técnico normalizados (timeout, credenciales inválidas, límite de solicitudes, operación no soportada, etc.), independientes de qué pasarela los causó. Son trece, y \texttt{KitPagosError} lleva uno de ellos en \texttt{code}. \\ \hline
 Gateway (Enumeración) & Identifica cuál de las cuatro pasarelas está involucrada (WOMPI, RAPYD, MERCADOPAGO, KUSHKI). Se usa tanto en GatewayTransactionId como en KitPagosError para saber de dónde vino cada dato. \\ \hline
 PaymentMethod (Objeto de Valor) & Describe el medio de pago con el que se cobra: \texttt{CARD} o \texttt{PSE}. Se construye con las fábricas \texttt{PaymentMethod.card(cardToken?, \{ installments? \})} y \texttt{PaymentMethod.pse(\{ bankCode, payerKind? \})}; \texttt{requiresPayerDocument()} indica si el flujo exige documento del pagador, como ocurre en PSE. \\ \hline
 PaymentResult y PendingRedirect (Objeto de Valor) & Unión discriminada por \texttt{outcome} que retorna \texttt{createPayment()}: \texttt{TRANSACTION} cuando el cobro queda resuelto en una \texttt{Transaction}, o \texttt{REDIRECT\_REQUIRED} cuando el comprador debe completar el pago en una URL externa. \texttt{PendingRedirect} agrupa \texttt{redirectUrl}, \texttt{gatewayTransactionId} y \texttt{rawStatus}. \\ \hline
