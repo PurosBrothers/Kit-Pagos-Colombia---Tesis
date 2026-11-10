@@ -1,8 +1,14 @@
 @startuml Context Diagram - SDK
 title Diagrama de Contexto — Kit Pagos Colombia (Nivel 1)
 skinparam backgroundColor white
-skinparam rectangleFontSize 12
-skinparam wrapWidth 220
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam rectangleFontSize 10
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam nodesep 6
+skinparam ranksep 18
 skinparam rectangle {
   BorderColor #666666
   ArrowColor #666666
@@ -14,29 +20,33 @@ rectangle "**Tester / QA**\n\nValida flujos de pago sin\ndepender de entornos\nr
 
 rectangle "**Kit Pagos Colombia**\n\nFramework open source que\nunifica la integracion de\nmultiples pasarelas de pago\ncolombianas bajo una\ninterfaz comun" as KitPagos #2E75B6
 
-rectangle "**Wompi**\n\nPasarela de pago de\nBancolombia. Procesa\ntransacciones en Colombia" as Wompi #A9A9A9
-rectangle "**Rapyd**\n\nPasarela que adquirio el\nnegocio de PayU Latam en\nColombia el 14 mar 2025.\nLas cuentas de comercio\nnuevas solo obtienen acceso\na esta plataforma" as Rapyd #A9A9A9
-rectangle "**Mercado Pago**\n\nPlataforma de pagos\ndigitales de Mercado Libre\npara Colombia" as MercadoPago #A9A9A9
-rectangle "**Kushki**\n\nPasarela de origen\nlatinoamericano con\noperacion activa en\nColombia" as Kushki #A9A9A9
+rectangle "**Wompi**\n\nPasarela de pago\nde Bancolombia.\nProcesa\ntransacciones\nen Colombia" as Wompi #A9A9A9
+rectangle "**Rapyd**\n\nPasarela que\nadquirio el negocio\nde PayU Latam en\nColombia el 14 mar\n2025. Las cuentas\nde comercio nuevas\nsolo obtienen\nacceso a esta\nplataforma" as Rapyd #A9A9A9
+rectangle "**Mercado Pago**\n\nPlataforma de\npagos digitales\nde Mercado Libre\npara Colombia" as MercadoPago #A9A9A9
+rectangle "**Kushki**\n\nPasarela de origen\nlatinoamericano\ncon operacion\nactiva en Colombia" as Kushki #A9A9A9
 
 Dev --> KitPagos : Instala, configura y consume\n[npm / HTTPS]
 QA --> KitPagos : Simula escenarios de pago\ny valida respuestas\n[HTTPS / REST]
 
-KitPagos --> Wompi : Crea pagos, consulta estados\ny recibe webhooks\n[HTTPS / REST]
-Wompi --> KitPagos : Envia eventos asincronos\nde transaccion\n[Webhook / HTTPS]
+KitPagos --> Wompi : Crea pagos,\nconsulta\nestados y\nrecibe\nwebhooks\n[HTTPS /\nREST]
+KitPagos <-- Wompi : Envia\neventos\nasincronos\nde\ntransaccion\n[Webhook /\nHTTPS]
 
-KitPagos --> Rapyd : Crea pagos, consulta estados\ny recibe webhooks\n[HTTPS / REST]
-Rapyd --> KitPagos : Envia eventos asincronos\nde transaccion\n[Webhook / HTTPS]
+KitPagos --> Rapyd : Crea pagos,\nconsulta\nestados y\nrecibe\nwebhooks\n[HTTPS /\nREST]
+KitPagos <-- Rapyd : Envia\neventos\nasincronos\nde\ntransaccion\n[Webhook /\nHTTPS]
 
-KitPagos --> MercadoPago : Crea pagos, consulta estados\ny recibe webhooks\n[HTTPS / REST]
-MercadoPago --> KitPagos : Envia eventos asincronos\nde transaccion\n[Webhook / HTTPS]
+KitPagos --> MercadoPago : Crea pagos,\nconsulta\nestados y\nrecibe\nwebhooks\n[HTTPS /\nREST]
+KitPagos <-- MercadoPago : Envia\neventos\nasincronos\nde\ntransaccion\n[Webhook /\nHTTPS]
 
-KitPagos --> Kushki : Crea pagos, consulta estados\ny recibe webhooks\n[HTTPS / REST]
-Kushki --> KitPagos : Envia eventos asincronos\nde transaccion\n[Webhook / HTTPS]
+KitPagos --> Kushki : Crea pagos,\nconsulta\nestados y\nrecibe\nwebhooks\n[HTTPS /\nREST]
+KitPagos <-- Kushki : Envia\neventos\nasincronos\nde\ntransaccion\n[Webhook /\nHTTPS]
 
+Wompi -[hidden]down- MercadoPago
+Rapyd -[hidden]down- Kushki
 note bottom of Rapyd
-  Reemplaza a "PayU Latam" tras la adquisicion
-  (ver architecture-log.md, punto 15).
+  Reemplaza a "PayU Latam"
+  tras la adquisicion
+  (ver architecture-log.md,
+  punto 15).
 end note
 
 @enduml

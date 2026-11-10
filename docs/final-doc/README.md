@@ -89,6 +89,33 @@ La CI no necesita esa lista porque usa la imagen [`texlive/texlive:latest`](http
 que trae TeX Live completo. Si algo compila allá y no en local, lo más probable es que falte un
 paquete; `tlmgr search --global --file /nombre.sty` dice cuál lo contiene.
 
+## Diagramas
+
+Las figuras del SAD y del SPMP se dibujan en PlantUML. Las fuentes están en
+`docs/architecture/SDK/diagrams-source/`, `docs/architecture/Simulador API/diagrams-source/` y
+[`spmp/figuras/diagrams-source/`](spmp/figuras/diagrams-source/). Cada fuente produce un PDF
+vectorial, que es el que incluyen los documentos, y las del SAD además un PNG para verlas en
+GitHub.
+
+Se dibujan de arriba abajo, en Helvetica de 10 puntos, que es el tamaño de la letra del cuerpo.
+Una figura que cabe en el ancho de texto (468 pt) y en 600 pt de alto se incluye a tamaño
+natural, con `\includegraphics{…}` sin opciones, y su texto sale impreso a 10 pt. Una que no
+cabe se incluye con `width=\textwidth,height=0.93\textheight,keepaspectratio`, y su letra baja
+en la misma proporción. Al cambiar una fuente conviene comprobar en cuál de los dos casos queda.
+
+Para regenerarlas hacen falta Java 17 o superior, el jar de PlantUML, Graphviz y Python 3 con
+PyMuPDF (`pip install pymupdf`). Desde la raíz del repositorio:
+
+```bash
+PLANTUML_JAR=/ruta/plantuml-1.2026.9.jar bash docs/final-doc/diagramas.sh
+```
+
+Si `dot` no está en el PATH, `GRAPHVIZ_DOT` indica dónde está. El 9 de noviembre de 2026 se
+regeneraron con PlantUML 1.2026.9, Graphviz 14.1.2, Temurin 21.0.13 y PyMuPDF 1.26.5; dos
+corridas seguidas dieron los mismos archivos. El PDF sale del SVG de PlantUML, y no del PNG,
+por dos motivos: el PNG tiene un tope de 4096 px que recortaba la figura de la arquitectura
+hexagonal, y en un PDF vectorial el tamaño de la letra se puede medir.
+
 ## PDF de la CI
 
 El workflow [`final-doc.yml`](../../.github/workflows/final-doc.yml) compila los cinco

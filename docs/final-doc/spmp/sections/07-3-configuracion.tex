@@ -57,9 +57,13 @@ La Tabla~\ref{tab:artefactos-documentacion} describe dónde vive cada artefacto 
 \end{longtable}
 \end{center}
 
+La Figura~\ref{fig:bpmn-documentacion} es el proceso de control de cambios a los ítems de configuración que preveía la versión 1.0 de este plan. Su propósito es que las modificaciones se evalúen, aprueben, implementen, documenten y verifiquen de forma controlada y con trazabilidad. En él, un integrante del equipo identifica la necesidad de un cambio y crea una solicitud de cambio con su justificación y el impacto esperado. El coordinador de configuración registra la solicitud y analiza el ítem afectado y el impacto preliminar. Si el cambio no es mayor ni crítico, puede aprobarse como menor y se comunica la decisión; si lo es, se convoca al Comité de Control de Cambios (CCB), que evalúa el impacto y decide si lo aprueba o lo rechaza. Cuando lo aprueba, se define un plan de acción y se comunica la aprobación.
+
+El responsable de implementación ejecuta el cambio, actualiza los ítems de configuración y la documentación asociada, registra el cambio y notifica su implementación. Después, el equipo de aseguramiento de calidad verifica que el cambio se haya aplicado correctamente: si es así, se cierra la solicitud; si hay desviaciones, se reporta la incidencia y se reabre el cambio para corregirlo. Los ítems de configuración incluyen el código fuente, la documentación, los scripts de pruebas, los reportes de métricas, las configuraciones de CI/CD y los datos de prueba, y todas las solicitudes, decisiones y cambios, aprobados o rechazados, quedan registrados en el repositorio de configuración del proyecto. El proceso que se sigue en la práctica es el de los pull requests descrito arriba.
+
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\textwidth]{figuras/07-bpmn-documentacion}
+  \includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{figuras/07-bpmn-documentacion}
   \caption{Diagrama BPMN para documentación}
   \label{fig:bpmn-documentacion}
 \end{figure}

@@ -1,6 +1,18 @@
 @startuml Sequence Diagram - Webhook Conciliation
 title C - Conciliacion por Webhook (asincrono)
 skinparam backgroundColor white
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam ParticipantFontSize 10
+skinparam ActorFontSize 10
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam SequenceGroupFontSize 10
+skinparam SequenceGroupHeaderFontSize 10
+skinparam SequenceDividerFontSize 10
+skinparam maxMessageSize 90
+hide footbox
 skinparam sequenceMessageAlign center
 skinparam ArrowColor #666666
 skinparam LifeLineBorderColor #666666
@@ -11,22 +23,22 @@ participant "KitPagos\n(Facade)" as Facade
 participant "WebhookVerifier" as Verifier
 
 Pasarela -> Comercio : POST /webhook(payload, headers)
-Comercio -> Facade : validateWebhook(payload, headers, options?)
-Facade -> Verifier : verify(payload, headers, secret, gateway)
+Comercio -> Facade : validateWebhook(\npayload, headers,\noptions?)
+Facade -> Verifier : verify(payload,\nheaders, secret,\ngateway)
 
 alt Firma valida
   Verifier --> Facade : true
   Facade -> Verifier : parse(payload, gateway)
   Verifier --> Facade : WebhookEvent
   Facade --> Comercio : WebhookEvent
-  Comercio -> Facade : getPaymentStatus(gatewayTransactionId)
+  Comercio -> Facade : getPaymentStatus(\ngatewayTransactionId)
   Facade --> Comercio : Transaction (reconstruido con el nuevo estado)
 else Firma invalida
   Verifier --> Facade : false
-  Facade --> Comercio : throw KitPagosError(WEBHOOK_SIGNATURE_INVALID)
+  Facade --> Comercio : throw KitPagosError(\nWEBHOOK_SIGNATURE_INVALID)
 end
 
-note over Facade, Verifier
+note over Comercio, Verifier
   Transaction es inmutable: la conciliacion no muta
   la instancia previa, getPaymentStatus() reconstruye
   una instancia nueva a partir del estado actualizado.
