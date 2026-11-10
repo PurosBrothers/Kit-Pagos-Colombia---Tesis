@@ -349,7 +349,7 @@ El SDK es el contenedor de mayor complejidad arquitectónica del sistema. Su dis
 
 ## 3. Detalle de Componentes — API de Simulación (Fastify Container — Nivel 3)
 
-La API de Simulación es un servicio Fastify sobre Node.js 18 con dos superficies HTTP en el mismo proceso y despliegue: `/v1/sim` imita las APIs de las pasarelas y `/v1/api` expone operaciones de Kit Pagos. La primera conserva sus plugins y fábricas por pasarela; la segunda es el módulo `kit-pagos-api/`, que traduce solicitudes HTTP a llamadas de la fachada del SDK. **No existe un `router.ts` central** en `api/routes/`: los componentes se describen con los archivos reales.
+La API de Simulación es un servicio Fastify sobre Node.js 20.19 o superior con dos superficies HTTP en el mismo proceso y despliegue: `/v1/sim` imita las APIs de las pasarelas y `/v1/api` expone operaciones de Kit Pagos. La primera conserva sus plugins y fábricas por pasarela; la segunda es el módulo `kit-pagos-api/`, que traduce solicitudes HTTP a llamadas de la fachada del SDK. **No existe un `router.ts` central** en `api/routes/`: los componentes se describen con los archivos reales.
 
 ---
 

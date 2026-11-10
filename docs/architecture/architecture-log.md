@@ -42,8 +42,9 @@ directamente sobre el documento original.
 
 Cada punto indica su estado: **Resuelto** (ya se decidió y se aplicó en el código y en
 `layers-and-components.md`) o **Pendiente en el SAD** (la decisión ya se tomó, pero falta
-corregir el texto o los diagramas del documento original, algo que este agente no puede editar
-directamente porque vive fuera del repositorio).
+corregir el texto o los diagramas del documento). El SAD ya vive en el repositorio, en
+`docs/final-doc/sad/`, así que las correcciones aplicadas se marcan como **Resuelto en el
+SAD (v2.0)** y solo quedan como pendientes las que aún no se hayan trasladado a esa fuente LaTeX.
 
 ---
 
@@ -84,7 +85,7 @@ Los puntos 4, 8, 9, 11, 12, 29, 30, 31, 32 y 35 de la Sección B, y toda la Secc
 
 **Decisión:** Se adopta la versión que coincide en más artefactos: `createPayment()`, `getPaymentStatus()`, `validateWebhook()`.
 
-**Estado:** Resuelto en código (`KitPagos.ts`) y en `layers-and-components.md`. **Pendiente en el SAD:** corregir la sección 15.2 para que use estos mismos nombres.
+**Estado:** Resuelto en código (`KitPagos.ts`) y en `layers-and-components.md`. **Resuelto en el SAD (v2.0):** la sección 15.2 usa `createPayment()`, `getPaymentStatus()` y `validateWebhook()`.
 
 ### 2. Forma de la clase `SdkError`
 
@@ -94,7 +95,7 @@ Los puntos 4, 8, 9, 11, 12, 29, 30, 31, 32 y 35 de la Sección B, y toda la Secc
 
 **Decisión:** Se mantiene la versión de la sección 15.1 (`code`, `gateway`, `originalPayload`), ya implementada.
 
-**Estado:** Resuelto en código. **Pendiente en el SAD:** corregir el `Domain Class Diagram.png` para que coincida con la sección 15.1, o justificar explícitamente por qué la clase real necesita los campos adicionales (si el equipo decide que sí los necesita más adelante, esta decisión debe revisarse).
+**Estado:** Resuelto en código. **Resuelto en el SAD (v2.0) en el texto de la sección 3:** la tabla de conceptos ya usa `KitPagosError` con `code`, `gateway` y `originalPayload`. **Pendiente en el `Domain Class Diagram.png`:** la imagen sigue mostrando `SdkError`, por lo que falta regenerarla para que coincida con la tabla.
 
 ### 3. Mutabilidad de `Transaction` y campo `authorizationCode`
 
@@ -104,7 +105,7 @@ Los puntos 4, 8, 9, 11, 12, 29, 30, 31, 32 y 35 de la Sección B, y toda la Secc
 
 **Decisión:** `Transaction` se mantiene inmutable. Cuando llega un webhook de conciliación, el `Response Normalizer` construye una instancia nueva en lugar de mutar la existente. El campo `authorizationCode` sí se incorpora, como atributo opcional fijado en el constructor.
 
-**Estado:** Resuelto en código. **Pendiente en el SAD:** quitar el método `updateStatus(...)` del `Domain Class Diagram.png` y aclarar en la sección 15.1 que la reconciliación por webhook se resuelve reconstruyendo la entidad, no mutándola.
+**Estado:** Resuelto en código. **Resuelto en el SAD (v2.0):** la sección 15.1 aclara que la reconciliación por webhook reconstruye la entidad y no la muta. **Pendiente en el `Domain Class Diagram.png`:** la imagen aún muestra `updateStatus(...)`; debe regenerarse para reflejar la entidad inmutable.
 
 ### 4. Mayúsculas y minúsculas en el enum `Gateway`
 
@@ -124,9 +125,7 @@ Los puntos 4, 8, 9, 11, 12, 29, 30, 31, 32 y 35 de la Sección B, y toda la Secc
 
 **Decisión:** Render es la plataforma correcta.
 
-**Estado:** Resuelto en el diagrama (punto 17): el `Container Diagram - C4.png` y el `Deploy Diagram - C4.png` regenerados de la API de Simulación ya dicen únicamente "Render", sin ambigüedad. **Pendiente en el SAD (texto):**
-1. Sección 8.1: reemplazar "Railway" por "Render" en el texto.
-2. Sección 8.2: mismo reemplazo.
+**Estado:** Resuelto en el diagrama (punto 17): el `Container Diagram - C4.png` y el `Deploy Diagram - C4.png` regenerados de la API de Simulación ya dicen únicamente "Render", sin ambigüedad. **Resuelto en el SAD (v2.0):** las secciones 8.1, 8.2 y 11 describen Render y sus datos de despliegue; no queda ninguna mención a Railway.
 
 ### 6. Concepto `WebhookEvent` para satisfacer RF-04
 
@@ -136,7 +135,7 @@ Los puntos 4, 8, 9, 11, 12, 29, 30, 31, 32 y 35 de la Sección B, y toda la Secc
 
 **Decisión:** Se reintroduce `WebhookEvent` como concepto vigente del dominio. `WebhookVerifier` gana un segundo método público, `parse(payload, gateway): WebhookEvent`, y `KitPagos.validateWebhook(payload, headers)` ahora retorna `WebhookEvent` en lugar de `boolean`.
 
-**Estado:** Resuelto en código. **Pendiente en el SAD:** agregar `WebhookEvent` a la tabla de conceptos del dominio (sección 3) y actualizar la sección 15.1 para reflejar que `WebhookVerifier` ya no tiene un único método público, sino dos (`verify` y `parse`).
+**Estado:** Resuelto en código. **Resuelto en el SAD (v2.0):** `WebhookEvent` está en la tabla de conceptos del dominio (sección 3) y la sección 15.1 refleja que `WebhookVerifier` tiene dos métodos públicos (`verify` y `parse`).
 
 ### 14. RF-03 usa nombres de estado en español, distintos del enum implementado
 
@@ -148,7 +147,7 @@ De paso se revisó RF-04 (*"...retornar un evento normalizado si la firma es vá
 
 **Decisión:** Los 6 valores en inglés (`APPROVED`, `DECLINED`, `PENDING`, `EXPIRED`, `VOIDED`, `ERROR`) son los correctos, porque coinciden en tres artefactos independientes (código, sección 15.1 y ADR-03) contra uno solo (RF-03).
 
-**Estado:** Pendiente en el SAD. Reemplazar en RF-03 la frase "PENDIENTE, APROBADO, RECHAZADO, EXPIRADO o ERROR" por "APPROVED, DECLINED, PENDING, EXPIRED, VOIDED o ERROR".
+**Estado:** Resuelto en el SAD (v2.0). RF-03 ya enumera los seis estados `APPROVED`, `DECLINED`, `PENDING`, `EXPIRED`, `VOIDED` y `ERROR`.
 
 ### 20. `KitPagos` no envuelve la llamada en `RetryHandler`, y la normalización vive en el Adapter
 
@@ -164,7 +163,7 @@ La segunda es una atribución equivocada: quien invoca al `ResponseNormalizer` e
 
 De paso se decidió **mantener de forma permanente el `Error` nativo** en `SdkConfigurator.getActiveGateway()` (cerrando la deuda técnica pendiente, issue #51). La justificación es estrictamente arquitectónica: este fallo ocurre previo a la interacción transaccional, producto de un error de configuración del desarrollador consumidor. Dado que la sección 15.1 del SAD estipula que `KitPagosError` requiere obligatoriamente una pasarela concreta del enum (`gateway: Gateway`), convertir este fallo forzaría a relajar el tipo a `Gateway | null` o a inventar una pasarela artificial, degradando la seguridad de tipos del núcleo del dominio.
 
-**Estado:** Resuelto en código y justificado arquitectónicamente. **Pendiente en el SAD:** en la sección 15.2 y en la descripción del Component Diagram, aclarar que la normalización de respuestas es responsabilidad del Adapter y no de la fachada, y anotar que la integración de `RetryHandler` en la fachada está prevista para la Iteración 2.
+**Estado:** Resuelto en código y justificado arquitectónicamente. **Resuelto en el SAD (v2.0):** la sección 9.1 y la sección 15.2 aclaran que cada adaptador invoca al normalizador y que `RetryHandler` envuelve las lecturas idempotentes de la fachada, no la creación.
 
 ### 21. La superficie pública del paquete no alcanzaba para integrarlo desde afuera
 
@@ -193,7 +192,7 @@ La mitad de empaquetado del punto 2 (el `tsconfig.build.json`, el campo `files` 
 2. **Comparación criptográfica en tiempo constante (`timingSafeEqual`):** `WebhookVerifier` comparaba las firmas usando igualdad estricta (`===`), vulnerable a ataques de temporización (*timing attacks*) donde un atacante puede inferir la firma carácter por carácter midiendo diferencias en el tiempo de respuesta. Se adoptó una función segura a nivel de archivo (`safeCompare`) que utiliza `crypto.timingSafeEqual` sobre buffers de igual longitud, evitando exponer nuevos métodos en la clase que alteren el diagrama de clases del SAD.
 3. **Privacidad y prevención de fuga de datos en logs y errores:** cuando la verificación de firma falla, el SDK **nunca** debe registrar en logs ni adjuntar en el atributo `originalPayload` de `SdkError` el cuerpo de la notificación ni la firma recibida, ya que estos datos podrían contener información sensible o vectores de inyección. Se registra únicamente el identificador de la pasarela afectada y el hecho de que la firma falló.
 
-**Estado:** Resuelto en código (`KitPagos.ts`, `WebhookVerifier.ts`). **Pendiente en el SAD:** en la sección 15.2, aclarar que `validateWebhook()` retorna `WebhookEvent` directamente ante firmas válidas y lanza `SdkError(WEBHOOK_SIGNATURE_INVALID)` cuando la firma no coincide o es inválida, en lugar de retornar un booleano.
+**Estado:** Resuelto en código (`KitPagos.ts`, `WebhookVerifier.ts`). **Resuelto en el SAD (v2.0):** la sección 15.2 aclara que `validateWebhook()` retorna `WebhookEvent` ante firmas válidas y lanza `KitPagosError` con código `WEBHOOK_SIGNATURE_INVALID` cuando la firma no coincide o es inválida, en lugar de retornar un booleano.
 
 ### 23. Renombrado y reemplazo total de `SdkError` a `KitPagosError` y `SdkErrorCode` a `KitPagosErrorCode`
 
@@ -207,9 +206,7 @@ La mitad de empaquetado del punto 2 (el `tsconfig.build.json`, el campo `files` 
 3. Se eliminaron por completo los archivos obsoletos (`SdkErrorCode.ts`, `SdkError.ts` y `SdkError.test.ts`) para evitar duplicidad de fuentes de verdad en el árbol del dominio y asegurar consistencia limpia tanto en exportaciones de `sdk/src/index.ts` como en la futura defensa de tesis y el SAD.
 4. Todos los componentes internos (`KitPagos`, `WompiAdapter`, `GatewayFactory`, `SDKConfigurator`, `ResponseNormalizer`, `ErrorHandler`), sus respectivas pruebas unitarias y ejemplos externos (`simulate-wompi-payment.ts`) se migraron exclusivamente a los identificadores canónicos `KitPagosError` y `KitPagosErrorCode`.
 
-**Estado:** Resuelto en código y pruebas (`sdk/src/`). **Pendiente en el SAD:**
-1. Sección 3 (Modelo de dominio) y `Domain Class Diagram.png`: renombrar la clase `SdkError` a `KitPagosError` y `SdkErrorCode` a `KitPagosErrorCode`.
-2. Sección 15.1: documentar formalmente `KitPagosError` y `KitPagosErrorCode` en sustitución de la nomenclatura genérica previa.
+**Estado:** Resuelto en código y pruebas (`sdk/src/`). **Resuelto en el SAD (v2.0):** la sección 3 y la sección 15.1 usan `KitPagosError` y `KitPagosErrorCode`. **Pendiente en el `Domain Class Diagram.png`:** la imagen todavía rotula `SdkError` y `SdkErrorCode`, así que debe regenerarse.
 
 ### 24. Centralización del mapeo de excepciones en `ErrorHandler`, clasificación `RETRIABLE`/`FINAL` y sanitización (issue #51)
 
@@ -225,7 +222,7 @@ La mitad de empaquetado del punto 2 (el `tsconfig.build.json`, el campo `files` 
 3. **Sanitización estricta (RF-08):** Todo mensaje público generado pasa por un filtro de sanitización que enmascara tokens Bearer, llaves secretas (`prv_...`, `pub_...`) y encabezados `Authorization`. Los detalles crudos de pasarela se conservan únicamente en el atributo `originalPayload` para trazabilidad y auditoría técnica.
 4. **Patrón de referencia en Adaptadores:** `WompiAdapter` se refactorizó para delegar completamente en `ErrorHandler`, instanciándolo dentro de sus métodos para no sobrepasar el umbral de Acoplamiento entre Objetos (CBO <= 5). Queda documentado como patrón obligatorio para los futuros adaptadores de la Iteración 2.
 
-**Estado:** Resuelto en código y pruebas (`sdk/src/application/services/ErrorHandler.ts`, `WompiAdapter.ts`). **Pendiente en el SAD:** actualizar la descripción de `ErrorHandler` en la vista de componentes (sección 9) y sección 15.2 para reflejar las responsabilidades de clasificación (`ErrorFamily`) y sanitización.
+**Estado:** Resuelto en código y pruebas (`sdk/src/application/services/ErrorHandler.ts`, `WompiAdapter.ts`). **Resuelto en el SAD (v2.0):** la sección 9.1 y la sección 15.2 describen la clasificación `ErrorFamily` y la sanitización de credenciales de `ErrorHandler`.
 
 ### 25. Reversión del tipo de dato de `Amount`: de `number` a string decimal exacto, con exponente ISO 4217 en `Currency` (issue #63)
 
@@ -250,11 +247,7 @@ Conviene registrar con precisión **qué motivó la reversión y qué no**, porq
 6. **Nuevo objeto de valor `TaxBreakdown`** (`sdk/src/domain/value-objects/TaxBreakdown.ts`) para el monto descompuesto que exige Kushki, con constructores `exempt()`, `fromTaxIncluded()`, `fromTaxExcluded()` y `fromComponents()`. Vive en el dominio y no en el `KushkiAdapter` porque descomponer un precio en base e impuesto es una regla de dinero, no un detalle de una pasarela; Kushki solo es la única de las cuatro que la necesita explícita. Su invariante es que los cuatro componentes sumen exactamente el total, garantizada calculando un lado y derivando el otro **por resta**. Se agregó como campo opcional `taxBreakdown` en `CreatePaymentRequest`.
 7. **La conversión a `number` queda visible en el Adapter.** `WompiAdapter` hace `Number(request.amount.toMinorUnits(request.currency))` con un comentario que explica por qué: JSON solo tiene el tipo `number`, así que la frontera de cable es inevitable, y es segura porque el valor ya es un entero de centavos muy por debajo de `Number.MAX_SAFE_INTEGER`. Lo que el dominio garantiza es que ese entero se calculó sin punto flotante.
 
-**Estado:** Resuelto en código y pruebas (`Amount.ts`, `Currency.ts`, `TaxBreakdown.ts`, `ResponseNormalizer.ts`, `WompiAdapter.ts`, `PaymentGatewayPort.ts`, `index.ts` y el ejemplo de `examples/`). **Pendiente en el SAD:**
-1. Sección 15.1: documentar que `Amount` encapsula un string decimal y no un atributo numérico, y describir `toMinorUnits(currency)`, `fromMinorUnits()`, `toFixedScale()` y las operaciones aritméticas con escala explícita.
-2. Sección 15.1 y sección 3: agregar `TaxBreakdown` y `RoundingMode` al modelo de dominio, y `getMinorUnitExponent()` a `Currency`.
-3. `Domain Class Diagram.png`: reflejar el tipo `string` de `Amount` y la nueva relación `Amount` → `Currency`.
-4. Corregir en la documentación toda afirmación de que COP es divisa de cero decimales según ISO 4217.
+**Estado:** Resuelto en código y pruebas (`Amount.ts`, `Currency.ts`, `TaxBreakdown.ts`, `ResponseNormalizer.ts`, `WompiAdapter.ts`, `PaymentGatewayPort.ts`, `index.ts` y el ejemplo de `examples/`). **Resuelto en el SAD (v2.0):** la sección 15.1 documenta el string decimal de `Amount`, `toMinorUnits`, `fromMinorUnits`, `toFixedScale`, las operaciones con escala explícita y `RoundingMode`; la sección 3 agrega `TaxBreakdown` y `PseBank`. **Pendiente en el `Domain Class Diagram.png`:** la imagen debe reflejar el tipo `string` de `Amount` y la relación con `Currency`.
 
 ### 26. Conciliación de Webhooks en Dos Pasos y Normalización de Notificaciones de Mercado Pago (issue #56)
 
@@ -275,10 +268,7 @@ La implementación inicial de `WebhookVerifier.parse()` para `Gateway.MERCADOPAG
 
 **Estado:** Resuelto en código y pruebas (`sdk/src/domain/services/WebhookVerifier.ts`, `WebhookVerifier.test.ts`, `KitPagos.test.ts`).
 
-**Pendiente en el SAD:**
-1. **Sección 2 (Requisitos Funcionales, RF-04):** Aclarar que en pasarelas con notificaciones asíncronas de solo identificador (Mercado Pago), el `WebhookEvent` normalizado devuelto por la validación criptográfica tiene estado `PENDING` para indicar que requiere la posterior invocación de RF-03 (`getPaymentStatus`).
-2. **Sección 10 (Vista de Procesos, Proceso C — Conciliación por Webhook / Figura `sequence-webhook-conciliation.puml`):** Aclarar en el texto descriptivo del diagrama que el paso 22 (`Comercio -> Facade : getPaymentStatus(gatewayTransactionId)`) es mandatorio para pasarelas que emiten webhooks livianos como Mercado Pago, mientras que para Wompi es opcional si el comercio solo necesita los datos provistos en el payload.
-3. **Sección 15.2:** Documentar que `WebhookVerifier.parse` mapea la ausencia de `status` a `TransactionStatus.PENDING` para respetar la semántica de dos pasos de Mercado Pago.
+**Resuelto en el SAD (v2.0):** RF-04 aclara que en Mercado Pago el evento retorna `PENDING` y la conciliación se completa con `getPaymentStatus()`; la sección 10 describe el flujo en dos pasos; y la sección 15.1 documenta que `WebhookVerifier.parse` mapea la ausencia de `status` a `TransactionStatus.PENDING`.
 
 ### 27. Diagrama de Proceso de Ejecución de Código y Orquestación del Facade (flujo real KitPagos → GatewayFactory → Adapter → Webhook)
 
@@ -377,7 +367,7 @@ Facade --> Comercio : Transaction
 ```
 
 **Estado:** Documentado como requerimiento de diseño en `architecture-log.md`.
-**Pendiente en el SAD:** David debe incluir este diagrama de interacción detallado en la sección 10 (Vista de Procesos) del documento `.docx`, complementando los diagramas conceptuales de alto nivel ya existentes.
+**Resuelto en el SAD (v2.0):** la sección 10.1.4 incluye el diagrama de orquestación de código del SDK y describe la colaboración entre `KitPagos`, `SdkConfigurator`, `GatewayFactory`, los adaptadores, `ResponseNormalizer`, `ErrorHandler` y `RetryHandler`.
 
 ### 28. Recomendación de apartado explicativo de la Arquitectura de Puertos y Adaptadores (Hexagonal) en el SAD
 
@@ -424,7 +414,7 @@ Se recomienda redactar en la Sección 13 (ADR-01) o en la Sección 15 (Estructur
    - Facilita pruebas automatizadas 100% aisladas mediante mocks e inyección sin levantar servidores web reales.
 
 **Estado:** Registrado como recomendación arquitectónica en `architecture-log.md`.
-**Pendiente en el SAD:** Joan (sección 13) y David (sección 15) deben incorporar esta sección explicativa en el documento `.docx`.
+**Resuelto en el SAD (v2.0):** la sección 13 incorpora los ADR-10, ADR-11 y ADR-12, y la sección 15.4 agrega el desglose de capas y módulos del SDK y de la superficie REST.
 
 ### 29. Directriz para el README y la Documentación del SDK: Orquestación de Webhooks por parte del desarrollador del comercio
 
@@ -632,7 +622,7 @@ El tiempo total de espera acumulado en el peor escenario (3 reintentos antes de 
 - **Inyección de `sleep`:** El constructor acepta una función inyectable `sleep?: (ms: number) => Promise<void>`, permitiendo en pruebas unitarias ejecutar suites completas de reintento de forma instantánea sin ralentizar el CI con temporizadores de reloj real.
 - **Acoplamiento CBO en `KitPagos`:** Al integrar `RetryHandler` en la fachada `KitPagos`, no se inyecta por constructor para no inflar el Acoplamiento entre Objetos (CBO $\le 5$). Se instancia internamente en el método `getPaymentStatus` (o bajo demanda), asegurando que las métricas de Chidamber & Kemerer se mantengan estrictamente en verde (`KitPagos` WMC 8, CBO 4, RFC 7; `RetryHandler` WMC 13, CBO 0, RFC 7, MAX_CC 6).
 
-**Estado:** Resuelto en código y 100% probado en `RetryHandler.test.ts` (15 pruebas unitarias cubriendo casos de éxito, recuperación transitoria, bypass no transitorio, agotamiento de intentos, clamping exponencial, jitter y simulación de timers). Pendiente en el SAD según el reparto de responsabilidades.
+**Estado:** Resuelto en código y 100% probado en `RetryHandler.test.ts` (15 pruebas unitarias cubriendo casos de éxito, recuperación transitoria, bypass no transitorio, agotamiento de intentos, clamping exponencial, jitter y simulación de timers). **Resuelto en el SAD (v2.0):** ADR-05 y la sección 15.2 documentan la política de reintentos y la exclusión de `createPayment()`.
 
 ---
 
@@ -695,7 +685,7 @@ La regla de detección en Rapyd es la presencia de un `redirect_url` no vacío, 
 - **Sección 3 y `Domain Class Diagram.png` (Henao).** El modelo gana `PaymentMethod` y el tipo `PaymentResult` con `PendingRedirect`. Nota para el issue #53: `KushkiAdapter` debe escribirse contra la firma nueva.
 - **Sección 15.1 (David).** El inventario de objetos de valor del núcleo pasa de siete a ocho con `PaymentMethod`.
 
-**Estado:** Resuelto en el código. Pendiente en el SAD, según el reparto de arriba.
+**Estado:** Resuelto en el código. **Resuelto en el SAD (v2.0):** las secciones 3 y 15.1 documentan `PaymentMethod`, `PaymentResult` y `PendingRedirect`.
 
 ---
 
@@ -864,7 +854,7 @@ código de salida 1.
 - **`prototypes-evaluation-plan.md` (David).** Este ejemplo es el artefacto sobre el que se mide
   la variable "conceptos nativos expuestos" de la Fase 5; conviene que el plan lo nombre.
 
-**Estado:** Resuelto en el código. Pendiente en el SAD, según el reparto de arriba.
+**Estado:** Resuelto en el código. **Resuelto en el SAD (v2.0):** ADR-10 documenta la comparación de montos por valor y no por representación.
 
 ---
 
@@ -2193,7 +2183,7 @@ Además, el número 14 lo usaban dos puntos: el de RF-03 en la Sección B y el d
 **Decisiones.**
 
 - **El README da mínimos, no conteos exactos, para lo que cambia en cada pull request.** Dice «más de 600 pruebas unitarias» y «más de setenta puntos», y remite a `docs/04-metricas-y-pruebas/2-pruebas-del-sdk.md`, que tiene el conteo exacto con la fecha de la corrida. Se descartó poner el conteo exacto en el README porque ya demostró que se desactualiza sin que nada lo detecte: `check:readme` compila los fragmentos de `sdk/README.md`, no revisa cifras del de la raíz. También se descartó quitar las cifras, porque la magnitud es la evidencia de que las cuatro pasarelas están probadas. Las cifras que cambian poco (18 pruebas de contrato, once ejemplos) quedan exactas.
-- **El punto que conserva el 14 es el de RF-03.** Es el más antiguo y lo citan la tabla de responsables de la Sección A y el punto 6. Además es una corrección pendiente en el SAD, que se hace fuera del repositorio con ese número a la vista. El de la reorganización pasa a ser el 76. Solo lo citaban dos puntos de este mismo archivo, que se actualizaron, y ningún archivo de código. Se descartó numerarlo «14 bis» porque una búsqueda de «punto 14» lo seguiría encontrando, y las citas desde el código usan números enteros.
+- **El punto que conserva el 14 es el de RF-03.** Es el más antiguo y lo citan la tabla de responsables de la Sección A y el punto 6. Además era una corrección pendiente en el SAD, que se aplicó en la v2.0 con ese número a la vista. El de la reorganización pasa a ser el 76. Solo lo citaban dos puntos de este mismo archivo, que se actualizaron, y ningún archivo de código. Se descartó numerarlo «14 bis» porque una búsqueda de «punto 14» lo seguiría encontrando, y las citas desde el código usan números enteros.
 - **El README de la raíz pasa a español neutro.** Estaba en voseo rioplatense («Integrá», «Empezá»), y es la cara pública de un trabajo que se sustenta en Colombia. El cambio se aplicó a todo el archivo. El resto de `docs/` conserva voseo en varios lugares; normalizarlo no es parte de este punto.
 
 **Lo medido (29 de septiembre de 2026).**
@@ -4707,9 +4697,7 @@ completamente.
 **Estado:** Resuelto en código (`Gateway.ts`, `WebhookVerifier.ts`, `WebhookVerifier.test.ts`) y
 en documentación (`ubiquitous-language.md`, `layers-and-components.md`, `architecture-explained.md`),
 con la excepción del formato de `parse()` descrita arriba, corregida por separado en el punto 16.
-**Pendiente en el SAD:** actualizar sección 15.1 (tabla de headers de WebhookVerifier), sección 7
-(contexto de pasarelas), y sección 16 (glosario: entrada "PayU" debe actualizarse a
-"Rapyd / PayU GPO").
+**Resuelto en el SAD (v2.0):** la sección 15.1 describe los métodos y el contexto de firma de `WebhookVerifier`; la sección 7 presenta a Rapyd como pasarela que sustituye a PayU; y la sección 16 incluye la entrada histórica «Rapyd (y PayU Latam)».
 
 ### 16. `WebhookVerifier.parse()` para `Gateway.RAPYD` usaba el formato de notificación de PayU sin cita
 
@@ -4958,9 +4946,7 @@ plataforma, mientras en producción devuelve solo los habilitados para la organi
 
 **Decisión:** Se regeneran los 4 diagramas para reflejar el diseño final (facade directo, sin capa explícita de Use Cases ni Controller), consistente con las secciones 9 y 15 y con el `Component Diagram - C4.png` y el `Domain Class Diagram.png` vigentes.
 
-**Estado:** Resuelto (diagramas regenerados en esta misma sesión, ver `docs/architecture/SDK/`). **Pendiente en el SAD:**
-1. David: reemplazar las Figuras 8, 9 y 10 de la sección 10 por las versiones nuevas, y corregir el texto de la sección 10.1.1 que todavía menciona `KitPagosFacade` (debe decir `KitPagos`).
-2. Joan: reemplazar la imagen citada en la sección 13.1 por la versión regenerada de `Hexagonal architecture class diagram.png`, y asignarle un número de figura ("Figura N") para que quede referenciada igual que el resto de diagramas del documento.
+**Estado:** Resuelto (diagramas regenerados en esta misma sesión, ver `docs/architecture/SDK/`). **Resuelto en el SAD (v2.0):** la sección 10 incluye las versiones nuevas y usa `KitPagos` en lugar de `KitPagosFacade`; la sección 13.1 incluye el `Hexagonal architecture class diagram.png` con su número de figura.
 
 ### 17. Auditoría post-#32: diagramas de la API de Simulación seguían citando a PayU
 
@@ -5026,15 +5012,14 @@ responder `200 OK` con el error en el body, Rapyd sí usa códigos HTTP distinto
 regenerado documenta esta diferencia explícitamente en su nota final.
 
 **Pendiente, fuera del alcance de este punto:** `docs/architecture/SDK/Domain Class Diagram.png`
-y `docs/architecture/SDK/Component Diagram - C4.png` (SDK) siguen sin fuente PlantUML en el repo
-y siguen mostrando "PAYU" / "PayU Adapter"; permanecen a cargo de Henao y Joshua respectivamente,
-según la tabla de la Sección A (filas 3 y 9), para corregirse con la herramienta original
-con la que se dibujaron.
+sigue sin fuente PlantUML en el repo y sigue mostrando "PAYU", `SdkError`, `SdkErrorCode` y
+`updateStatus(...)`; permanece a cargo de Henao según la tabla de la Sección A (fila 3), para
+corregirse con la herramienta original con la que se dibujó. El `Component Diagram - C4.png` del
+SDK ya cuenta con `component-diagram.puml` y muestra `Rapyd Adapter`.
 
-**Pendiente en el SAD:** el documento original embebe versiones antiguas de estos 11 diagramas
-(ver el mapeo de reemplazo completo entregado por chat, con la sección exacta del `.docx` para
-cada figura). Cada responsable de sección (ver tabla de la Sección A) debe reemplazar la imagen
-correspondiente por el PNG regenerado.
+**Resuelto en el SAD (v2.0):** las figuras embebidas en el SAD ya son los PNG regenerados, porque
+el documento LaTeX referencia directamente los archivos de `docs/architecture/`; no queda ninguna
+versión antigua que reemplazar.
 
 ### Issue #108 — Figuras de contexto, contenedores y componentes de la API de Simulación
 
@@ -5197,7 +5182,7 @@ Además, los cuatro `private static` de `TaxBreakdown` (`zero`, `onePlus`, `asse
 - **Sección 3 (Henao).** El `Domain Class Diagram.png` muestra los miembros de `Amount` y `TaxBreakdown`. `Amount` perdió el `private static stripLeadingZeros` y ganó el `private widestScale`; `TaxBreakdown` perdió sus cuatro `private static`. Si el diagrama lista miembros privados, quedó desactualizado.
 - **Sección 13 (Joan).** El `Hexagonal architecture class diagram.png` refleja la estructura de clases del SDK. Conviene además evaluar si este patrón (módulo de funciones puras como seam sobre dependencias externas, en vez de clase envolvente) merece un ADR propio, dado que ya se aplicó tres veces y es una decisión de diseño repetible, no un ajuste puntual.
 
-**Estado:** Resuelto en el código. Pendiente en el SAD, según el reparto de arriba.
+**Estado:** Resuelto en el código. **Resuelto en el SAD (v2.0):** ADR-11 y la sección 15.4 documentan los módulos de funciones puras y su criterio de extracción.
 
 ---
 
