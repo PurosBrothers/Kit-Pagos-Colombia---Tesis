@@ -24,18 +24,18 @@ participant "WebhookVerifier" as Verifier
 
 Pasarela -> Comercio : POST /webhook(payload, headers)
 Comercio -> Facade : validateWebhook(\npayload, headers,\noptions?)
-Facade -> Verifier : verify(payload,\nheaders, secret,\ngateway)
+Facade -> Verifier : verify(webhook,\ncontext, gateway,\noptions?)
 
 alt Firma valida
   Verifier --> Facade : true
-  Facade -> Verifier : parse(payload, gateway)
+  Facade -> Verifier : parse(webhook, gateway)
   Verifier --> Facade : WebhookEvent
   Facade --> Comercio : WebhookEvent
-  Comercio -> Facade : getPaymentStatus(\ngatewayTransactionId)
+  Comercio -> Facade : getPaymentStatus(event.\ngatewayTransactionId)
   Facade --> Comercio : Transaction (reconstruido con el nuevo estado)
 else Firma invalida
   Verifier --> Facade : false
-  Facade --> Comercio : throw KitPagosError(\nWEBHOOK_SIGNATURE_INVALID)
+  Facade --> Comercio : throw KitPagosError con code\nWEBHOOK_SIGNATURE_INVALID
 end
 
 note over Comercio, Verifier
@@ -47,8 +47,8 @@ note over Comercio, Verifier
   solo envia el ID sin estado final), y OPCIONAL para
   pasarelas con webhooks completos (Wompi, que incluye
   el estado final en el payload del webhook).
-  Kushki no publica su algoritmo de firma: el SDK
-  informa esta limitacion al intentar verificar.
+  Kushki firma con HMAC-SHA256 sobre el cuerpo y
+  x-kushki-id; se probo solo con el simulador.
 end note
 
 @enduml
