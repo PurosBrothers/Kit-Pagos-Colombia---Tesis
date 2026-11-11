@@ -25,6 +25,7 @@ FIGURAS=(
   "$SDK/diagrams-source/sequence-payment-creation.puml|$SDK/Sequence Diagram - Payment Creation|png"
   "$SDK/diagrams-source/sequence-synchronous-payment.puml|$SDK/Sequence Diagram - Synchronous Payment|png"
   "$SDK/diagrams-source/sequence-webhook-conciliation.puml|$SDK/Sequence Diagram - Webhook Conciliation|png"
+  "$SDK/diagrams-source/sequence-sdk-code-orchestration.puml|$SDK/Sequence Diagram - SDK Code Orchestration|png"
   "$SDK/diagrams-source/hexagonal-architecture-class-diagram.puml|$SDK/Hexagonal architecture class diagram|png"
   "$SIM/diagrams-source/domain-class-diagram.puml|$SIM/diagrama-clases-dominio-simulacion|png"
   "$SIM/diagrams-source/context-diagram.puml|$SIM/Context Diagram - C4|png"
