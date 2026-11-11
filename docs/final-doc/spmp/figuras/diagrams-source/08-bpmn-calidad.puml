@@ -44,7 +44,7 @@ split
   -[hidden]->
   partition "<&clock> Ciclo iterativo de desarrollo" #F3F6FA {
     repeat
-      :<&cog> ② Revisión de código en PR\nArquitectura · Complejidad\nWMC ≤ 15 · CBO ≤ 5 · RFC ≤ 20;
+      :<&cog> ② Revisión de código en PR\nArquitectura · Complejidad\nWMC ≤ 20 · CBO ≤ 5\nRFC ≤ 20 · MAX_CC ≤ 10;
       if (¿Aprobado?) then (Sí)
         :Merge a\nrama dev;
         :③ Análisis CK\nal cierre de ciclo;

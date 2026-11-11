@@ -1,5 +1,5 @@
 @startuml Domain Class Diagram - Simulation API
-title Diagrama de Clases del Dominio - API de Simulación\nConceptos formalizados a partir de la sección 9.2 / RF-08..RF-13
+title Dominio de la API de Simulación (tipos de simulator-api/src)
 skinparam backgroundColor white
 skinparam defaultFontName Helvetica
 skinparam defaultFontSize 10
@@ -9,124 +9,148 @@ skinparam classAttributeFontSize 10
 skinparam classStereotypeFontSize 10
 skinparam ArrowFontSize 10
 skinparam NoteFontSize 10
-skinparam nodesep 10
-skinparam ranksep 22
+skinparam nodesep 12
+skinparam ranksep 16
 skinparam classAttributeIconSize 0
 skinparam class {
   BorderColor #666666
   ArrowColor #666666
 }
 
-class WebhookTriggerRequest <<ObjetoValor>> #C8E6C9 {
-  -targetUrl: string
-  -gateway: Gateway
-  -eventType: string
-  -scenario: SimulationScenario
-  +constructor(targetUrl, gateway,\n    eventType, scenario)
-}
-
-class SimulationRequestHeaders <<ObjetoValor>> #C8E6C9 {
-  -scenario: SimulationScenario
-  -delayMs: number
-  +constructor(scenario, delayMs)
-}
-
-class MockPaymentResult <<ObjetoValor>> #C8E6C9 {
-  -gatewayTransactionId: string
-  -gateway: Gateway
-  -scenario: SimulationScenario
-  -amount: number
-  -currency: string
-  -rawStatus: string
-  -rejectionReason: string
-  +constructor(gatewayTransactionId,\n    gateway, scenario, amount, currency,\n    rawStatus, rejectionReason)
-}
-
-class Credentials <<Compartido>> #ECEFF1 {
-  +publicKey: string
-  +privateKey: string
-}
-
-class WebhookEvent <<Compartido>> #ECEFF1 {
-  +eventType: string
-  +gatewayTransactionId: string
-  +newStatus: TransactionStatus
+class TriggerRequest <<Interfaz>> #C8E6C9 {
   +gateway: Gateway
-  +constructor(attributes:\n    WebhookEventAttributes)
+  +transactionId: string
 }
 
-enum SimulationScenario <<Enumeracion>> #FFF9C4 {
+class ResolvedScenario <<Interfaz>> #C8E6C9 {
+  +scenario: string
+  +source: ScenarioSource
+  +queryFailure?: QueryFailure
+}
+
+enum ScenarioSource <<Tipo>> #FFF9C4 {
+  header
+  gateway_data
+  amount
+  default
+}
+
+enum QueryFailure <<Tipo>> #FFF9C4 {
+  QUERY_FLAPPING
+  QUERY_SERVER_ERROR
+  QUERY_SLOW
+}
+
+enum SimulatorScenario <<Enumeración>> #FFF9C4 {
   APPROVED
+  APPROVAL
+  PENDING
   DECLINED
-  INSUFFICIENT_FUNDS
+  REJECTED
+  EXPIRED
   TIMEOUT
+  GATEWAY_TIMEOUT
   NETWORK_ERROR
+  CONNECTION_ERROR
+  RATE_LIMIT
+  TOO_MANY_REQUESTS
+  SERVER_ERROR
+  INTERNAL_ERROR
+  BAD_GATEWAY
+  SERVICE_UNAVAILABLE
+  FLAPPING
+  DUPLICATE_PAYMENT
+  SLOW
+  MALFORMED_JSON
+  MALFORMED_BODY
+  HTML_ERROR
+  PENDING_THEN_DECLINED
 }
 
-class Gateway <<Compartido>> #ECEFF1 {
+class "TransactionStore<TRecord>" as TransactionStore <<Almacén>> #BBDEFB {
+  +save(id: string,\n    record: TRecord): void
+  +findById(id: string):\n    TRecord | undefined
+  +clear(): void
+  +size(): number
+}
+
+class WebhookSubject <<Tipo>> #C8E6C9 {
+  +gateway: Gateway
+  +kind: "transaction" | "payment" |\n    "order" | "charge" |\n    "transfer" | "checkout"
+  +record: registro nativo\n    (WompiTransaction,\n    RapydPayment, ...)
+}
+
+class SignatureGenerator <<Servicio>> #BBDEFB {
+  +generate(subject:\n    WebhookSubject):\n    OutgoingWebhook
+  +generateSequence(subject:\n    WebhookSubject):\n    OutgoingWebhook[]
+}
+
+class OutgoingWebhook <<Interfaz>> #C8E6C9 {
+  +gateway: Gateway
+  +query: string | null
+  +headers: Record<string, string>
+  +body: string
+}
+
+class WebhookDispatcher <<Servicio>> #BBDEFB {
+  +deliver(webhook:\n    OutgoingWebhook): Promise<\n    { receiverStatus: number }>
+}
+
+class WebhookDispatchConfig <<Interfaz>> #C8E6C9 {
+  +targetUrl?: string
+  +auto: boolean
+  +timeoutMs: number
+}
+
+enum Gateway <<Compartido>> #ECEFF1 {
   WOMPI
   RAPYD
   MERCADOPAGO
   KUSHKI
 }
 
-SimulationRequestHeaders -[hidden]down- MockPaymentResult
-MockPaymentResult -[hidden]down- WebhookEvent
-Gateway -[hidden]down- Credentials
-WebhookTriggerRequest ..> WebhookEvent : dispara
-WebhookTriggerRequest "1" --> "0..1" SimulationScenario : refleja
-WebhookTriggerRequest "1" --> "1" Gateway : simulada_para
-SimulationRequestHeaders "1" --> "1" SimulationScenario : indica
-MockPaymentResult "1" --> "1" SimulationScenario : refleja
-MockPaymentResult "1" --> "1" Gateway : simulada_para
-WebhookEvent "1" --> "1" Gateway : originado_en
+TriggerRequest -[hidden]down- ResolvedScenario
+ResolvedScenario -down-> ScenarioSource : source
+ResolvedScenario -down-> QueryFailure : queryFailure
+ResolvedScenario .down.> SimulatorScenario : scenario
+ScenarioSource -[hidden]down- SimulatorScenario
+TransactionStore .down. WebhookSubject : findById()\nda el record
+SignatureGenerator .up.> WebhookSubject : usa
+SignatureGenerator .down.> OutgoingWebhook : genera
+WebhookDispatcher .up.> OutgoingWebhook : entrega
+WebhookDispatcher -down-> WebhookDispatchConfig : config
+WebhookSubject -right-> Gateway : gateway
+OutgoingWebhook -right-> Gateway : gateway
+TriggerRequest -right-> Gateway : gateway
+TriggerRequest -[hidden]right- TransactionStore
 
-note bottom of WebhookEvent
-  Reutiliza el objeto de valor
-  WebhookEvent ya definido en el
-  Modelo de Dominio del SDK. Es
-  retornado por WebhookVerifier.parse()
-  para dar cumplimiento a RF-04; la
-  API de Simulacion lo usa como forma
-  del evento que WebhookTriggerRequest
-  termina disparando.
+note left of TriggerRequest
+  Cuerpo de POST
+  /v1/sim/webhooks/trigger.
+  Cualquier otra clave, como
+  targetUrl, se rechaza con
+  INVALID_REQUEST.
 end note
 
-note right of Gateway
-  Reutiliza el enum Gateway ya
-  definido en el Modelo de Dominio
-  del SDK (seccion 3, Tabla 2); no se
-  redefine aqui, se comparte entre
-  ambos bounded contexts.
+note right of SimulatorScenario
+  resolveScenario() toma la
+  cabecera x-simulator-scenario
+  o x-simulate-scenario, el dato
+  de prueba de la pasarela o un
+  monto de RESERVED_AMOUNTS,
+  en ese orden; si no hay
+  ninguno, APPROVED.
 end note
 
-note bottom of SimulationScenario
-  RF-10 describe estos mismos
-  escenarios en espanol (APROBADO,
-  RECHAZADO, FONDOS_INSUFICIENTES,
-  TIMEOUT, ERROR_RED). Se normalizan
-  en ingles para ser consistentes con
-  TransactionStatus, RejectionCategory,
-  SdkErrorCode y Gateway.
-  HttpRouterMiddleware traduce el
-  valor del header hacia este enum.
+note left of WebhookDispatchConfig
+  Sale de
+  SIMULATOR_WEBHOOK_TARGET_URL,
+  SIMULATOR_WEBHOOK_AUTO y
+  SIMULATOR_WEBHOOK_TIMEOUT_MS.
 end note
 
-note right of MockPaymentResult
-  No aplica a TIMEOUT ni
-  NETWORK_ERROR: esos dos
-  escenarios no delegan en
-  GatewayMockFactory, segun
-  9.2.2 y 15.3.
-end note
-
-note right of Credentials
-  Reutiliza el objeto de valor
-  Credentials del SDK (publicKey,
-  privateKey). SdkConfigurator
-  mantiene un mapa Gateway ->
-  Credentials; ningun campo se
-  propaga a logs, errores ni
-  respuestas (RF-08).
+note bottom of Gateway
+  Viene de kit-pagos-colombia,
+  el SDK; no se redefine aquí.
 end note
 @enduml
