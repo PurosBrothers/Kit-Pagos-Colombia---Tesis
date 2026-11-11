@@ -436,7 +436,7 @@ async function main(): Promise<void> {
   printTable(outcomes);
 
   console.log(
-    "\nLa columna del estado nativo es la que cambia: APPROVED, CLO, approved\n" +
+    "\nLa columna del estado nativo es la que cambia: APPROVED, CLO, processed\n" +
       "y APPROVAL son la misma cosa dicha de cuatro formas. La del estado\n" +
       "normalizado es la que el comercio programa contra, y es una sola.\n",
   );
