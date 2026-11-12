@@ -5671,7 +5671,7 @@ Esto es lo que respalda que el diseño generalice y no solo funcione para las cu
 |---|---|---|---|
 | 1 | **Escala del monto** | Wompi cobra en centavos; Rapyd y Mercado Pago en unidad principal; Kushki exige el monto descompuesto por impuesto | `Amount.toMinorUnits(currency)` + `minor-units.ts`; el adaptador elige |
 | 2 | **Envoltorio de la respuesta** | Wompi y Rapyd envuelven el pago en `{ data: ... }`; Mercado Pago lo devuelve en la raíz | Normalizador de la pasarela, que elige qué le entrega al validador compartido `requireData()` (`payload?.data` frente a `payload?.data ?? payload`) |
-| 3 | **Vocabulario de estado** | `APPROVED` / `approved` / `CLO` / `APPROVAL` | Normalizador, que mapea a `TransactionStatus` |
+| 3 | **Vocabulario de estado** | `APPROVED` / `processed` en una orden y `approved` en un pago / `CLO` / `APPROVAL` | Normalizador, que mapea a `TransactionStatus` |
 | 4 | **Estados ambiguos** | En Rapyd `CLO` y `ERR` no bastan: hay que leer campos secundarios para saber el resultado | Normalizador; la interfaz no obliga a un mapeo 1:1 |
 | 5 | **Señal de éxito o fallo** | Tres usan el código HTTP; **Kushki responde 200 incluso cuando rechaza** y hay que mirar el cuerpo | Adaptador, que decide cuándo invocar `ErrorHandler` |
 | 6 | **Autenticación saliente** | Bearer con llave pública / Bearer con access token / HMAC por petición / cabecera de merchant ID | Adaptador, con módulo de costura si es no trivial (`rapyd-signature.ts`) |

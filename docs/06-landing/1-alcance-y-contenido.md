@@ -69,7 +69,7 @@ Al lado, la tabla de estados nativos que ya imprime el ejemplo 10, porque es la 
 |---|---|---|
 | Wompi | `APPROVED` | `APPROVED` |
 | Rapyd | `CLO` | `APPROVED` |
-| Mercado Pago | `approved` | `APPROVED` |
+| Mercado Pago | `processed` | `APPROVED` |
 | Kushki | `APPROVAL` | `APPROVED` |
 
 Cuatro vocabularios, y uno —`CLO`— que no significa "pagado" sino "cerrado".

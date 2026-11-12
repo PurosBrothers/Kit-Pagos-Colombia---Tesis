@@ -119,54 +119,66 @@ suyo y de nadie más:
     }
 ```
 
-Mercado Pago, en una:
+Mercado Pago, en tres —la primera lee los seis primeros dígitos del token y la
+segunda busca con ellos la marca y el tipo de tarjeta, que la orden pide en el cuerpo:
 
 ```
-[1] POST .../mercadopago/payments                          respondió 201
+[1] GET  .../mercadopago/card_tokens/tok_demo_no_real      respondió 200
+[2] GET  .../mercadopago/payment_methods/search?...        respondió 200
+[3] POST .../mercadopago/orders                            respondió 201
 
-  Lo que el adaptador envió:
+  Lo que el adaptador envió en la tercera:
     {
-      "transaction_amount": 150000,
-      "description": "ORDER-DEMO-1790011947545",
-      "external_reference": "ORDER-DEMO-1790011947545",
-      "token": "tok_demo_no_real",
-      "installments": 1,
-      "payer": { "email": "jaime.pavlich@example.com" }
+      "type": "online",
+      "processing_mode": "automatic",
+      "total_amount": "150000",
+      "external_reference": "ORDER-DEMO-1794446197885",
+      "payer": { "email": "jaime.pavlich@example.com" },
+      "transactions": {
+        "payments": [
+          {
+            "amount": "150000",
+            "payment_method": { "id": "visa", "type": "credit_card", "token": "tok_demo_no_real", "installments": 1 }
+          }
+        ]
+      }
     }
 ```
 
-`amount_in_cents: 15000000` contra `transaction_amount: 150000`, para el mismo
-monto. Más la firma de integridad que Wompi exige y las otras tres no, y el token de
-aceptación que obliga a una llamada extra.
+`amount_in_cents: 15000000` contra `total_amount: "150000"`, para el mismo monto:
+centavos en un número contra pesos en un texto. Más la firma de integridad que Wompi
+exige y las otras tres no, el token de aceptación que le cuesta a Wompi una llamada
+extra y las dos consultas que Mercado Pago hace antes de crear la orden.
 
 Nada de eso aparece en el código que escribe el comercio, y nada de eso está escrito
 en el ejemplo: sale del espía. Es la diferencia de escala del punto 42 del
 `architecture-log.md`, que hasta ahora estaba *tolerada* en una comparación y ahora
 está *explicada* en pantalla.
 
-### Seis vocabularios nativos, un estado normalizado
+### Cinco vocabularios nativos, un estado normalizado
 
-Corriendo los ocho caminos —cuatro pasarelas por dos métodos— esto es lo que
-devuelve cada una:
+Corriendo los ocho caminos —cuatro pasarelas por dos métodos— contra el simulador, el
+11 de noviembre de 2026, esto es lo que devuelve cada una:
 
 | Pasarela | Método | Estado normalizado | Estado nativo | Llamadas al crear |
 |---|---|---|---|---|
 | Wompi | tarjeta | `APPROVED` | `APPROVED` | 2 |
 | Wompi | PSE | `APPROVED` | `APPROVED` | 3 |
-| Mercado Pago | tarjeta | `APPROVED` | `approved` | 1 |
+| Mercado Pago | tarjeta | `APPROVED` | `processed` | 3 |
 | Mercado Pago | PSE | `APPROVED` | `processed` | 1 |
 | Kushki | tarjeta | `APPROVED` | `APPROVAL` | 1 |
 | Kushki | PSE | `APPROVED` | `approvedTransaction` | 2 |
 | Rapyd | tarjeta | `APPROVED` | `CLO` | 1 |
 | Rapyd | PSE | `APPROVED` | `CLO` | 2 |
 
-Seis formas distintas de decir "aprobado" —`APPROVED`, `approved`, `processed`,
-`APPROVAL`, `approvedTransaction`, `CLO`— contra una sola que el comercio programa.
+Cinco formas distintas de decir "aprobado" —`APPROVED`, `processed`, `APPROVAL`,
+`approvedTransaction`, `CLO`— contra una sola que el comercio programa.
 Y entre una y tres llamadas HTTP según la pasarela y el método, con el comercio
 escribiendo siempre la misma línea.
 
 La tabla del ejemplo de [intercambiabilidad](./intercambiabilidad.md) muestra cuatro
-vocabularios porque solo recorre tarjeta. Al incluir PSE aparecen dos más.
+vocabularios porque solo recorre tarjeta. Al incluir PSE aparece uno más,
+`approvedTransaction`, el de la transferencia de Kushki.
 
 ### Que el SDK valida antes de gastar red
 
