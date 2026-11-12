@@ -20,7 +20,7 @@ Es el segundo componente del producto y vive en el mismo proceso que la API de S
 
 **Si el servidor no tiene `API_AUTH_TOKEN`, la capa REST opera abierta**, sin pedir cabecera, y avisa por el log al arrancar. Es el modo por omisión en desarrollo local y el que usa quien levanta el repositorio para probar. En un despliegue público, sin token, cualquiera con la URL puede intentar cobrar con las credenciales del servidor.
 
-**Rutas exentas de token:** `/health` y todo `/v1/sim`. La excepción es `/v1/sim/webhooks/trigger`, que sí lo exige: dispara webhooks firmados con los secretos del servidor y abierto sería un oráculo de firma.
+**Rutas exentas de token:** `/health`, la documentación de `/docs` y todo `/v1/sim`. La excepción es `/v1/sim/webhooks/trigger`, que sí lo exige: dispara webhooks firmados con los secretos del servidor y abierto sería un oráculo de firma. `/docs` queda abierta porque solo describe la API y un navegador no le puede mandar el token. Para probar `/v1/api` desde Swagger, el token se pega en «Authorize».
 
 Un token ausente o incorrecto responde `401` con un cuerpo distinto al de los demás errores:
 

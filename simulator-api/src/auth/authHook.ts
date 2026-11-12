@@ -13,9 +13,10 @@ export interface AuthHookOptions {
 /**
  * `/v1/sim` queda exento porque el SDK le habla sin el token de la API. El trigger de webhooks
  * no: devuelve el webhook firmado con los secretos del servidor, y abierto sería un oráculo de
- * firma (decisión de Joan, 6 de octubre de 2026).
+ * firma (decisión de Joan, 6 de octubre de 2026). `/docs` también queda exento: solo describe la
+ * API, sin cobrar ni firmar nada, y un navegador que abre Swagger no puede mandar el token.
  */
-const DEFAULT_EXEMPT_PATHS = ["/health", "/v1/sim"];
+const DEFAULT_EXEMPT_PATHS = ["/health", "/v1/sim", "/docs"];
 const DEFAULT_PROTECTED_PATHS = ["/v1/sim/webhooks"];
 
 function underPrefix(path: string, prefix: string): boolean {
