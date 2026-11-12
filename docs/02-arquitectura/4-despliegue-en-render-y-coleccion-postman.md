@@ -293,7 +293,9 @@ npx newman run simulator-api/postman/kit-pagos-simulator.postman_collection.json
 
 ### 6.3. Reporte de ejecución contra Render (Medición en vivo)
 
-Resultado certificado ejecutado sobre `https://kit-pagos-colombia.onrender.com`. Fue una corrida de 33 peticiones, anterior a las tres de las páginas de banco del PSE y a las cinco de la tarjeta de Mercado Pago por la Orders API (issue #109). Con las 41 actuales solo se corrió el simulador local, no Render: el 15 de octubre de 2026, contra un simulador levantado desde el código del issue en `127.0.0.1` y sin `.env`, 41 de 41 peticiones y 44 de 44 aserciones, con la verificación de `POST /v1/api/webhooks/wompi` omitida porque ese servidor no tenía secreto de eventos. Antes, el 14 de octubre de 2026, 36 de 36:
+La corrida más reciente es del 11 de noviembre de 2026 a las 21:21, ya con el token. Dio 40 de 40 peticiones y 45 de 45 aserciones en 29,3 s, solo en el ambiente `simulator` y sin la carpeta `06. Webhooks`. La primera petición, `GET /health`, tardó 22,3 s porque el servicio estaba dormido. El reporte está en `docs/final-doc/pruebas/evidencias/postman/2026-11-11-postman-render.txt` y registra qué secretos se usaron, sin sus valores.
+
+La anterior, sobre `https://kit-pagos-colombia.onrender.com`, fue una corrida de 33 peticiones, anterior a las tres de las páginas de banco del PSE y a las cinco de la tarjeta de Mercado Pago por la Orders API (issue #109). Con las 41 de entonces solo se corrió el simulador local: el 15 de octubre de 2026, contra un simulador levantado desde el código del issue en `127.0.0.1` y sin `.env`, 41 de 41 peticiones y 44 de 44 aserciones, con la verificación de `POST /v1/api/webhooks/wompi` omitida porque ese servidor no tenía secreto de eventos. Antes, el 14 de octubre de 2026, 36 de 36:
 
 ```text
 ┌─────────────────────────┬─────────────────────┬─────────────────────┐

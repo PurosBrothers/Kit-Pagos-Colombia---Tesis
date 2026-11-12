@@ -4671,6 +4671,7 @@ El corte por clase no reemplaza al de archivo: deja fuera las funciones de módu
 - 20:41, con la línea descomentada: `/health` `200`, `/v1/sim/wompi/merchants/pub_test_demo_no_real` `200`, `/v1/api/gateways` `401`, `/docs/` `401` y `/docs/json` `401`.
 - En local, con el token configurado: `/docs`, `/docs/`, `/docs/json`, `/docs/yaml` y `/docs/static/swagger-ui.css` cargan sin él, y `/v1/api/gateways` responde `401` sin token y `200` con él (`openapi.test.ts`). La prueba falla si se quita `/docs` de la lista.
 - Simulador: 54 suites y 1302 pruebas en verde, 97,25 % de sentencias; el lint, `tsc` y las métricas CK con sus excepciones dan código 0. Landing: `check:snippets` y el build dan código 0.
+- 21:21, Postman contra Render con el token: 40 de 40 peticiones y 45 de 45 aserciones, solo en el ambiente `simulator` y sin la carpeta `06. Webhooks` (`docs/final-doc/pruebas/evidencias/postman/2026-11-11-postman-render.txt`).
 
 **Estado:** Resuelto en Render (token activo desde las 20:41) y en código (`authHook.ts`, `register.ts`, `openapi.test.ts`, `landing/`). En Render, `/docs` sigue detrás del token hasta que se despliegue este cambio.
 

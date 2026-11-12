@@ -119,7 +119,7 @@ Suite de la API de Simulación & 54 de 54 suites y 1301 de 1301 pruebas; de 11:2
 Contrato contra sandboxes & 4 de 4 suites y 25 de 25 pruebas, en una sola corrida en serie contra los sandboxes de las cuatro pasarelas, de 16:17 a 16:18. Corrió sobre la carpeta \path{sdk/} de \texttt{devops} (\texttt{e8fe681}), que este PR no modifica. & 67~s; sin pruebas omitidas. \\ \hline
 Ejemplos y escenarios & Intercambiabilidad, PSE de Wompi y escenarios con código 0, en dos corridas cada uno; escenarios con 61 de 61 en \texttt{OK}. & Recorrido de escenarios en 12{,}8~s. \\ \hline
 Prototipos y paridad & A: 5 suites y 60 pruebas. B: 6 y 165. C: 6 y 139. D: 10 y 239. \texttt{typecheck} y paridad de esqueleto con código 0. & Sentencias y ramas: A 90{,}03 y 74{,}11~\%; B 99{,}07 y 92{,}33~\%; C 95{,}64 y 97{,}43~\%; D 93{,}04 y 83{,}11~\%. \\ \hline
-Postman local y Render & Local: 42 peticiones, 47 aserciones y 0 fallas; se omite la del webhook firmado porque el simulador corría sin secreto de eventos. Render: no ejecutado en esta corrida, porque requiere los secretos de firma del servicio; su resultado se agregará aparte. & No aplica \\ \hline
+Postman local y Render & Local: 42 peticiones, 47 aserciones y 0 fallas; se omite la del webhook firmado porque el simulador corría sin secreto de eventos. Render, a las 21:21 y con el token de la API: 40 peticiones, 45 aserciones y 0 fallas, solo en el ambiente \texttt{simulator} y sin la carpeta \texttt{06. Webhooks}. La colección y su ambiente son los mismos de \texttt{devops}. & No aplica \\ \hline
 OpenAPI & \texttt{/docs/}, \texttt{/docs/json} y \texttt{/docs/yaml} en 200, con OpenAPI 3.0.3 y 40 rutas; \texttt{rejectionCode} y \texttt{rejectionCategory} en el esquema de \texttt{/v1/api/payments}; \path{openapi.test.ts} en verde. & No aplica \\ \hline
 Carga y rendimiento & 30 de 30 corridas, con 0 errores, 0 respuestas que no fueran 2xx y el contador del guardián en 0; 8\,181\,054 peticiones medidas, de 11:27 a 11:45. & Tabla~\ref{tab:resultados-carga}. \\ \hline
 Integración continua & Se verifica en el PR de este issue. & No aplica \\ \hline
@@ -174,7 +174,7 @@ Las evidencias están en \path{docs/final-doc/pruebas/evidencias/}, con una subc
   \item \emph{cp-01} a \emph{cp-07}: salida de consola, código de salida y, cuando aplica, capturas de la interfaz. Las de CP-05 son el formulario, la página alojada de Rapyd y el resultado de cada pago; las de CP-06, el formulario, la página del banco y el resultado en C. En CP-01 y CP-04 quedan la primera corrida, que falló, y la nueva, con el prefijo \emph{reejecucion}. CP-01 guarda además las corridas del ejemplo de Mercado Pago y de la demo interactiva que respaldan la corrección de DEF-01.
   \item \emph{contrato}: la salida de la corrida única de las pruebas de contrato, con el nombre y el estado de cada prueba, sin llaves, cabeceras ni cuerpos.
   \item \emph{suites}: el resumen de las suites con su cobertura, la paridad y el \texttt{typecheck} de los prototipos y de los ejemplos, y las rutas de OpenAPI.
-  \item \emph{postman}: el reporte de la colección completa en local.
+  \item \emph{postman}: el reporte de la colección completa en local y el de la corrida contra Render, que registra qué secretos usó sin sus valores.
   \item \emph{carga}: un JSON por corrida, el resumen, la tabla de medianas, la salida de consola y las mutaciones de las guardas.
 \end{itemize}
 

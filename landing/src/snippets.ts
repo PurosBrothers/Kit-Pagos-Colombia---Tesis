@@ -208,22 +208,34 @@ const res = await fetch("https://sandbox.wompi.co/v1/transactions", {
   }),
 });`;
 
-export const SNIPPET_DISPARITY_MERCADOPAGO = `// Cobro directo en Mercado Pago (sin acceptance_token)
-// Exige cabecera X-Idempotency-Key y monto en pesos
-const idempotencyKey = crypto.randomUUID();
+export const SNIPPET_DISPARITY_MERCADOPAGO = `// 1. Leer el BIN del token de la tarjeta
+const auth = { Authorization: "Bearer APP_USR-xxx" };
+const card = await fetch("https://api.mercadopago.com/v1/card_tokens/tok_test_card", { headers: auth });
+const { first_six_digits } = await card.json();
 
-const res = await fetch("https://api.mercadopago.com/v1/payments", {
+// 2. Buscar la marca y el tipo de tarjeta de ese BIN (exige la llave pública)
+const search = await fetch(
+  "https://api.mercadopago.com/v1/payment_methods/search?public_key=APP_USR-pub&bins=" + first_six_digits,
+  { headers: auth },
+);
+const { id, payment_type_id } = (await search.json()).results[0];
+
+// 3. Crear la orden, con idempotencia obligatoria
+const res = await fetch("https://api.mercadopago.com/v1/orders", {
   method: "POST",
-  headers: {
-    Authorization: "Bearer APP_USR-xxx",
-    "X-Idempotency-Key": idempotencyKey, // <- Cabecera obligatoria
-  },
+  headers: { ...auth, "X-Idempotency-Key": crypto.randomUUID() }, // <- Cabecera obligatoria
   body: JSON.stringify({
-    transaction_amount: 150000, // <- Pesos directos (no centavos)
-    token: "tok_test_card",
-    installments: 1, // <- Obligatorio como entero
-    payer: { email: "cliente@example.com" },
+    type: "online",
+    processing_mode: "automatic",
+    total_amount: "150000", // <- Pesos enteros, como texto
     external_reference: "ORD-1",
+    payer: { email: "cliente@example.com" },
+    transactions: {
+      payments: [{
+        amount: "150000",
+        payment_method: { id, type: payment_type_id, token: "tok_test_card", installments: 1 },
+      }],
+    },
   }),
 });`;
 
