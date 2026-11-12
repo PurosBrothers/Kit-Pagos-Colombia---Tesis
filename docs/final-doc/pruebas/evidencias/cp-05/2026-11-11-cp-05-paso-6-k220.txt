@@ -1,0 +1,2 @@
+Suites: 1/1 · pruebas: 1/1 · fallidas: 0
+  [passed] Kushki K220 through /v1/api should answer INVALID_REQUEST with the native code and reason when the token is charged for another amount

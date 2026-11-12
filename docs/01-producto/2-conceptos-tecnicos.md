@@ -175,15 +175,17 @@ La **URL de retorno** es donde vuelve el pagador. Las pasarelas no coinciden en 
 
 ## 8. Los estados no se llaman igual en ninguna parte
 
-El mismo desenlace de negocio tiene cuatro nombres distintos:
+El mismo desenlace de negocio tiene un nombre distinto en cada pasarela:
 
 | Desenlace | Wompi | Mercado Pago | Kushki | Rapyd |
 |---|---|---|---|---|
-| Pago exitoso | `APPROVED` | `approved` | `APPROVAL` | `CLO` |
+| Pago exitoso | `APPROVED` | `processed` en una orden, `approved` en un pago | `APPROVAL` | `CLO` |
 
 `CLO` es el más interesante: significa "cerrado", no "pagado". Un checkout cerrado sin pagar también termina en `CLO`, así que traducirlo a "aprobado" solo es correcto si la respuesta además trae `paid: true`. Un comercio que asumiera que `CLO` es éxito estaría entregando producto sin haber cobrado.
 
 Kushki, además, usa **dos vocabularios distintos según el método**: con tarjeta dice `approval`, y con transferencia dice `approvedTransaction`, `declinedTransaction`, `expiredTransaction`. Son tablas separadas, no sinónimos.
+
+Mercado Pago también tiene dos, uno por API. `processed` es el de la Orders API, por la que el SDK cobra PSE y, desde la versión 0.6.0, tarjeta. `approved` es el de la Payments API, que todavía responde la consulta de los pagos con tarjeta creados antes de esa versión.
 
 La normalización del SDK traduce todo eso a seis valores: `APPROVED`, `DECLINED`, `PENDING`, `EXPIRED`, `VOIDED`, `ERROR`. Y conserva el estado nativo en un campo `rawStatus`, porque para auditar y para hablar con el soporte de la pasarela hace falta el original.
 

@@ -82,14 +82,14 @@ esconderse.
 ```text
 Pasarela      Estado normalizado  Estado nativo  Monto          ID en la pasarela                      Reconsulta
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-WOMPI         APPROVED            APPROVED       150000.00 COP  3a82bd8b-af43-4eaf-af0c-a2bf4d7962c4   APPROVED
-RAPYD         APPROVED            CLO            150000.00 COP  payment_baf68ee326978d06e813b705c8891e00 APPROVED
-MERCADOPAGO   APPROVED            approved       150000.00 COP  5894090463                             APPROVED
-KUSHKI        APPROVED            APPROVAL       150000.00 COP  b748a8a65ed942e4b4                     APPROVED
+WOMPI         APPROVED            APPROVED       150000.00 COP  f2c781de-cb93-4e99-bbe1-ff8f13e353e8   APPROVED
+RAPYD         APPROVED            CLO            150000.00 COP  payment_6135e71e283a027c01df8c186a2a94b3 APPROVED
+MERCADOPAGO   APPROVED            processed      150000.00 COP  ORD01W6IHFOAVL9                        APPROVED
+KUSHKI        APPROVED            APPROVAL       150000.00 COP  decc3143db2e49bcaa                     APPROVED
 ```
 
 La columna que importa es la del estado nativo, porque es la que cambia: `APPROVED`, `CLO`,
-`approved` y `APPROVAL` son la misma cosa dicha de cuatro formas, y una de ellas (`CLO`) no
+`processed` y `APPROVAL` son la misma cosa dicha de cuatro formas, y una de ellas (`CLO`) no
 significa "pagado" sino "cerrado". La columna del estado normalizado es la que el comercio
 programa contra, y es una sola.
 

@@ -52,8 +52,8 @@ Pasan las suites de cada prototipo (Tabla~\ref{tab:pruebas-prototipos}), el \tex
 
 \textbf{Postman local y Render} &
 Postman o Newman con \path{kit-pagos-simulator.postman_collection.json}. &
-Dos ambientes versionados: \texttt{local} (\url{http://localhost:3000}) y \texttt{render} (\url{https://kit-pagos-colombia.onrender.com}). En \texttt{render}, el token y los secretos del servicio se pasan al correr la colección. &
-Las 42 peticiones de las 7 carpetas responden con el código esperado y sus aserciones pasan. La orden de tarjeta con titular \texttt{OTHE} es la única que espera \texttt{402}. \\ \hline
+Dos ambientes versionados: \texttt{local} (\url{http://localhost:3000}) y \texttt{render} (\url{https://kit-pagos-colombia.onrender.com}). En \texttt{render}, la colección corre solo contra el ambiente \texttt{simulator}: las peticiones de \texttt{/v1/api} llevan \path{x-kit-pagos-environment: simulator}, se excluye la carpeta \texttt{06. Webhooks}, cuyo disparador entrega el webhook a un destino configurado, y el token de la API y los secretos de firma del servicio se leen de un archivo fuera del repositorio. &
+En \texttt{local}, las 42 peticiones de las 7 carpetas responden con el código esperado y sus aserciones pasan; en \texttt{render}, las 40 de las carpetas \texttt{00} a \texttt{05}. La orden de tarjeta con titular \texttt{OTHE} es la única que espera \texttt{402}. \\ \hline
 
 \textbf{OpenAPI} &
 Jest (\path{openapi.test.ts}) y revisión de \texttt{/docs}, \texttt{/docs/json} y \texttt{/docs/yaml}. &
@@ -169,7 +169,7 @@ Los prototipos tienen sus propias suites, que corren en sus jobs de la CI. Mezcl
 
 \paragraph{Objetivo.} Medir cómo responde la API de Simulación bajo concurrencia y comprobar que no falla: ni errores, ni respuestas inesperadas, ni caída del proceso. El SDK se carga en la misma corrida, porque cada petición a \texttt{/v1/api} pasa por \texttt{KitPagos} y por las rutas de \texttt{/v1/sim} que este llama; no se mide por separado. El SRS no fija umbrales de latencia porque no se midieron en un entorno controlado. Por eso las latencias se informan, pero no deciden el resultado.
 
-\paragraph{Herramienta.} Autocannon~[\ref{ref:autocannon}], usado como biblioteca desde un script de Node.js; es la herramienta con la que Fastify publica sus propias mediciones~[\ref{ref:fastify-benchmarks}]. El script lo escribe y lo ejecuta el issue \#174, como \emph{scripts/carga.ts} dentro de \path{simulator-api/}, con autocannon como dependencia de desarrollo y su versión fijada en el \path{package-lock.json}. Se corre con \texttt{npx ts-node --transpile-only} sobre ese archivo, desde \path{simulator-api/}. Este plan fija lo que el script debe cumplir.
+\paragraph{Herramienta.} Autocannon~[\ref{ref:autocannon}], usado como biblioteca desde un script de Node.js; es la herramienta con la que Fastify publica sus propias mediciones~[\ref{ref:fastify-benchmarks}]. El script es \path{simulator-api/scripts/carga.ts}, con autocannon 8.0.0 como dependencia de desarrollo y su versión fijada en el \path{package-lock.json}. Se corre desde \path{simulator-api/} con \texttt{npx ts-node --transpile-only scripts/carga.ts}. Este apartado fija lo que el script cumple, y la Sección~\ref{sec:resultados} da su corrida.
 
 \paragraph{Reglas de aislamiento.} La carga nunca llega a una pasarela, a su sandbox ni a Render. Hay cuatro caminos por los que podría salir: la cabecera \path{x-kit-pagos-environment} con \texttt{sandbox} o \texttt{production}, que hace que \texttt{/v1/api} cobre contra los hosts reales (\path{simulator-api/src/services/KitPagosProvider.ts}); el \path{.env} de la raíz, que \texttt{loadServerEnv()} lee si existe y que en la máquina de quien ejecuta tiene las llaves de sandbox (\path{simulator-api/src/auth/CredentialResolver.ts}); Render, que tiene esas llaves; y los prototipos B y C, que con \texttt{npm start} arrancan en \texttt{sandbox}. Las reglas cierran los cuatro:
 
@@ -182,7 +182,7 @@ Los prototipos tienen sus propias suites, que corren en sus jobs de la CI. Mezcl
   \item \textbf{Corrida nula.} Si el contador del guardián termina distinto de cero, si la autoprueba falla o si la regla~2 aborta, la corrida no vale y no se reporta ninguna cifra.
 \end{enumerate}
 
-El 09/11/2026 se comprobó este aislamiento con un sondeo desechable. Primero, desviando el SDK interno a \path{example.invalid}: el guardián bloqueó la petición y la API respondió 500 sin salir de la máquina. Después, con los cinco escenarios de la Tabla~\ref{tab:escenarios-carga} durante 3~s cada uno: todas las respuestas fueron 2xx y el guardián terminó en 0. Esas cifras no son un resultado: la medición formal es la del \#174.
+El 09/11/2026 se comprobó este aislamiento con un sondeo desechable. Primero, desviando el SDK interno a \path{example.invalid}: el guardián bloqueó la petición y la API respondió 500 sin salir de la máquina. Después, con los cinco escenarios de la Tabla~\ref{tab:escenarios-carga} durante 3~s cada uno: todas las respuestas fueron 2xx y el guardián terminó en 0. Esas cifras no son un resultado: la medición formal es la del \#174, en la Tabla~\ref{tab:resultados-carga}.
 
 \begin{table}[H]
   \centering
@@ -238,7 +238,7 @@ Los casos CP-01 a CP-07 son pruebas de sistema con criterio de aceptación: cada
     \textbf{Simulador local} & \path{simulator-api} en \texttt{http://localhost:3000}, SDK compilado. Las llaves del \path{.env} de la raíz, si existen, solo viajan a este proceso. & CP-01 a CP-07; escenarios e intercambiabilidad. \\ \hline
     \textbf{Carga aislada} & La app de la API de Simulación en el mismo proceso del script, en \texttt{127.0.0.1} con un puerto efímero, credenciales ficticias y el guardián de red (Sección~\ref{sec:carga}). & Pruebas de carga y rendimiento. \\ \hline
     \textbf{Sandboxes reales} & APIs oficiales de las cuatro pasarelas, credenciales de prueba en el \path{.env}, Internet. & Solo las pruebas de contrato. Nunca carga. \\ \hline
-    \textbf{Render} & \url{https://kit-pagos-colombia.onrender.com}, desplegado desde \texttt{devops}; nivel gratuito, puede tardar en despertar. Exige el token de la API fuera de \texttt{/health} y \texttt{/v1/sim}. & Postman y humo de \texttt{/health}, \texttt{/v1/api} y \texttt{/docs}. Nunca carga. \\ \hline
+    \textbf{Render} & \url{https://kit-pagos-colombia.onrender.com}, desplegado desde \texttt{devops}; nivel gratuito, puede tardar en despertar. Desde el 11/11/2026 exige el token de la API en \texttt{/v1/api}; \texttt{/health}, \texttt{/v1/sim} y \texttt{/docs} responden sin él. & Postman y humo de \texttt{/health}, \texttt{/v1/api} y \texttt{/docs}. Nunca carga. \\ \hline
     \textbf{Prototipos locales} & \texttt{http://localtest.me:4000} para B y \texttt{http://localhost:4100} para C, con \texttt{npm run start:local}; el dominio resuelve a \texttt{127.0.0.1}. & CP-04, CP-05 y CP-06; aceptación del flujo de comercio. Nunca carga. \\ \hline
     \textbf{Integración continua} & \texttt{ubuntu-latest}, Node.js 20, servicios locales del job. & Repetición automática de las suites, de la paridad y de la compilación de los documentos. \\ \hline
   \end{tabularx}

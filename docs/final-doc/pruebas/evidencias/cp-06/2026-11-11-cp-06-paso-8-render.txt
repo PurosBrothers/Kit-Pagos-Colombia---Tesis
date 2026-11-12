@@ -1,0 +1,9 @@
+2026-11-11 15:41:09 -0500
+== Petición 5: GET /health
+{"status":"ok"}
+HTTP 200 · 32.493512 s
+== Petición 6, sin el token de Render: GET /v1/api/gateways
+{"gateways":["wompi","rapyd","mercadopago","kushki"],"cardCapture":{"wompi":"BROWSER_TOKEN","mercadopago":"BROWSER_TOKEN","kushki":"BROWSER_TOKEN","rapyd":"HOSTED_PAGE"}}
+HTTP 200
+== Petición 7, sin el token de Render: GET /docs/json (solo el campo openapi y el número de rutas)
+openapi: 3.0.3 · rutas: 40

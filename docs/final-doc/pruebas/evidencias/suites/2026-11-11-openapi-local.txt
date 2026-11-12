@@ -1,0 +1,6 @@
+2026-11-11 15:47:21 -0500
+GET /docs/ → HTTP 200, text/html; charset=utf-8
+GET /docs/json → HTTP 200, application/json; charset=utf-8
+GET /docs/yaml → HTTP 200, application/x-yaml
+openapi 3.0.3 · rutas 40
+rejectionCode en el esquema de /v1/api/payments: True · rejectionCategory: True

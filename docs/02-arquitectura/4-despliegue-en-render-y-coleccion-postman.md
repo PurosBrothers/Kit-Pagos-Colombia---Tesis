@@ -140,7 +140,7 @@ Esta variable está documentada en `.env.example` (`RENDER_DEPLOY_HOOK_URL`). Pe
 
 ---
 
-## 4. Gestión de credenciales y modo abierto
+## 4. Gestión de credenciales y token de la API
 
 ### 4.1. Cero credenciales en el repositorio
 
@@ -169,11 +169,13 @@ La consecuencia en Render es que una variable de la sección «Environment» del
 
 En local aplica lo mismo: con un `.env` en la raíz del repositorio y otro en `simulator-api/`, arrancando desde `simulator-api/`, gana el de la raíz en cada clave que traigan los dos, y lo exportado en la terminal gana sobre ambos. `PORT` y `HOST` siguen la misma regla (sección 2.2).
 
-### 4.3. Modo Abierto en Render para evaluación pública
+### 4.3. Render exige el token de la API
 
-Por decisión de diseño de la tesis (punto 88 del `architecture-log.md`), en Render la variable `API_AUTH_TOKEN` se mantiene **sin configurar**:
-- **Fundamento:** La API de Simulación desplegada es un artefacto de acceso público para que evaluadores, miembros del jurado, la landing page y pruebas externas puedan consumir tanto `/v1/sim` como `/v1/api` y el trigger de webhooks sin requerir tokens Bearer privados ni credenciales estáticas.
-- **Comportamiento en código (`authHook.ts`):** Cuando `API_AUTH_TOKEN` no está definido en el entorno, el hook de autenticación emite una advertencia en el log de inicio y deja el acceso abierto sin exigir la cabecera `Authorization: Bearer <token>`.
+Desde el 11 de noviembre de 2026, Render tiene `API_AUTH_TOKEN` en el Secret File, y `/v1/api` y el trigger de webhooks exigen `Authorization: Bearer <token>` (punto 128 del `architecture-log.md`, que revisa la decisión 3 del punto 88):
+- **Por qué:** sin token, cualquiera con la URL podía mandar `x-kit-pagos-environment: sandbox` sin cabeceras `x-gateway-*` y cobrar en los sandboxes con las llaves del servidor. Hacia producción el servidor no presta sus llaves.
+- **Qué sigue abierto:** `/health`, la documentación de `/docs` y `/v1/sim`, salvo el trigger. El SDK en modo simulador, que le habla a `/v1/sim`, no necesita el token.
+- **Quién lo manda:** la colección de Postman, en la variable `apiAuthToken` (sección 6.2), y Swagger, con el botón «Authorize». El token se pide al equipo y no se versiona.
+- **La línea no puede ir comentada:** `loadServerEnv()` salta las líneas que empiezan con `#` (sección 4.2). Con `# API_AUTH_TOKEN=...` en el Secret File, el servicio arranca abierto y lo avisa en el log con «API_AUTH_TOKEN no está definido. La API REST está operando en modo abierto».
 - **Aislamiento en pruebas unitarias:** En `NODE_ENV === "test"`, `authHook.ts` ignora deliberadamente cualquier `API_AUTH_TOKEN` privado presente en el `.env` local del desarrollador, asegurando que las suites de prueba unitarias corran en modo abierto hermético.
 
 ### 4.4. Las variables que lee el servidor
@@ -186,7 +188,7 @@ Son todas las que lee `simulator-api/src` (`process.env` y `loadServerEnv()`), c
 | `SIMULATOR_SDK_BASE_URL` | La URL de Render | A dónde apunta el SDK en el ambiente `simulator` |
 | `SIMULATOR_PUBLIC_ORIGIN` | La URL de Render | Origen de las URL que el simulador entrega (sección 2.3) |
 | `SIMULATOR_TRUST_FORWARDED_FOR` | `"true"` | La IP del pagador sale de `X-Forwarded-For` (punto 92) |
-| `API_AUTH_TOKEN` (o `SIMULATOR_API_AUTH_TOKEN`) | `sync: false`, sin valor a propósito (sección 4.3) | Token Bearer de `/v1/api` y del trigger de webhooks |
+| `API_AUTH_TOKEN` (o `SIMULATOR_API_AUTH_TOKEN`) | `sync: false`; en Render el valor está en el Secret File (sección 4.3) | Token Bearer de `/v1/api` y del trigger de webhooks |
 | `WOMPI_PUBLIC_KEY`, `WOMPI_PRIVATE_KEY`, `WOMPI_INTEGRITY_SECRET`, `WOMPI_EVENTS_SECRET` | `sync: false` | Perfil de Wompi: llaves, firma de integridad y verificación de eventos |
 | `MERCADOPAGO_PUBLIC_KEY`, `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET` | `sync: false` | Perfil de Mercado Pago |
 | `KUSHKI_PUBLIC_MERCHANT_ID`, `KUSHKI_PRIVATE_MERCHANT_ID`, `KUSHKI_WEBHOOK_SECRET` (o `KUSHKI_WEBHOOK_SIGNATURE_ID`, si `KUSHKI_WEBHOOK_SECRET` falta o está vacía) | `sync: false` | Perfil de Kushki |
@@ -272,9 +274,12 @@ npx newman run simulator-api/postman/kit-pagos-simulator.postman_collection.json
 
 ### 6.2. Ejecución contra Render
 
+Render exige el token en `/v1/api` (sección 4.3), así que la corrida lo recibe en `apiAuthToken`. Se pasa en línea, sin escribirlo en el disco:
+
 ```bash
 npx newman run simulator-api/postman/kit-pagos-simulator.postman_collection.json \
-  -e simulator-api/postman/render.postman_environment.json
+  -e simulator-api/postman/render.postman_environment.json \
+  --env-var "apiAuthToken=<token de Render>"
 ```
 
 Si el servidor remoto tuviese configurados secretos específicos distintos a los valores por omisión de `merchantSecrets.ts`, se inyectan en línea mediante `--env-var` sin escribirlos en el disco:
@@ -288,7 +293,9 @@ npx newman run simulator-api/postman/kit-pagos-simulator.postman_collection.json
 
 ### 6.3. Reporte de ejecución contra Render (Medición en vivo)
 
-Resultado certificado ejecutado sobre `https://kit-pagos-colombia.onrender.com`. Fue una corrida de 33 peticiones, anterior a las tres de las páginas de banco del PSE y a las cinco de la tarjeta de Mercado Pago por la Orders API (issue #109). Con las 41 actuales solo se corrió el simulador local, no Render: el 15 de octubre de 2026, contra un simulador levantado desde el código del issue en `127.0.0.1` y sin `.env`, 41 de 41 peticiones y 44 de 44 aserciones, con la verificación de `POST /v1/api/webhooks/wompi` omitida porque ese servidor no tenía secreto de eventos. Antes, el 14 de octubre de 2026, 36 de 36:
+La corrida más reciente es del 11 de noviembre de 2026 a las 21:21, ya con el token. Dio 40 de 40 peticiones y 45 de 45 aserciones en 29,3 s, solo en el ambiente `simulator` y sin la carpeta `06. Webhooks`. La primera petición, `GET /health`, tardó 22,3 s porque el servicio estaba dormido. El reporte está en `docs/final-doc/pruebas/evidencias/postman/2026-11-11-postman-render.txt` y registra qué secretos se usaron, sin sus valores.
+
+La anterior, sobre `https://kit-pagos-colombia.onrender.com`, fue una corrida de 33 peticiones, anterior a las tres de las páginas de banco del PSE y a las cinco de la tarjeta de Mercado Pago por la Orders API (issue #109). Con las 41 de entonces solo se corrió el simulador local: el 15 de octubre de 2026, contra un simulador levantado desde el código del issue en `127.0.0.1` y sin `.env`, 41 de 41 peticiones y 44 de 44 aserciones, con la verificación de `POST /v1/api/webhooks/wompi` omitida porque ese servidor no tenía secreto de eventos. Antes, el 14 de octubre de 2026, 36 de 36:
 
 ```text
 ┌─────────────────────────┬─────────────────────┬─────────────────────┐

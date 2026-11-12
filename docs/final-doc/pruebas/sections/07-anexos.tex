@@ -76,7 +76,7 @@ Typecheck de ejemplos & \texttt{cd examples \&\& npm run typecheck} & Compila co
 Prototipos & \texttt{npm test} y \texttt{npm run typecheck} en cada carpeta de \path{prototypes/} & Suites de la Tabla~\ref{tab:pruebas-prototipos} y compilación en verde. \\ \hline
 Paridad de esqueleto & \path{./prototypes/check-skeleton-parity.sh} & Sin diferencias entre B y D. \\ \hline
 Postman local & Newman o Postman con el ambiente \texttt{local} & 42 peticiones con sus aserciones en verde. \\ \hline
-Postman Render & Newman con el ambiente \texttt{render} y el token y los secretos del servicio pasados con \texttt{--env-var} (\path{simulator-api/postman/README.md}) & 42 peticiones con sus aserciones en verde. \\ \hline
+Postman Render & Newman con el ambiente \texttt{render}, solo en el ambiente \texttt{simulator} y sin la carpeta \texttt{06. Webhooks}, con el token de la API y los secretos de firma del servicio leídos de un archivo fuera del repositorio & 40 peticiones con sus aserciones en verde. \\ \hline
 OpenAPI & \texttt{GET /docs}, \texttt{/docs/json} y \texttt{/docs/yaml} & Las tres rutas responden y el documento describe las rutas reales. \\ \hline
 Carga & El script del \#174 (Sección~\ref{sec:carga}), desde un checkout sin \path{.env} & 30 corridas sin errores y con el contador del guardián en 0. \\ \hline
 \end{xltabular}

@@ -6,8 +6,8 @@
   {David Estevan Rodriguez Jurado}
   {09/11/2026}
   {Motivo de rechazo normalizado en Kushki y Mercado Pago}
-  {Pendiente (\#174)}
-  {Pendiente (\#174)}
+  {Joan Emmanuel Orduz Chia}
+  {11/11/2026}
   {Provocar rechazos con datos de prueba de Kushki y Mercado Pago y comprobar que el SDK devuelve el código nativo y la categoría normalizada en \texttt{rejectionReason}, que una transacción aprobada no tiene ese campo y que el motivo no se pierde al pasar por la ruta REST \texttt{/v1/api}. El caso cubre el defecto que producía un objeto \texttt{\{\}} cuando el esquema de serialización descartaba los campos.}
   {Funcional (sistema, caja negra sobre la ruta real).}
   {\textbullet\ Dependencias de \path{simulator-api/} instaladas, incluido el paquete \path{kit-pagos-colombia} que usa la suite.\newline
@@ -28,37 +28,37 @@ Los pasos 2 a 7 se leen en la salida del paso 1: con \texttt{--verbose}, Jest li
   Ejecutar la suite de motivo de rechazo. &
   \texttt{cd simulator-api \&\& npx jest rejection-reason --coverage=false --verbose}. &
   La suite reporta 7 pruebas en 1 archivo, todas en verde, y termina con código 0. &
-  & & \\ \hline
+  7 de 7; código 0. & Pasó & Suite \\ \hline
   2 &
   Verificar el rechazo de Kushki por fondos insuficientes. &
   Tarjeta \texttt{4349001210846432}, monto \texttt{50000.00 COP}, tokenización por \path{/v1/sim/kushki/card/v1/tokens}. &
   Pasa «a Kushki card declined with the test card 4349001210846432»: \texttt{POST /v1/api/payments} devuelve \texttt{DECLINED} y \texttt{rejectionReason} igual a \path{{ rejectionCode: "021", rejectionCategory: "INSUFFICIENT_FUNDS" }}. &
-  & & \\ \hline
+  El par esperado. & Pasó & Suite \\ \hline
   3 &
   Verificar un segundo código de Kushki. &
   Tarjeta \texttt{4349008516656431}. &
   Pasa la misma prueba con esa tarjeta: \texttt{DECLINED} y \path{{ rejectionCode: "019", rejectionCategory: "UNKNOWN" }}. El código nativo se conserva aunque la categoría sea \texttt{UNKNOWN}. &
-  & & \\ \hline
+  El par esperado. & Pasó & Suite \\ \hline
   4 &
   Verificar el rechazo de Mercado Pago por fondos insuficientes. &
   Titular \texttt{FUND Ruiz}; token de tarjeta creado en \path{/v1/sim/mercadopago/card_tokens}. &
   Pasa «a Mercado Pago card declined for cardholder FUND Ruiz»: \texttt{DECLINED} y \path{{ rejectionCode: "insufficient_amount", rejectionCategory: "INSUFFICIENT_FUNDS" }}. &
-  & & \\ \hline
+  El par esperado. & Pasó & Suite \\ \hline
   5 &
   Verificar el rechazo de Mercado Pago por emisor. &
   Titular \texttt{OTHE Ruiz}. &
   Pasa la misma prueba con ese titular: \texttt{DECLINED} y \path{{ rejectionCode: "rejected_by_issuer", rejectionCategory: "UNKNOWN" }}. &
-  & & \\ \hline
+  El par esperado. & Pasó & Suite \\ \hline
   6 &
   Verificar que la consulta devuelve el mismo motivo. &
   El identificador de cada cobro rechazado de Mercado Pago, con \texttt{GET} \path{/v1/api/payments/:id?gateway=mercadopago}. &
   Pasa «GET /v1/api/payments/:id returns the same rejection reason» para los dos titulares: respuesta 200 con el mismo \texttt{rejectionReason} de la creación. &
-  & & \\ \hline
+  El mismo motivo. & Pasó & Suite \\ \hline
   7 &
   Verificar que una transacción aprobada no tiene motivo. &
   Titular \texttt{APRO Ruiz}, tarjeta de Mercado Pago. &
   Pasa «an approved transaction has no rejectionReason»: estado \texttt{APPROVED} y la transacción no tiene la propiedad \texttt{rejectionReason}. &
-  & & \\ \hline
+  Sin el campo. & Pasó & Suite \\ \hline
 \end{xltabular}
 \end{TablaPasos}
 

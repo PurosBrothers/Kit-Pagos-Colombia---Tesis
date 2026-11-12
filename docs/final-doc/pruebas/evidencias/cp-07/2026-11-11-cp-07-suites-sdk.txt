@@ -1,0 +1,59 @@
+Suites: 3/3 · pruebas: 55/55 · fallidas: 0
+== RetryHandler.test.ts (passed)
+  [passed] RetryHandler isTransient() classifies KitPagosError network and server codes as transient
+  [passed] RetryHandler isTransient() classifies business and credential errors as non-transient
+  [passed] RetryHandler isTransient() classifies native connection and timeout errors as transient
+  [passed] RetryHandler isTransient() classifies the AbortSignal.timeout rejection as transient by its name
+  [passed] RetryHandler isTransient() classifies generic native errors as non-transient
+  [passed] RetryHandler calculateDelay() computes the exponential progression base * 2^attempt
+  [passed] RetryHandler calculateDelay() adds bounded jitter within the range [capped, capped + jitterMs]
+  [passed] RetryHandler calculateDelay() produces delays with random variation (jitter) between consecutive calls
+  [passed] RetryHandler calculateDelay() honors custom configuration parameters
+  [passed] RetryHandler execute() retries a RESOURCE_LOCKED failure and returns the result once the lock is released
+  [passed] RetryHandler execute() returns the result immediately if the first attempt succeeds without calling sleep
+  [passed] RetryHandler execute() retries and recovers after a transient failure
+  [passed] RetryHandler execute() retries up to the configured limit before succeeding on the last attempt
+  [passed] RetryHandler execute() rethrows non-transient errors immediately without retrying or pausing
+  [passed] RetryHandler execute() exhausts the retries and throws MAX_RETRIES_EXCEEDED with the last error as cause
+  [passed] RetryHandler execute() MAX_RETRIES_EXCEEDED is not transient: an outer RetryHandler does not retry it again
+  [passed] RetryHandler execute() rethrows unwrapped a transient native error that exhausts the retries
+  [passed] RetryHandler execute() if maxRetries is 0, runs no retry and fails right after the first error
+  [passed] RetryHandler execute() uses native setTimeout if no sleep function is supplied
+== KitPagos.http-errors.test.ts (passed)
+  [passed] KitPagos against a real HTTP server that fails WOMPI: a 502 with an HTML body ends in GATEWAY_SERVER_ERROR with the text as originalPayload
+  [passed] KitPagos against a real HTTP server that fails MERCADOPAGO: a 502 with an HTML body ends in GATEWAY_SERVER_ERROR with the text as originalPayload
+  [passed] KitPagos against a real HTTP server that fails RAPYD: a 502 with an HTML body ends in GATEWAY_SERVER_ERROR with the text as originalPayload
+  [passed] KitPagos against a real HTTP server that fails KUSHKI: a 502 with an HTML body ends in GATEWAY_SERVER_ERROR with the text as originalPayload
+  [passed] KitPagos against a real HTTP server that fails WOMPI: an error body that stalls past timeoutMs ends in GATEWAY_TIMEOUT
+  [passed] KitPagos against a real HTTP server that fails MERCADOPAGO: an error body that stalls past timeoutMs ends in GATEWAY_TIMEOUT
+  [passed] KitPagos against a real HTTP server that fails RAPYD: an error body that stalls past timeoutMs ends in GATEWAY_TIMEOUT
+  [passed] KitPagos against a real HTTP server that fails KUSHKI: an error body that stalls past timeoutMs ends in GATEWAY_TIMEOUT
+  [passed] KitPagos against a real HTTP server that fails WOMPI: a 200 whose body is not JSON ends in MALFORMED_RESPONSE
+  [passed] KitPagos against a real HTTP server that fails MERCADOPAGO: a 200 whose body is not JSON ends in MALFORMED_RESPONSE
+  [passed] KitPagos against a real HTTP server that fails RAPYD: a 200 whose body is not JSON ends in MALFORMED_RESPONSE
+  [passed] KitPagos against a real HTTP server that fails KUSHKI: a 200 whose body is not JSON ends in MALFORMED_RESPONSE
+  [passed] KitPagos against a real HTTP server that fails WOMPI: a refused connection ends in CONNECTION_FAILED
+  [passed] KitPagos against a real HTTP server that fails MERCADOPAGO: a refused connection ends in CONNECTION_FAILED
+  [passed] KitPagos against a real HTTP server that fails RAPYD: a refused connection ends in CONNECTION_FAILED
+  [passed] KitPagos against a real HTTP server that fails KUSHKI: a refused connection ends in CONNECTION_FAILED
+== KitPagos.timeout.test.ts (passed)
+  [passed] KitPagos request timeout against a server that never responds WOMPI: getPaymentStatus() fails with GATEWAY_TIMEOUT within the configured limit
+  [passed] KitPagos request timeout against a server that never responds MERCADOPAGO: getPaymentStatus() fails with GATEWAY_TIMEOUT within the configured limit
+  [passed] KitPagos request timeout against a server that never responds RAPYD: getPaymentStatus() fails with GATEWAY_TIMEOUT within the configured limit
+  [passed] KitPagos request timeout against a server that never responds KUSHKI: getPaymentStatus() fails with GATEWAY_TIMEOUT within the configured limit
+  [passed] KitPagos request timeout against a server that never responds retries the timed-out query and ends in MAX_RETRIES_EXCEEDED with GATEWAY_TIMEOUT as cause
+  [passed] KitPagos request timeout against a server that never responds value passed to the request timer uses the default when timeoutMs is not configured
+  [passed] KitPagos request timeout against a server that never responds value passed to the request timer uses the configured timeoutMs
+  [passed] KitPagos request timeout when fetch ignores the signal WOMPI: a fetch that never settles ends in GATEWAY_TIMEOUT within the limit
+  [passed] KitPagos request timeout when fetch ignores the signal MERCADOPAGO: a fetch that never settles ends in GATEWAY_TIMEOUT within the limit
+  [passed] KitPagos request timeout when fetch ignores the signal RAPYD: a fetch that never settles ends in GATEWAY_TIMEOUT within the limit
+  [passed] KitPagos request timeout when fetch ignores the signal KUSHKI: a fetch that never settles ends in GATEWAY_TIMEOUT within the limit
+  [passed] KitPagos request timeout when fetch ignores the signal WOMPI: a success body that never arrives ends in GATEWAY_TIMEOUT within the limit
+  [passed] KitPagos request timeout when fetch ignores the signal MERCADOPAGO: a success body that never arrives ends in GATEWAY_TIMEOUT within the limit
+  [passed] KitPagos request timeout when fetch ignores the signal RAPYD: a success body that never arrives ends in GATEWAY_TIMEOUT within the limit
+  [passed] KitPagos request timeout when fetch ignores the signal KUSHKI: a success body that never arrives ends in GATEWAY_TIMEOUT within the limit
+  [passed] KitPagos request timeout when fetch ignores the signal WOMPI: an error body that never arrives ends in GATEWAY_TIMEOUT within the limit
+  [passed] KitPagos request timeout when fetch ignores the signal MERCADOPAGO: an error body that never arrives ends in GATEWAY_TIMEOUT within the limit
+  [passed] KitPagos request timeout when fetch ignores the signal RAPYD: an error body that never arrives ends in GATEWAY_TIMEOUT within the limit
+  [passed] KitPagos request timeout when fetch ignores the signal KUSHKI: an error body that never arrives ends in GATEWAY_TIMEOUT within the limit
+  [passed] KitPagos request timeout when fetch ignores the signal leaves no abort listener or timer behind when the gateway answers in time

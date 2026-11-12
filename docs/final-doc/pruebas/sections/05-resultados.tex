@@ -1,7 +1,7 @@
 \section{Resultados}
 \label{sec:resultados}
 
-Esta sección queda preparada para la ejecución del issue \#174. No contiene resultados inventados ni una corrida anticipada: su función es fijar de antemano qué se registrará, con qué escala y con qué evidencia, para que el informe no dependa de la memoria de quien ejecutó las pruebas. Las tablas se llenan una sola vez, con la corrida real, y cada fila queda enlazada a su evidencia.
+Esta sección registra la ejecución del issue \#174, del 11/11/2026. Las tablas se llenaron con la corrida real; las de CP-01 y CP-04, con la nueva corrida que siguió a la corrección de sus defectos. Cada fila remite a su evidencia en \path{docs/final-doc/pruebas/evidencias/}. Las horas son de Colombia (UTC$-$5).
 
 \subsection{Escala de estados}
 
@@ -24,100 +24,172 @@ Esta sección queda preparada para la ejecución del issue \#174. No contiene re
 
 \subsection{Resumen de ejecución}
 
+Los siete casos quedaron aprobados. Ninguno quedó bloqueado ni omitido. CP-01 y CP-04 fallaron en la primera corrida por dos defectos de redacción del plan y del ejemplo, no del comportamiento del framework (DEF-01 y DEF-02). Los dos defectos se corrigieron en el mismo PR de este issue, y los dos casos pasaron en una nueva corrida (Sección~\ref{sec:resultado-por-caso}).
+
 \begin{table}[H]
   \centering
   \small
   \renewcommand{\arraystretch}{1.3}
-  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.2cm}|>{\raggedright\arraybackslash}p{2.3cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{2.1cm}|>{\raggedright\arraybackslash}p{2.6cm}|}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{1.3cm}|>{\raggedright\arraybackslash}p{1.8cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{2.4cm}|>{\raggedright\arraybackslash}p{2.6cm}|}
     \hline
     \textbf{Caso} & \textbf{Fecha} & \textbf{Ejecutor y ambiente} & \textbf{Estado} & \textbf{Evidencia} \\ \hline
-    CP-01 & Pendiente & Pendiente & Pendiente & Pendiente \\ \hline
-    CP-02 & Pendiente & Pendiente & Pendiente & Pendiente \\ \hline
-    CP-03 & Pendiente & Pendiente & Pendiente & Pendiente \\ \hline
-    CP-04 & Pendiente & Pendiente & Pendiente & Pendiente \\ \hline
-    CP-05 & Pendiente & Pendiente & Pendiente & Pendiente \\ \hline
-    CP-06 & Pendiente & Pendiente & Pendiente & Pendiente \\ \hline
-    CP-07 & Pendiente & Pendiente & Pendiente & Pendiente \\ \hline
+    CP-01 & 11/11/2026 & Joan Emmanuel Orduz Chia; simulador local & Aprobado tras corregir DEF-01 & \emph{cp-01} \\ \hline
+    CP-02 & 11/11/2026 & Joan Emmanuel Orduz Chia; simulador local & Aprobado & \emph{cp-02} \\ \hline
+    CP-03 & 11/11/2026 & Joan Emmanuel Orduz Chia; en memoria & Aprobado & \emph{cp-03} \\ \hline
+    CP-04 & 11/11/2026 & Joan Emmanuel Orduz Chia; simulador local y prototipo B & Aprobado tras corregir DEF-02 & \emph{cp-04} \\ \hline
+    CP-05 & 11/11/2026 & Joan Emmanuel Orduz Chia; simulador local, prototipo B y navegador & Aprobado & \emph{cp-05} \\ \hline
+    CP-06 & 11/11/2026 & Joan Emmanuel Orduz Chia; simulador local, prototipo C y Render & Aprobado & \emph{cp-06} \\ \hline
+    CP-07 & 11/11/2026 & Joan Emmanuel Orduz Chia; en memoria y simulador local & Aprobado & \emph{cp-07} \\ \hline
   \end{tabularx}
   \caption{Resumen de resultados por caso}
   \label{tab:resumen-resultados}
 \end{table}
 
-Al cerrar la ejecución, esta tabla debe permitir responder cuántos casos se aprobaron, cuántos fallaron, cuántos quedaron bloqueados y cuántos se omitieron, sin necesidad de recorrer cada caso individual.
+\subsection{Condiciones de la corrida}
+\label{sec:condiciones-corrida}
+
+Los casos se ejecutaron tal como están escritos, con estas diferencias de entorno. Ninguna cambia el código que se prueba:
+
+\begin{itemize}
+  \item \textbf{Puertos.} En la máquina de la corrida, los puertos 3000, 4000, 4100 y 4200 están reservados para otro uso. El simulador escuchó en \texttt{127.0.0.1:4817}, el prototipo B en el 4827 y el C en el 4837; en las peticiones de los casos solo cambia el puerto.
+  \item \textbf{Sin \path{.env}.} Los casos se ejecutaron en un worktree sin \path{.env} en la raíz: el simulador, B y C lo confirman en su salida. Las credenciales y los secretos que algún caso necesita se pasaron por variables de entorno, con valores ficticios.
+  \item \textbf{Contrato.} Las pruebas de contrato son la única parte de la corrida que usó credenciales reales. Se corrieron una sola vez, en serie, con una copia temporal del \path{.env} que solo tenía las nueve llaves de pasarela, con permisos 600. La copia se borró al terminar.
+  \item \textbf{Ejemplos.} \path{gateway-interchangeability.ts}, \path{simulate-wompi-pse.ts} y \path{simulate-scenarios.ts} apuntan a \texttt{localhost:3000}: los dos primeros con su \texttt{baseUrl} y el tercero con el catálogo cerrado del ambiente \texttt{simulator}. Corrieron sin cambios, con un módulo precargado que reescribe \texttt{localhost:3000} hacia el puerto 4817 y bloquea todo host fuera de loopback. Reescribió 15, 5 y 183 peticiones, respectivamente.
+  \item \textbf{Navegador.} CP-05 y el paso~7 de CP-06 se ejecutaron en Chrome 158 sin interfaz, controlado con Playwright 1.65.0. El resolvedor de nombres del navegador solo resuelve \texttt{localhost}, \texttt{127.0.0.1} y \texttt{localtest.me} (hacia \texttt{127.0.0.1}), así que la página no puede salir de la máquina. Las peticiones de \texttt{KitPagosBrowser} a \texttt{localhost:3000} se reenvían al simulador del 4817.
+  \item \textbf{Render.} El humo de CP-06 usó solo peticiones \texttt{GET}, sin token.
+  \item \textbf{Carga.} El script corrió sobre el commit \texttt{07e542e}. Su carpeta \path{simulator-api/} es el mismo árbol (\texttt{305f5ac}) que la del commit que agrega el script en este PR, porque entre las dos bases solo cambiaron documentos.
+\end{itemize}
 
 \subsection{Resultado detallado por caso}
+\label{sec:resultado-por-caso}
 
-Para cada caso se conserva la tabla de pasos del diseño y se completan las columnas \emph{Resultado obtenido}, \emph{Estado} y \emph{Notas}. Cuando un paso falle, la nota debe describir la diferencia observada y remitir al defecto correspondiente. No se considera evidencia suficiente una captura sin la salida de consola, el código de salida del proceso o la respuesta HTTP que la respalde.
+Cada tabla de pasos (CP-01 en la Sección~\ref{sec:cp01}, CP-02 a CP-07 en los anexos) tiene llenas las columnas \emph{Resultado obtenido}, \emph{Estado} y \emph{Notas}. Este apartado resume cada caso y explica las fallas.
+
+\begin{description}
+  \item[CP-01, aprobado tras corregir DEF-01.] En la primera corrida, el ejemplo de intercambiabilidad terminó con código 0 dos veces. Las cuatro pasarelas devolvieron \texttt{APPROVED} con \texttt{150000.00 COP}, y el ejemplo imprimió «Las 4 pasarelas coinciden en estado normalizado, monto y referencia». El paso~2 falló porque el estado nativo de Mercado Pago es \texttt{processed}, el de la orden de la Orders API, y no \texttt{approved}, como decían el paso, el texto que imprime el propio ejemplo y el README del repositorio (DEF-01). El mismo PR cambia esos tres textos a \texttt{processed}. En la nueva corrida, de las 16:31, el ejemplo terminó con código 0 dos veces y su texto coincide con la tabla que imprime. El PR corrige también el mismo error en dos documentos de los ejemplos, \mbox{\path{examples/README.md}} y \path{docs/05-ejemplos/intercambiabilidad.md}; el ejemplo de Mercado Pago, corrido contra el simulador a las 19:50, imprimió \texttt{processed} y consultó \path{GET /v1/sim/mercadopago/orders/:id}. Además corrige los textos generales, la landing y la demo interactiva que daban \texttt{approved} como el único estado de éxito de Mercado Pago, que es el de la Payments API: la tarjeta se cobra por la Orders API. La demo, corrida en sus ocho caminos a las 20:16, dio \texttt{processed} y tres llamadas al crear con la tarjeta de Mercado Pago.
+  \item[CP-02, aprobado.] Eligió «Banco que aprueba» (1) de \texttt{getPseBanks()}. La creación devolvió la redirección con estado nativo \texttt{PENDING} y la consulta, \texttt{APPROVED} y final. Código 0 en las dos corridas.
+  \item[CP-03, aprobado.] La suite \path{rejection-reason.test.ts} pasó sus 7 pruebas, con los cuatro pares de motivo esperados, la consulta que conserva el motivo y la transacción aprobada sin el campo.
+  \item[CP-04, aprobado tras corregir DEF-02.] La primera corrida siguió la precondición tal como estaba escrita, con \path{WOMPI_EVENTS_SECRET} y \path{KUSHKI_WEBHOOK_SECRET}. El disparador respondió 409 \path{WEBHOOK_SECRET_NOT_CONFIGURED}: el simulador solo arma el perfil de Wompi, y con él el secreto de eventos, si también están \path{WOMPI_PUBLIC_KEY} y \path{WOMPI_PRIVATE_KEY}. La orden terminó en \texttt{DECLINED} por la consulta de B, no por el webhook (DEF-02). La precondición corregida pide también las dos llaves. Con ella, la nueva corrida, de las 16:34 y con valores ficticios, pasó los nueve pasos. El webhook llegó con \texttt{receiverStatus} 200, el historial registró \texttt{webhook} con \texttt{DECLINED}, el webhook repetido sumó una entrada sin volver a \texttt{PENDING} y el mismo webhook con el cuerpo alterado recibió 401 sin cambiar la orden.
+  \item[CP-05, aprobado.] En Wompi, Mercado Pago y Kushki, el número de la tarjeta viajó solo en la petición del navegador a la ruta de tokenización del simulador. \texttt{POST /api/orders} llevó \texttt{cardToken} sin número, CVV ni vencimiento, y los tres pagos quedaron \texttt{APPROVED}. Rapyd no tokenizó: pasó por la página de pago simulada y quedó \texttt{APPROVED}. La tarjeta \texttt{4111} de Wompi quedó \texttt{DECLINED} sin motivo. En las 67 líneas de la salida de B no aparece ningún número de tarjeta, y la suite K220 confirmó que el token de Kushki cobrado por otro monto responde 400.
+  \item[CP-06, aprobado.] La carpeta \texttt{01} de Postman pasó sus 4 peticiones y 5 aserciones. Los pasos 3 a 6 dieron:
+  \begin{itemize}
+    \item la creación, 201 \texttt{TRANSACTION} con \texttt{"50000.00"} en \texttt{PENDING};
+    \item la consulta, \texttt{APPROVED};
+    \item la consulta sin pasarela y con \texttt{paypal}, 400 \texttt{INVALID\_REQUEST};
+    \item los bancos, un solo grupo de Wompi.
+  \end{itemize}
+  En C, el PSE de Wompi terminó aprobado. En Render, \texttt{/health}, \texttt{/v1/api/gateways} y \texttt{/docs/json} respondieron 200 sin token, con OpenAPI 3.0.3 y 40 rutas, como prevé el paso~8. Ese 200 mostró que Render no tenía un token efectivo, así que toda \texttt{/v1/api} estaba abierta. El mismo día, a las 20:41, Render pasó a exigir el token: sin él, \texttt{/v1/api/gateways} y \texttt{/docs/json} responden 401 y \texttt{/health}, 200. Este PR deja \texttt{/docs} sin token, y Render la abre cuando despliega \texttt{devops} (punto~128 del \path{architecture-log.md}).
+  \item[CP-07, aprobado.] Las tres suites del SDK pasaron sus 55 pruebas, el recorrido de escenarios imprimió «61 de 61 casos OK» en las dos corridas y \path{scenario-through-sdk.test.ts} pasó sus 147 pruebas, incluidas las ocho filas del monto \texttt{10002}. La fachada confirma que \texttt{createPayment()} no usa \texttt{RetryHandler}.
+\end{description}
 
 \subsection{Registro de defectos}
 
-\begin{table}[H]
-  \centering
-  \small
-  \renewcommand{\arraystretch}{1.25}
-  \setlength{\tabcolsep}{3pt}
-  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{1.35cm}|>{\raggedright\arraybackslash}p{1.25cm}|>{\raggedright\arraybackslash}p{1.55cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{2.15cm}|>{\raggedright\arraybackslash}p{1.6cm}|}
-    \hline
-    \textbf{Id} & \textbf{Caso} & \textbf{Severidad} & \textbf{Descripción y resultado observado} & \textbf{Componente} & \textbf{Estado} \\ \hline
-    DEF-01 & Pendiente & Pendiente & Pendiente & Pendiente & Pendiente \\ \hline
-    DEF-02 & Pendiente & Pendiente & Pendiente & Pendiente & Pendiente \\ \hline
-    DEF-03 & Pendiente & Pendiente & Pendiente & Pendiente & Pendiente \\ \hline
-  \end{tabularx}
-  \caption{Registro de defectos}
-  \label{tab:defectos}
-\end{table}
-
-Cada defecto debe incluir la severidad según la escala de la Sección~\ref{sec:estrategia}, el componente afectado y el estado (abierto, en corrección, corregido, verificado o no se corrige). Un defecto corregido no se cierra hasta que la prueba que lo detectó vuelve a pasar.
+{\small
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{3pt}
+\begin{xltabular}{\textwidth}{|>{\raggedright\arraybackslash}p{1.35cm}|>{\raggedright\arraybackslash}p{1.25cm}|>{\raggedright\arraybackslash}p{1.55cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{2.15cm}|>{\raggedright\arraybackslash}p{1.6cm}|}
+\caption{Registro de defectos}\label{tab:defectos}\\
+\hline
+\textbf{Id} & \textbf{Caso} & \textbf{Severidad} & \textbf{Descripción y resultado observado} & \textbf{Componente} & \textbf{Estado} \\ \hline
+\endfirsthead
+\caption[]{Registro de defectos (continuación)}\\
+\hline
+\textbf{Id} & \textbf{Caso} & \textbf{Severidad} & \textbf{Descripción y resultado observado} & \textbf{Componente} & \textbf{Estado} \\ \hline
+\endhead
+DEF-01 & CP-01 & Baja & Mercado Pago devuelve el estado nativo \texttt{processed} y no \texttt{approved}, como decían el paso~2 del caso, el texto que imprime \path{examples/gateway-interchangeability.ts}, el README del repositorio y la documentación de los ejemplos. El SDK lo normaliza bien a \texttt{APPROVED}. & Documentación y ejemplo & Corregido; CP-01 pasó en la nueva corrida \\ \hline
+DEF-02 & CP-04 & Baja & La precondición pedía \path{WOMPI_EVENTS_SECRET}, pero el simulador solo usa ese secreto con el perfil de Wompi completo, que necesita también \path{WOMPI_PUBLIC_KEY} y \path{WOMPI_PRIVATE_KEY}. Sin ellas, el disparador responde 409 \path{WEBHOOK_SECRET_NOT_CONFIGURED}. & Plan de pruebas (CP-04) & Corregido; CP-04 pasó en la nueva corrida \\ \hline
+\end{xltabular}
+}
 
 \subsection{Métricas de la corrida}
 
+{\small
+\renewcommand{\arraystretch}{1.25}
+\begin{xltabular}{\textwidth}{|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|}
+\caption{Métricas de la corrida}\label{tab:metricas-corrida}\\
+\hline
+\textbf{Suite} & \textbf{Resultado de la corrida} & \textbf{Cobertura, duración y otras métricas} \\ \hline
+\endfirsthead
+\caption[]{Métricas de la corrida (continuación)}\\
+\hline
+\textbf{Suite} & \textbf{Resultado de la corrida} & \textbf{Cobertura, duración y otras métricas} \\ \hline
+\endhead
+Suite del SDK & 58 de 58 suites y 1088 de 1088 pruebas; de 10:49 a 10:50, sobre \texttt{4f46917}. & 97{,}95~\% de sentencias, 91{,}80~\% de ramas, 98{,}19~\% de funciones y 98{,}50~\% de líneas. \\ \hline
+Suite de la API de Simulación & 54 de 54 suites y 1301 de 1301 pruebas; de 11:23 a 11:26, sobre \texttt{07e542e}. Lint, \texttt{tsc} y métricas CK en verde. & 97{,}25~\% de sentencias, 89{,}16~\% de ramas, 99{,}08~\% de funciones y 97{,}52~\% de líneas; 107~s. \\ \hline
+Contrato contra sandboxes & 4 de 4 suites y 25 de 25 pruebas, en una sola corrida en serie contra los sandboxes de las cuatro pasarelas, de 16:17 a 16:18. Corrió sobre la carpeta \path{sdk/} de \texttt{devops} (\texttt{e8fe681}), que este PR no modifica. & 67~s; sin pruebas omitidas. \\ \hline
+Ejemplos y escenarios & Intercambiabilidad, PSE de Wompi y escenarios con código 0, en dos corridas cada uno; escenarios con 61 de 61 en \texttt{OK}. & Recorrido de escenarios en 12{,}8~s. \\ \hline
+Prototipos y paridad & A: 5 suites y 60 pruebas. B: 6 y 165. C: 6 y 139. D: 10 y 239. \texttt{typecheck} y paridad de esqueleto con código 0. & Sentencias y ramas: A 90{,}03 y 74{,}11~\%; B 99{,}07 y 92{,}33~\%; C 95{,}64 y 97{,}43~\%; D 93{,}04 y 83{,}11~\%. \\ \hline
+Postman local y Render & Local: 42 peticiones, 47 aserciones y 0 fallas; se omite la del webhook firmado porque el simulador corría sin secreto de eventos. Render, a las 21:21 y con el token de la API: 40 peticiones, 45 aserciones y 0 fallas, solo en el ambiente \texttt{simulator} y sin la carpeta \texttt{06. Webhooks}. La colección y su ambiente son los mismos de \texttt{devops}. & No aplica \\ \hline
+OpenAPI & \texttt{/docs/}, \texttt{/docs/json} y \texttt{/docs/yaml} en 200, con OpenAPI 3.0.3 y 40 rutas; \texttt{rejectionCode} y \texttt{rejectionCategory} en el esquema de \texttt{/v1/api/payments}; \path{openapi.test.ts} en verde. & No aplica \\ \hline
+Carga y rendimiento & 30 de 30 corridas, con 0 errores, 0 respuestas que no fueran 2xx y el contador del guardián en 0; 8\,181\,054 peticiones medidas, de 11:27 a 11:45. & Tabla~\ref{tab:resultados-carga}. \\ \hline
+Integración continua & Se verifica en el PR de este issue. & No aplica \\ \hline
+\end{xltabular}
+}
+
+Las cifras de las suites coinciden con la línea base del diseño: 58 suites y 1088 pruebas en el SDK, 54 y 1301 en la API de Simulación, y las mismas de los cuatro prototipos.
+
+\subsubsection{Resultados de la carga}
+
+El perfil fue el de la Sección~\ref{sec:carga}. La Tabla~\ref{tab:resultados-carga} da la mediana de las tres repeticiones de cada escenario y nivel. Las latencias son las propias, calculadas sobre la duración de cada respuesta, en milisegundos. Entre paréntesis van el mínimo y el máximo del p99 en las tres repeticiones.
+
 \begin{table}[H]
   \centering
   \small
-  \renewcommand{\arraystretch}{1.25}
-  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.8cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|}
+  \renewcommand{\arraystretch}{1.2}
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}X|>{\centering\arraybackslash}p{1.7cm}|>{\raggedleft\arraybackslash}p{1.6cm}|>{\raggedleft\arraybackslash}p{1.1cm}|>{\raggedleft\arraybackslash}p{1.1cm}|>{\raggedleft\arraybackslash}p{2.9cm}|}
     \hline
-    \textbf{Suite} & \textbf{Resultado de la corrida} & \textbf{Cobertura, duración y otras métricas} \\ \hline
-    Suite del SDK & Pendiente & Pendiente \\ \hline
-    Suite de la API de Simulación & Pendiente & Pendiente \\ \hline
-    Contrato contra sandboxes & Pendiente & Pendiente \\ \hline
-    Ejemplos y escenarios & Pendiente & Pendiente \\ \hline
-    Prototipos y paridad & Pendiente & Pendiente \\ \hline
-    Postman local y Render & Pendiente & No aplica \\ \hline
-    OpenAPI & Pendiente & No aplica \\ \hline
-    Carga y rendimiento & Pendiente: corridas completadas, tasa de errores y contador del guardián & Pendiente: p50, p95 y p99 propios y del resumen de autocannon, peticiones por segundo, RSS y retardo del bucle de eventos, por escenario y nivel \\ \hline
-    Integración continua & Pendiente & No aplica \\ \hline
+    \textbf{Escenario} & \textbf{Conexiones} & \textbf{Pet/s} & \textbf{p50} & \textbf{p95} & \textbf{p99 (mín.--máx.)} \\ \hline
+    E1 \texttt{GET /health} & 10 & 18\,477 & 0{,}45 & 0{,}83 & 1{,}35 (1{,}23--1{,}68) \\ \hline
+    E1 \texttt{GET /health} & 50 & 12\,687 & 2{,}65 & 8{,}11 & 13{,}18 (8{,}26--17{,}71) \\ \hline
+    E2 \texttt{GET /v1/api/gateways} & 10 & 18\,017 & 0{,}51 & 0{,}75 & 1{,}18 (1{,}06--1{,}58) \\ \hline
+    E2 \texttt{GET /v1/api/gateways} & 50 & 17\,484 & 2{,}70 & 3{,}57 & 4{,}70 (4{,}40--6{,}08) \\ \hline
+    E3 bancos PSE & 10 & 3\,992 & 2{,}09 & 4{,}61 & 7{,}58 (6{,}74--7{,}70) \\ \hline
+    E3 bancos PSE & 50 & 3\,769 & 11{,}63 & 22{,}97 & 33{,}23 (32{,}26--44{,}63) \\ \hline
+    E4 consulta de un cobro & 10 & 4\,487 & 1{,}55 & 4{,}84 & 8{,}28 (5{,}00--11{,}67) \\ \hline
+    E4 consulta de un cobro & 50 & 5\,772 & 7{,}84 & 10{,}79 & 20{,}01 (14{,}63--22{,}00) \\ \hline
+    E5 \texttt{POST /v1/api/payments} & 10 & 2\,660 & 3{,}28 & 5{,}77 & 7{,}38 (7{,}30--18{,}09) \\ \hline
+    E5 \texttt{POST /v1/api/payments} & 50 & 2\,371 & 19{,}87 & 26{,}91 & 46{,}12 (43{,}57--54{,}95) \\ \hline
   \end{tabularx}
-  \caption{Métricas de la corrida}
-  \label{tab:metricas-corrida}
+  \caption{Resultados de la carga: mediana de tres repeticiones de 30~s, latencias en ms}
+  \label{tab:resultados-carga}
 \end{table}
 
-La corrida de referencia del diseño, del 09/11/2026 entre las 20:15 y las 20:23, sobre el commit \texttt{4189075} y con Node.js 22.23.4, registró 58 suites y 1088 pruebas en el SDK y 54 suites y 1301 pruebas en la API de Simulación. En los prototipos fueron 5 y 60 en A, 6 y 165 en B, 6 y 139 en C y 10 y 239 en D. El contrato tiene 25 pruebas en 4 archivos, contadas en el código y no ejecutadas. Esas cifras son la línea base; la tabla anterior debe reflejar la corrida del \#174 y, si cambian, la diferencia se explica en las notas.
+Al leerla conviene tener en cuenta cuatro cosas:
+
+\begin{itemize}
+  \item \textbf{Mismo proceso.} Autocannon y la API corrieron en el mismo proceso y en un Apple M4 de 10 núcleos, así que las cifras son de esa máquina y no se comparan con otras. Tampoco hay un umbral contra el cual juzgarlas, porque el SRS no lo fija.
+  \item \textbf{Variación.} El rendimiento varió entre repeticiones: en E1 con 50 conexiones, de 11\,122 a 18\,605 peticiones por segundo.
+  \item \textbf{Bucle de eventos.} Su p99 estuvo entre 10{,}4 y 22{,}3~ms de mediana por escenario. Se midió con un intervalo de muestreo de 10~ms; en las corridas más livianas el valor quedó cerca de ese intervalo, lo que sugiere que lo incluye.
+  \item \textbf{Memoria.} El RSS llegó a 524~MB en E5, porque cada corrida crea decenas de miles de cobros en memoria; el almacén se vacía antes de cada corrida.
+\end{itemize}
+
+El resumen de autocannon de cada corrida, con su resolución de 1~ms, queda en el JSON de esa corrida como contraste. La salida de consola registra la autoprueba del guardián, y un archivo aparte, las mutaciones que comprueban las guardas del script: un \path{.env} presente, una variable de pasarela, un escenario con \texttt{sandbox} y el SDK interno desviado fuera de loopback.
 
 \subsection{Evidencias}
 
-Las evidencias se guardan en \path{docs/final-doc/pruebas/evidencias/}, con una subcarpeta por tipo:
+Las evidencias están en \path{docs/final-doc/pruebas/evidencias/}, con una subcarpeta por tipo:
 
 \begin{itemize}
-  \item \emph{cp-01} a \emph{cp-07}: salida de consola, código de salida y, cuando aplique, captura de la interfaz.
-  \item \emph{suites}: salida resumida de Jest y Vitest con el número de suites, pruebas y cobertura.
-  \item \emph{postman}: reporte de la colección en local y en Render, con el código de cada petición.
-  \item \emph{carga}: un JSON por corrida y la salida de consola con la autoprueba y el contador del guardián (Sección~\ref{sec:carga}).
-  \item \emph{defectos}: evidencia específica de cada \texttt{DEF-nn}, si no está ya en la carpeta del caso.
+  \item \emph{cp-01} a \emph{cp-07}: salida de consola, código de salida y, cuando aplica, capturas de la interfaz. Las de CP-05 son el formulario, la página alojada de Rapyd y el resultado de cada pago; las de CP-06, el formulario, la página del banco y el resultado en C. En CP-01 y CP-04 quedan la primera corrida, que falló, y la nueva, con el prefijo \emph{reejecucion}. CP-01 guarda además las corridas del ejemplo de Mercado Pago y de la demo interactiva que respaldan la corrección de DEF-01.
+  \item \emph{contrato}: la salida de la corrida única de las pruebas de contrato, con el nombre y el estado de cada prueba, sin llaves, cabeceras ni cuerpos.
+  \item \emph{suites}: el resumen de las suites con su cobertura, la paridad y el \texttt{typecheck} de los prototipos y de los ejemplos, y las rutas de OpenAPI.
+  \item \emph{postman}: el reporte de la colección completa en local y el de la corrida contra Render, que registra qué secretos usó sin sus valores.
+  \item \emph{carga}: un JSON por corrida, el resumen, la tabla de medianas, la salida de consola y las mutaciones de las guardas.
 \end{itemize}
 
-Cada archivo de evidencia lleva en su nombre la fecha de la corrida en formato \texttt{AAAA-MM-DD}, por ejemplo \emph{2026-11-09-cp-01-salida.txt}. No se versionan credenciales, tokens completos ni datos personales; los valores sensibles se redactan.
+Cada archivo lleva en su nombre la fecha de la corrida, \emph{2026-11-11}. No hay credenciales reales, tokens de pasarela ni datos personales: las credenciales que aparecen son ficticias, la salida del contrato no incluye las llaves con que corrió, las tarjetas son las de prueba de \path{docs/testing-data/} y los datos del pagador son inventados.
 
 \subsection{Criterio de cierre}
 
-La ejecución del \#174 se considera cerrada cuando:
+La ejecución del \#174 se evalúa así contra su criterio de cierre:
 
 \begin{enumerate}
-  \item Los siete casos tienen estado registrado y evidencia enlazada.
-  \item Las suites unitarias, de integración y de escenarios de la corrida vigente están en verde.
-  \item La carga cumplió su criterio de completitud, con el contador del guardián en 0 en todas las corridas.
-  \item Las 25 pruebas de contrato se ejecutaron, o su omisión quedó justificada por falta de credenciales.
-  \item No queda ningún defecto de severidad alta abierto sin decisión documentada.
-  \item Las métricas de la Tabla~\ref{tab:metricas-corrida} están completas y son consistentes con la salida de las suites.
-  \item La tabla de defectos y el resumen de resultados coinciden: todo caso fallido tiene al menos un \texttt{DEF-nn}, y todo defecto referencia un caso.
+  \item \textbf{Cumplido.} Los siete casos tienen estado registrado y evidencia enlazada.
+  \item \textbf{Cumplido.} Las suites unitarias, de integración y de escenarios de la corrida están en verde.
+  \item \textbf{Cumplido.} La carga cumplió su criterio de completitud, con el contador del guardián en 0 en las 30 corridas.
+  \item \textbf{Cumplido.} Las 25 pruebas de contrato pasaron en una corrida única contra los cuatro sandboxes.
+  \item \textbf{Cumplido.} No hay defectos de severidad alta, y los dos registrados están corregidos.
+  \item \textbf{Cumplido.} Las métricas de la Tabla~\ref{tab:metricas-corrida} están completas y coinciden con la salida de las suites.
+  \item \textbf{Cumplido.} Los dos casos que fallaron en la primera corrida tienen su defecto, y los dos defectos remiten a un caso.
 \end{enumerate}

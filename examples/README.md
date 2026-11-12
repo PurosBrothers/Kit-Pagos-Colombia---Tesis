@@ -99,8 +99,8 @@ npm run simulate:mercadopago
 * **Descripción:** Demuestra el flujo completo end-to-end con Mercado Pago:
   * Creación de pago con montos en pesos decimales directos (a diferencia de Wompi, no requiere centavos).
   * Autenticación mediante token Bearer.
-  * Normalización de respuestas manteniendo el estado nativo (`approved` en minúsculas en `rawStatus`) y el estado unificado (`TransactionStatus.APPROVED`).
-  * Consulta del estado de la transacción (`kitPagos.getPaymentStatus(...)`) contra el endpoint HTTP `GET /v1/sim/mercadopago/payments/:id`.
+  * Normalización de respuestas manteniendo el estado nativo (`processed`, el de la orden de la Orders API, en `rawStatus`) y el estado unificado (`TransactionStatus.APPROVED`).
+  * Consulta del estado de la transacción (`kitPagos.getPaymentStatus(...)`) contra el endpoint HTTP `GET /v1/sim/mercadopago/orders/:id`.
 * **Qué esperar:** Verá en consola tanto la creación de la transacción como la consulta posterior con estado acreditado/aprobado.
 
 ---
@@ -220,7 +220,7 @@ npm run simulate:interchangeability
 
 * **Archivo:** `gateway-interchangeability.ts`
 * **Qué demuestra:** el mismo pago, descrito **una sola vez**, cobrado por las cuatro pasarelas sin que cambie una línea del código del comercio. Es el cierre de la Iteración 2 y el argumento central de la tesis convertido en código ejecutable. Los nueve ejemplos anteriores muestran una pasarela o un método cada uno; este muestra lo que ninguno puede mostrar solo, porque la intercambiabilidad es una propiedad de la relación entre las cuatro.
-* **Qué esperar:** una tabla comparativa con el estado normalizado, el estado nativo, el monto y el identificador de cada pasarela. La columna que cambia es la del estado nativo — `APPROVED`, `CLO`, `approved` y `APPROVAL` son la misma cosa dicha de cuatro formas —; la del estado normalizado es una sola.
+* **Qué esperar:** una tabla comparativa con el estado normalizado, el estado nativo, el monto y el identificador de cada pasarela. La columna que cambia es la del estado nativo — `APPROVED`, `CLO`, `processed` y `APPROVAL` son la misma cosa dicha de cuatro formas —; la del estado normalizado es una sola.
 * **La verificación no es visual.** El ejemplo compara por código que las cuatro coincidan en estado normalizado, monto y referencia de la orden, y **sale con código distinto de cero** si alguna no coincide. Romper a mano el mapeo de estados de cualquier adaptador lo pone rojo, así que funciona como prueba de regresión ejecutable.
 * **Detalle a tener en cuenta:** el monto se compara con `Amount.equals()` y no con `===` sobre la cadena, porque Wompi y Rapyd devuelven `150000.00` y Mercado Pago y Kushki `150000`. Es el mismo monto con distinta escala, y comparar cadenas daría un fallo que no es un fallo.
 * **Lo que el ejemplo absorbe sin que se note:** las cuatro necesitan **distinta cantidad de llamadas** para llegar al mismo estado —una Mercado Pago y Kushki, dos Wompi, que nace `PENDING`, y tres Rapyd, que cobra la tarjeta en su página alojada y redirige—. El código del comercio es el mismo para las cuatro: el resultado se consulta cuando `isFinal()` dice que todavía no es definitivo, sin preguntar qué pasarela es.

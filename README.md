@@ -37,7 +37,7 @@ La capa REST y las rutas del simulador están completamente documentadas mediant
 
 Las cuatro están implementadas y probadas: más de 1000 pruebas unitarias en el SDK, más de 1300 en la API de Simulación, 25 pruebas de contrato contra los sandboxes reales, y un ejemplo ejecutable que verifica por código que las cuatro devuelven el mismo resultado normalizado. Las cifras exactas las imprime cada suite al ejecutarse; el detalle está en [`docs/04-metricas-y-pruebas/2-pruebas-del-sdk.md`](docs/04-metricas-y-pruebas/2-pruebas-del-sdk.md).
 
-Cuatro algoritmos de firma distintos y cuatro vocabularios de estado distintos —`APPROVED`, `CLO`, `approved`, `APPROVAL`— son, en resumen, el problema que el SDK resuelve. Uno de ellos, `CLO`, ni siquiera significa "pagado": significa "cerrado".
+Cuatro algoritmos de firma distintos y cuatro vocabularios de estado distintos —`APPROVED`, `CLO`, `processed`, `APPROVAL`— son, en resumen, el problema que el SDK resuelve. Uno de ellos, `CLO`, ni siquiera significa "pagado": significa "cerrado".
 
 ---
 

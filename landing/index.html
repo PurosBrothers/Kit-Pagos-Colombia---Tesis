@@ -270,7 +270,7 @@
             <div>
               <h3 class="comparison-title" style="margin-bottom: 8px;">Misma intención de cobro, dos implementaciones incompatibles</h3>
               <p class="section-lead" style="margin-bottom: 24px; font-size: 0.9375rem;">
-                Para cobrar una tarjeta en Wompi necesitas dos llamadas HTTP, calcular una firma SHA-256 a mano y pasar el monto en centavos. En Mercado Pago es una sola llamada, pero exige pesos directos y una cabecera de idempotencia UUID v4 obligatoria.
+                Para cobrar una tarjeta en Wompi necesitas dos llamadas HTTP, calcular una firma SHA-256 a mano y pasar el monto en centavos. En Mercado Pago son tres: dos para averiguar la marca y el tipo de la tarjeta, que la orden exige, y la orden, con el monto en pesos enteros y una cabecera de idempotencia UUID v4 obligatoria.
               </p>
 
               <div class="comparison-container">
@@ -314,7 +314,7 @@
                 <div class="comparison-col">
                   <div class="comparison-heading">
                     <h4 class="comparison-title">Mercado Pago nativo</h4>
-                    <span class="comparison-traits">1 llamada HTTP · Monto en pesos · Idempotencia obligatoria</span>
+                    <span class="comparison-traits">3 llamadas HTTP · Monto en pesos enteros · Idempotencia obligatoria</span>
                   </div>
                   <div class="terminal">
                     <div class="terminal-bar">
@@ -322,22 +322,34 @@
                       <button type="button" class="btn-copy" data-copy="snippet-mercadopago">Copiar</button>
                     </div>
                     <div class="terminal-body">
-                      <pre><code id="code-snippet-mercadopago"><span class="tok-cm">// Cobro directo en Mercado Pago (sin acceptance_token)</span>
-<span class="tok-cm">// Exige cabecera X-Idempotency-Key y monto en pesos</span>
-<span class="tok-kw">const</span> idempotencyKey = crypto.randomUUID();
+                      <pre><code id="code-snippet-mercadopago"><span class="tok-cm">// 1. Leer el BIN del token de la tarjeta</span>
+<span class="tok-kw">const</span> auth = { Authorization: "Bearer APP_USR-xxx" };
+<span class="tok-kw">const</span> card = <span class="tok-kw">await</span> fetch("https://api.mercadopago.com/v1/card_tokens/tok_test_card", { headers: auth });
+<span class="tok-kw">const</span> { first_six_digits } = <span class="tok-kw">await</span> card.json();
 
-<span class="tok-kw">const</span> res = <span class="tok-kw">await</span> fetch("https://api.mercadopago.com/v1/payments", {
+<span class="tok-cm">// 2. Buscar la marca y el tipo de tarjeta de ese BIN (exige la llave pública)</span>
+<span class="tok-kw">const</span> search = <span class="tok-kw">await</span> fetch(
+  "https://api.mercadopago.com/v1/payment_methods/search?public_key=APP_USR-pub&amp;bins=" + first_six_digits,
+  { headers: auth },
+);
+<span class="tok-kw">const</span> { id, payment_type_id } = (<span class="tok-kw">await</span> search.json()).results[<span class="tok-num">0</span>];
+
+<span class="tok-cm">// 3. Crear la orden, con idempotencia obligatoria</span>
+<span class="tok-kw">const</span> res = <span class="tok-kw">await</span> fetch("https://api.mercadopago.com/v1/orders", {
   method: "POST",
-  headers: {
-    Authorization: "Bearer APP_USR-xxx",
-    "X-Idempotency-Key": idempotencyKey, // &lt;- Cabecera obligatoria
-  },
+  headers: { ...auth, "X-Idempotency-Key": crypto.randomUUID() }, // &lt;- Cabecera obligatoria
   body: JSON.stringify({
-    transaction_amount: <span class="tok-num">150000</span>, // &lt;- Pesos directos (no centavos)
-    token: "tok_test_card",
-    installments: <span class="tok-num">1</span>, // &lt;- Obligatorio como entero
-    payer: { email: "cliente@example.com" },
+    <span class="tok-kw">type</span>: "online",
+    processing_mode: "automatic",
+    total_amount: "<span class="tok-num">150000</span>", // &lt;- Pesos enteros, como texto
     external_reference: "ORD-<span class="tok-num">1</span>",
+    payer: { email: "cliente@example.com" },
+    transactions: {
+      payments: [{
+        amount: "<span class="tok-num">150000</span>",
+        payment_method: { id, <span class="tok-kw">type</span>: payment_type_id, token: "tok_test_card", installments: <span class="tok-num">1</span> },
+      }],
+    },
   }),
 });</code></pre>
                     </div>
@@ -437,7 +449,7 @@
                           </tr>
                           <tr>
                             <td><strong>Mercado Pago</strong></td>
-                            <td><code>approved</code></td>
+                            <td><code>processed</code></td>
                             <td><span class="outcome-cell status-approved"><span class="outcome-dot"></span>APPROVED</span></td>
                           </tr>
                           <tr>
@@ -1054,7 +1066,7 @@
               <span class="path-meta">API REST en Render</span>
             </div>
             <p class="path-desc">
-              Manda un cobro de prueba al endpoint en Render (o en <code>localhost:3000</code> si lo corres local). Observa el cobro normalizado: con tarjeta, Wompi lo crea en PENDING y la consulta lo resuelve.
+              Manda un cobro de prueba al endpoint en Render con el token de la API, que se le pide al equipo, o a <code>localhost:3000</code> sin token si lo corres local. Observa el cobro normalizado: con tarjeta, Wompi lo crea en PENDING y la consulta lo resuelve.
             </p>
 
             <div class="terminal">
@@ -1064,16 +1076,13 @@
                   <button type="button" class="term-tab-btn" id="btn-tab-curl-res">Respuesta (HTTP 201)</button>
                 </div>
                 <div class="terminal-actions">
-                  <button type="button" class="btn-live-run" id="btn-run-live-curl" title="Ejecutar llamada HTTP real contra Render">
-                    <span class="live-dot" id="live-run-dot"></span>
-                    <span class="live-btn-text" id="live-run-text">Probar en vivo ⚡</span>
-                  </button>
                   <button type="button" class="btn-copy" id="btn-copy-curl" data-copy="snippet-rest">Copiar</button>
                 </div>
               </div>
               <div class="terminal-body">
                 <div id="pane-curl-req" class="terminal-pane is-active">
                   <pre><code id="code-snippet-rest"><span class="tok-kw">curl</span> <span class="tok-fn">-X</span> POST https://kit-pagos-colombia.onrender.com/v1/api/payments \
+  <span class="tok-fn">-H</span> "Authorization: Bearer $API_AUTH_TOKEN" \
   <span class="tok-fn">-H</span> "Content-Type: application/json" \
   <span class="tok-fn">-H</span> "x-kit-pagos-environment: simulator" \
   <span class="tok-fn">-d</span> '{
@@ -1122,7 +1131,7 @@
             <ol class="path-steps">
               <li>
                 <span class="step-marker">a</span>
-                <span>Dale a <strong>Probar en vivo ⚡</strong> para mandar la petición a Render o cópialo en tu terminal.</span>
+                <span>Copia la petición en tu terminal con el token en <code>API_AUTH_TOKEN</code>. En local, quita la cabecera <code>Authorization</code> y cambia la URL por <code>http://localhost:3000</code>.</span>
               </li>
               <li>
                 <span class="step-marker">b</span>

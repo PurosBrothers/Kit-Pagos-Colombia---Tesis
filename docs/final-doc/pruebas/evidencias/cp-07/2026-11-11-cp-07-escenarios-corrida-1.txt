@@ -1,0 +1,69 @@
+=== Kit Pagos Colombia — escenarios del simulador por el SDK (issue #122) ===
+
+OK   WOMPI       tarjeta 4242, aprobada al consultar                  esperado APPROVED               obtenido APPROVED
+OK   WOMPI       tarjeta 4111, pendiente y declinada al consultar     esperado PENDING -> DECLINED    obtenido PENDING -> DECLINED
+OK   WOMPI       rechazo por monto                                    esperado DECLINED               obtenido DECLINED
+OK   WOMPI       PSE banco 2, declinado sin redirección               esperado DECLINED               obtenido DECLINED
+OK   WOMPI       límite de peticiones                                 esperado RATE_LIMIT_EXCEEDED    obtenido RATE_LIMIT_EXCEEDED
+OK   WOMPI       error del servidor                                   esperado GATEWAY_SERVER_ERROR   obtenido GATEWAY_SERVER_ERROR
+OK   WOMPI       página HTML de un proxy (502)                        esperado GATEWAY_SERVER_ERROR   obtenido GATEWAY_SERVER_ERROR
+OK   WOMPI       200 con JSON inválido                                esperado MALFORMED_RESPONSE     obtenido MALFORMED_RESPONSE
+OK   WOMPI       socket cortado                                       esperado CONNECTION_FAILED      obtenido CONNECTION_FAILED
+OK   WOMPI       sin respuesta dentro de 2000 ms                      esperado GATEWAY_TIMEOUT        obtenido GATEWAY_TIMEOUT
+OK   WOMPI       credencial con marca `invalid`                       esperado INVALID_CREDENTIALS    obtenido INVALID_CREDENTIALS
+OK   WOMPI       consulta que falla dos veces (2 reintentos)          esperado APPROVED               obtenido APPROVED
+OK   WOMPI       consulta que responde 500 siempre (1 reintento)      esperado MAX_RETRIES_EXCEEDED   obtenido MAX_RETRIES_EXCEEDED  (causa GATEWAY_SERVER_ERROR)
+OK   WOMPI       consulta sin respuesta en 2000 ms (sin reintentos)   esperado GATEWAY_TIMEOUT        obtenido GATEWAY_TIMEOUT
+OK   WOMPI       bancos PSE que fallan dos veces (2 reintentos)       esperado LISTA_DE_BANCOS        obtenido LISTA_DE_BANCOS
+OK   WOMPI       bancos PSE con 500 siempre (1 reintento)             esperado MAX_RETRIES_EXCEEDED   obtenido MAX_RETRIES_EXCEEDED  (causa GATEWAY_SERVER_ERROR)
+OK   MERCADOPAGO titular APRO                                         esperado APPROVED               obtenido APPROVED
+OK   MERCADOPAGO titular OTHE                                         esperado DECLINED               obtenido DECLINED
+OK   MERCADOPAGO rechazo por monto                                    esperado DECLINED               obtenido DECLINED
+OK   MERCADOPAGO PSE: rechazo por monto                               esperado DECLINED               obtenido DECLINED
+OK   MERCADOPAGO límite de peticiones                                 esperado RATE_LIMIT_EXCEEDED    obtenido RATE_LIMIT_EXCEEDED
+OK   MERCADOPAGO error del servidor                                   esperado GATEWAY_SERVER_ERROR   obtenido GATEWAY_SERVER_ERROR
+OK   MERCADOPAGO página HTML de un proxy (502)                        esperado GATEWAY_SERVER_ERROR   obtenido GATEWAY_SERVER_ERROR
+OK   MERCADOPAGO 200 con JSON inválido                                esperado MALFORMED_RESPONSE     obtenido MALFORMED_RESPONSE
+OK   MERCADOPAGO socket cortado                                       esperado CONNECTION_FAILED      obtenido CONNECTION_FAILED
+OK   MERCADOPAGO sin respuesta dentro de 2000 ms                      esperado GATEWAY_TIMEOUT        obtenido GATEWAY_TIMEOUT
+OK   MERCADOPAGO credencial con marca `invalid`                       esperado INVALID_CREDENTIALS    obtenido INVALID_CREDENTIALS
+OK   MERCADOPAGO consulta que falla dos veces (2 reintentos)          esperado APPROVED               obtenido APPROVED
+OK   MERCADOPAGO consulta que responde 500 siempre (1 reintento)      esperado MAX_RETRIES_EXCEEDED   obtenido MAX_RETRIES_EXCEEDED  (causa GATEWAY_SERVER_ERROR)
+OK   MERCADOPAGO consulta sin respuesta en 2000 ms (sin reintentos)   esperado GATEWAY_TIMEOUT        obtenido GATEWAY_TIMEOUT
+OK   MERCADOPAGO bancos PSE que fallan dos veces (2 reintentos)       esperado LISTA_DE_BANCOS        obtenido LISTA_DE_BANCOS
+OK   MERCADOPAGO bancos PSE con 500 siempre (1 reintento)             esperado MAX_RETRIES_EXCEEDED   obtenido MAX_RETRIES_EXCEEDED  (causa GATEWAY_SERVER_ERROR)
+OK   KUSHKI      tarjeta aprobada                                     esperado APPROVED               obtenido APPROVED
+OK   KUSHKI      PSE con documento 100000002                          esperado DECLINED               obtenido DECLINED
+OK   KUSHKI      rechazo por monto                                    esperado DECLINED               obtenido DECLINED
+OK   KUSHKI      límite de peticiones                                 esperado RATE_LIMIT_EXCEEDED    obtenido RATE_LIMIT_EXCEEDED
+OK   KUSHKI      error del servidor                                   esperado GATEWAY_SERVER_ERROR   obtenido GATEWAY_SERVER_ERROR
+OK   KUSHKI      página HTML de un proxy (502)                        esperado GATEWAY_SERVER_ERROR   obtenido GATEWAY_SERVER_ERROR
+OK   KUSHKI      200 con JSON inválido                                esperado MALFORMED_RESPONSE     obtenido MALFORMED_RESPONSE
+OK   KUSHKI      socket cortado                                       esperado CONNECTION_FAILED      obtenido CONNECTION_FAILED
+OK   KUSHKI      sin respuesta dentro de 2000 ms                      esperado GATEWAY_TIMEOUT        obtenido GATEWAY_TIMEOUT
+OK   KUSHKI      credencial con marca `invalid`                       esperado INVALID_CREDENTIALS    obtenido INVALID_CREDENTIALS
+OK   KUSHKI      consulta que falla dos veces (2 reintentos)          esperado APPROVED               obtenido APPROVED
+OK   KUSHKI      consulta que responde 500 siempre (1 reintento)      esperado MAX_RETRIES_EXCEEDED   obtenido MAX_RETRIES_EXCEEDED  (causa GATEWAY_SERVER_ERROR)
+OK   KUSHKI      consulta sin respuesta en 2000 ms (sin reintentos)   esperado GATEWAY_TIMEOUT        obtenido GATEWAY_TIMEOUT
+OK   KUSHKI      bancos PSE que fallan dos veces (2 reintentos)       esperado LISTA_DE_BANCOS        obtenido LISTA_DE_BANCOS
+OK   KUSHKI      bancos PSE con 500 siempre (1 reintento)             esperado MAX_RETRIES_EXCEEDED   obtenido MAX_RETRIES_EXCEEDED  (causa GATEWAY_SERVER_ERROR)
+OK   RAPYD       tarjeta: redirige a la página de pago                esperado REDIRECT_REQUIRED      obtenido REDIRECT_REQUIRED
+OK   RAPYD       PSE: rechazo por monto                               esperado DECLINED               obtenido DECLINED
+OK   RAPYD       límite de peticiones                                 esperado RATE_LIMIT_EXCEEDED    obtenido RATE_LIMIT_EXCEEDED
+OK   RAPYD       error del servidor                                   esperado GATEWAY_SERVER_ERROR   obtenido GATEWAY_SERVER_ERROR
+OK   RAPYD       página HTML de un proxy (502)                        esperado GATEWAY_SERVER_ERROR   obtenido GATEWAY_SERVER_ERROR
+OK   RAPYD       200 con JSON inválido                                esperado MALFORMED_RESPONSE     obtenido MALFORMED_RESPONSE
+OK   RAPYD       socket cortado                                       esperado CONNECTION_FAILED      obtenido CONNECTION_FAILED
+OK   RAPYD       sin respuesta dentro de 2000 ms                      esperado GATEWAY_TIMEOUT        obtenido GATEWAY_TIMEOUT
+OK   RAPYD       credencial con marca `invalid`                       esperado INVALID_CREDENTIALS    obtenido INVALID_CREDENTIALS
+OK   RAPYD       consulta que falla dos veces (2 reintentos)          esperado PENDING                obtenido PENDING
+OK   RAPYD       consulta que responde 500 siempre (1 reintento)      esperado MAX_RETRIES_EXCEEDED   obtenido MAX_RETRIES_EXCEEDED  (causa GATEWAY_SERVER_ERROR)
+OK   RAPYD       consulta sin respuesta en 2000 ms (sin reintentos)   esperado GATEWAY_TIMEOUT        obtenido GATEWAY_TIMEOUT
+OK   RAPYD       bancos PSE que fallan dos veces (2 reintentos)       esperado LISTA_DE_BANCOS        obtenido LISTA_DE_BANCOS
+OK   RAPYD       bancos PSE con 500 siempre (1 reintento)             esperado MAX_RETRIES_EXCEEDED   obtenido MAX_RETRIES_EXCEEDED  (causa GATEWAY_SERVER_ERROR)
+
+61 de 61 casos OK en 12.8 s.
+[remap-3000] peticiones reescritas de localhost:3000 a 127.0.0.1:4817: 183
+[remap-3000] peticiones reescritas de localhost:3000 a 127.0.0.1:4817: 0
+[remap-3000] peticiones reescritas de localhost:3000 a 127.0.0.1:4817: 0
+cp-07 escenarios corrida 1 exit 0
