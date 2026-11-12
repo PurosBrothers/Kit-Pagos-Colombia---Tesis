@@ -1,22 +1,132 @@
 \setcounter{subsection}{0}
 \section{DISEÑO ARQUITECTÓNICO DEL KIT PAGOS COLOMBIA}
-% Presentar el diseño como decisión previa a la implementación y contrastarlo con el SAD aprobado.
+
+El diseño de Kit Pagos Colombia se documentó en el Documento de Arquitectura de Software (SAD) versión 2.0 (Equipo del Proyecto, 2026a). Este capítulo no reproduce ese documento: sintetiza las decisiones que sostienen la propuesta del proyecto y las relaciona con los requisitos y las restricciones que las originaron. La pregunta que ordena el capítulo es por qué la arquitectura permite que un comercio integre varias pasarelas sin escribir el mapeo, la firma ni el flujo de consulta de cada una. La respuesta se organiza en seis partes: los criterios de diseño, la arquitectura hexagonal y el modelo de dominio, el diseño de los componentes, los patrones de integración, el tratamiento de la seguridad y los errores, y las tecnologías empleadas.
 
 \subsection{Criterios y decisiones de diseño}
-% Explicar requisitos y restricciones que condicionaron las decisiones; remitir a ADR/SAD y architecture-log.
+
+El diseño se derivó de los requisitos arquitectónicamente significativos (ASR) del SAD y de las restricciones del proyecto. Los ASR de mayor prioridad son la extensibilidad ante nuevas pasarelas, la normalización uniforme de respuestas, la autenticidad de los webhooks y la protección de credenciales. A ellos se suman la reproducción fiel de escenarios, la recuperación ante fallas transitorias y el manejo uniforme de errores. La Tabla~\ref{tab:asr-memoria} resume cada atributo, la decisión que lo materializa y el escenario con el que se verifica.
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.9cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{4.1cm}|}
+    \hline
+    \textbf{Atributo} & \textbf{Decisión de diseño} & \textbf{Escenario de verificación} \\ \hline
+    Extensibilidad & Puerto \texttt{PaymentGatewayPort} y un adaptador por pasarela, seleccionado por fábrica. & Incorporar una pasarela nueva sin modificar el dominio ni el código del comercio. \\ \hline
+    Intercambiabilidad & Fachada \texttt{KitPagos} y configuración centralizada en \texttt{SdkConfigurator}. & Cambiar de pasarela cambiando un campo de configuración. \\ \hline
+    Normalización & \texttt{ResponseNormalizer} y tabla canónica de estados nativos. & Un mismo pago produce el mismo estado normalizado en las cuatro pasarelas. \\ \hline
+    Seguridad & Tokenización en el navegador, verificación de firmas y redacción de secretos. & La tarjeta no llega al servidor del comercio; un webhook alterado se rechaza. \\ \hline
+    Resiliencia & Reintentos con retroceso exponencial solo en operaciones idempotentes. & Una falla transitoria se recupera sin duplicar un cobro. \\ \hline
+    Reproducibilidad & API de Simulación con escenarios deterministas y webhooks firmados. & Un caso de prueba produce el mismo desenlace en cada corrida. \\ \hline
+  \end{tabularx}
+  \caption{Atributos de calidad, decisiones de diseño y escenarios de verificación}
+  \label{tab:asr-memoria}
+\end{table}
+
+Las restricciones acotaron el espacio de soluciones. El SDK se implementa exclusivamente en TypeScript sobre Node.js 20.19 o superior; las pruebas contra pasarelas reales dependen de sandboxes externos que el equipo no controla; el despliegue de la API de Simulación usa el plan gratuito de Render; el proyecto dispone de cinco meses; y el framework no puede procesar ni almacenar datos de tarjeta, porque esa responsabilidad se delega en los mecanismos certificados de cada proveedor. Estas restricciones explican decisiones que de otro modo parecerían arbitrarias, como el catálogo cerrado de URLs por ambiente o el almacenamiento efímero del simulador.
+
+Tres principios guiaron la descomposición. El primero es la inversión de dependencias: el dominio no conoce a las pasarelas, y son los adaptadores quienes dependen de él. El segundo es la separación entre configuración y lógica: agregar una pasarela debe ser, en lo posible, registrar sus credenciales y su adaptador, no reescribir reglas de negocio. El tercero es la sustitución de lo externo por una costura verificable: las llamadas HTTP, el reloj y la generación de identificadores se aíslan para poder probarlas sin red. La literatura sobre adaptadores de pasarelas en líneas de producto de software respalda el primero y el segundo: la variación entre proveedores se concentra en el adaptador y se estabiliza un contrato común (Febrian et al., 2021).
 
 \subsection{Arquitectura hexagonal y modelo de dominio}
-% Describir dominio, puertos y adaptadores; usar docs/02-arquitectura/ y diagramas C4 vigentes.
+
+El núcleo del SDK sigue el estilo de arquitectura hexagonal, también llamado de puertos y adaptadores (Cockburn \& Garrido de Paz, 2024). El código se organiza en tres capas con dependencias dirigidas hacia adentro: \texttt{domain/}, \texttt{application/} e \texttt{infrastructure/}. El dominio contiene la entidad inmutable \texttt{Transaction}, los objetos de valor —\texttt{Amount}, \texttt{Currency}, \texttt{PaymentResult}, \texttt{PendingRedirect}, \texttt{PseBank}, \texttt{RejectionReason} y \texttt{WebhookEvent}, entre otros—, el error \texttt{KitPagosError} y el servicio \texttt{WebhookVerifier}. No importa nada de las capas exteriores. La aplicación coordina los casos de uso mediante \texttt{ResponseNormalizer}, \texttt{RetryHandler} y \texttt{ErrorHandler}. La infraestructura implementa los detalles: los cuatro adaptadores de pasarela, la configuración, la fábrica, la fachada y el cliente HTTP.
+
+La regla de dependencia se materializa en el puerto de salida \texttt{PaymentGatewayPort}, que declara las operaciones \texttt{createPayment}, \texttt{getStatus}, \texttt{getPseBanks} y \texttt{verifySignature}. Cada pasarela implementa ese puerto en su propio adaptador. La fachada \texttt{KitPagos} depende del puerto y de los tipos del dominio, nunca de una clase concreta de proveedor; la selección del adaptador ocurre en \texttt{GatewayFactory}. Esta estructura es la que permite que el código del comercio ignore el vocabulario de cada pasarela y que el cambio de proveedor sea una operación de configuración (Martin, 2017). El modelo de dominio, además, sigue el principio de Ubiquitous Language: los nombres del negocio —pago, transacción, monto, referencia de orden, banco PSE, motivo de rechazo— son los mismos en el código y en la documentación (Evans, 2003).
+
+Las Figuras~\ref{fig:memoria-contenedores} y~\ref{fig:memoria-componentes} presentan las vistas C4 de contenedores y de componentes del SDK. Se reutilizan los diagramas del SAD, elaborados con el modelo C4 (Brown, s.~f.), para que la memoria y el documento de arquitectura describan el mismo sistema sin duplicar su mantenimiento.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{"../../architecture/SDK/Container Diagram - C4.pdf"}
+  \caption{Diagrama de contenedores de Kit Pagos Colombia}
+  \label{fig:memoria-contenedores}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{"../../architecture/SDK/Component Diagram - C4.pdf"}
+  \caption{Diagrama de componentes del SDK}
+  \label{fig:memoria-componentes}
+\end{figure}
 
 \subsection{Diseño de los componentes}
-% Tratar SDK, API de Simulación y documentación de datos; diferenciar rutas /v1/sim y /v1/api.
+
+El SDK es el contenedor de mayor complejidad. Su paquete de servidor agrupa los componentes que describe la Tabla~\ref{tab:componentes-memoria}; el paquete de navegador se publica por separado como \texttt{kit-pagos-colombia/browser} y no depende de módulos de Node.js. La fachada \texttt{KitPagos} expone las operaciones del comercio y delega en la configuración y en la fábrica. \texttt{SdkConfigurator} valida las opciones —pasarela, credenciales, ambiente, URL base, reintentos, tolerancia de webhooks y tiempo límite— y \texttt{GatewayFactory} instancia el adaptador correspondiente. \texttt{ResponseNormalizer} traduce estados nativos a los seis estados canónicos —\texttt{APPROVED}, \texttt{DECLINED}, \texttt{PENDING}, \texttt{EXPIRED}, \texttt{VOIDED} y \texttt{ERROR}— y conserva el valor original en \texttt{rawStatus}. \texttt{WebhookVerifier} comprueba la firma de cada proveedor; \texttt{RetryHandler} aplica la política de reintentos; \texttt{ErrorHandler} convierte las fallas en \texttt{KitPagosError}.
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.6cm}|>{\raggedright\arraybackslash}X|}
+    \hline
+    \textbf{Componente} & \textbf{Responsabilidad} \\ \hline
+    \texttt{KitPagos} & Fachada que expone creación, consulta, bancos PSE y verificación de webhooks al comercio. \\ \hline
+    \texttt{SdkConfigurator} y \texttt{GatewayFactory} & Validan las opciones y resuelven el adaptador de la pasarela configurada. \\ \hline
+    \texttt{PaymentGatewayPort} y adaptadores & Contrato común y traducción del contrato del SDK al de Wompi, Mercado Pago, Kushki y Rapyd. \\ \hline
+    \texttt{ResponseNormalizer} & Traduce estados, motivos de rechazo y montos a los tipos del dominio. \\ \hline
+    \texttt{WebhookVerifier} y \texttt{ErrorHandler} & Verifican firmas y convierten fallas en errores tipados y redactados. \\ \hline
+    \texttt{RetryHandler} & Reintenta solo operaciones idempotentes con retroceso exponencial y jitter. \\ \hline
+    Módulo de navegador & Tokeniza la tarjeta en las pasarelas que lo permiten, sin exponerla al servidor del comercio. \\ \hline
+  \end{tabularx}
+  \caption{Componentes principales del SDK y su responsabilidad}
+  \label{tab:componentes-memoria}
+\end{table}
+
+La API de Simulación es un servicio Fastify que reúne dos superficies HTTP en un solo proceso y un solo despliegue. La primera, \texttt{/v1/sim}, reproduce el comportamiento nativo de las cuatro pasarelas para que las pruebas no dependan de sus sandboxes: recibe la petición con el formato del proveedor, resuelve un escenario y responde con el mismo vocabulario que el proveedor. La segunda, \texttt{/v1/api}, ofrece por HTTP las operaciones de la fachada \texttt{KitPagos} y está pensada para clientes que no instalan el SDK de servidor, como un frontend o una herramienta de pruebas. Las dos superficies comparten puerto, credenciales y almacenes, pero no se sustituyen: \texttt{/v1/sim} simula a la pasarela y \texttt{/v1/api} consume el SDK, que en modo simulación llama a \texttt{/v1/sim}. Esta distinción es importante para leer los resultados: una prueba sobre \texttt{/v1/api} ejercita el SDK completo, mientras que una prueba sobre \texttt{/v1/sim} ejercita el simulador.
+
+El simulador resuelve el escenario con una precedencia explícita: la cabecera \texttt{x-simulator-scenario}, el dato de prueba nativo de la pasarela, un monto reservado y, por omisión, \texttt{APPROVED}. Los almacenes en memoria guardan los registros por identificador nativo y las máquinas de estado modelan las transiciones válidas de cada proveedor. Los webhooks se generan con la firma de la pasarela correspondiente y se envían a una URL configurada en el servidor, nunca a una dirección tomada del cuerpo de la petición. La documentación OpenAPI 3.0.3 se publica en \texttt{/docs}, \texttt{/docs/json} y \texttt{/docs/yaml}.
 
 \subsection{Patrones de integración}
-% Definir P1 (backend -> SDK), P2 (frontend -> REST -> SDK) y el límite investigado P3.
+
+El sistema soporta dos patrones de integración y explora un tercero, como resume la Tabla~\ref{tab:patrones-memoria}. En P1, el backend del comercio usa el SDK y este se comunica con la pasarela. En P2, el frontend consume la API REST \texttt{/v1/api}, que a su vez usa el SDK; en simulación, el SDK llama por HTTP a \texttt{/v1/sim} dentro del mismo servicio. P3 —un SDK unificado que se ejecutara en el navegador y hablara directamente con cada pasarela— no se implementó y no forma parte de las pruebas; se conserva como límite investigado y como trabajo futuro.
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|>{\centering\arraybackslash}p{1.25cm}|>{\raggedright\arraybackslash}X|>{\centering\arraybackslash}p{2.2cm}|}
+    \hline
+    \textbf{Patrón} & \textbf{Flujo} & \textbf{Estado} \\ \hline
+    P1 & Backend del comercio $\rightarrow$ SDK Kit Pagos $\rightarrow$ pasarela & Implementado \\ \hline
+    P2 & Frontend $\rightarrow$ \texttt{/v1/api} $\rightarrow$ SDK Kit Pagos $\rightarrow$ pasarela (en simulación, \texttt{/v1/sim}) & Implementado \\ \hline
+    P3 & Frontend $\rightarrow$ SDK unificado en el navegador $\rightarrow$ pasarela & No implementado \\ \hline
+  \end{tabularx}
+  \caption{Patrones de integración soportados y explorados}
+  \label{tab:patrones-memoria}
+\end{table}
+
+Los patrones se apoyan en ideas clásicas de integración de sistemas: el adaptador traduce el contrato, el enrutador de mensajes dirige la petición al proveedor correcto y el normalizador convierte la respuesta a un formato común (Hohpe \& Woolf, 2003). La integración de varias pasarelas en un mismo flujo de pago ha sido estudiada para escenarios de pago dividido, donde la selección del proveedor y la reconciliación de respuestas son parte del problema (Hisyam \& Manuaba, 2022). Kit Pagos Colombia se concentra en el caso del comercio que cobra con una pasarela a la vez, pero conserva la misma separación entre selección, traducción y normalización.
 
 \subsection{Seguridad y tratamiento de errores}
-% Justificar credenciales, firmas, webhooks, normalización y reintentos.
-% Aclarar qué garantiza el simulador y qué requiere validación contra pasarelas reales.
+
+La seguridad se apoya en delegar lo sensible. El framework no procesa ni almacena datos de tarjeta: en Wompi, Mercado Pago y Kushki el número viaja del navegador a la ruta de tokenización de la pasarela —o del simulador— y el servidor del comercio recibe solo un token opaco; en Rapyd, la tarjeta se captura en la página alojada del proveedor. Esta separación reduce el alcance de PCI DSS del comercio y es coherente con el estándar (PCI Security Standards Council, 2024). Las credenciales se resuelven por ambiente, el catálogo de URLs es cerrado y los errores redactan las llaves antes de propagarse. La verificación de webhooks usa el algoritmo de firma de cada proveedor y una tolerancia temporal configurable; sin esa verificación, un tercero podría alterar el estado de una orden con una notificación falsa. La literatura sobre seguridad en pasarelas de pago coincide en que la autenticación del comercio, la integridad de las notificaciones y la protección de las credenciales son los controles críticos (Olanrewaju et al., 2017).
+
+El tratamiento de errores distingue lo transitorio de lo definitivo. \texttt{RetryHandler} reintenta solo lecturas idempotentes —consultas de estado y listas de bancos— con retroceso exponencial, jitter y un número máximo de intentos; la creación de un pago no se reintenta, porque un reintento ciego podría cobrar dos veces. Cuando el error persiste, \texttt{ErrorHandler} lo convierte en un \texttt{KitPagosError} con código, causa y detalle redactado. Este patrón de aislar fallas y evitar reintentos no idempotentes es el que la literatura de resiliencia recomienda para sistemas que dependen de servicios externos (Nygard, 2018), y responde a un riesgo documentado en la integración de APIs de pago: las fallas de integración no siempre son fallas del proveedor, sino diferencias entre el contrato esperado y el real (Aué et al., 2018).
+
+Los montos se representan como cadena decimal exacta, no como número de punto flotante, para no perder centavos en la conversión. El sistema respeta los códigos de moneda de ISO~4217 y evita las operaciones binarias que introduce IEEE~754 (International Organization for Standardization, 2015; Institute of Electrical and Electronics Engineers, 2019). En el simulador, el monto también funciona como regla de escenario cuando cae en un valor reservado; esa convención es una herramienta de prueba y no una regla del framework. La frontera entre lo que garantiza el simulador y lo que solo puede verificarse contra una pasarela real se declara en el capítulo de resultados.
 
 \subsection{Tecnologías y herramientas}
-% Justificar selección con criterios del análisis y fuentes aprobadas; no confundir inventario con justificación.
+
+La Tabla~\ref{tab:tecnologias-memoria} resume las tecnologías y su justificación. La elección de Node.js y TypeScript busca que el SDK y el simulador compartan lenguaje, tipos y herramientas de prueba, y que el paquete pueda publicarse en npm sin un runtime adicional (Node.js, s.~f.). Jest se usa para las suites del SDK y del simulador; Vitest, en el prototipo C; Fastify, para la API; OpenAPI, para documentar las rutas; Postman y Newman, para la colección de extremo a extremo; Render, para el despliegue; y GitHub Actions, para la integración continua. Las métricas CK se calculan con un script propio sobre \texttt{ts-morph}, y la carga se mide con Autocannon. El paquete se publica como \texttt{kit-pagos-colombia} versión 0.7.0-rc.2 (Kit Pagos Colombia, 2026).
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.9cm}|>{\raggedright\arraybackslash}p{4.7cm}|>{\raggedright\arraybackslash}X|}
+    \hline
+    \textbf{Tecnología} & \textbf{Uso} & \textbf{Justificación} \\ \hline
+    Node.js 20.19+ y TypeScript & SDK, simulador y prototipos & Un solo lenguaje y tipos compartidos entre servidor y pruebas. \\ \hline
+    Jest y Vitest & Pruebas unitarias, de integración y de contrato & Cobertura, sustitución de red y ejecución reproducible. \\ \hline
+    Fastify y OpenAPI 3.0.3 & API de Simulación y documentación & Rendimiento, esquemas y documentación autoexplorable. \\ \hline
+    Postman y Newman & Colección de extremo a extremo & Pruebas ejecutables en local y en Render sin instalar el SDK. \\ \hline
+    Render y GitHub Actions & Despliegue e integración continua & URL pública para la evaluación y verificación automática en cada cambio. \\ \hline
+    ts-morph y Autocannon & Métricas CK y carga & Medición reproducible de complejidad y comportamiento bajo concurrencia. \\ \hline
+  \end{tabularx}
+  \caption{Tecnologías y herramientas del artefacto}
+  \label{tab:tecnologias-memoria}
+\end{table}
+
+En conjunto, el diseño separa tres responsabilidades que suelen confundirse: la traducción del contrato de cada pasarela, la normalización del resultado y la orquestación del caso de uso. Esa separación es la que hace posible la comparación del capítulo siguiente, porque permite medir cuánto código necesita el comercio cuando el framework absorbe la traducción y cuánto necesita cuando integra cada pasarela por su cuenta.

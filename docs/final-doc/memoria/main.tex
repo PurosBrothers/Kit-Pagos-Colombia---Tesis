@@ -14,9 +14,16 @@
 \usepackage{enumitem}
 \usepackage{float}
 \usepackage{setspace}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{xltabular}
+\usepackage{placeins}
 \usepackage[hidelinks]{hyperref}
+\usepackage{xurl}
 
 \setstretch{1.15}
+\setlength{\emergencystretch}{3em}
 
 \pagenumbering{roman}
 \pagestyle{fancy}
@@ -29,14 +36,13 @@
 
 \definecolor{azul_oscuro}{HTML}{003770}
 
-% Título de trabajo basado en el objetivo general; confirmar el título aprobado antes de entregar.
 \title{Kit Pagos Colombia: desarrollo de un framework para simplificar la integración de múltiples pasarelas de pago en el contexto colombiano}
 \author{
 \begin{tabular}{c}
-    Autor 1 \\ 
-    Autor 2 \\
-    Autor 3 \\
-    Autor 4
+    Andres Henao Niño \\ 
+    Joan Emmanuel Orduz Chia \\
+    Joshua Prieto Zambrano \\
+    David Estevan Rodriguez Jurado
 \end{tabular}
 }
 
@@ -87,8 +93,6 @@
     \newpage
     \listoftables
 
-    \include{sections/covers/abstract_resumen.tex}
-    
     \include{sections/introduccion.tex}
     \include{sections/descripcionGeneral.tex}
     \include{sections/contextoProyecto.tex}
