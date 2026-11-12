@@ -18,7 +18,7 @@ La naturaleza del proyecto determina cuál metodología se elige antes de analiz
     \item Los adaptadores de cada pasarela con bajo acoplamiento, siendo independientes entre sí.
     \item La API de Simulación completa, la documentación de datos de prueba, la página de presentación y los prototipos B y D, los cuatro entregables que \texttt{methodology.md} (sección 2.1) asigna a esta iteración.
   \end{itemize}
-  El orden no es arbitrario: la arquitectura hexagonal impone que el núcleo y sus contratos existan antes de que cualquier adaptador pueda construirse correctamente. La versión 1.0 de este plan ponía los prototipos en la fase de demostración; sus issues (\#150 y \#151) quedaron en el hito de la Iteración 3 y se cerraron el 25 de octubre de 2026.
+  El orden no es arbitrario: la arquitectura hexagonal impone que el núcleo y sus contratos existan antes de que cualquier adaptador pueda construirse correctamente. La versión 1.0 de este plan ponía los prototipos en la fase de demostración; sus issues quedaron en el hito de la Iteración 3 y se cerraron el 25 de octubre de 2026.
   \item \textbf{Demostración y evaluación:} El framework se aplica en los proyectos prototípicos y sobre el código resultante se miden seis variables, entre ellas las métricas WMC, CBO y RFC de Chidamber y Kemerer (1994). El prototipo B, que usa el framework, se compara con el D, que integra las cuatro pasarelas directamente contra sus APIs nativas, lo que constituye el núcleo experimental del proyecto (\path{docs/project-management/prototypes-evaluation-plan.md}). En paralelo de esta evaluación, sucede la demostración, siendo esta el acto de integrar el framework en los prototipos.
   \item \textbf{Comunicación:} Esta fase comprende la consolidación del documento de trabajo de grado y la publicación del repositorio público con documentación suficiente para que un desarrollador externo pueda integrar el kit sin haber estado involucrado en el desarrollo del mismo. Aunque esta fase cierra formalmente el ciclo DSR, su redacción comienza desde las primeras fases: el documento de grado no es una actividad de cierre sino un artefacto que crece en paralelo con el proyecto.
 \end{itemize}
@@ -58,9 +58,9 @@ La Tabla~\ref{tab:hitos-reales} compara la semana en que el plan ubicaba cada hi
   \hline
   H3 completo & S10 (hasta el 20 de septiembre) & 21 de septiembre de 2026 & Último cierre de la Iteración 2 \\
   \hline
-  H4 & S12 (hasta el 4 de octubre) & 9 de noviembre de 2026 & Último cierre de la Iteración 3 (\#112, la documentación oficial del producto) \\
+  H4 & S12 (hasta el 4 de octubre) & 9 de noviembre de 2026 & Último cierre de la Iteración 3: la documentación oficial del producto \\
   \hline
-  H5 & S16 (hasta el 1 de noviembre) & 9 de noviembre de 2026 & Último cierre de la Fase 5 (\#135): el informe comparativo (\path{docs/evaluation/informe-comparativo-fase-5.md}), sobre las seis variables medidas el 22 y el 28 de octubre \\
+  H5 & S16 (hasta el 1 de noviembre) & 9 de noviembre de 2026 & Último cierre de la Fase 5: el informe comparativo (\path{docs/evaluation/informe-comparativo-fase-5.md}), sobre las seis variables medidas el 22 y el 28 de octubre \\
   \hline
   H6 & S18 (hasta el 15 de noviembre) & Entrega prevista el 9 de noviembre de 2026 & Hito «Fase 6 – Comunicación» \\
   \hline
@@ -122,4 +122,4 @@ Para las pruebas, el framework se valida primero contra la API de simulación pr
 
 Para la revisión de código, se adopta una política estricta de pull requests: ningún cambio entra a las ramas \texttt{devops} y \texttt{main} sin un pull request revisado por al menos otro integrante (\texttt{CONTRIBUTING.md}). Esto funciona como mecanismo de control de calidad continuo y también como transferencia de conocimiento entre quienes trabajan en frentes distintos del framework.
 
-Para la evaluación con métricas CK, el diseño experimental se fija antes de medir y no se improvisa al llegar a la fase 5. Los proyectos prototípicos y la herramienta de medición se definen con anticipación, igual que las unidades sobre las que se calculan las métricas: archivos, desde el issue \#134 (\texttt{methodology.md}, sección 6.1.1). Así, la comparación entre integración directa e integración con el framework es reproducible y no queda sujeta a sesgos de selección posterior.
+Para la evaluación con métricas CK, el diseño experimental se fija antes de medir y no se improvisa al llegar a la fase 5. Los proyectos prototípicos y la herramienta de medición se definen con anticipación, igual que las unidades sobre las que se calculan las métricas: archivos, desde la Fase 5 (\texttt{methodology.md}, sección 6.1.1). Así, la comparación entre integración directa e integración con el framework es reproducible y no queda sujeta a sesgos de selección posterior.

@@ -82,7 +82,7 @@ Chidamber y Kemerer (1994) propusieron un conjunto de métricas para el diseño 
 La definición de terminado acota esas métricas en cada pull request: WMC hasta 20, CBO hasta 5, RFC hasta 20 y una complejidad ciclomática máxima por método de 10. Para la evaluación de la Fase 5, las métricas se adaptaron a nivel de archivo, porque el módulo de pagos del prototipo B no tiene clases (sección 6.1.1 del mismo documento).
 
 \subsection{Ecosistema de pasarelas seleccionado}
-El proyecto trabaja con cuatro pasarelas que operan en Colombia: \textbf{Wompi}, \textbf{Mercado Pago}, \textbf{Kushki} y \textbf{Rapyd}. Rapyd reemplazó a PayU, que nombraba la versión 1.0 del SPMP, después de que Rapyd completara la adquisición de PayU GPO en América Latina el 14 de marzo de 2025 (punto 15 del registro de arquitectura).
+El proyecto trabaja con cuatro pasarelas que operan en Colombia: \textbf{Wompi}, \textbf{Mercado Pago}, \textbf{Kushki} y \textbf{Rapyd}. Rapyd reemplazó a PayU, que nombraba la versión 1.0 del SPMP, después de que Rapyd completara la adquisición de PayU GPO en América Latina el 14 de marzo de 2025.
 
 Los datos de esta sección salen del código de los adaptadores del SDK, de la documentación oficial de cada pasarela y de \path{docs/testing-data/}. Cuando un dato se midió en el sandbox, se indica la fecha de la medición.
 
@@ -108,7 +108,7 @@ Los datos de esta sección salen del código de los adaptadores del SDK, de la d
 \begin{itemize}
     \item \textbf{Autenticación:} usa cabeceras propias. \texttt{Public-Merchant-Id} identifica al comercio en las operaciones que en una integración real ocurren en el navegador, como listar bancos o tokenizar, y \texttt{Private-Merchant-Id}, en las que cobran.
     \item \textbf{Manejo del monto:} recibe el monto como un objeto, en pesos, con \texttt{subtotalIva0}, \texttt{subtotalIva}, \texttt{iva} e \texttt{ice}, cuyas partes deben sumar el total.
-    \item \textbf{Flujo transaccional:} la tarjeta se tokeniza en el navegador por la API REST de tokenización, que acepta llamadas desde el navegador (medido el 17 de octubre de 2026, punto 106 del registro de arquitectura). El cobro va a \texttt{POST} \path{/card/v1/charges}; \texttt{POST} \path{/charges} responde \texttt{403}.
+    \item \textbf{Flujo transaccional:} la tarjeta se tokeniza en el navegador por la API REST de tokenización, que acepta llamadas desde el navegador (medido el 17 de octubre de 2026). El cobro va a \texttt{POST} \path{/card/v1/charges}; \texttt{POST} \path{/charges} responde \texttt{403}.
     \item \textbf{PSE:} los bancos se listan con \texttt{GET} \path{/transfer/v1/bankList}. El pago toma tres llamadas: \texttt{POST} \path{/transfer/v1/tokens}, \texttt{POST} \path{/transfer/v1/init}, que devuelve la URL del banco, y \texttt{GET} \path|/transfer/v1/status/{token}| para el estado.
     \item \textbf{Firma y webhooks:} notifica el evento completo. La firma viaja en la cabecera \texttt{x-\allowbreak kushki-\allowbreak signature} y es un HMAC-SHA256 en hexadecimal sobre el cuerpo y el valor de \texttt{x-\allowbreak kushki-\allowbreak id}, una marca de tiempo, separados por un punto (Kushki, 2026).
 \end{itemize}

@@ -21,7 +21,7 @@
 \hline
 \endfoot
 \endlastfoot
-Transaction (Entidad) & Representa una transacción de pago tal como la reporta la pasarela: agrupa el identificador nativo, la referencia del comercio, el monto, la moneda, los datos del pagador, el estado normalizado y el nativo y, cuando lo hay, el motivo de rechazo. Es inmutable (punto 3 del registro de arquitectura): un estado nuevo produce otra instancia y la anterior queda igual. Es la única entidad del modelo, es decir, la única clase que se distingue por su identidad y no por sus valores. \\ \hline
+Transaction (Entidad) & Representa una transacción de pago tal como la reporta la pasarela: agrupa el identificador nativo, la referencia del comercio, el monto, la moneda, los datos del pagador, el estado normalizado y el nativo y, cuando lo hay, el motivo de rechazo. Es inmutable: un estado nuevo produce otra instancia y la anterior queda igual. Es la única entidad del modelo, es decir, la única clase que se distingue por su identidad y no por sus valores. \\ \hline
 Amount (Objeto de Valor) & Encapsula el monto en unidades monetarias con hasta dos decimales — la representación canónica del SDK. Cada adaptador es responsable de convertirla al formato nativo de su pasarela (centavos, objeto descompuesto, etc.). \\ \hline
 Currency (Objeto de Valor) & Encapsula el código ISO 4217 de la moneda (por defecto "COP") y valida que tenga exactamente tres letras mayúsculas. \\ \hline
 OrderReference (Objeto de Valor) & Es la referencia que el comercio asigna a la transacción para correlacionarla con sus propios sistemas. El SDK valida que no esté vacía, pero nunca la genera ni garantiza su unicidad — eso es responsabilidad del comercio. \\ \hline
