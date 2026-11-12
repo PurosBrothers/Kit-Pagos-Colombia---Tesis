@@ -1054,7 +1054,7 @@
               <span class="path-meta">API REST en Render</span>
             </div>
             <p class="path-desc">
-              Manda un cobro de prueba al endpoint en Render (o en <code>localhost:3000</code> si lo corres local). Observa el cobro normalizado: con tarjeta, Wompi lo crea en PENDING y la consulta lo resuelve.
+              Manda un cobro de prueba al endpoint en Render con el token de la API, que se le pide al equipo, o a <code>localhost:3000</code> sin token si lo corres local. Observa el cobro normalizado: con tarjeta, Wompi lo crea en PENDING y la consulta lo resuelve.
             </p>
 
             <div class="terminal">
@@ -1064,16 +1064,13 @@
                   <button type="button" class="term-tab-btn" id="btn-tab-curl-res">Respuesta (HTTP 201)</button>
                 </div>
                 <div class="terminal-actions">
-                  <button type="button" class="btn-live-run" id="btn-run-live-curl" title="Ejecutar llamada HTTP real contra Render">
-                    <span class="live-dot" id="live-run-dot"></span>
-                    <span class="live-btn-text" id="live-run-text">Probar en vivo ⚡</span>
-                  </button>
                   <button type="button" class="btn-copy" id="btn-copy-curl" data-copy="snippet-rest">Copiar</button>
                 </div>
               </div>
               <div class="terminal-body">
                 <div id="pane-curl-req" class="terminal-pane is-active">
                   <pre><code id="code-snippet-rest"><span class="tok-kw">curl</span> <span class="tok-fn">-X</span> POST https://kit-pagos-colombia.onrender.com/v1/api/payments \
+  <span class="tok-fn">-H</span> "Authorization: Bearer $API_AUTH_TOKEN" \
   <span class="tok-fn">-H</span> "Content-Type: application/json" \
   <span class="tok-fn">-H</span> "x-kit-pagos-environment: simulator" \
   <span class="tok-fn">-d</span> '{
@@ -1122,7 +1119,7 @@
             <ol class="path-steps">
               <li>
                 <span class="step-marker">a</span>
-                <span>Dale a <strong>Probar en vivo ⚡</strong> para mandar la petición a Render o cópialo en tu terminal.</span>
+                <span>Copia la petición en tu terminal con el token en <code>API_AUTH_TOKEN</code>. En local, quita la cabecera <code>Authorization</code> y cambia la URL por <code>http://localhost:3000</code>.</span>
               </li>
               <li>
                 <span class="step-marker">b</span>

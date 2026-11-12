@@ -78,7 +78,7 @@ Cada tabla de pasos (CP-01 en la Sección~\ref{sec:cp01}, CP-02 a CP-07 en los a
     \item la consulta sin pasarela y con \texttt{paypal}, 400 \texttt{INVALID\_REQUEST};
     \item los bancos, un solo grupo de Wompi.
   \end{itemize}
-  En C, el PSE de Wompi terminó aprobado. En Render, \texttt{/health}, \texttt{/v1/api/gateways} y \texttt{/docs/json} respondieron 200 sin token, con OpenAPI 3.0.3 y 40 rutas, como prevé el paso~8.
+  En C, el PSE de Wompi terminó aprobado. En Render, \texttt{/health}, \texttt{/v1/api/gateways} y \texttt{/docs/json} respondieron 200 sin token, con OpenAPI 3.0.3 y 40 rutas, como prevé el paso~8. Ese 200 mostró que Render no tenía un token efectivo, así que toda \texttt{/v1/api} estaba abierta. El mismo día, a las 20:41, Render pasó a exigir el token: sin él, \texttt{/v1/api/gateways} y \texttt{/docs/json} responden 401 y \texttt{/health}, 200. Este PR deja \texttt{/docs} sin token, y Render la abre cuando despliega \texttt{devops} (punto~128 del \path{architecture-log.md}).
   \item[CP-07, aprobado.] Las tres suites del SDK pasaron sus 55 pruebas, el recorrido de escenarios imprimió «61 de 61 casos OK» en las dos corridas y \path{scenario-through-sdk.test.ts} pasó sus 147 pruebas, incluidas las ocho filas del monto \texttt{10002}. La fachada confirma que \texttt{createPayment()} no usa \texttt{RetryHandler}.
 \end{description}
 

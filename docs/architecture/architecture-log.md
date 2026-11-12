@@ -1815,6 +1815,8 @@ Se implementó un hook `onRequest` para Fastify gobernado por la variable de ent
 - Si la variable **está definida**, exige la cabecera `Authorization: Bearer <token>`. La comparación se realiza mediante `crypto.timingSafeEqual` con normalización de longitud previa (`timingSafeCompare`), mitigando cualquier vulnerabilidad de fuga de información por análisis de tiempos (*timing attacks*).
 - Rutas públicas como `/health` y los endpoints mock del simulador (`/v1/sim/*`, consumidos por los adaptadores del SDK) quedan exentos por prefijo.
 
+> **Revisado en el punto 128.** `/docs` también queda exenta: solo describe la API y un navegador que abre Swagger no puede mandar el token.
+
 **Decisión 4: Redacción estricta de secretos en logs (`redactSerializer`).**
 Para prevenir fugas accidentales de secretos en terminales, consolas de Render o monitores de observabilidad, se configuró un serializador y redactor de Fastify/Pino que reemplaza por `"[REDACTED]"` cualquier cabecera sensible (`authorization`, `x-gateway-private-key`, `x-gateway-public-key`, `x-gateway-integrity-secret`, `x-gateway-webhook-secret`). Se escribió una prueba con captura de stream en memoria (`redactSerializer.test.ts`) que garantiza que ningún valor sensible en claro figure en la salida del logger.
 
@@ -2967,6 +2969,8 @@ Render monta los archivos secretos en `/etc/secrets/.env`. `CredentialResolver.l
 
 **Decisión 3: modo abierto en Render para evaluación pública y aislamiento de pruebas locales.**
 En Render, `API_AUTH_TOKEN` se mantiene sin configurar. Esto permite que el jurado de tesis, los evaluadores externos, la landing page y Newman interactúen con `/v1/api` y con el trigger de webhooks sin requerir bearer tokens privados. En el entorno local de desarrollo, `authHook.ts` aísla las pruebas de Jest (`NODE_ENV === "test"`) para que no hereden el token privado del `.env` local del desarrollador, preservando la hermeticidad de las pruebas unitarias.
+
+> **Revisado en el punto 128.** Desde el 11 de noviembre de 2026, Render exige el token en `/v1/api` y en el trigger de webhooks, porque abierta la capa REST dejaba cobrar en los sandboxes con las llaves del servidor. `/docs` queda exenta.
 
 **Decisión 4: redespliegue automatizado mediante Deploy Hook.**
 Se documentó `RENDER_DEPLOY_HOOK_URL` en `.env.example`, permitiendo invocar `curl -X POST "$RENDER_DEPLOY_HOOK_URL"` para desencadenar el ciclo de build (`npm ci && npm run build`) y start (`npm start`) en Render sin acceder manualmente a la consola web.
@@ -4646,6 +4650,29 @@ El corte por clase no reemplaza al de archivo: deja fuera las funciones de módu
 **Lo medido.** El informe recoge: 310 LOC de B frente a 1 308 de D (-76.30 %); +67/-14 líneas para las tres pasarelas nuevas frente a +1 042/-5 (-93.57 %); WMC total 66 frente a 375 (-82.40 %); RFC promedio 22.00 frente a 36.17 (-39.17 %); MAX_CC 10 frente a 19 (-47.37 %); 0 identificadores y 0 ocurrencias de conceptos nativos frente a 10 y 18; 4 de 4 pasarelas en los dos; y cobertura de 100 %/97.59 % frente a 90.03 %/81.08 % (+9.97 y +16.51 puntos porcentuales). La hipótesis se confirma en el código fuente que B agrega en `src/payments` —es configuración—, con dos matices declarados: B también escribe las pruebas de cada pasarela (51, 65 y 121 líneas) y el costo del SDK no entra en la medición.
 
 **Estado:** El informe está en [`docs/evaluation/informe-comparativo-fase-5.md`](../evaluation/informe-comparativo-fase-5.md), con la recolección de las seis variables, los dos reportes CK por archivo y los dos por clase. OE-06 pasó a `Implementado` en [`thesis-objectives.md`](../project-management/thesis-objectives.md), y el [`README`](../README.md) y la guía de medición apuntan al informe. El issue se cierra con el PR de esta entrega.
+
+### 128. Render pasa a exigir el token de la API, y `/docs` queda abierta (issue #174)
+
+**Responsable:** Joan (issue #174).
+
+**Contexto.** El punto 88 dejó `API_AUTH_TOKEN` sin configurar en Render para que el jurado, la landing y Newman usaran `/v1/api` sin token. La ejecución del plan de pruebas midió que Render respondía `200` sin token en `/v1/api/gateways` y en `/docs/json`. Como `authHook.ts` solo exime `/health` y `/v1/sim`, eso quería decir que toda la capa REST estaba abierta. `POST /v1/api/payments` con `x-kit-pagos-environment: sandbox` y sin cabeceras `x-gateway-*` cobraba en los sandboxes con las llaves del servidor (`KitPagosProvider.resolveClient`, con la advertencia `SERVER_SANDBOX_CREDENTIALS_USED`), y el Secret File del servicio trae llaves de las cuatro pasarelas. Hacia producción el servidor nunca presta sus llaves: sin las dos cabeceras responde `401` sin tocar la red (punto 69). En Mercado Pago, sandbox y producción usan la misma URL (`gateway-urls.ts`), así que lo que separa la prueba de lo real es la cuenta dueña del token.
+
+**Por qué el token no se aplicaba.** En el Secret File `.env` la línea del token estaba comentada con `#`, y `loadServerEnv()` salta esas líneas (sección 4.2 de `docs/02-arquitectura/4-despliegue-en-render-y-coleccion-postman.md`). El servicio arrancaba en modo abierto aunque el valor estuviera en el archivo. Se descomentó el 11 de noviembre de 2026 y el servicio se redesplegó.
+
+**Decisión 1: Render exige el token.** Revisa la decisión 3 del punto 88. Quien use `/v1/api` o el trigger de webhooks en Render, incluida la colección de Postman, manda `Authorization: Bearer <token>`, y el token se pide al equipo. `/health` y `/v1/sim` siguen abiertos, así que el SDK en modo simulador no cambia.
+
+**Decisión 2: `/docs` queda exenta.** Con el token activo, Swagger respondía `401`, y la landing, los README y el manual de la API REST enlazan a `/docs`. La documentación solo describe la API, sin cobrar ni firmar nada, y un navegador que la abre no puede mandar el token. `DEFAULT_EXEMPT_PATHS` pasa a `["/health", "/v1/sim", "/docs"]`, y para probar `/v1/api` desde Swagger el token se pega en «Authorize». Render abre `/docs` cuando despliega `devops` con este cambio.
+
+**Decisión 3: la landing deja de llamar a `/v1/api` desde el navegador.** El token no puede ir en una página pública. El indicador de estado consulta `/health`, el botón «Probar en vivo» se quita y queda el ejemplo fijo, con la cabecera `Authorization` en el `curl`. Ese `curl` (`SNIPPET_REST_CURL` en `landing/src/snippets.ts`, el que la página muestra y copia) mandaba `x-kit-pagos-environment: sandbox`, a diferencia del HTML; pasa a `simulator`, para que nadie que lo copie cobre en un sandbox con las llaves del servidor.
+
+**Lo medido** (11 de noviembre de 2026, sin token, solo códigos HTTP):
+
+- 15:41, 19:55, 20:16, 20:17 y 20:28, la última después de un redespliegue: `/v1/api/gateways` responde `200`.
+- 20:41, con la línea descomentada: `/health` `200`, `/v1/sim/wompi/merchants/pub_test_demo_no_real` `200`, `/v1/api/gateways` `401`, `/docs/` `401` y `/docs/json` `401`.
+- En local, con el token configurado: `/docs`, `/docs/`, `/docs/json`, `/docs/yaml` y `/docs/static/swagger-ui.css` cargan sin él, y `/v1/api/gateways` responde `401` sin token y `200` con él (`openapi.test.ts`). La prueba falla si se quita `/docs` de la lista.
+- Simulador: 54 suites y 1302 pruebas en verde, 97,25 % de sentencias; el lint, `tsc` y las métricas CK con sus excepciones dan código 0. Landing: `check:snippets` y el build dan código 0.
+
+**Estado:** Resuelto en Render (token activo desde las 20:41) y en código (`authHook.ts`, `register.ts`, `openapi.test.ts`, `landing/`). En Render, `/docs` sigue detrás del token hasta que se despliegue este cambio.
 
 ---
 
