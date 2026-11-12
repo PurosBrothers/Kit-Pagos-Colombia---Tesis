@@ -5,7 +5,7 @@ La estrategia combina pruebas automatizadas que se repiten en cada cambio con pr
 
 \subsection{Tipos de prueba y criterios de completitud}
 
-La Tabla~\ref{tab:estrategia} resume los once tipos de comprobación que se aplican al artefacto. Cada fila declara la herramienta, el ambiente y el criterio objetivo que decide si el tipo de prueba se considera terminado. Las cifras de las suites son de la corrida del 09/11/2026 entre las 20:15 y las 20:23, sobre el commit \texttt{4189075}, con Node.js 22.23.4.
+La Tabla~\ref{tab:estrategia} resume los once tipos de comprobación que se aplican al artefacto. Cada fila declara la herramienta, el ambiente y el criterio objetivo que decide si el tipo de prueba se considera terminado. Las cifras de las suites son de la corrida del 09/11/2026 entre las 20:15 y las 20:23, con el SDK 0.7.0-rc.2, la API de Simulación 0.1.0 y Node.js 22.23.4.
 
 {\small
 \begin{longtable}{|>{\raggedright\arraybackslash}p{2.45cm}|>{\raggedright\arraybackslash}p{3.05cm}|>{\raggedright\arraybackslash}p{3.25cm}|>{\raggedright\arraybackslash}p{5.55cm}|}
@@ -182,7 +182,7 @@ Los prototipos tienen sus propias suites, que corren en sus jobs de la CI. Mezcl
   \item \textbf{Corrida nula.} Si el contador del guardián termina distinto de cero, si la autoprueba falla o si la regla~2 aborta, la corrida no vale y no se reporta ninguna cifra.
 \end{enumerate}
 
-El 09/11/2026 se comprobó este aislamiento con un sondeo desechable. Primero, desviando el SDK interno a \path{example.invalid}: el guardián bloqueó la petición y la API respondió 500 sin salir de la máquina. Después, con los cinco escenarios de la Tabla~\ref{tab:escenarios-carga} durante 3~s cada uno: todas las respuestas fueron 2xx y el guardián terminó en 0. Esas cifras no son un resultado: la medición formal es la del \#174, en la Tabla~\ref{tab:resultados-carga}.
+El 09/11/2026 se comprobó este aislamiento con un sondeo desechable. Primero, desviando el SDK interno a \path{example.invalid}: el guardián bloqueó la petición y la API respondió 500 sin salir de la máquina. Después, con los cinco escenarios de la Tabla~\ref{tab:escenarios-carga} durante 3~s cada uno: todas las respuestas fueron 2xx y el guardián terminó en 0. Esas cifras no son un resultado: la medición formal es la de la Tabla~\ref{tab:resultados-carga}.
 
 \begin{table}[H]
   \centering

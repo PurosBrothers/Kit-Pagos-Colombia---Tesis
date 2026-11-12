@@ -18,7 +18,7 @@ El SPMP formula el problema al presentar el proyecto (Equipo del Proyecto, 2026c
 El proyecto Kit Pagos Colombia surge a partir de un problema recurrente en el desarrollo de software colombiano: integrar pasarelas de pago sigue siendo un proceso fragmentado, repetitivo y, en muchos casos, innecesariamente complejo. Plataformas como Wompi, Rapyd, Mercado Pago y Kushki ofrecen servicios similares, pero cada una maneja estructuras distintas para autenticación, respuestas HTTP, validaciones y notificaciones asíncronas. En la práctica, esto obliga a los equipos de desarrollo a implementar varias veces la misma lógica, aumentando el tiempo de integración y la probabilidad de errores.
 \end{quote}
 
-Su sección 1.2.1 fija el propósito del trabajo: construir un artefacto de software contra esa fragmentación y evaluarlo. La versión 1.0 del SPMP, de mayo de 2026, nombraba a PayU en lugar de Rapyd. Rapyd completó la adquisición de PayU GPO en América Latina en marzo de 2025 y la reemplazó en el proyecto (punto 15 del registro de arquitectura).
+Su sección 1.2.1 fija el propósito del trabajo: construir un artefacto de software contra esa fragmentación y evaluarlo. La versión 1.0 del SPMP, de mayo de 2026, nombraba a PayU en lugar de Rapyd. Rapyd completó la adquisición de PayU GPO en América Latina en marzo de 2025 y la reemplazó en el proyecto.
 
 Esta realidad técnica somete a los equipos de ingeniería a duplicar esfuerzos de implementación ante cada cambio de proveedor y aumenta la superficie de error en puntos críticos de seguridad, tales como la validación de webhooks y la tokenización de credenciales de pago.
 
@@ -67,7 +67,7 @@ El SPMP estableció seis objetivos específicos (OE-01 a OE-06). A continuación
     \textbf{Evidencia:} Implementado en el paquete central del SDK (\texttt{sdk/}), con la fachada unificada \texttt{KitPagos}, factoría de pasarelas, adaptadores para Wompi, Mercado Pago, Kushki y Rapyd, módulo de navegador para tokenización segura y suite de pruebas unitarias y de integración.
     
     \item \textbf{OE-04:} \textit{Implementar la API de simulación.} \\
-    \textbf{Evidencia:} Implementado en \texttt{simulator-api/}: rutas de simulación de las cuatro pasarelas bajo \texttt{/v1/sim/*}, escenarios elegidos por cabecera (\texttt{x-simulator-scenario}), datos de prueba, montos reservados o marcas de credencial, y la capa REST propia \texttt{/v1/api}. La especificación OpenAPI (RF-13) cubre \texttt{/v1/api} y, desde el PR \#137, las rutas de simulación de las cuatro pasarelas; siete operaciones sin esquema quedan como límite declarado (punto 109 del registro de arquitectura).
+    \textbf{Evidencia:} Implementado en \texttt{simulator-api/}: rutas de simulación de las cuatro pasarelas bajo \texttt{/v1/sim/*}, escenarios elegidos por cabecera (\texttt{x-simulator-scenario}), datos de prueba, montos reservados o marcas de credencial, y la capa REST propia \texttt{/v1/api}. La especificación OpenAPI (RF-13) cubre \texttt{/v1/api} y las rutas de simulación de las cuatro pasarelas; siete operaciones sin esquema quedan como límite declarado.
     
     \item \textbf{OE-05:} \textit{Consolidar los datos de prueba por pasarela para su documentación.} \\
     \textbf{Evidencia:} Implementado en el directorio \texttt{docs/testing-data/}, estructurado por pasarela, con tarjetas de prueba, credenciales sandbox validadas, listas de bancos PSE y categorización explícita del nivel de evidencia experimental.
@@ -77,7 +77,7 @@ El SPMP estableció seis objetivos específicos (OE-01 a OE-06). A continuación
 \end{itemize}
 
 \subsubsection{Alcance y exclusiones}
-El alcance que describe el SPMP 2.0 (sección 1.2.2) es el que se construyó (Equipo del Proyecto, 2026c). Cubre cuatro pasarelas, Wompi, Rapyd, Mercado Pago y Kushki, y dos métodos de pago, tarjeta y PSE (punto 49). Las operaciones son crear un pago, consultar su estado, listar los bancos PSE y validar los webhooks. El framework admite tres patrones de integración, que el capítulo III describe: P1, desde el servidor del comercio con el SDK; P2, desde un navegador contra \texttt{/v1/api}, y P3, con el módulo de navegador. P3 quedó implementado en parte, porque Rapyd no tokeniza la tarjeta en el navegador.
+El alcance que describe el SPMP 2.0 (sección 1.2.2) es el que se construyó (Equipo del Proyecto, 2026c). Cubre cuatro pasarelas, Wompi, Rapyd, Mercado Pago y Kushki, y dos métodos de pago, tarjeta y PSE. Las operaciones son crear un pago, consultar su estado, listar los bancos PSE y validar los webhooks. El framework admite tres patrones de integración, que el capítulo III describe: P1, desde el servidor del comercio con el SDK; P2, desde un navegador contra \texttt{/v1/api}, y P3, con el módulo de navegador. P3 quedó implementado en parte, porque Rapyd no tokeniza la tarjeta en el navegador.
 
 Para demostrar y medir esos patrones se construyeron cuatro proyectos prototípicos en \texttt{prototypes/}. A (\texttt{checkout-con-sdk-solo-back}) usa el SDK solo en el servidor, y B (\texttt{checkout-con-sdk-front-back}), el SDK y el módulo de navegador. C (\texttt{checkout-frontend-rest}) cobra desde el navegador contra \texttt{/v1/api}, y D (\texttt{checkout-sin-solucion}) integra las cuatro pasarelas a mano. B y D son el par del experimento de la Fase 5; A y C no participan en él (\path{thesis-objectives.md}, sección 5).
 

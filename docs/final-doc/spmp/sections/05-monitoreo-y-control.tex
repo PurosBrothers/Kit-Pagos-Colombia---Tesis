@@ -20,7 +20,7 @@ El tercero es el registro de cambios. La versión 1.0 lo ubicaba en Notion, que 
 
 El proceso opera bajo las siguientes reglas. Cualquier integrante del equipo o el director puede proponer una modificación a los requerimientos. La propuesta se abre como un issue, con la descripción del cambio, su justificación y su impacto sobre el cronograma y los entregables, y se discute en el grupo del equipo o en la reunión semanal. Un cambio aprobado se implementa en un pull request que actualiza la Matriz de Trazabilidad, y el registro de arquitectura guarda la decisión cuando cambia el diseño.
 
-La versión 1.0 exigía además que ningún cambio entrara a la rama principal sin el SRS actualizado. Eso no se cumplió durante el desarrollo: el SRS pasó de la versión 1.0 de mayo a la 2.0 recién en el issue \#169, en octubre de 2026, que reescribió los requerimientos para reflejar el framework construido. Entre tanto, la matriz de trazabilidad y el registro de arquitectura fueron los que siguieron cada cambio.
+La versión 1.0 exigía además que ningún cambio entrara a la rama principal sin el SRS actualizado. Eso no se cumplió durante el desarrollo: el SRS pasó de la versión 1.0 de mayo a la 2.0 recién en octubre de 2026, cuando se reescribieron los requerimientos para reflejar el framework construido. Entre tanto, la matriz de trazabilidad y el registro de arquitectura fueron los que siguieron cada cambio.
 
 El diagrama BPMN del proceso de administración de requerimientos, que incluye los roles participantes, los puntos de decisión y los artefactos que se crean o refinan en cada paso, se presenta en la Figura~\ref{fig:bpmn-requerimientos}. Es el de la versión 1.0: donde dice Notion, el registro está en los issues y en el registro de arquitectura.
 
@@ -63,7 +63,7 @@ Cuando un valor de WMC, CBO, RFC o MAX\_CC supera su umbral, la integración con
 
 Cuando la cobertura baja del 80\% en el SDK o en el simulador, Jest falla y el pull request no pasa la integración continua. El autor agrega las pruebas faltantes antes de pedir una nueva revisión.
 
-Cuando una iteración no cerró en su fecha, sus issues pendientes siguieron en el mismo hito y el cronograma se comprimió para no mover la entrega. \texttt{methodology.md} (sección 10.2) redujo la Fase 5 de tres a dos semanas y la Fase 6 de dos a una, con dos semanas de colchón antes del 9 de noviembre. La Iteración 3 cerró 15 issues después del 5 de octubre, su fecha planeada; el último, el \#112, el 9 de noviembre de 2026.
+Cuando una iteración no cerró en su fecha, sus issues pendientes siguieron en el mismo hito y el cronograma se comprimió para no mover la entrega. \texttt{methodology.md} (sección 10.2) redujo la Fase 5 de tres a dos semanas y la Fase 6 de dos a una, con dos semanas de colchón antes del 9 de noviembre. La Iteración 3 cerró 15 issues después del 5 de octubre, su fecha planeada; el último, el 9 de noviembre de 2026.
 
 La versión 1.0 preveía también reuniones extraordinarias cuando la completitud semanal bajara del 60\% y planes de recuperación presentados en la reunión quincenal. No se aplicaron: la completitud semanal no se registró como cifra.
 
