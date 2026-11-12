@@ -6,8 +6,8 @@
   {David Estevan Rodriguez Jurado}
   {09/11/2026}
   {PSE de Wompi: redirección y consulta de estado}
-  {Pendiente (\#174)}
-  {Pendiente (\#174)}
+  {Joan Emmanuel Orduz Chia}
+  {11/11/2026}
   {Crear un pago con PSE en Wompi y comprobar que el SDK distingue una redirección requerida de una transacción resuelta: la creación devuelve la URL del banco y el identificador de la pasarela con estado nativo \texttt{PENDING}; la consulta posterior devuelve \texttt{APPROVED}. El caso verifica además que el código de banco se obtiene con \texttt{getPseBanks()} y no está escrito a mano.}
   {Funcional (sistema, caja negra).}
   {\textbullet\ SDK compilado y dependencias de \path{examples/} instaladas.\newline
@@ -27,32 +27,32 @@ Comprobar que el resultado de la creación conserva la diferencia entre \texttt{
   Verificar que el simulador responde. &
   \texttt{cd simulator-api \&\& npm run dev}; luego \texttt{GET} \url{http://localhost:3000/health}. &
   Respuesta 200 con estado \texttt{ok}. &
-  & & \\ \hline
+  200 con \texttt{ok}. & Pasó & Simulador en 4817 \\ \hline
   2 &
   Ejecutar el ejemplo de PSE de Wompi. &
   \texttt{cd examples \&\& npm run} \path{simulate:wompi-pse}. &
   La salida imprime «Elegido: Banco que aprueba (1)», la solicitud con el documento del pagador y el banco, y un bloque «Redirección pendiente:» con la URL del banco, el identificador en la pasarela y «Estado nativo: PENDING». &
-  & & \\ \hline
+  Banco 1; \texttt{PENDING}; URL del banco. & Pasó & Corrida 1 \\ \hline
   3 &
   Verificar el discriminante del resultado. &
   Inspección de la salida y del código de \path{simulate-wompi-pse.ts}. &
   El ejemplo entra por la rama \texttt{result.outcome === "REDIRECT\_REQUIRED"} y lee \texttt{result.redirect}; el compilador no permite tratarlo como una transacción sin comprobar la rama. &
-  & & \\ \hline
+  Rama de redirección. & Pasó & Código revisado \\ \hline
   4 &
   Verificar la consulta posterior. &
   La misma salida del paso 2, después de «Consultando el estado después de la redirección...». El ejemplo llama a \texttt{getPaymentStatus()} con el identificador de la redirección. &
   «Estado normalizado: APPROVED», «Estado nativo: APPROVED» y «¿Estado final? true». &
-  & & \\ \hline
+  \texttt{APPROVED} y final. & Pasó & Corrida 1 \\ \hline
   5 &
   Verificar el origen del código de banco. &
   Revisión de \path{simulate-wompi-pse.ts}. &
   El código sale de \path{kitPagos.getPseBanks()} y se usa el primero de la lista; no hay un código numérico escrito a mano. &
-  & & \\ \hline
+  Sale de la lista de bancos. & Pasó & Código revisado \\ \hline
   6 &
   Repetir la corrida. &
   El mismo comando del paso 2. &
   La segunda corrida reproduce la redirección, el \texttt{PENDING} y el \texttt{APPROVED}; el proceso termina con código 0. &
-  & & \\ \hline
+  Igual; código 0. & Pasó & Corrida 2 \\ \hline
 \end{xltabular}
 \end{TablaPasos}
 

@@ -1,0 +1,837 @@
+{
+  "context": {
+    "date": "2026-11-11",
+    "commit": "07e542ed4b4714e0527800a1532fadea6ade010d",
+    "uncommittedChanges": false,
+    "node": "v22.23.4",
+    "os": "Darwin 27.0.0 arm64",
+    "cpu": "Apple M4 (10 núcleos)",
+    "autocannon": "8.0.0",
+    "target": "http://127.0.0.1:60053",
+    "settings": {
+      "outputDir": "docs/final-doc/pruebas/evidencias/carga",
+      "measureSeconds": 30,
+      "warmupSeconds": 5,
+      "repetitions": 3
+    }
+  },
+  "guard": {
+    "selfTest": "example.invalid bloqueado",
+    "blockedDuringLoad": 0,
+    "hosts": []
+  },
+  "valid": true,
+  "complete": true,
+  "runs": [
+    {
+      "run": "E1-c10-r1",
+      "scenario": "E1 GET /health",
+      "connections": 10,
+      "repetition": 1,
+      "startedAt": "2026-11-11T16:27:56.483Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 592817,
+        "p50Ms": 0.448,
+        "p95Ms": 0.779,
+        "p99Ms": 1.226
+      },
+      "requestsPerSecond": {
+        "average": 19762.8,
+        "stddev": 2611.95
+      },
+      "bytesPerSecond": 3675545.6,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 592817,
+      "errorRate": 0,
+      "rssBeforeMb": 243.4,
+      "rssAfterMb": 231.5,
+      "eventLoopDelayP99Ms": 10.666
+    },
+    {
+      "run": "E1-c10-r2",
+      "scenario": "E1 GET /health",
+      "connections": 10,
+      "repetition": 2,
+      "startedAt": "2026-11-11T16:28:31.547Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 533275,
+        "p50Ms": 0.448,
+        "p95Ms": 1.018,
+        "p99Ms": 1.676
+      },
+      "requestsPerSecond": {
+        "average": 17777.04,
+        "stddev": 5679.43
+      },
+      "bytesPerSecond": 3306261.34,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 533275,
+      "errorRate": 0,
+      "rssBeforeMb": 238.4,
+      "rssAfterMb": 253.7,
+      "eventLoopDelayP99Ms": 14.705
+    },
+    {
+      "run": "E1-c10-r3",
+      "scenario": "E1 GET /health",
+      "connections": 10,
+      "repetition": 3,
+      "startedAt": "2026-11-11T16:29:06.630Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 554250,
+        "p50Ms": 0.447,
+        "p95Ms": 0.827,
+        "p99Ms": 1.348
+      },
+      "requestsPerSecond": {
+        "average": 18476.54,
+        "stddev": 5803.41
+      },
+      "bytesPerSecond": 3436366.94,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 554250,
+      "errorRate": 0,
+      "rssBeforeMb": 257.9,
+      "rssAfterMb": 163.5,
+      "eventLoopDelayP99Ms": 15.811
+    },
+    {
+      "run": "E1-c50-r1",
+      "scenario": "E1 GET /health",
+      "connections": 50,
+      "repetition": 1,
+      "startedAt": "2026-11-11T16:29:41.788Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 558118,
+        "p50Ms": 2.228,
+        "p95Ms": 5.299,
+        "p99Ms": 8.264
+      },
+      "requestsPerSecond": {
+        "average": 18604.94,
+        "stddev": 5709.6
+      },
+      "bytesPerSecond": 3460445.87,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 558118,
+      "errorRate": 0,
+      "rssBeforeMb": 169.6,
+      "rssAfterMb": 190.8,
+      "eventLoopDelayP99Ms": 15.073
+    },
+    {
+      "run": "E1-c50-r2",
+      "scenario": "E1 GET /health",
+      "connections": 50,
+      "repetition": 2,
+      "startedAt": "2026-11-11T16:30:16.939Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 333657,
+        "p50Ms": 3.243,
+        "p95Ms": 9.446,
+        "p99Ms": 17.706
+      },
+      "requestsPerSecond": {
+        "average": 11122.44,
+        "stddev": 4842.56
+      },
+      "bytesPerSecond": 2068791.47,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 333657,
+      "errorRate": 0,
+      "rssBeforeMb": 195.2,
+      "rssAfterMb": 204,
+      "eventLoopDelayP99Ms": 22.348
+    },
+    {
+      "run": "E1-c50-r3",
+      "scenario": "E1 GET /health",
+      "connections": 50,
+      "repetition": 3,
+      "startedAt": "2026-11-11T16:30:52.028Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 380573,
+        "p50Ms": 2.654,
+        "p95Ms": 8.105,
+        "p99Ms": 13.179
+      },
+      "requestsPerSecond": {
+        "average": 12686.9,
+        "stddev": 6071.6
+      },
+      "bytesPerSecond": 2359620.27,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 380573,
+      "errorRate": 0,
+      "rssBeforeMb": 190.4,
+      "rssAfterMb": 189.8,
+      "eventLoopDelayP99Ms": 32.309
+    },
+    {
+      "run": "E2-c10-r1",
+      "scenario": "E2 GET /v1/api/gateways",
+      "connections": 10,
+      "repetition": 1,
+      "startedAt": "2026-11-11T16:31:27.420Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 491600,
+        "p50Ms": 0.508,
+        "p95Ms": 1.038,
+        "p99Ms": 1.584
+      },
+      "requestsPerSecond": {
+        "average": 16387.94,
+        "stddev": 3708.93
+      },
+      "bytesPerSecond": 6980710.4,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 491600,
+      "errorRate": 0,
+      "rssBeforeMb": 190.8,
+      "rssAfterMb": 197.4,
+      "eventLoopDelayP99Ms": 10.813
+    },
+    {
+      "run": "E2-c10-r2",
+      "scenario": "E2 GET /v1/api/gateways",
+      "connections": 10,
+      "repetition": 2,
+      "startedAt": "2026-11-11T16:32:02.568Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 547793,
+        "p50Ms": 0.502,
+        "p95Ms": 0.746,
+        "p99Ms": 1.184
+      },
+      "requestsPerSecond": {
+        "average": 18259.74,
+        "stddev": 1433.87
+      },
+      "bytesPerSecond": 7778577.07,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 547793,
+      "errorRate": 0,
+      "rssBeforeMb": 197.4,
+      "rssAfterMb": 197.4,
+      "eventLoopDelayP99Ms": 10.437
+    },
+    {
+      "run": "E2-c10-r3",
+      "scenario": "E2 GET /v1/api/gateways",
+      "connections": 10,
+      "repetition": 3,
+      "startedAt": "2026-11-11T16:32:37.623Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 540499,
+        "p50Ms": 0.516,
+        "p95Ms": 0.727,
+        "p99Ms": 1.063
+      },
+      "requestsPerSecond": {
+        "average": 18016.67,
+        "stddev": 1234.69
+      },
+      "bytesPerSecond": 7675221.34,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 540499,
+      "errorRate": 0,
+      "rssBeforeMb": 197.4,
+      "rssAfterMb": 197.5,
+      "eventLoopDelayP99Ms": 10.338
+    },
+    {
+      "run": "E2-c50-r1",
+      "scenario": "E2 GET /v1/api/gateways",
+      "connections": 50,
+      "repetition": 1,
+      "startedAt": "2026-11-11T16:33:12.695Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 536964,
+        "p50Ms": 2.671,
+        "p95Ms": 3.441,
+        "p99Ms": 4.403
+      },
+      "requestsPerSecond": {
+        "average": 17899.07,
+        "stddev": 1051.28
+      },
+      "bytesPerSecond": 7625113.6,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 536964,
+      "errorRate": 0,
+      "rssBeforeMb": 197.7,
+      "rssAfterMb": 197.7,
+      "eventLoopDelayP99Ms": 11.436
+    },
+    {
+      "run": "E2-c50-r2",
+      "scenario": "E2 GET /v1/api/gateways",
+      "connections": 50,
+      "repetition": 2,
+      "startedAt": "2026-11-11T16:33:47.773Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 518970,
+        "p50Ms": 2.697,
+        "p95Ms": 3.597,
+        "p99Ms": 6.075
+      },
+      "requestsPerSecond": {
+        "average": 17299.47,
+        "stddev": 1886.32
+      },
+      "bytesPerSecond": 7368977.07,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 518970,
+      "errorRate": 0,
+      "rssBeforeMb": 197.7,
+      "rssAfterMb": 192.8,
+      "eventLoopDelayP99Ms": 12.337
+    },
+    {
+      "run": "E2-c50-r3",
+      "scenario": "E2 GET /v1/api/gateways",
+      "connections": 50,
+      "repetition": 3,
+      "startedAt": "2026-11-11T16:34:22.849Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 524469,
+        "p50Ms": 2.77,
+        "p95Ms": 3.567,
+        "p99Ms": 4.702
+      },
+      "requestsPerSecond": {
+        "average": 17483.74,
+        "stddev": 1274.58
+      },
+      "bytesPerSecond": 7447074.14,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 524469,
+      "errorRate": 0,
+      "rssBeforeMb": 192.9,
+      "rssAfterMb": 206,
+      "eventLoopDelayP99Ms": 11.592
+    },
+    {
+      "run": "E3-c10-r1",
+      "scenario": "E3 GET /v1/api/pse-banks?gateway=wompi",
+      "connections": 10,
+      "repetition": 1,
+      "startedAt": "2026-11-11T16:34:57.918Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 124499,
+        "p50Ms": 1.912,
+        "p95Ms": 4.593,
+        "p99Ms": 7.576
+      },
+      "requestsPerSecond": {
+        "average": 4150.57,
+        "stddev": 916.31
+      },
+      "bytesPerSecond": 1776136.54,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 124499,
+      "errorRate": 0,
+      "rssBeforeMb": 364.9,
+      "rssAfterMb": 413.9,
+      "eventLoopDelayP99Ms": 13.943
+    },
+    {
+      "run": "E3-c10-r2",
+      "scenario": "E3 GET /v1/api/pse-banks?gateway=wompi",
+      "connections": 10,
+      "repetition": 2,
+      "startedAt": "2026-11-11T16:35:32.957Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 119747,
+        "p50Ms": 2.094,
+        "p95Ms": 4.609,
+        "p99Ms": 6.739
+      },
+      "requestsPerSecond": {
+        "average": 3992.1,
+        "stddev": 705.53
+      },
+      "bytesPerSecond": 1708330.67,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 119747,
+      "errorRate": 0,
+      "rssBeforeMb": 412.7,
+      "rssAfterMb": 415.5,
+      "eventLoopDelayP99Ms": 13.124
+    },
+    {
+      "run": "E3-c10-r3",
+      "scenario": "E3 GET /v1/api/pse-banks?gateway=wompi",
+      "connections": 10,
+      "repetition": 3,
+      "startedAt": "2026-11-11T16:36:07.996Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 107075,
+        "p50Ms": 2.285,
+        "p95Ms": 5.16,
+        "p99Ms": 7.697
+      },
+      "requestsPerSecond": {
+        "average": 3569.6,
+        "stddev": 819.7
+      },
+      "bytesPerSecond": 1527645.87,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 107075,
+      "errorRate": 0,
+      "rssBeforeMb": 414.5,
+      "rssAfterMb": 404.8,
+      "eventLoopDelayP99Ms": 14.057
+    },
+    {
+      "run": "E3-c50-r1",
+      "scenario": "E3 GET /v1/api/pse-banks?gateway=wompi",
+      "connections": 50,
+      "repetition": 1,
+      "startedAt": "2026-11-11T16:36:43.096Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 113067,
+        "p50Ms": 11.635,
+        "p95Ms": 22.971,
+        "p99Ms": 32.259
+      },
+      "requestsPerSecond": {
+        "average": 3769.24,
+        "stddev": 647.78
+      },
+      "bytesPerSecond": 1613175.47,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 113067,
+      "errorRate": 0,
+      "rssBeforeMb": 404.8,
+      "rssAfterMb": 415.2,
+      "eventLoopDelayP99Ms": 17.859
+    },
+    {
+      "run": "E3-c50-r2",
+      "scenario": "E3 GET /v1/api/pse-banks?gateway=wompi",
+      "connections": 50,
+      "repetition": 2,
+      "startedAt": "2026-11-11T16:37:18.181Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 104191,
+        "p50Ms": 12.092,
+        "p95Ms": 25.212,
+        "p99Ms": 44.63
+      },
+      "requestsPerSecond": {
+        "average": 3473.3,
+        "stddev": 879.75
+      },
+      "bytesPerSecond": 1486382.94,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 104191,
+      "errorRate": 0,
+      "rssBeforeMb": 415,
+      "rssAfterMb": 418.3,
+      "eventLoopDelayP99Ms": 20.677
+    },
+    {
+      "run": "E3-c50-r3",
+      "scenario": "E3 GET /v1/api/pse-banks?gateway=wompi",
+      "connections": 50,
+      "repetition": 3,
+      "startedAt": "2026-11-11T16:37:53.271Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 116973,
+        "p50Ms": 10.928,
+        "p95Ms": 22.703,
+        "p99Ms": 33.225
+      },
+      "requestsPerSecond": {
+        "average": 3899.64,
+        "stddev": 1191.01
+      },
+      "bytesPerSecond": 1668778.67,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 116973,
+      "errorRate": 0,
+      "rssBeforeMb": 417.7,
+      "rssAfterMb": 385.4,
+      "eventLoopDelayP99Ms": 18.579
+    },
+    {
+      "run": "E4-c10-r1",
+      "scenario": "E4 GET /v1/api/payments/:id?gateway=wompi",
+      "connections": 10,
+      "repetition": 1,
+      "startedAt": "2026-11-11T16:38:28.400Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 115037,
+        "p50Ms": 2.002,
+        "p95Ms": 4.938,
+        "p99Ms": 8.284
+      },
+      "requestsPerSecond": {
+        "average": 3835.07,
+        "stddev": 1175.88
+      },
+      "bytesPerSecond": 1997849.6,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 115037,
+      "errorRate": 0,
+      "rssBeforeMb": 385.9,
+      "rssAfterMb": 389,
+      "eventLoopDelayP99Ms": 18.121
+    },
+    {
+      "run": "E4-c10-r2",
+      "scenario": "E4 GET /v1/api/payments/:id?gateway=wompi",
+      "connections": 10,
+      "repetition": 2,
+      "startedAt": "2026-11-11T16:39:03.448Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 134589,
+        "p50Ms": 1.546,
+        "p95Ms": 4.84,
+        "p99Ms": 11.674
+      },
+      "requestsPerSecond": {
+        "average": 4486.77,
+        "stddev": 1749.71
+      },
+      "bytesPerSecond": 2337192.54,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 134589,
+      "errorRate": 0,
+      "rssBeforeMb": 386.5,
+      "rssAfterMb": 388.5,
+      "eventLoopDelayP99Ms": 17.498
+    },
+    {
+      "run": "E4-c10-r3",
+      "scenario": "E4 GET /v1/api/payments/:id?gateway=wompi",
+      "connections": 10,
+      "repetition": 3,
+      "startedAt": "2026-11-11T16:39:38.684Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 170089,
+        "p50Ms": 1.497,
+        "p95Ms": 3.168,
+        "p99Ms": 4.996
+      },
+      "requestsPerSecond": {
+        "average": 5670.04,
+        "stddev": 974.61
+      },
+      "bytesPerSecond": 2954086.4,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 170089,
+      "errorRate": 0,
+      "rssBeforeMb": 388.5,
+      "rssAfterMb": 391.4,
+      "eventLoopDelayP99Ms": 12.493
+    },
+    {
+      "run": "E4-c50-r1",
+      "scenario": "E4 GET /v1/api/payments/:id?gateway=wompi",
+      "connections": 50,
+      "repetition": 1,
+      "startedAt": "2026-11-11T16:40:13.726Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 177931,
+        "p50Ms": 7.731,
+        "p95Ms": 10.115,
+        "p99Ms": 14.627
+      },
+      "requestsPerSecond": {
+        "average": 5931.6,
+        "stddev": 259.37
+      },
+      "bytesPerSecond": 3090158.94,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 177931,
+      "errorRate": 0,
+      "rssBeforeMb": 391.3,
+      "rssAfterMb": 403.8,
+      "eventLoopDelayP99Ms": 13.91
+    },
+    {
+      "run": "E4-c50-r2",
+      "scenario": "E4 GET /v1/api/payments/:id?gateway=wompi",
+      "connections": 50,
+      "repetition": 2,
+      "startedAt": "2026-11-11T16:40:48.797Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 173118,
+        "p50Ms": 7.839,
+        "p95Ms": 10.792,
+        "p99Ms": 20.012
+      },
+      "requestsPerSecond": {
+        "average": 5771.57,
+        "stddev": 501.18
+      },
+      "bytesPerSecond": 3006344.54,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 173118,
+      "errorRate": 0,
+      "rssBeforeMb": 402.6,
+      "rssAfterMb": 394.2,
+      "eventLoopDelayP99Ms": 14.565
+    },
+    {
+      "run": "E4-c50-r3",
+      "scenario": "E4 GET /v1/api/payments/:id?gateway=wompi",
+      "connections": 50,
+      "repetition": 3,
+      "startedAt": "2026-11-11T16:41:23.875Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 169634,
+        "p50Ms": 7.996,
+        "p95Ms": 11.472,
+        "p99Ms": 22.001
+      },
+      "requestsPerSecond": {
+        "average": 5655,
+        "stddev": 700.46
+      },
+      "bytesPerSecond": 2945911.47,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 169634,
+      "errorRate": 0,
+      "rssBeforeMb": 387.2,
+      "rssAfterMb": 386.4,
+      "eventLoopDelayP99Ms": 14.877
+    },
+    {
+      "run": "E5-c10-r1",
+      "scenario": "E5 POST /v1/api/payments",
+      "connections": 10,
+      "repetition": 1,
+      "startedAt": "2026-11-11T16:41:58.924Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 81014,
+        "p50Ms": 3.22,
+        "p95Ms": 5.685,
+        "p99Ms": 7.381
+      },
+      "requestsPerSecond": {
+        "average": 2700.94,
+        "stddev": 188.2
+      },
+      "bytesPerSecond": 1606792.54,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 81014,
+      "errorRate": 0,
+      "rssBeforeMb": 393.2,
+      "rssAfterMb": 505.5,
+      "eventLoopDelayP99Ms": 12.46
+    },
+    {
+      "run": "E5-c10-r2",
+      "scenario": "E5 POST /v1/api/payments",
+      "connections": 10,
+      "repetition": 2,
+      "startedAt": "2026-11-11T16:42:33.941Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 79800,
+        "p50Ms": 3.284,
+        "p95Ms": 5.771,
+        "p99Ms": 7.298
+      },
+      "requestsPerSecond": {
+        "average": 2660.4,
+        "stddev": 165.18
+      },
+      "bytesPerSecond": 1585459.2,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 79800,
+      "errorRate": 0,
+      "rssBeforeMb": 506.3,
+      "rssAfterMb": 511.5,
+      "eventLoopDelayP99Ms": 12.73
+    },
+    {
+      "run": "E5-c10-r3",
+      "scenario": "E5 POST /v1/api/payments",
+      "connections": 10,
+      "repetition": 3,
+      "startedAt": "2026-11-11T16:43:08.956Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 67803,
+        "p50Ms": 3.319,
+        "p95Ms": 7.621,
+        "p99Ms": 18.087
+      },
+      "requestsPerSecond": {
+        "average": 2260.6,
+        "stddev": 640.88
+      },
+      "bytesPerSecond": 1346922.67,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 67803,
+      "errorRate": 0,
+      "rssBeforeMb": 520.4,
+      "rssAfterMb": 523.3,
+      "eventLoopDelayP99Ms": 18.416
+    },
+    {
+      "run": "E5-c50-r1",
+      "scenario": "E5 POST /v1/api/payments",
+      "connections": 50,
+      "repetition": 1,
+      "startedAt": "2026-11-11T16:43:43.983Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 71115,
+        "p50Ms": 19.698,
+        "p95Ms": 26.91,
+        "p99Ms": 54.955
+      },
+      "requestsPerSecond": {
+        "average": 2371.14,
+        "stddev": 392.03
+      },
+      "bytesPerSecond": 1412753.07,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 71115,
+      "errorRate": 0,
+      "rssBeforeMb": 520.3,
+      "rssAfterMb": 524.2,
+      "eventLoopDelayP99Ms": 20.513
+    },
+    {
+      "run": "E5-c50-r2",
+      "scenario": "E5 POST /v1/api/payments",
+      "connections": 50,
+      "repetition": 2,
+      "startedAt": "2026-11-11T16:44:19.284Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 70440,
+        "p50Ms": 19.995,
+        "p95Ms": 26.382,
+        "p99Ms": 46.124
+      },
+      "requestsPerSecond": {
+        "average": 2348.4,
+        "stddev": 394.73
+      },
+      "bytesPerSecond": 1399419.74,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 70440,
+      "errorRate": 0,
+      "rssBeforeMb": 521,
+      "rssAfterMb": 522,
+      "eventLoopDelayP99Ms": 16.876
+    },
+    {
+      "run": "E5-c50-r3",
+      "scenario": "E5 POST /v1/api/payments",
+      "connections": 50,
+      "repetition": 3,
+      "startedAt": "2026-11-11T16:44:54.464Z",
+      "measureSeconds": 30,
+      "own": {
+        "responses": 71947,
+        "p50Ms": 19.873,
+        "p95Ms": 28.446,
+        "p99Ms": 43.566
+      },
+      "requestsPerSecond": {
+        "average": 2398.81,
+        "stddev": 239.25
+      },
+      "bytesPerSecond": 1429546.67,
+      "errors": 0,
+      "timeouts": 0,
+      "non2xx": 0,
+      "total": 71947,
+      "errorRate": 0,
+      "rssBeforeMb": 517.4,
+      "rssAfterMb": 521.5,
+      "eventLoopDelayP99Ms": 17.383
+    }
+  ]
+}

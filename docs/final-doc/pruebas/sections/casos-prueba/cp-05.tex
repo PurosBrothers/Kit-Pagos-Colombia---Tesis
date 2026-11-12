@@ -6,8 +6,8 @@
   {David Estevan Rodriguez Jurado}
   {09/11/2026}
   {Tokenización de la tarjeta en el navegador}
-  {Pendiente (\#174)}
-  {Pendiente (\#174)}
+  {Joan Emmanuel Orduz Chia}
+  {11/11/2026}
   {Pagar con tarjeta en el prototipo B y comprobar que \texttt{KitPagosBrowser} envía el número de la tarjeta directamente a la ruta de tokenización del simulador, que el servidor del comercio recibe solo un token opaco y que Rapyd no tokeniza porque cobra en su página alojada. El caso verifica la separación entre el navegador y el servidor que sostiene el alcance PCI de la página.}
   {Funcional (sistema): la tokenización en el navegador.}
   {\textbullet\ SDK compilado; \path{simulator-api} y el prototipo B con dependencias instaladas.\newline
@@ -28,47 +28,47 @@ Comprobar que los datos de la tarjeta no pasan por el servidor de B en las pasar
   Levantar el simulador y el prototipo B. &
   \texttt{cd simulator-api \&\& npm run dev}; en otra terminal, \texttt{cd} \path{prototypes/checkout-con-sdk-front-back} \texttt{\&\& npm run start:local}. &
   El simulador responde en el puerto 3000 y B en \url{http://localtest.me:4000}. &
-  & & \\ \hline
+  4817 y 4827. & Pasó & Puertos libres \\ \hline
   2 &
   Abrir B con la pestaña Network y limpiar la captura. &
   \url{http://localtest.me:4000}, herramientas de desarrollo, pestaña Network, filtro «Fetch/XHR». &
   La tienda carga el catálogo y el carrito sin errores. &
-  & & \\ \hline
+  Carga sin errores. & Pasó & Captura \\ \hline
   3 &
   Pagar con tarjeta de Wompi. &
   Tarjeta \texttt{4242 4242 4242 4242}, vencimiento \texttt{12/30}, CVV \texttt{123}; cualquier nombre. &
   La petición del navegador a \texttt{POST} \path{/v1/sim/wompi/tokens/cards} lleva el número de la tarjeta; la petición posterior a \texttt{POST /api/orders} lleva solo \texttt{cardToken}. El pago termina \texttt{APPROVED}. &
-  & & \\ \hline
+  Número solo al tokenizar; \texttt{APPROVED}. & Pasó & Captura \\ \hline
   4 &
   Pagar con tarjeta de Mercado Pago. &
   Tarjeta \texttt{4013 5406 8274 6260}, vencimiento \texttt{11/30}, CVV \texttt{123}, titular \texttt{APRO Ruiz}. &
   La petición a \texttt{POST} \path{/v1/sim/mercadopago/card_tokens} lleva los datos de la tarjeta; \texttt{POST /api/orders} lleva solo \texttt{cardToken}. El pago termina \texttt{APPROVED}. &
-  & & \\ \hline
+  Número solo al tokenizar; \texttt{APPROVED}. & Pasó & Captura \\ \hline
   5 &
   Pagar con tarjeta de Kushki. &
   Tarjeta \texttt{4242 4242 4242 4242}, vencimiento \texttt{12/30}, CVV \texttt{123}. &
   La petición a \texttt{POST} \path{/v1/sim/kushki/card/v1/tokens} lleva los datos y el monto; \texttt{POST /api/orders} lleva solo el token. El cobro termina \texttt{APPROVED}. &
-  & & \\ \hline
+  Número solo al tokenizar; \texttt{APPROVED}. & Pasó & Captura \\ \hline
   6 &
   Verificar que el token es opaco y está atado a la pasarela y al monto. &
   Inspección del cuerpo de \texttt{POST /api/orders}. Para el monto de Kushki: \texttt{cd simulator-api \&\& npx jest} \path{kushki-k220-through-api} \texttt{--coverage=false --verbose}. &
   El cuerpo no contiene el número, el CVV ni el vencimiento, y el token no se puede interpretar como datos de tarjeta. La suite pasa su única prueba: un token de Kushki emitido por 48~000 y cobrado por 50~000 responde 400 \texttt{INVALID\_REQUEST}, con el código nativo \texttt{K220} en el mensaje, en lugar de una transacción. &
-  & & \\ \hline
+  Sin número, CVV ni vencimiento; K220: 400. & Pasó & Suite K220 \\ \hline
   7 &
   Pagar con tarjeta de Rapyd. &
   Elegir Rapyd y tarjeta. La página de pago del simulador no pide datos. &
   B no llama a ninguna ruta de tokenización para Rapyd. Redirige a la página de pago simulada (\path{/v1/sim/rapyd/checkout/:checkoutId/pay}), que muestra «Página de pago simulada» y el enlace «Volver al comercio». Al volver, la orden queda \texttt{APPROVED}. \texttt{GET /api/gateways} reporta Rapyd con captura \path{HOSTED_PAGE}. &
-  & & \\ \hline
+  Página alojada; \texttt{APPROVED}. & Pasó & Captura \\ \hline
   8 &
   Buscar el número de la tarjeta en el servidor del comercio. &
   Terminal de B y cuerpos de las peticiones a \texttt{/api/orders}. &
   Ningún log, mensaje de error ni cuerpo de petición al servidor contiene el número completo de la tarjeta. Solo aparecen tokens y, si acaso, prefijos de llaves. &
-  & & \\ \hline
+  0 apariciones. & Pasó & Salida de B \\ \hline
   9 &
   Repetir con una tarjeta declinada. &
   Wompi \texttt{4111 1111 1111 1111}. &
   La tokenización ocurre igual en el navegador y el servidor recibe el token. La orden termina \texttt{DECLINED}, sin motivo, porque Wompi no envía un código de rechazo estable (HU-11 del SRS). El número sigue sin aparecer en el servidor. &
-  & & \\ \hline
+  \texttt{DECLINED}, sin motivo. & Pasó & Captura \\ \hline
 \end{xltabular}
 \end{TablaPasos}
 

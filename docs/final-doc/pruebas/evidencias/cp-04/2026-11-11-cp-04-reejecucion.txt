@@ -1,0 +1,26 @@
+== Paso 4: petición 1 (tokenización)
+{"status":"CREATED","data":{"id":"tok_sim_179103e98b6f47cc","created_at":"2026-11-11T21:34:09.593Z","brand":"VISA","name":"COMPRADOR PRUEBA","last_four":"1111","bin":"411111","exp_year":"30","exp_month":"12","card_holder":"COMPRADOR PRUEBA","created_with_cvc":true,"expires_at":"2026-11-11T22:34:09.593Z","validity_ends_at":null}}
+HTTP 201
+
+== Paso 5: petición 2 (orden)
+{"order":{"gateway":"wompi","lines":[{"productId":"casillero-del-diablo-cabernet","title":"Casillero del Diablo Cabernet Sauvignon","quantity":1,"unitPriceInPesos":58000}],"amountInPesos":58000,"payer":{"fullName":"Comprador Prueba","email":"comprador@example.com","documentType":"CC","documentNumber":"1000000001","phone":"3001234567","address":{"streetName":"Calle 10","streetNumber":"5-20","neighborhood":"Chapinero","city":"Bogota","zipCode":"110231"}},"method":"CARD","id":"ORD-3C33D319","status":"PENDING","history":[{"at":"2026-11-11T21:34:09.826Z","source":"creation","status":"PENDING","nativeStatus":"PENDING"}],"transactionId":"e90d1efc-a6b0-485d-8328-11f567425d6a"}}
+HTTP 201
+
+== Paso 6: petición 3 (disparo del webhook)
+{"delivered":true,"receiverStatus":200,"webhook":{"method":"POST","query":null,"headers":{"content-type":"application/json","x-event-checksum":"46f21a81d3b986701c135923eee67aceed268087b29e188e48cc4be1ed7d009c"},"body":"{\"event\":\"transaction.updated\",\"data\":{\"transaction\":{\"id\":\"e90d1efc-a6b0-485d-8328-11f567425d6a\",\"status\":\"DECLINED\",\"amount_in_cents\":5800000,\"currency\":\"COP\",\"reference\":\"ORD-3C33D319\",\"customer_email\":\"comprador@example.com\",\"payment_method\":{\"type\":\"CARD\",\"token\":\"tok_sim_179103e98b6f47cc\",\"installments\":1},\"status_message\":\"La transacción fue rechazada (Sandbox)\"}},\"environment\":\"test\",\"signature\":{\"properties\":[\"transaction.id\",\"transaction.status\",\"transaction.amount_in_cents\"],\"checksum\":\"46f21a81d3b986701c135923eee67aceed268087b29e188e48cc4be1ed7d009c\"},\"timestamp\":1794432849,\"sent_at\":\"2026-11-11T21:34:09.974Z\"}"}}
+HTTP 200
+
+== Paso 7: petición 4 (historial)
+{"order":{"gateway":"wompi","lines":[{"productId":"casillero-del-diablo-cabernet","title":"Casillero del Diablo Cabernet Sauvignon","quantity":1,"unitPriceInPesos":58000}],"amountInPesos":58000,"payer":{"fullName":"Comprador Prueba","email":"comprador@example.com","documentType":"CC","documentNumber":"1000000001","phone":"3001234567","address":{"streetName":"Calle 10","streetNumber":"5-20","neighborhood":"Chapinero","city":"Bogota","zipCode":"110231"}},"method":"CARD","id":"ORD-3C33D319","status":"DECLINED","history":[{"at":"2026-11-11T21:34:09.826Z","source":"creation","status":"PENDING","nativeStatus":"PENDING"},{"at":"2026-11-11T21:34:09.986Z","source":"webhook","status":"DECLINED","nativeStatus":"DECLINED"}],"transactionId":"e90d1efc-a6b0-485d-8328-11f567425d6a"}}
+HTTP 200
+
+== Paso 8: petición 3 otra vez
+HTTP 200
+{"order":{"gateway":"wompi","lines":[{"productId":"casillero-del-diablo-cabernet","title":"Casillero del Diablo Cabernet Sauvignon","quantity":1,"unitPriceInPesos":58000}],"amountInPesos":58000,"payer":{"fullName":"Comprador Prueba","email":"comprador@example.com","documentType":"CC","documentNumber":"1000000001","phone":"3001234567","address":{"streetName":"Calle 10","streetNumber":"5-20","neighborhood":"Chapinero","city":"Bogota","zipCode":"110231"}},"method":"CARD","id":"ORD-3C33D319","status":"DECLINED","history":[{"at":"2026-11-11T21:34:09.826Z","source":"creation","status":"PENDING","nativeStatus":"PENDING"},{"at":"2026-11-11T21:34:09.986Z","source":"webhook","status":"DECLINED","nativeStatus":"DECLINED"},{"at":"2026-11-11T21:34:10.045Z","source":"webhook","status":"DECLINED","nativeStatus":"DECLINED"}],"transactionId":"e90d1efc-a6b0-485d-8328-11f567425d6a"}}
+HTTP 200
+
+== Paso 9: el webhook firmado del paso 6, reenviado a B con el cuerpo alterado
+{"error":"Firma del webhook inválida"}
+HTTP 401
+cambió el cuerpo: sí
+HTTP 200

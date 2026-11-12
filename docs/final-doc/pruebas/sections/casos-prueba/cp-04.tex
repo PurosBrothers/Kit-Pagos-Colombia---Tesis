@@ -6,12 +6,12 @@
   {David Estevan Rodriguez Jurado}
   {09/11/2026}
   {Un webhook firmado actualiza el historial de la orden}
-  {Pendiente (\#174)}
-  {Pendiente (\#174)}
+  {Joan Emmanuel Orduz Chia}
+  {11/11/2026}
   {Crear una orden con tarjeta de Wompi en el prototipo B, disparar el webhook firmado del simulador y comprobar que la notificación se verifica, se registra en el historial con origen \texttt{webhook} y deja la orden en \texttt{DECLINED}. El caso verifica la función 4 del prototipo y la integración entre el simulador, el SDK y el esqueleto.}
   {Funcional (sistema e integración).}
   {\textbullet\ SDK compilado; \path{simulator-api} y el prototipo B con dependencias instaladas.\newline
-   \textbullet\ En el \path{.env} de la raíz, que leen el simulador y B, \texttt{WOMPI\_EVENTS\_SECRET} con un valor no vacío; \texttt{KUSHKI\_WEBHOOK\_SECRET} también, con cualquier valor.\newline
+   \textbullet\ En el \path{.env} de la raíz, que leen el simulador y B, \texttt{WOMPI\_PUBLIC\_KEY} y \texttt{WOMPI\_PRIVATE\_KEY} con valor, porque sin las dos el simulador no arma el perfil de Wompi ni usa su secreto de eventos; \texttt{WOMPI\_EVENTS\_SECRET} con un valor no vacío; \texttt{KUSHKI\_WEBHOOK\_SECRET} también, con cualquier valor.\newline
    \textbullet\ Puerto 4000 libre y \texttt{localtest.me} resolviendo a \texttt{127.0.0.1}.\newline
    \textbullet\ Los archivos \emph{cp04-tarjeta.json} y \emph{cp04-orden.json} creados en la carpeta desde donde se ejecuta \texttt{curl}, con el contenido de la Tabla~\ref{tab:cp04-cuerpos}.}
   {Local. Simulador en \texttt{http://localhost:3000}, con destino de webhooks y sin emisión automática; prototipo B en \texttt{http://localtest.me:4000} con \texttt{npm run start:local}; SDK 0.7.0-rc.2. Las llaves del \path{.env} solo viajan al simulador local. Node.js 20.}
@@ -25,49 +25,49 @@ Comprobar que un webhook de Wompi firmado por el simulador llega a B, se verific
 \begin{TablaPasos}{Pasos del caso CP-04}
   1 &
   Revisar los secretos compartidos. &
-  \path{.env} de la raíz: \path{WOMPI_EVENTS_SECRET} y \path{KUSHKI_WEBHOOK_SECRET} con valor. &
-  El simulador firma con \path{WOMPI_EVENTS_SECRET} y B verifica con el mismo valor, porque los dos leen el mismo archivo. &
-  & & \\ \hline
+  \path{.env} de la raíz: \path{WOMPI_PUBLIC_KEY}, \path{WOMPI_PRIVATE_KEY}, \path{WOMPI_EVENTS_SECRET} y \path{KUSHKI_WEBHOOK_SECRET} con valor. &
+  Con las dos llaves, el simulador arma el perfil de Wompi y firma con \path{WOMPI_EVENTS_SECRET}; B verifica con el mismo valor, porque los dos leen el mismo archivo. &
+  Las cuatro, con valores ficticios. & Pasó & Nueva corrida, tras DEF-02 \\ \hline
   2 &
   Levantar el simulador con el destino de webhooks. &
   \texttt{cd simulator-api}; luego \path{SIMULATOR_WEBHOOK_TARGET_URL='http://localhost:4000/webhooks/{gateway}'} \texttt{npm run dev}, sin \path{SIMULATOR_WEBHOOK_AUTO}. &
   El simulador escucha en el puerto 3000. Sin emisión automática, el único webhook del caso es el del paso 6. &
-  & & \\ \hline
+  Escucha en 4817. & Pasó & Nueva corrida \\ \hline
   3 &
   Levantar el prototipo B contra el simulador local. &
   \texttt{cd} \path{prototypes/checkout-con-sdk-front-back} \texttt{\&\& npm run start:local}. &
   La tienda responde en \url{http://localtest.me:4000} y usa el simulador local como ambiente de pagos. &
-  & & \\ \hline
+  B en 4827. & Pasó & Nueva corrida \\ \hline
   4 &
   Tokenizar la tarjeta de prueba \texttt{4111} de Wompi. &
   Petición~1 de la Tabla~\ref{tab:cp04-cuerpos}, con \emph{cp04-tarjeta.json}. &
   Respuesta 201 con el token en \texttt{data.id}. El simulador asocia ese token al escenario \path{PENDING_THEN_DECLINED}. &
-  & & \\ \hline
+  201; token en \texttt{data.id}. & Pasó & Nueva corrida \\ \hline
   5 &
   Crear la orden con la tarjeta tokenizada. &
   Escribir el token en \emph{cp04-orden.json}; luego, petición~2. &
   Respuesta 201 con \texttt{order.id}, \texttt{order.transactionId} y \texttt{order.status} igual a \texttt{PENDING}, como toda tarjeta de Wompi al crearse. &
-  & & \\ \hline
+  201; \texttt{PENDING}. & Pasó & Nueva corrida \\ \hline
   6 &
   Disparar el webhook firmado de la transacción. &
   Petición~3, con el \texttt{order.transactionId} del paso 5. &
   Respuesta 200 con \texttt{delivered: true}, \texttt{receiverStatus: 200} y el webhook firmado. La transacción avanzó a \texttt{DECLINED} antes de firmarse. &
-  & & \\ \hline
+  200; entregado a B, que respondió 200. & Pasó & Nueva corrida \\ \hline
   7 &
   Consultar el historial de la orden. &
   Petición~4, con el \texttt{order.id} del paso 5. &
   La orden está en \texttt{DECLINED}. Su historial tiene la entrada de creación (\texttt{PENDING}) y una con \texttt{source: "webhook"}, estado \texttt{DECLINED} y \texttt{nativeStatus: "DECLINED"}. La consulta de B repite el mismo estado y no agrega una entrada. &
-  & & \\ \hline
+  \texttt{DECLINED}; creación y una entrada \texttt{webhook}. & Pasó & Nueva corrida \\ \hline
   8 &
   Repetir el webhook. &
   La petición~3 otra vez. &
   Respuesta 200. La orden sigue en \texttt{DECLINED}; el historial suma una segunda entrada de webhook con el mismo estado y no vuelve a \texttt{PENDING}. &
-  & & \\ \hline
+  200; \texttt{DECLINED} y dos entradas \texttt{webhook}. & Pasó & Nueva corrida \\ \hline
   9 &
   Verificar que la firma se comprobó y no se confió en el cuerpo. &
   Revisión de \path{src/routes/webhooks.ts} de B y de su salida en la terminal. &
   B pasa el cuerpo crudo, las cabeceras y la query a \texttt{verifyWebhook()}; una firma inválida responde 401 y no actualiza la orden. &
-  & & \\ \hline
+  Revisado; cuerpo alterado: 401. & Pasó & Nueva corrida \\ \hline
 \end{xltabular}
 \end{TablaPasos}
 
@@ -104,6 +104,8 @@ Petición~4 & \path{curl -s http://localtest.me:4000/api/orders/<id>} \\ \hline
 \subsubsection{Observaciones de diseño}
 
 El disparador del simulador no acepta una URL en el cuerpo: el destino sale de \path{SIMULATOR_WEBHOOK_TARGET_URL}. Cualquier clave distinta de \texttt{gateway} y \texttt{transactionId} responde 400, y el \texttt{transactionId} tiene que ser el identificador nativo. Esa restricción es deliberada: impide que una prueba convierta al simulador en un proxy hacia una URL arbitraria y obliga a que el webhook se firme con los secretos del servidor, como en una pasarela real.
+
+El simulador solo usa \path{WOMPI_EVENTS_SECRET} si el perfil de Wompi está completo, es decir, si también están \path{WOMPI_PUBLIC_KEY} y \path{WOMPI_PRIVATE_KEY}. Con el secreto suelto, el disparador responde 409 \path{WEBHOOK_SECRET_NOT_CONFIGURED}. Por eso la precondición pide las tres variables, aunque el caso no las use fuera del simulador local.
 
 El caso deja apagada la emisión automática (\path{SIMULATOR_WEBHOOK_AUTO}). Encendida, el simulador también enviaría un webhook propio cuando la transacción cambia de estado, y el historial tendría una entrada de webhook más que lo que esperan los pasos 7 y 8.
 

@@ -1,0 +1,236 @@
+npm warn deprecated har-validator@5.1.5: this library is no longer supported
+npm warn deprecated uuid@3.4.0: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+npm warn deprecated uuid@8.3.2: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+npm warn deprecated @faker-js/faker@5.5.3: Please update to a newer version.
+newman
+
+Kit Pagos Colombia - Simulator API
+
+❏ 00. Diagnóstico
+↳ GET /health
+  GET http://127.0.0.1:4817/health [200 OK, 186B, 30ms]
+  ✓  GET /health: responde 2xx
+
+❏ 01. Capa REST Kit Pagos (/v1/api)
+↳ GET /v1/api/gateways
+  GET http://127.0.0.1:4817/v1/api/gateways [200 OK, 426B, 4ms]
+  ✓  GET /v1/api/gateways: responde 2xx
+  ✓  GET /v1/api/gateways: dice cómo recibe la tarjeta cada pasarela (punto 106)
+
+↳ POST /v1/api/payments
+  POST http://127.0.0.1:4817/v1/api/payments [201 Created, 609B, 77ms]
+  ✓  POST /v1/api/payments: responde 2xx
+
+↳ GET /v1/api/payments/:id
+  GET http://127.0.0.1:4817/v1/api/payments/76367c5c-06b8-4f74-8c46-dde915a01cc3?gateway=wompi [200 OK, 530B, 6ms]
+  ✓  GET /v1/api/payments/:id: responde 2xx
+
+↳ GET /v1/api/pse-banks
+  GET http://127.0.0.1:4817/v1/api/pse-banks?gateway=wompi [200 OK, 428B, 8ms]
+  ✓  GET /v1/api/pse-banks: responde 2xx
+
+❏ 02. Simulador Wompi (/v1/sim/wompi)
+↳ GET /v1/sim/wompi/merchants/:publicKey
+  GET http://127.0.0.1:4817/v1/sim/wompi/merchants/pub_test_wompi_key [200 OK, 335B, 2ms]
+  ✓  GET /v1/sim/wompi/merchants/:publicKey: responde 2xx
+
+↳ GET /v1/sim/wompi/terms
+  GET http://127.0.0.1:4817/v1/sim/wompi/terms [200 OK, 591B, 3ms]
+  ✓  GET /v1/sim/wompi/terms: responde 2xx
+
+↳ GET /v1/sim/wompi/pse/financial_institutions
+  GET http://127.0.0.1:4817/v1/sim/wompi/pse/financial_institutions [200 OK, 452B, 2ms]
+  ✓  GET /v1/sim/wompi/pse/financial_institutions: responde 2xx
+
+↳ GET /v1/sim/wompi/pse/redirect
+  GET http://127.0.0.1:4817/v1/sim/wompi/pse/redirect [200 OK, 651B, 3ms]
+  ✓  GET /v1/sim/wompi/pse/redirect: responde 2xx
+
+↳ POST /v1/sim/wompi/tokens/cards
+  POST http://127.0.0.1:4817/v1/sim/wompi/tokens/cards [201 Created, 535B, 2ms]
+  ✓  POST /v1/sim/wompi/tokens/cards: responde 2xx
+
+↳ POST /v1/sim/wompi/transactions
+  ┌
+  │ `Using "CryptoJS" is deprecated. Use "require('crypto-
+  │ js')" instead.`
+  └
+  POST http://127.0.0.1:4817/v1/sim/wompi/transactions [201 Created, 460B, 2ms]
+  ✓  POST /v1/sim/wompi/transactions: responde 2xx
+
+↳ GET /v1/sim/wompi/transactions/:id
+  GET http://127.0.0.1:4817/v1/sim/wompi/transactions/141c3423-5d61-4664-b03d-c14204ca520c [200 OK, 456B, 1ms]
+  ✓  GET /v1/sim/wompi/transactions/:id: responde 2xx
+
+❏ 03. Simulador Mercado Pago (/v1/sim/mercadopago)
+↳ GET /v1/sim/mercadopago/payment_methods
+  GET http://127.0.0.1:4817/v1/sim/mercadopago/payment_methods [200 OK, 630B, 1ms]
+  ✓  GET /v1/sim/mercadopago/payment_methods: responde 2xx
+
+↳ POST /v1/sim/mercadopago/card_tokens
+  POST http://127.0.0.1:4817/v1/sim/mercadopago/card_tokens?public_key=APP_USR_PUBLIC_KEY [201 Created, 714B, 3ms]
+  ✓  POST /v1/sim/mercadopago/card_tokens: responde 2xx
+
+↳ POST /v1/sim/mercadopago/payments
+  POST http://127.0.0.1:4817/v1/sim/mercadopago/payments [201 Created, 503B, 2ms]
+  ✓  POST /v1/sim/mercadopago/payments: responde 2xx
+
+↳ GET /v1/sim/mercadopago/payments/:id
+  GET http://127.0.0.1:4817/v1/sim/mercadopago/payments/2247745655 [200 OK, 498B, 2ms]
+  ✓  GET /v1/sim/mercadopago/payments/:id: responde 2xx
+
+↳ GET /v1/sim/mercadopago/card_tokens/:id
+  GET http://127.0.0.1:4817/v1/sim/mercadopago/card_tokens/tok_sim_mp_p3bqj13kvw [200 OK, 628B, 1ms]
+  ✓  GET /v1/sim/mercadopago/card_tokens/:id: responde 2xx
+  ✓  GET /v1/sim/mercadopago/card_tokens/:id: devuelve el BIN de la tarjeta tokenizada
+
+↳ GET /v1/sim/mercadopago/payment_methods/search
+  GET http://127.0.0.1:4817/v1/sim/mercadopago/payment_methods/search?public_key=APP_USR_PUBLIC_KEY&bins=424242 [200 OK, 306B, 1ms]
+  ✓  GET /v1/sim/mercadopago/payment_methods/search: responde 2xx
+  ✓  GET /v1/sim/mercadopago/payment_methods/search: resuelve la marca y el tipo del BIN
+
+↳ POST /v1/sim/mercadopago/orders (tarjeta, APRO)
+  POST http://127.0.0.1:4817/v1/sim/mercadopago/orders [201 Created, 975B, 3ms]
+  ✓  POST /v1/sim/mercadopago/orders (tarjeta, APRO): responde 2xx
+  ✓  POST /v1/sim/mercadopago/orders (tarjeta, APRO): crea la orden aprobada
+
+↳ POST /v1/sim/mercadopago/card_tokens (titular OTHE)
+  POST http://127.0.0.1:4817/v1/sim/mercadopago/card_tokens?public_key=APP_USR_PUBLIC_KEY [201 Created, 714B, 2ms]
+  ✓  POST /v1/sim/mercadopago/card_tokens (titular OTHE): responde 2xx
+
+↳ POST /v1/sim/mercadopago/orders (tarjeta, OTHE)
+  POST http://127.0.0.1:4817/v1/sim/mercadopago/orders [402 Payment Required, 1.12kB, 2ms]
+  ✓  POST /v1/sim/mercadopago/orders (tarjeta, OTHE): responde 402 con la orden rechazada
+
+↳ POST /v1/sim/mercadopago/orders
+  POST http://127.0.0.1:4817/v1/sim/mercadopago/orders [201 Created, 852B, 2ms]
+  ✓  POST /v1/sim/mercadopago/orders: responde 2xx
+
+↳ GET /v1/sim/mercadopago/orders/:id
+  GET http://127.0.0.1:4817/v1/sim/mercadopago/orders/ORD01VHZ12JXHO1 [200 OK, 741B, 2ms]
+  ✓  GET /v1/sim/mercadopago/orders/:id: responde 2xx
+
+↳ GET /v1/sim/mercadopago/payments/:paymentId/bank_transfer
+  GET http://127.0.0.1:4817/v1/sim/mercadopago/payments/732478187645/bank_transfer [200 OK, 658B, 2ms]
+  ✓  GET /v1/sim/mercadopago/payments/:paymentId/bank_transfer: responde 2xx
+
+❏ 04. Simulador Rapyd (/v1/sim/rapyd)
+↳ GET /v1/sim/rapyd/payment_methods/country
+  ┌
+  │ `Using "CryptoJS" is deprecated. Use "require('crypto-
+  │ js')" instead.`
+  └
+  GET http://127.0.0.1:4817/v1/sim/rapyd/payment_methods/country?country=CO&currency=COP [200 OK, 1.02kB, 4ms]
+  ✓  GET /v1/sim/rapyd/payment_methods/country: responde 2xx
+
+↳ POST /v1/sim/rapyd/customers
+  ┌
+  │ `Using "CryptoJS" is deprecated. Use "require('crypto-
+  │ js')" instead.`
+  └
+  POST http://127.0.0.1:4817/v1/sim/rapyd/customers [200 OK, 450B, 3ms]
+  ✓  POST /v1/sim/rapyd/customers: responde 2xx
+
+↳ POST /v1/sim/rapyd/payments
+  ┌
+  │ `Using "CryptoJS" is deprecated. Use "require('crypto-
+  │ js')" instead.`
+  └
+  POST http://127.0.0.1:4817/v1/sim/rapyd/payments [201 Created, 773B, 3ms]
+  ✓  POST /v1/sim/rapyd/payments: responde 2xx
+
+↳ GET /v1/sim/rapyd/payments/:paymentId
+  ┌
+  │ `Using "CryptoJS" is deprecated. Use "require('crypto-
+  │ js')" instead.`
+  └
+  GET http://127.0.0.1:4817/v1/sim/rapyd/payments/payment_d2a1b613f8fcf5a95eed4db496aaac1b [200 OK, 735B, 3ms]
+  ✓  GET /v1/sim/rapyd/payments/:paymentId: responde 2xx
+
+↳ GET /v1/sim/rapyd/complete-bank-payment
+  GET http://127.0.0.1:4817/v1/sim/rapyd/complete-bank-payment?token=payment_d2a1b613f8fcf5a95eed4db496aaac1b [200 OK, 651B, 3ms]
+  ✓  GET /v1/sim/rapyd/complete-bank-payment: responde 2xx
+
+↳ POST /v1/sim/rapyd/checkout
+  ┌
+  │ `Using "CryptoJS" is deprecated. Use "require('crypto-
+  │ js')" instead.`
+  └
+  POST http://127.0.0.1:4817/v1/sim/rapyd/checkout [200 OK, 605B, 4ms]
+  ✓  POST /v1/sim/rapyd/checkout: responde 2xx
+
+↳ GET /v1/sim/rapyd/checkout/:checkoutId
+  ┌
+  │ `Using "CryptoJS" is deprecated. Use "require('crypto-
+  │ js')" instead.`
+  └
+  GET http://127.0.0.1:4817/v1/sim/rapyd/checkout/checkout_0402f4a5cd74e8787aed03f9eda0ee9a [200 OK, 573B, 3ms]
+  ✓  GET /v1/sim/rapyd/checkout/:checkoutId: responde 2xx
+
+↳ GET /v1/sim/rapyd/checkout/:checkoutId/pay
+  GET http://127.0.0.1:4817/v1/sim/rapyd/checkout/checkout_0402f4a5cd74e8787aed03f9eda0ee9a/pay [200 OK, 609B, 2ms]
+  ✓  GET /v1/sim/rapyd/checkout/:checkoutId/pay: responde 2xx
+
+❏ 05. Simulador Kushki (/v1/sim/kushki)
+↳ GET /v1/sim/kushki/transfer/v1/bankList
+  GET http://127.0.0.1:4817/v1/sim/kushki/transfer/v1/bankList [200 OK, 379B, 2ms]
+  ✓  GET /v1/sim/kushki/transfer/v1/bankList: responde 2xx
+
+↳ POST /v1/sim/kushki/transfer/v1/tokens
+  POST http://127.0.0.1:4817/v1/sim/kushki/transfer/v1/tokens [201 Created, 220B, 7ms]
+  ✓  POST /v1/sim/kushki/transfer/v1/tokens: responde 2xx
+
+↳ POST /v1/sim/kushki/transfer/v1/init
+  POST http://127.0.0.1:4817/v1/sim/kushki/transfer/v1/init [201 Created, 419B, 3ms]
+  ✓  POST /v1/sim/kushki/transfer/v1/init: responde 2xx
+
+↳ GET /v1/sim/kushki/transfer/v1/status/:token
+  GET http://127.0.0.1:4817/v1/sim/kushki/transfer/v1/status/3bad2f49906d455fb60bb78a9d5c513b [200 OK, 685B, 1ms]
+  ✓  GET /v1/sim/kushki/transfer/v1/status/:token: responde 2xx
+
+↳ GET /v1/sim/kushki/transfer/v1/agent
+  GET http://127.0.0.1:4817/v1/sim/kushki/transfer/v1/agent?token=3bad2f49906d455fb60bb78a9d5c513b [200 OK, 707B, 2ms]
+  ✓  GET /v1/sim/kushki/transfer/v1/agent: responde 2xx
+
+↳ POST /v1/sim/kushki/card/v1/tokens
+  POST http://127.0.0.1:4817/v1/sim/kushki/card/v1/tokens [201 Created, 252B, 2ms]
+  ✓  POST /v1/sim/kushki/card/v1/tokens: responde 2xx
+  ✓  POST /v1/sim/kushki/card/v1/tokens: emite un token de 32 hexadecimales, como UAT
+
+↳ POST /v1/sim/kushki/card/v1/charges
+  POST http://127.0.0.1:4817/v1/sim/kushki/card/v1/charges [201 Created, 476B, 2ms]
+  ✓  POST /v1/sim/kushki/card/v1/charges: responde 2xx
+
+↳ GET /v1/sim/kushki/charges/:ticketNumber
+  GET http://127.0.0.1:4817/v1/sim/kushki/charges/94eba19e12034aa1a6 [200 OK, 471B, 2ms]
+  ✓  GET /v1/sim/kushki/charges/:ticketNumber: responde 2xx
+
+❏ 06. Webhooks
+↳ POST /v1/sim/webhooks/trigger
+  POST http://127.0.0.1:4817/v1/sim/webhooks/trigger [409 Conflict, 300B, 2ms]
+  ✓  POST /v1/sim/webhooks/trigger: responde 200 o 409
+
+↳ POST /v1/api/webhooks/:gateway
+  POST http://127.0.0.1:4817/v1/api/webhooks/wompi [401 Unauthorized, 339B, 3ms]
+  -  [skipped] POST /v1/api/webhooks/:gateway: el trigger no devolvió un webhook firmado
+
+┌─────────────────────────┬──────────────────┬─────────────────┐
+│                         │         executed │          failed │
+├─────────────────────────┼──────────────────┼─────────────────┤
+│              iterations │                1 │               0 │
+├─────────────────────────┼──────────────────┼─────────────────┤
+│                requests │               42 │               0 │
+├─────────────────────────┼──────────────────┼─────────────────┤
+│            test-scripts │               63 │               0 │
+├─────────────────────────┼──────────────────┼─────────────────┤
+│      prerequest-scripts │               10 │               0 │
+├─────────────────────────┼──────────────────┼─────────────────┤
+│              assertions │               47 │               0 │
+├─────────────────────────┴──────────────────┴─────────────────┤
+│ total run duration: 822ms                                    │
+├──────────────────────────────────────────────────────────────┤
+│ total data received: 15.84kB (approx)                        │
+├──────────────────────────────────────────────────────────────┤
+│ average response time: 5ms [min: 1ms, max: 77ms, s.d.: 12ms] │
+└──────────────────────────────────────────────────────────────┘
+newman exit 0

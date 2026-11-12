@@ -6,8 +6,8 @@
   {David Estevan Rodriguez Jurado}
   {09/11/2026}
   {Un mismo pago de tarjeta por las cuatro pasarelas}
-  {Pendiente (\#174)}
-  {Pendiente (\#174)}
+  {Joan Emmanuel Orduz Chia}
+  {11/11/2026}
   {El mismo pago, descrito una sola vez con \texttt{CreatePaymentRequest} y ejecutado con \texttt{kitPagos.createPayment()}, se cobra por Wompi, Mercado Pago, Kushki y Rapyd. El caso verifica que el SDK normaliza el estado, conserva el estado nativo, mantiene el monto exacto y la referencia de la orden, y que la reconsulta es estable. Es el argumento de intercambiabilidad del proyecto convertido en una verificación ejecutable.}
   {Funcional (sistema, caja negra). No es un CRUD ni una prueba de seguridad.}
   {\textbullet\ SDK compilado en \path{sdk/} con \texttt{npm install} y \texttt{npm run build}.\newline
@@ -27,27 +27,27 @@ Comprobar que las cuatro pasarelas producen el mismo resultado normalizado para 
   Compilar el SDK y levantar la API de Simulación. &
   \texttt{cd sdk \&\& npm install \&\& npm run build}; en otra terminal, \texttt{cd simulator-api \&\& npm install \&\& npm run dev}. &
   La compilación termina con código 0; el simulador escucha en el puerto 3000 y \texttt{GET /health} responde 200 con estado \texttt{ok}. &
-  & & \\ \hline
+  Build en 0; \texttt{/health} en 200. & Pasó & Simulador en 4817 \\ \hline
   2 &
   Ejecutar el ejemplo de intercambiabilidad. &
   \texttt{cd examples \&\& npm install \&\& npm run} \path{simulate:interchangeability}. &
-  El proceso imprime una tabla con las cuatro pasarelas. Las cuatro filas muestran estado normalizado \texttt{APPROVED}, monto \texttt{150000.00 COP} y reconsulta \texttt{APPROVED}. El estado nativo es \texttt{APPROVED} en Wompi, \texttt{CLO} en Rapyd, \texttt{approved} en Mercado Pago y \texttt{APPROVAL} en Kushki. Al final imprime «Las 4 pasarelas coinciden en estado normalizado, monto y referencia.» &
-  & & \\ \hline
+  El proceso imprime una tabla con las cuatro pasarelas. Las cuatro filas muestran estado normalizado \texttt{APPROVED}, monto \texttt{150000.00 COP} y reconsulta \texttt{APPROVED}. El estado nativo es \texttt{APPROVED} en Wompi, \texttt{CLO} en Rapyd, \texttt{processed} en Mercado Pago, el estado de la orden de su Orders API, y \texttt{APPROVAL} en Kushki. Al final imprime «Las 4 pasarelas coinciden en estado normalizado, monto y referencia.» &
+  Cuatro \texttt{APPROVED} y \texttt{150000.00 COP}; Mercado Pago, \texttt{processed}. & Pasó & Nueva corrida 1, tras DEF-01 \\ \hline
   3 &
   Verificar cómo llega cada pago a su estado final. &
   La salida del paso 2 y \path{examples/gateway-interchangeability.ts}. &
   Wompi se consulta porque nace \texttt{PENDING}; Rapyd redirige, y el ejemplo visita la \texttt{redirectUrl} y consulta; Mercado Pago y Kushki traen el desenlace en la creación. Las dos ramas dependen del resultado (\texttt{outcome} e \texttt{isFinal()}), no de la pasarela. &
-  & & \\ \hline
+  Como se espera. & Pasó & Código revisado \\ \hline
   4 &
   Repetir la corrida para descartar un resultado accidental. &
   El mismo comando del paso 2. &
   La segunda corrida produce el mismo estado normalizado, el mismo monto y la misma línea de verificación; el código de salida vuelve a ser 0. &
-  & & \\ \hline
+  Igual; código 0. & Pasó & Nueva corrida 2 \\ \hline
   5 &
   Verificar que el código del comercio no tiene ramas por pasarela. &
   Revisión de \path{examples/gateway-interchangeability.ts}. &
   El pago se describe una sola vez y lo cobra la misma función \texttt{charge()} para las cuatro pasarelas, sin \texttt{switch} ni \texttt{if} sobre \texttt{Gateway}. Lo que cambia por pasarela es el valor de \texttt{gateway}, su credencial en \texttt{CREDENTIALS} y su URL en \texttt{SIMULATOR\_ENDPOINTS}. El token \path{tok_test_interchange} es el mismo para las cuatro. &
-  & & \\ \hline
+  Sin ramas por pasarela; el mismo token. & Pasó & Código revisado \\ \hline
 \end{xltabular}
 \end{TablaPasos}
 

@@ -1,0 +1,36 @@
+Autoprueba del guardián: example.invalid bloqueado (guardián: petición a example.invalid bloqueada).
+Carga aislada de la API de Simulación, 2026-11-11. Commit 07e542e.
+Node.js v22.23.4; Darwin 27.0.0 arm64; Apple M4 (10 núcleos); autocannon 8.0.0.
+Instancia en http://127.0.0.1:60053, sin .env, con credenciales ficticias. Perfil: 5 s de calentamiento y 30 s de medición, conexiones 10 y 50, 3 repeticiones.
+E1-c10-r1	19762.8 pet/s	p50 0.448 ms	p95 0.779 ms	p99 1.226 ms	errores 0	no 2xx 0	RSS 243.4→231.5 MB	bucle p99 10.666 ms
+E1-c10-r2	17777.04 pet/s	p50 0.448 ms	p95 1.018 ms	p99 1.676 ms	errores 0	no 2xx 0	RSS 238.4→253.7 MB	bucle p99 14.705 ms
+E1-c10-r3	18476.54 pet/s	p50 0.447 ms	p95 0.827 ms	p99 1.348 ms	errores 0	no 2xx 0	RSS 257.9→163.5 MB	bucle p99 15.811 ms
+E1-c50-r1	18604.94 pet/s	p50 2.228 ms	p95 5.299 ms	p99 8.264 ms	errores 0	no 2xx 0	RSS 169.6→190.8 MB	bucle p99 15.073 ms
+E1-c50-r2	11122.44 pet/s	p50 3.243 ms	p95 9.446 ms	p99 17.706 ms	errores 0	no 2xx 0	RSS 195.2→204 MB	bucle p99 22.348 ms
+E1-c50-r3	12686.9 pet/s	p50 2.654 ms	p95 8.105 ms	p99 13.179 ms	errores 0	no 2xx 0	RSS 190.4→189.8 MB	bucle p99 32.309 ms
+E2-c10-r1	16387.94 pet/s	p50 0.508 ms	p95 1.038 ms	p99 1.584 ms	errores 0	no 2xx 0	RSS 190.8→197.4 MB	bucle p99 10.813 ms
+E2-c10-r2	18259.74 pet/s	p50 0.502 ms	p95 0.746 ms	p99 1.184 ms	errores 0	no 2xx 0	RSS 197.4→197.4 MB	bucle p99 10.437 ms
+E2-c10-r3	18016.67 pet/s	p50 0.516 ms	p95 0.727 ms	p99 1.063 ms	errores 0	no 2xx 0	RSS 197.4→197.5 MB	bucle p99 10.338 ms
+E2-c50-r1	17899.07 pet/s	p50 2.671 ms	p95 3.441 ms	p99 4.403 ms	errores 0	no 2xx 0	RSS 197.7→197.7 MB	bucle p99 11.436 ms
+E2-c50-r2	17299.47 pet/s	p50 2.697 ms	p95 3.597 ms	p99 6.075 ms	errores 0	no 2xx 0	RSS 197.7→192.8 MB	bucle p99 12.337 ms
+E2-c50-r3	17483.74 pet/s	p50 2.77 ms	p95 3.567 ms	p99 4.702 ms	errores 0	no 2xx 0	RSS 192.9→206 MB	bucle p99 11.592 ms
+E3-c10-r1	4150.57 pet/s	p50 1.912 ms	p95 4.593 ms	p99 7.576 ms	errores 0	no 2xx 0	RSS 364.9→413.9 MB	bucle p99 13.943 ms
+E3-c10-r2	3992.1 pet/s	p50 2.094 ms	p95 4.609 ms	p99 6.739 ms	errores 0	no 2xx 0	RSS 412.7→415.5 MB	bucle p99 13.124 ms
+E3-c10-r3	3569.6 pet/s	p50 2.285 ms	p95 5.16 ms	p99 7.697 ms	errores 0	no 2xx 0	RSS 414.5→404.8 MB	bucle p99 14.057 ms
+E3-c50-r1	3769.24 pet/s	p50 11.635 ms	p95 22.971 ms	p99 32.259 ms	errores 0	no 2xx 0	RSS 404.8→415.2 MB	bucle p99 17.859 ms
+E3-c50-r2	3473.3 pet/s	p50 12.092 ms	p95 25.212 ms	p99 44.63 ms	errores 0	no 2xx 0	RSS 415→418.3 MB	bucle p99 20.677 ms
+E3-c50-r3	3899.64 pet/s	p50 10.928 ms	p95 22.703 ms	p99 33.225 ms	errores 0	no 2xx 0	RSS 417.7→385.4 MB	bucle p99 18.579 ms
+E4-c10-r1	3835.07 pet/s	p50 2.002 ms	p95 4.938 ms	p99 8.284 ms	errores 0	no 2xx 0	RSS 385.9→389 MB	bucle p99 18.121 ms
+E4-c10-r2	4486.77 pet/s	p50 1.546 ms	p95 4.84 ms	p99 11.674 ms	errores 0	no 2xx 0	RSS 386.5→388.5 MB	bucle p99 17.498 ms
+E4-c10-r3	5670.04 pet/s	p50 1.497 ms	p95 3.168 ms	p99 4.996 ms	errores 0	no 2xx 0	RSS 388.5→391.4 MB	bucle p99 12.493 ms
+E4-c50-r1	5931.6 pet/s	p50 7.731 ms	p95 10.115 ms	p99 14.627 ms	errores 0	no 2xx 0	RSS 391.3→403.8 MB	bucle p99 13.91 ms
+E4-c50-r2	5771.57 pet/s	p50 7.839 ms	p95 10.792 ms	p99 20.012 ms	errores 0	no 2xx 0	RSS 402.6→394.2 MB	bucle p99 14.565 ms
+E4-c50-r3	5655 pet/s	p50 7.996 ms	p95 11.472 ms	p99 22.001 ms	errores 0	no 2xx 0	RSS 387.2→386.4 MB	bucle p99 14.877 ms
+E5-c10-r1	2700.94 pet/s	p50 3.22 ms	p95 5.685 ms	p99 7.381 ms	errores 0	no 2xx 0	RSS 393.2→505.5 MB	bucle p99 12.46 ms
+E5-c10-r2	2660.4 pet/s	p50 3.284 ms	p95 5.771 ms	p99 7.298 ms	errores 0	no 2xx 0	RSS 506.3→511.5 MB	bucle p99 12.73 ms
+E5-c10-r3	2260.6 pet/s	p50 3.319 ms	p95 7.621 ms	p99 18.087 ms	errores 0	no 2xx 0	RSS 520.4→523.3 MB	bucle p99 18.416 ms
+E5-c50-r1	2371.14 pet/s	p50 19.698 ms	p95 26.91 ms	p99 54.955 ms	errores 0	no 2xx 0	RSS 520.3→524.2 MB	bucle p99 20.513 ms
+E5-c50-r2	2348.4 pet/s	p50 19.995 ms	p95 26.382 ms	p99 46.124 ms	errores 0	no 2xx 0	RSS 521→522 MB	bucle p99 16.876 ms
+E5-c50-r3	2398.81 pet/s	p50 19.873 ms	p95 28.446 ms	p99 43.566 ms	errores 0	no 2xx 0	RSS 517.4→521.5 MB	bucle p99 17.383 ms
+Bloqueos del guardián durante la carga: 0. Corridas: 30 de 30.
+Criterio de completitud cumplido.

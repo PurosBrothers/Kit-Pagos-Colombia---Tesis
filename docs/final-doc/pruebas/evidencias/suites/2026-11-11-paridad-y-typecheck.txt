@@ -1,0 +1,15 @@
+2026-11-11 15:45:32 -0500
+commit aa14719
+== ./prototypes/check-skeleton-parity.sh
+Esqueleto idéntico en los dos prototipos, salvo sus vitrinas, y el módulo de pagos de D no usa el SDK.
+exit 0
+== npm run typecheck en prototypes/checkout-con-sdk-solo-back
+exit 0
+== npm run typecheck en prototypes/checkout-con-sdk-front-back
+exit 0
+== npm run typecheck en prototypes/checkout-frontend-rest
+exit 0
+== npm run typecheck en prototypes/checkout-sin-solucion
+exit 0
+== npm run typecheck en examples
+exit 0
