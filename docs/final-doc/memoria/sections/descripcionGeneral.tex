@@ -46,6 +46,8 @@ El efecto sobre el esfuerzo de integración se mide en la evaluación de la Fase
 
 \subsection{Objetivos, alcance y entregables}
 
+La documentación técnica del proyecto está escrita en archivos Markdown (\texttt{.md}) dentro del repositorio público de GitHub. En esos archivos están el análisis de las pasarelas, las decisiones de diseño con sus compromisos técnicos, los datos de prueba y los resultados. Se publicó así porque Kit Pagos Colombia es de código abierto, con licencia Apache 2.0: junto con el código, cualquiera puede consultar el análisis y el diseño que justifican el framework. Los documentos finales, como esta memoria, están en LaTeX en el mismo repositorio. Las rutas que esta memoria cita desde una carpeta del repositorio son relativas a su raíz, como explican los anexos (sección~\ref{sec:anexos}).
+
 \subsubsection{Objetivo general}
 El objetivo general del trabajo de grado, aprobado en el SPMP (sección 1.2.3) y transcrito en \path{docs/project-management/thesis-objectives.md}, es:
 
@@ -64,7 +66,7 @@ El SPMP estableció seis objetivos específicos (OE-01 a OE-06). A continuación
     \textbf{Evidencia:} Implementado mediante la especificación de puertos, entidades del dominio transaccional, adaptadores de infraestructura y registro histórico de decisiones arquitectónicas (\path{docs/architecture/architecture-log.md} y \path{docs/02-arquitectura/}).
     
     \item \textbf{OE-03:} \textit{Desarrollar un prototipo funcional del framework que implemente la interfaz unificada y los mecanismos de comunicación segura.} \\
-    \textbf{Evidencia:} Implementado en el paquete central del SDK (\texttt{sdk/}), con la fachada unificada \texttt{KitPagos}, factoría de pasarelas, adaptadores para Wompi, Mercado Pago, Kushki y Rapyd, módulo de navegador para tokenización segura y suite de pruebas unitarias y de integración.
+    \textbf{Evidencia:} Implementado en el paquete central del SDK (\texttt{sdk/}), con la fachada unificada \texttt{KitPagos}, fábrica de pasarelas, adaptadores para Wompi, Mercado Pago, Kushki y Rapyd, módulo de navegador para tokenización segura y suite de pruebas unitarias y de integración.
     
     \item \textbf{OE-04:} \textit{Implementar la API de simulación.} \\
     \textbf{Evidencia:} Implementado en \texttt{simulator-api/}: rutas de simulación de las cuatro pasarelas bajo \texttt{/v1/sim/*}, escenarios elegidos por cabecera (\texttt{x-simulator-scenario}), datos de prueba, montos reservados o marcas de credencial, y la capa REST propia \texttt{/v1/api}. La especificación OpenAPI (RF-13) cubre \texttt{/v1/api} y las rutas de simulación de las cuatro pasarelas; siete operaciones sin esquema quedan como límite declarado.
