@@ -1,6 +1,6 @@
 \section{Contexto y Alcance}
 
-\subsection{Diagrama de Contexto del Sistema — Kit Pagos Colombia (Nivel 1)}
+\subsection{Diagrama de Contexto del Sistema --- Kit Pagos Colombia (Nivel 1)}
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{"../../architecture/SDK/Context Diagram - C4.pdf"}
@@ -14,19 +14,19 @@ El diagrama de contexto del sistema muestra la posición de Kit Pagos Colombia d
 El sistema tiene dos tipos de usuario. El primero es el Desarrollador Junior o Senior, quien instala el framework en su entorno de trabajo mediante npm, lo configura con las credenciales de las pasarelas que desea utilizar y consume su interfaz unificada para integrar capacidades de pago en su aplicación. El segundo es el Tester o QA, quien interactúa con el framework principalmente a través de la API de simulación para validar flujos de pago en escenarios controlados sin depender de entornos reales ni de credenciales de producción.
 
 \subsubsection{Sistema principal}
-Kit Pagos Colombia actúa como intermediario técnico entre las aplicaciones de software y las pasarelas de pago colombianas. Su propósito es abstraer la heterogeneidad del ecosistema de proveedores, exponiéndose como una interfaz común, predecible y reutilizable. El sistema no procesa pagos directamente (delega cada operación hacia el proveedor seleccionado) sino que normaliza la comunicación, los formatos de respuesta y el manejo de errores para que la aplicación consumidora no tenga que conocer las convenciones de ningún proveedor en particular.
+Kit Pagos Colombia actúa como intermediario técnico entre las aplicaciones de software y las pasarelas de pago colombianas. Su propósito es abstraer la heterogeneidad del ecosistema de proveedores, exponiéndose como una interfaz común, predecible y reutilizable. El sistema no autoriza, liquida ni procesa cobros por su cuenta. Arma cada petición y la envía a la pasarela seleccionada (Wompi, Mercado Pago, Kushki o Rapyd), que es la que siempre procesa el cobro. Lo que hace el framework es normalizar la comunicación, los formatos de respuesta y el manejo de errores, para que la aplicación consumidora no tenga que conocer las convenciones de ningún proveedor en particular.
 
 \subsubsection{Sistemas externos}
 El sistema se comunica con cuatro pasarelas de pago, cada una operando como sistema externo independiente:
 \begin{itemize}
     \item \textbf{Wompi} es la pasarela de Bancolombia, con mayor penetración en el mercado colombiano. El framework envía solicitudes de creación de pago y consulta de estado a su API REST mediante HTTPS, y recibe notificaciones asíncronas de cambio de estado a través de webhooks firmados con SHA-256.
-    \item \textbf{Rapyd Latam} es la pasarela que sustituye a PayU Latam en el ecosistema de Kit Pagos Colombia, tras la adquisición de su operación en Latinoamérica en 2025. A diferencia de las otras tres pasarelas, Rapyd no recibe las credenciales dentro del cuerpo de la solicitud sino en los encabezados HTTP. Cada petición debe llevar un \texttt{access\_key} propio del comercio y una firma calculada con HMAC-SHA256, que se construye concatenando el método HTTP, la ruta del recurso al que se llama, una cadena aleatoria (salt), la marca de tiempo de la petición, el \texttt{access\_key}, el \texttt{secret\_key} y el cuerpo del mensaje, y luego codificando ese resultado en Base64. Para las notificaciones asíncronas la fórmula es prácticamente la misma, con dos diferencias: no incluye el método HTTP, y en vez de la ruta relativa usa la URL pública completa que el comercio configuró para recibir los webhooks. Esta segunda fórmula es importante porque implica que el adaptador necesita conocer de antemano esa URL como un dato de configuración, algo que ninguna de las otras tres pasarelas exige.
+    \item \textbf{Rapyd Latam} es la pasarela que sustituye a PayU Latam en el ecosistema de Kit Pagos Colombia, tras la adquisición de su operación en Latinoamérica en 2025. A diferencia de las otras tres pasarelas, Rapyd no recibe las credenciales dentro del cuerpo de la solicitud sino en los encabezados HTTP. Cada petición debe llevar un \texttt{access\_key} propio del comercio y una firma calculada con HMAC-SHA256. La firma se construye concatenando el método HTTP, la ruta del recurso al que se llama, una cadena aleatoria (salt), la marca de tiempo de la petición, el \texttt{access\_key}, el \texttt{secret\_key} y el cuerpo del mensaje; ese resultado se codifica luego en Base64. Para las notificaciones asíncronas la fórmula es prácticamente la misma, con dos diferencias: no incluye el método HTTP, y en vez de la ruta relativa usa la URL pública completa que el comercio configuró para recibir los webhooks. Esta segunda fórmula es importante porque implica que el adaptador necesita conocer de antemano esa URL como un dato de configuración, algo que ninguna de las otras tres pasarelas exige.
     \item \textbf{Mercado Pago} es la plataforma de pagos de Mercado Libre para Colombia. La comunicación se realiza mediante autenticación Bearer y sus webhooks utilizan HMAC-SHA256.
     \item \textbf{Kushki} es una pasarela de origen latinoamericano con operación activa en Colombia. La autenticación se realiza mediante el header Private-Merchant-Id y sus notificaciones asíncronas también usan HMAC-SHA256.
 \end{itemize}
 En todos los casos, la relación bidireccional refleja dos flujos distintos: las solicitudes salientes del framework hacia cada pasarela (creación de pago, consulta de estado) y los eventos entrantes que cada pasarela envía hacia el framework mediante webhooks cuando el estado de una transacción cambia.
 
-\subsection{Diagrama de Contexto de la API de Simulación — Kit Pagos Colombia (Nivel 1)}
+\subsection{Diagrama de Contexto de la API de Simulación --- Kit Pagos Colombia (Nivel 1)}
 \begin{figure}[htbp]
 \centering
 \includegraphics{"../../architecture/Simulador API/Context Diagram - C4.pdf"}
@@ -40,8 +40,8 @@ Este diagrama complementa el anterior con un enfoque específico en el flujo de 
 En el contexto de simulación, el Desarrollador y el Tester QA comparten el mismo rol: configurar escenarios de prueba en modo sandbox o simulación y validar que la integración responde correctamente ante cada uno de ellos. La distinción entre ambos perfiles se diluye en este flujo porque el objetivo es el mismo, verificar el comportamiento del sistema sin transacciones reales.
 
 \subsubsection{Aplicación del Comercio (Huésped)}
-La aplicación del comercio es el sistema externo que integra el SDK de Kit Pagos Colombia para aceptar pagos. En el contexto de simulación actúa como cliente del simulador: envía solicitudes de pago y consulta de estado hacia el framework mediante HTTPS y JSON, y recibe notificaciones asíncronas de cambio de estado a través de webhooks sintéticos generados por la API de simulación mediante HTTP POST.
-Este elemento es relevante en el diagrama porque evidencia que el framework no es el destino final de las solicitudes, es un intermediario que procesa y redirige, y cuyo comportamiento debe ser transparente para la aplicación que lo consume.
+La aplicación del comercio es el sistema externo que integra el SDK de Kit Pagos Colombia para aceptar pagos. En el contexto de simulación actúa como cliente del simulador: envía solicitudes de pago y consulta de estado hacia el framework mediante HTTPS y JSON. También recibe notificaciones asíncronas de cambio de estado a través de webhooks sintéticos generados por la API de simulación mediante HTTP POST.
+Este elemento es relevante en el diagrama porque evidencia que el framework no es el destino final de las solicitudes, sino un intermediario que procesa y redirige, y cuyo comportamiento debe ser transparente para la aplicación que lo consume.
 
 \subsubsection{Kit Pagos Colombia}
 En este diagrama el sistema aparece en su rol de simulador: recibe las solicitudes de la aplicación del comercio, las procesa internamente según el escenario configurado y retorna respuestas que replican el comportamiento de las pasarelas reales sin establecer conexión efectiva con ninguna de ellas.

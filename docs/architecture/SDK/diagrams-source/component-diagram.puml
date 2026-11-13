@@ -71,8 +71,7 @@ KushkiAdapter ..> SimAPI : Modo\nsandbox UAT
 Webhook -[hidden]down- Configurator
 note bottom of RapydAdapter
   Reemplaza a "PayU Adapter"
-  tras la adquisicion (ver
-  architecture-log.md, punto 15).
+  tras la adquisicion.
 end note
 
 note top of Normalizer
@@ -88,8 +87,7 @@ note top of Normalizer
   sistema externo; el detalle de
   clases esta en el Diagrama de
   Clases de la Arquitectura
-  Hexagonal. Ver architecture-log.md,
-  punto 34.
+  Hexagonal.
 end note
 
 @enduml

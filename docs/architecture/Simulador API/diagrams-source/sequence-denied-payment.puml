@@ -30,11 +30,11 @@ alt Mercado Pago
 else Wompi, Kushki o Rapyd
   SimAPI -> MockFactory : buildDeclinedResponse(\nrequest)
 end
-MockFactory -> MockFactory : Genera payload nativo de rechazo\n(Wompi: {data:{id,\nstatus:"DECLINED",\nstatus_message:\n"Fondos insuficientes"}},\nMercado Pago: {id,\nstatus:"rejected",\nstatus_detail:\n"cc_rejected_insufficient_amount"},\nRapyd: {data:{id,status:"ERR",\nfailure_code:\n"INSUFFICIENT_FUNDS"}},\nKushki: {ticketNumber,\ndetails:{transactionStatus:\n"DECLINED"}})
+MockFactory -> MockFactory : Genera payload nativo de rechazo\n(Wompi: {data:{id,\nstatus:"DECLINED",\nstatus_message:\n"Fondos insuficientes"}},\nMercado Pago: {id,\nstatus:"rejected",\nstatus_detail:\n"cc_rejected_insufficient_amount"},\nRapyd: {data:{id,status:"ERR",\nfailure_code:\n"ERROR_PROCESSING_CARD - [51]"}},\nKushki (400):\n{code:"017", message,\ndetails:{responseCode:"017",\nresponseText}})
 MockFactory -> Store : save(\ngatewayTransactionId,\npayload)
 Store --> MockFactory : OK
 MockFactory --> SimAPI : payload nativo de rechazo
-SimAPI --> SDK : HTTP 201 / 200 (payload nativo)
+SimAPI --> SDK : HTTP 201 / 200;\nKushki: HTTP 400
 SDK -> SDK : ResponseNormalizer.\nnormalize(payload,\ngateway)
 SDK --> Comercio : PaymentResult(\nTRANSACTION:\nstatus=DECLINED,\nrejectionReason=\n{category, code})
 

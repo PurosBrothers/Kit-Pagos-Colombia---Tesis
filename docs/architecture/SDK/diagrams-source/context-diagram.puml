@@ -44,9 +44,7 @@ Wompi -[hidden]down- MercadoPago
 Rapyd -[hidden]down- Kushki
 note bottom of Rapyd
   Reemplaza a "PayU Latam"
-  tras la adquisicion
-  (ver architecture-log.md,
-  punto 15).
+  tras la adquisicion.
 end note
 
 @enduml

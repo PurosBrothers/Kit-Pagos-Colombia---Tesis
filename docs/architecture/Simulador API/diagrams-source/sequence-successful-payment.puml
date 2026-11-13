@@ -35,7 +35,7 @@ SDK -> SDK : ResponseNormalizer.\nnormalize(payload,\ngateway)
 SDK --> Comercio : PaymentResult(\nTRANSACTION:\nstatus=APPROVED)
 
 note over Comercio, Store
-  Para Wompi (punto 50): el simulador crea en PENDING y resuelve a APPROVED en la
+  Para Wompi: el simulador crea en PENDING y resuelve a APPROVED en la
   primera consulta de estado, reflejando el comportamiento asincrono de la pasarela
   real. Para Mercado Pago con PSE: devuelve REDIRECT_REQUIRED con redirectUrl; la
   consulta posterior por el id ORD... devuelve APPROVED. Para Rapyd con tarjeta:

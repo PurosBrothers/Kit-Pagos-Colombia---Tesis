@@ -28,29 +28,27 @@ Kushki -> API : POST /card/v1/charges
 
 alt Pago aprobado
   API --> Kushki : HTTP 201
-  rnote over Kushki: transaction_status = APPROVAL
+  rnote over Kushki: details.transactionStatus = APPROVAL
   Kushki -> Kushki : ResponseNormalizer.\nnormalize(rawResponse,\ngateway)
   Kushki --> Facade : PaymentResult
   Facade --> Comercio : PaymentResult(\nTRANSACTION:\nstatus=APPROVED)
 else Pago rechazado
-  API --> Kushki : HTTP 402
-  rnote over Kushki: transaction_status = DECLINED
+  API --> Kushki : HTTP 400
+  rnote over Kushki: details.responseCode 017 a 023\n-> acceptDeclinedCharge()
   Kushki -> Kushki : ResponseNormalizer.\nnormalize(rawResponse,\ngateway)
   Kushki --> Facade : PaymentResult
   Facade --> Comercio : PaymentResult(\nTRANSACTION:\nstatus=DECLINED)
 else Error tecnico
-  API --> Kushki : HTTP 500
+  API --> Kushki : HTTP 5xx
   Kushki --> Facade : error nativo
   Facade --> Comercio : throw KitPagosError(\nGATEWAY_SERVER_ERROR)
 end
 
 note over Comercio, API
-  Excepcion al patron "pendiente + webhook": para
-  tarjeta, Kushki devuelve el resultado final en
-  la misma respuesta HTTP, sin conciliacion
-  posterior. Esta particularidad la absorbe
-  KushkiAdapter; no se filtra hacia el codigo
-  del comercio.
+  Excepcion al patron "pendiente + webhook": para tarjeta, Kushki
+  devuelve el resultado final en la misma respuesta HTTP, sin
+  conciliacion posterior. Esta particularidad la absorbe
+  KushkiAdapter; no se filtra hacia el codigo del comercio.
 end note
 
 @enduml

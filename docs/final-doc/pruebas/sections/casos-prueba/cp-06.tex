@@ -14,7 +14,7 @@
    \textbullet\ Newman disponible con \texttt{npx newman}, o Postman con la colección y el ambiente \texttt{local}.\newline
    \textbullet\ El archivo \emph{cp06-pago.json} creado en la raíz del repositorio con el contenido de la Tabla~\ref{tab:cp06-peticiones}.\newline
    \textbullet\ Para el prototipo C: \texttt{npm ci} y \texttt{npm run build} en \path{prototypes/checkout-frontend-rest/}; el puerto 4100 libre.\newline
-   \textbullet\ Para el humo de Render: acceso a Internet y el servicio despierto.}
+   \textbullet\ Para el humo de Render: acceso a Internet, el servicio despierto y el token de la API para la petición~8.}
   {Local. API de Simulación en \texttt{http://localhost:3000}; prototipo C en \texttt{http://localtest.me:4100} con \texttt{npm run start:local}. Los pasos 1 a 6 usan credenciales ficticias de cliente; el paso 7 usa el perfil del \path{.env}, cuyas llaves solo viajan al simulador local. El humo de Render usa \url{https://kit-pagos-colombia.onrender.com} y no cobra. Node.js 20.}
 
 \subsubsection{Objetivo}
@@ -61,9 +61,9 @@ Comprobar que un cliente sin SDK puede crear un pago, consultarlo y listar banco
   PSE aprobado. & Pasó & Captura \\ \hline
   8 &
   Ejecutar el humo de Render. &
-  Peticiones~5, 6 y 7, sin token; si el servicio está dormido, esperar a que despierte. El plan trata \texttt{/v1/api/gateways} y \texttt{/docs/json} como rutas abiertas en Render, porque son de lectura y no tocan pasarelas ni dinero. &
-  \texttt{/health} responde 200; \texttt{/v1/api/gateways} devuelve las cuatro pasarelas y su \texttt{cardCapture}; \texttt{/docs/json} devuelve el documento OpenAPI con su campo \texttt{openapi} en 3.0. Si Render no está disponible, el paso se registra como bloqueado y no invalida la corrida local. &
-  200 en los tres, sin token. & Pasó & Render \\ \hline
+  Peticiones~5, 6 y 7, sin token, y petición~8, con el token de la API; si el servicio está dormido, esperar a que despierte. Desde el 11/11/2026, Render exige el token en \texttt{/v1/api}; \texttt{/health} y \texttt{/docs} siguen abiertas, porque son de lectura y no tocan pasarelas ni dinero. &
+  \texttt{/health} responde 200 y \texttt{/docs/json} devuelve el documento OpenAPI con su campo \texttt{openapi} en 3.0, los dos sin token. \texttt{/v1/api/gateways} responde 401 sin token y, con el token, 200 con las cuatro pasarelas y su \texttt{cardCapture}. Si Render no está disponible, el paso se registra como bloqueado y no invalida la corrida local. &
+  200 en los tres, sin token. & Pasó & Render. Corrida anterior a las 20:41, cuando Render aún no exigía el token \\ \hline
 \end{xltabular}
 \end{TablaPasos}
 
@@ -84,6 +84,7 @@ Petición~4 & \path{curl -s 'http://localhost:3000/v1/api/pse-banks?gateway=womp
 Petición~5 & \path{curl -s https://kit-pagos-colombia.onrender.com/health} \\ \hline
 Petición~6 & \path{curl -s https://kit-pagos-colombia.onrender.com/v1/api/gateways} \\ \hline
 Petición~7 & \path{curl -s https://kit-pagos-colombia.onrender.com/docs/json} \\ \hline
+Petición~8 & \path{curl -s https://kit-pagos-colombia.onrender.com/v1/api/gateways -H 'Authorization: Bearer <token de la API>'} \\ \hline
 \end{tabularx}
 \caption{Archivo y peticiones del caso CP-06}
 \label{tab:cp06-peticiones}

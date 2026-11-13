@@ -158,7 +158,7 @@ La decisión de TypeScript implica que el cálculo de métricas CK se hace con t
 
 \textbf{API de simulación:}
 
-Express es la alternativa más conocida en el ecosistema Node.js, con amplia documentación y comunidad. Se descartó en favor de Fastify por dos razones: Fastify tiene soporte nativo para TypeScript con validación de esquemas mediante JSON Schema, lo que permite definir los contratos de los endpoints de la API de simulación de forma explícita y verificable; y su rendimiento es significativamente mejor que Express para el mismo código, lo que es relevante si la API de simulación necesita manejar múltiples requests concurrentes durante las pruebas. Spring Boot fue descartado por introducir una dependencia de Java en un proyecto cuyo SDK es TypeScript, generando un stack tecnológico heterogéneo innecesario.
+Express es la alternativa más conocida en el ecosistema Node.js, con amplia documentación y comunidad. Se descartó en favor de Fastify por dos razones. Fastify tiene soporte nativo para TypeScript con validación de esquemas mediante JSON Schema, lo que permite definir los contratos de los endpoints de la API de simulación de forma explícita y verificable. Además, su rendimiento es significativamente mejor que Express para el mismo código, lo que es relevante si la API de simulación necesita manejar múltiples requests concurrentes durante las pruebas. Spring Boot fue descartado por introducir una dependencia de Java en un proyecto cuyo SDK es TypeScript, generando un stack tecnológico heterogéneo innecesario.
 
 \textbf{Framework de pruebas:}
 

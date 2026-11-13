@@ -253,9 +253,6 @@ PseBank -[hidden]down- Gateway
 note bottom of KitPagos
   Diseno "facade directo": sin capa
   explicita de UseCases ni Controller.
-  Reemplaza al diagrama anterior con
-  CrearPagoUseCase / WebhookController
-  (ver architecture-log.md, punto 7).
 end note
 
 note right of GatewayResponseNormalizer
@@ -265,12 +262,11 @@ note right of GatewayResponseNormalizer
   detras de una interfaz, no con ramas
   de un condicional. Agregar Kushki es
   agregar una clase, sin tocar las otras.
-  (ver architecture-log.md, punto 34).
 end note
 
 note right of PaymentGatewayPort
-  El puerto crecio de tres metodos a
-  cuatro: elegir banco no es un paso
+  El puerto tiene cuatro metodos:
+  elegir banco no es un paso
   opcional de PSE, es parte del metodo
   de pago, y sin la lista el comercio
   tiene que hablarle directo a la
@@ -278,7 +274,6 @@ note right of PaymentGatewayPort
   opaco y con significado por pasarela:
   sale de getPseBanks() y entra en
   PaymentMethod.pse() sin transformarse.
-  (ver architecture-log.md, punto 47).
 end note
 
 @enduml

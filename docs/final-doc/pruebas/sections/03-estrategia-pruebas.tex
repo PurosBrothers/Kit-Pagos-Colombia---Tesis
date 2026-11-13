@@ -5,7 +5,7 @@ La estrategia combina pruebas automatizadas que se repiten en cada cambio con pr
 
 \subsection{Tipos de prueba y criterios de completitud}
 
-La Tabla~\ref{tab:estrategia} resume los once tipos de comprobación que se aplican al artefacto. Cada fila declara la herramienta, el ambiente y el criterio objetivo que decide si el tipo de prueba se considera terminado. Las cifras de las suites son de la corrida del 09/11/2026 entre las 20:15 y las 20:23, con el SDK 0.7.0-rc.2, la API de Simulación 0.1.0 y Node.js 22.23.4.
+La Tabla~\ref{tab:estrategia} resume los once tipos de comprobación que se aplican al framework. Cada fila declara la herramienta, el ambiente y el criterio objetivo que decide si el tipo de prueba se considera terminado. Las cifras de las suites son de la corrida del 09/11/2026 entre las 20:15 y las 20:23, con el SDK 0.7.0-rc.2, la API de Simulación 0.1.0 y Node.js 22.23.4.
 
 {\small
 \begin{longtable}{|>{\raggedright\arraybackslash}p{2.45cm}|>{\raggedright\arraybackslash}p{3.05cm}|>{\raggedright\arraybackslash}p{3.25cm}|>{\raggedright\arraybackslash}p{5.55cm}|}
@@ -72,7 +72,7 @@ Todos los jobs terminan en verde: en \path{ci.yml}, \texttt{sdk} (lint, pruebas 
 
 \textbf{Documentación} &
 \texttt{latexmk} con la plantilla común. &
-El job de \path{final-doc.yml}, en el contenedor \path{texlive/texlive:latest}, en cada PR que toque \path{docs/final-doc/}; en local, tres pasadas de \texttt{pdflatex}. &
+El job de \path{final-doc.yml}, en el contenedor \path{texlive/texlive:latest}, en cada pull request que toque \path{docs/final-doc/}; en local, tres pasadas de \texttt{pdflatex}. &
 El PDF compila sin errores, sin referencias indefinidas y sin cajas desbordadas, y no quedan instrucciones de plantilla ni marcadores sin reemplazar. \\ \hline
 \end{longtable}
 }
@@ -182,7 +182,7 @@ Los prototipos tienen sus propias suites, que corren en sus jobs de la CI. Mezcl
   \item \textbf{Corrida nula.} Si el contador del guardián termina distinto de cero, si la autoprueba falla o si la regla~2 aborta, la corrida no vale y no se reporta ninguna cifra.
 \end{enumerate}
 
-El 09/11/2026 se comprobó este aislamiento con un sondeo desechable. Primero, desviando el SDK interno a \path{example.invalid}: el guardián bloqueó la petición y la API respondió 500 sin salir de la máquina. Después, con los cinco escenarios de la Tabla~\ref{tab:escenarios-carga} durante 3~s cada uno: todas las respuestas fueron 2xx y el guardián terminó en 0. Esas cifras no son un resultado: la medición formal es la de la Tabla~\ref{tab:resultados-carga}.
+El 09/11/2026 se comprobó este aislamiento con un sondeo preliminar. Primero, desviando el SDK interno a \path{example.invalid}: el guardián bloqueó la petición y la API respondió 500 sin salir de la máquina. Después, con los cinco escenarios de la Tabla~\ref{tab:escenarios-carga} durante 3~s cada uno: todas las respuestas fueron 2xx y el guardián terminó en 0. Esas cifras no son un resultado: la medición formal es la de la Tabla~\ref{tab:resultados-carga}.
 
 \begin{table}[H]
   \centering
@@ -213,7 +213,7 @@ El 09/11/2026 se comprobó este aislamiento con un sondeo desechable. Primero, d
   \item \textbf{Contexto.} El commit, la versión de Node.js, el sistema operativo, el procesador y la salida de la autoprueba del guardián. Las cifras dependen de la máquina y solo se comparan entre corridas de la misma.
 \end{itemize}
 
-\paragraph{Criterio de completitud.} La prueba de carga se da por completada cuando la autoprueba bloqueó \path{example.invalid}, las 30 corridas terminaron, cada una con 0 errores, 0 respuestas que no sean 2xx y el contador del guardián en 0, el proceso siguió vivo y las evidencias quedaron guardadas. Las latencias no tienen umbral.
+\paragraph{Criterio de completitud.} La prueba de carga se da por completada cuando la autoprueba bloqueó \path{example.invalid} y las 30 corridas terminaron, cada una con 0 errores, 0 respuestas que no sean 2xx y el contador del guardián en 0. Además, el proceso debe seguir vivo y las evidencias deben quedar guardadas. Las latencias no tienen umbral.
 
 \paragraph{Evidencia.} En la carpeta de evidencias de la Sección~\ref{sec:resultados}, una subcarpeta \emph{carga} con un JSON por corrida (el resumen de autocannon y los percentiles calculados), la salida de consola con la autoprueba y el contador del guardián, y el resumen en la Tabla~\ref{tab:metricas-corrida}.
 
@@ -262,7 +262,7 @@ Ningún dato de prueba es una credencial real. Las pruebas de contrato leen cred
 
 \subsection{Criterios de entrada y salida}
 
-\textbf{Entrada.} Una prueba puede ejecutarse cuando el repositorio está en la rama correcta, las dependencias están instaladas, el SDK compila y, si el caso lo requiere, la API de Simulación responde en el puerto 3000. Las pruebas de contrato necesitan además el \path{.env} con credenciales vigentes; las de carga necesitan lo contrario, un checkout sin \path{.env}.
+\textbf{Entrada.} Una prueba puede ejecutarse cuando el repositorio corresponde a la versión bajo prueba, las dependencias están instaladas, el SDK compila y, si el caso lo requiere, la API de Simulación responde en el puerto 3000. Las pruebas de contrato necesitan además el \path{.env} con credenciales vigentes; las de carga necesitan lo contrario, un checkout sin \path{.env}.
 
 \textbf{Salida.} El plan se considera ejecutado cuando se cumplen cinco condiciones: los siete casos tienen resultado registrado; las suites automatizadas de la corrida vigente están en verde; las pruebas de contrato se ejecutaron o se justificó su omisión; la carga cumplió su criterio de completitud; y no queda ningún defecto abierto de severidad alta sin decisión. Los defectos de severidad media o baja pueden quedar abiertos si se documentan con su impacto y su workaround.
 

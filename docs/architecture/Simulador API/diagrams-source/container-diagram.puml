@@ -19,9 +19,9 @@ skinparam rectangle {
 rectangle "**Desarrollador / Tester QA**\n\nConfigura y prueba las\nintegraciones de pago" as Dev #1F4E79
 
 rectangle "Kit Pagos Colombia\n[system]" as System #FFFFFF;text:black {
-  rectangle "**SDK Kit Pagos Colombia**\n<i>[TypeScript / Node.js 18+</i>\n<i>Paquete npm]</i>\n\nEn modo simulacion redirige\ntodas las solicitudes de sus\nadaptadores internos hacia\nla API de Simulacion. El\ncambio opera mediante\nconfiguracion de entorno sin\nmodificar el codigo de\nnegocio del llamador" as SDK #2E75B6
+  rectangle "**SDK Kit Pagos Colombia**\n<i>[TypeScript / Node.js 20.19+</i>\n<i>Paquete npm]</i>\n\nEn modo simulacion redirige\ntodas las solicitudes de sus\nadaptadores internos hacia\nla API de Simulacion. El\ncambio opera mediante\nconfiguracion de entorno sin\nmodificar el codigo de\nnegocio del llamador" as SDK #2E75B6
   rectangle "**Datos de prueba**\n<i>[Markdown / Repositorio publico]</i>\n\nDocumenta tarjetas,\nbancos y escenarios de\nprueba por pasarela" as Docs #2E75B6
-  rectangle "**API de Simulacion**\n<i>[Fastify / Node.js 18+</i>\n<i>Desplegada en Render — URL</i>\n<i>publica HTTPS]</i>\n\nExpone dos superficies:\n/v1/sim imita las APIs de\nlas pasarelas; /v1/api\nexpone operaciones de\nKit Pagos mediante el SDK.\nComparte proceso y despliegue.\nSirve OpenAPI y Swagger UI\nen /docs" as SimAPI #2E75B6
+  rectangle "**API de Simulacion**\n<i>[Fastify / Node.js 20.x</i>\n<i>Desplegada en Render — URL</i>\n<i>publica HTTPS]</i>\n\nExpone dos superficies:\n/v1/sim imita las APIs de\nlas pasarelas; /v1/api\nexpone operaciones de\nKit Pagos mediante el SDK.\nComparte proceso y despliegue.\nSirve OpenAPI y Swagger UI\nen /docs" as SimAPI #2E75B6
 }
 
 rectangle "**Aplicacion del Comercio**\n\nFrontend o backend que\nintegra Kit Pagos y recibe\nwebhooks en su endpoint\nde notificaciones" as Comercio #A9A9A9
@@ -40,14 +40,13 @@ SimAPI --> Pasarelas : Replica formatos de\nrespuesta\n(sin conexion real)\n[Ref
 Dev -[hidden]right- Comercio
 note right of Pasarelas
   "PayU" reemplazado por "Rapyd"
-  tras la adquisicion (ver
-  architecture-log.md, punto 15/17).
+  tras la adquisicion.
 end note
 
 note top of SDK
-  Patron futuro no implementado:
-  Frontend -> SDK unificado de pasarelas.
-  Su viabilidad se investiga en el issue #110.
+  Patron 3, Frontend -> SDK unificado
+  de pasarelas: implementado en parte
+  (Rapyd no tokeniza en el navegador).
 end note
 
 @enduml
