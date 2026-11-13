@@ -20,7 +20,7 @@ rectangle "**Desarrollador / Tester QA**\n\nPrueba escenarios de pago y\nconsume
 rectangle "**Aplicacion del Comercio (SDK embebido)**\n\nNode.js — Fuera de alcance\nde esta vista. El SDK se\ndistribuye via npm y no se\ndetalla a nivel de\ninfraestructura" as Comercio #A9A9A9
 
 rectangle "Plataforma Cloud (Render)\n[Platform as a Service]" as Cloud #FFFFFF;text:black {
-  rectangle "Instancia de Aplicacion\n[Node.js 18+ Runtime]" as Instance #FFFFFF;text:black {
+  rectangle "Instancia de Aplicacion\n[Node.js 20.x Runtime]" as Instance #FFFFFF;text:black {
     rectangle "**API de Simulacion**\n<i>[Fastify / TypeScript]</i>\n\nReplica el comportamiento\nde Wompi, Rapyd, Mercado\nPago y Kushki. Expone\ndos superficies: /v1/sim\n(simulador pasarelas) y\n/v1/api (REST SDK).\nAdemas /v1/sim/webhooks/trigger\ny /docs (OpenAPI 3.0)" as API #2E75B6
   }
 }
@@ -30,9 +30,8 @@ Comercio --> API : Solicitudes de pago\n(modo simulacion /v1/sim\no REST directo
 API --> Comercio : Despacha webhooks\nsinteticos firmados\n[HTTP POST]
 
 note bottom of Cloud
-  Decision de plataforma ya tomada (Render, no Railway),
-  consistente con Container Diagram - C4.png y .env.example.
-  "PayU" reemplazado por "Rapyd" (architecture-log.md, punto 5/15/17).
+  Plataforma elegida: Render, no Railway (render.yaml).
+  "PayU" reemplazado por "Rapyd" tras la adquisicion.
 end note
 
 @enduml

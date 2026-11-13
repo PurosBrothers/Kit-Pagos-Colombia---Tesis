@@ -23,27 +23,28 @@ participant "Simulator API\n(Fastify)" as SimAPI
 participant "Scenario Engine" as Engine
 
 Comercio -> SDK : createPayment(\nCreatePaymentRequest)
-SDK -> SimAPI : POST /v1/sim/{gateway}/payments\n(Header x-simulate-scenario: NETWORK_ERROR)
-SimAPI -> Engine : resolveScenario(\nheaders, body) ->\n"NETWORK_ERROR"
+SDK -> SimAPI : POST /v1/sim/{gateway}/payments\n(Header x-simulator-scenario:\nSLOW, NETWORK_ERROR o SERVER_ERROR)
+SimAPI -> Engine : resolveScenario(\nheaders, body) ->\nescenario
 
-alt Timeout (SDK no responde dentro del umbral)
-  Engine -->x SDK : sin respuesta\n(latencia inyectada > timeout)
-  SDK -->x SDK : socket hang up / AbortError
+alt SLOW o NETWORK_ERROR
+  Engine -->x SDK : SLOW: sin respuesta antes\ndel plazo; NETWORK_ERROR:\ncorta la conexion
+  SDK -->x SDK : AbortError / socket hang up
   SDK -> SDK : mapear a KitPagosError(\nGATEWAY_TIMEOUT\no CONNECTION_FAILED)
-else Error de servidor simulado
-  Engine --> SimAPI : 5xx (Wompi/MP/Rapyd) o 200 con\ncode="ERROR" (Kushki)
-  SimAPI --> SDK : respuesta de error nativa
-  SDK -> SDK : mapear codigo HTTP o body.code\n-> KitPagosErrorCode
+else SERVER_ERROR
+  Engine --> SimAPI : HTTP 500, 502 o 503\n(igual en las\ncuatro pasarelas)
+  SimAPI --> SDK : cuerpo de error nativo
+  SDK -> SDK : ErrorHandler: 5xx ->\nGATEWAY_SERVER_ERROR
 end
 
 SDK -->x Comercio : throw KitPagosError{\ncode, gateway,\noriginalPayload}
 
 note bottom
-  Kushki SIEMPRE devuelve HTTP 200: el adaptador debe leer body.code/body.error,
-  NO el status HTTP, para decidir GATEWAY_SERVER_ERROR. Rapyd SI usa codigos HTTP
-  diferenciados (200/400/401), a diferencia de Kushki
-  (docs.rapyd.net/en/list-payments.html) — leer tambien body.status.error_code
-  para el detalle.
+  Las dos ramas dan errores RETRIABLE, pero createPayment() no se
+  reintenta (ADR-05). Las cuatro pasarelas usan el status HTTP: Kushki
+  responde 400 al rechazo del procesador (017 a 023 en
+  details.responseCode) y a K001, K004 o K220; su adaptador lee el
+  cuerpo para separar el rechazo. Rapyd deja el detalle en
+  body.status.error_code.
 end note
 
 @enduml

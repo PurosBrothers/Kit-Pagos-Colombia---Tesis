@@ -28,8 +28,7 @@ KitPagos --> Pasarelas : Referencia de formato\npara replica de respuestas\nnati
 
 note right of Pasarelas
   "PayU" reemplazado por "Rapyd"
-  tras la adquisicion
-  (ver architecture-log.md, punto 15/17).
+  tras la adquisicion.
 end note
 
 @enduml

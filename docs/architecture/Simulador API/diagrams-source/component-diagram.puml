@@ -21,7 +21,7 @@ rectangle "**Frontend del Comercio**\n\nConsume la API REST\npara iniciar pagos"
 rectangle "**Aplicacion del Comercio**\n\nRecibe webhooks firmados" as Comercio #A9A9A9
 rectangle "**SDK Kit Pagos**\n\nFachada llamada por\nla capa REST" as SDK #A9A9A9
 
-rectangle "API de Simulacion (Fastify / Node.js 18+)\n[container]" as System #FFFFFF;text:black {
+rectangle "API de Simulacion (Fastify / Node.js 20.x)\n[container]" as System #FFFFFF;text:black {
   rectangle "**Kit Pagos REST API**\n<i>[Fastify Plugin /</i>\n<i>TypeScript]</i>\n<i>kit-pagos-api/</i>\n\nExpone /v1/api.\nValida DTOs y delega\noperaciones al SDK" as RestApi #2E75B6
   rectangle "**HTTP Routers de**\n**Simulacion**\n<i>[Fastify Plugins /</i>\n<i>TypeScript]</i>\n<i>routes/</i>\n\nExpone\n/v1/sim/{pasarela}/*.\nElige escenarios y\nconstruye respuestas\nnativas simuladas" as Router #2E75B6
   rectangle "**CredentialResolver y**\n**KitPagosProvider**\n<i>[Servicios /</i>\n<i>TypeScript]</i>\n\nResuelve credenciales\ny provee instancias\ndel SDK" as Provider #2E75B6
@@ -57,15 +57,14 @@ end note
 
 note bottom of SDK
   Patron 3, Frontend -> SDK
-  unificado de pasarelas: futuro,
-  no implementado. Viabilidad en
-  investigacion (#110).
+  unificado de pasarelas:
+  implementado en parte (Rapyd
+  no tokeniza en el navegador).
 end note
 
 note bottom of MockFactory
   "PayU" reemplazado por "Rapyd"
-  tras la adquisicion (ver
-  architecture-log.md, punto 15/17).
+  tras la adquisicion.
 end note
 
 @enduml
