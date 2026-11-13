@@ -61,7 +61,7 @@ Comprobar que el SDK distingue un fallo transitorio de uno de negocio, que la es
   8 &
   Confirmar la asimetría en el código de la fachada. &
   Revisión de \path{sdk/src/infrastructure/facade/KitPagos.ts}. &
-  \texttt{getPaymentStatus()} y \texttt{getPseBanks()} construyen un \texttt{RetryHandler}; \texttt{createPayment()} llama al adaptador directamente. La decisión está documentada para evitar un doble débito. &
+  \texttt{getPaymentStatus()} y \texttt{getPseBanks()} construyen un \texttt{RetryHandler}; \texttt{createPayment()} llama al adaptador directamente. La creación no se reintenta por diseño, para evitar un doble débito (ADR-05 del SAD). &
   Como se espera. & Pasó & Código revisado \\ \hline
   9 &
   Repetir el recorrido para descartar una recuperación accidental. &
