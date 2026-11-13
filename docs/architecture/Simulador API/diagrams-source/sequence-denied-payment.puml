@@ -1,6 +1,18 @@
 @startuml Sequence Diagram - Denied Payment
 title Escenario 2 - Pago Rechazado (Simulator API)
 skinparam backgroundColor white
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam ParticipantFontSize 10
+skinparam ActorFontSize 10
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam SequenceGroupFontSize 10
+skinparam SequenceGroupHeaderFontSize 10
+skinparam SequenceDividerFontSize 10
+skinparam maxMessageSize 95
+hide footbox
 skinparam sequenceMessageAlign center
 skinparam ArrowColor #666666
 skinparam LifeLineBorderColor #666666
@@ -11,27 +23,25 @@ participant "Simulator API\n(Fastify)" as SimAPI
 participant "GatewayMockFactory" as MockFactory
 participant "TransactionStore" as Store
 
-Comercio -> SDK : createPayment(CreatePaymentRequest)
+Comercio -> SDK : createPayment(\nCreatePaymentRequest)
 SDK -> SimAPI : POST /v1/sim/{gateway}/payments
 alt Mercado Pago
-  SimAPI -> MockFactory : buildRejectedResponse(request)
+  SimAPI -> MockFactory : buildRejectedResponse(\nrequest)
 else Wompi, Kushki o Rapyd
-  SimAPI -> MockFactory : buildDeclinedResponse(request)
+  SimAPI -> MockFactory : buildDeclinedResponse(\nrequest)
 end
-MockFactory -> MockFactory : Genera payload nativo de rechazo\n(Wompi: {data:{id,status:"DECLINED",\nstatus_message:"Fondos insuficientes"}},\nMercado Pago: {id,status:"rejected",\nstatus_detail:"cc_rejected_insufficient_amount"},\nRapyd: {data:{id,status:"ERR",\nfailure_code:"INSUFFICIENT_FUNDS"}},\nKushki: {ticketNumber,details:{transactionStatus:"DECLINED"}})
-MockFactory -> Store : save(gatewayTransactionId, payload)
+MockFactory -> MockFactory : Genera payload nativo de rechazo\n(Wompi: {data:{id,\nstatus:"DECLINED",\nstatus_message:\n"Fondos insuficientes"}},\nMercado Pago: {id,\nstatus:"rejected",\nstatus_detail:\n"cc_rejected_insufficient_amount"},\nRapyd: {data:{id,status:"ERR",\nfailure_code:\n"INSUFFICIENT_FUNDS"}},\nKushki: {ticketNumber,\ndetails:{transactionStatus:\n"DECLINED"}})
+MockFactory -> Store : save(\ngatewayTransactionId,\npayload)
 Store --> MockFactory : OK
 MockFactory --> SimAPI : payload nativo de rechazo
 SimAPI --> SDK : HTTP 201 / 200 (payload nativo)
-SDK -> SDK : ResponseNormalizer.normalize(payload, gateway)
-SDK --> Comercio : PaymentResult(TRANSACTION: status=DECLINED,\nrejectionReason={category, code})
+SDK -> SDK : ResponseNormalizer.\nnormalize(payload,\ngateway)
+SDK --> Comercio : PaymentResult(\nTRANSACTION:\nstatus=DECLINED,\nrejectionReason=\n{category, code})
 
 note over Comercio, Store
-  El simulador almacena la transaccion rechazada en
-  TransactionStore para que sea consultable via
-  GET /v1/sim/{gateway}/transactions/{id}.
-  El estado DECLINED se normaliza a partir del codigo
-  nativo de rechazo de cada pasarela mediante
+  El simulador almacena la transaccion rechazada en TransactionStore para que sea
+  consultable via GET /v1/sim/{gateway}/transactions/{id}. El estado DECLINED se
+  normaliza a partir del codigo nativo de rechazo de cada pasarela mediante
   RejectionCategory del dominio.
 end note
 

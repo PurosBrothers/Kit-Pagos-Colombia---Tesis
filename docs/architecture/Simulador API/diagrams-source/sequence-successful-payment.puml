@@ -1,6 +1,18 @@
 @startuml Sequence Diagram - Successful Payment
 title Escenario 1 - Pago Exitoso (Simulator API)
 skinparam backgroundColor white
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam ParticipantFontSize 10
+skinparam ActorFontSize 10
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam SequenceGroupFontSize 10
+skinparam SequenceGroupHeaderFontSize 10
+skinparam SequenceDividerFontSize 10
+skinparam maxMessageSize 95
+hide footbox
 skinparam sequenceMessageAlign center
 skinparam ArrowColor #666666
 skinparam LifeLineBorderColor #666666
@@ -11,26 +23,23 @@ participant "Simulator API\n(Fastify)" as SimAPI
 participant "GatewayMockFactory" as MockFactory
 participant "TransactionStore" as Store
 
-Comercio -> SDK : createPayment(CreatePaymentRequest)
+Comercio -> SDK : createPayment(\nCreatePaymentRequest)
 SDK -> SimAPI : POST /v1/sim/{gateway}/payments\n(Auth + Body nativo de la pasarela)
-SimAPI -> MockFactory : buildApprovedResponse(gateway, request)
-MockFactory -> MockFactory : Genera payload nativo\n(Wompi: {data:{id,status:"APPROVED"}},\nMercado Pago: {id,status:"approved"},\nRapyd: {data:{id,status:"CLO",paid:true}},\nKushki: {ticketNumber,details:{transactionStatus:"APPROVAL"}})
-MockFactory -> Store : save(gatewayTransactionId, payload)
+SimAPI -> MockFactory : buildApprovedResponse(\ngateway, request)
+MockFactory -> MockFactory : Genera payload nativo\n(Wompi: {data:{id,\nstatus:"APPROVED"}},\nMercado Pago: {id,\nstatus:"approved"},\nRapyd: {data:{id,\nstatus:"CLO",paid:true}},\nKushki: {ticketNumber,\ndetails:{transactionStatus:\n"APPROVAL"}})
+MockFactory -> Store : save(\ngatewayTransactionId,\npayload)
 Store --> MockFactory : OK
 MockFactory --> SimAPI : payload nativo
 SimAPI --> SDK : HTTP 201 / 200 (payload nativo)
-SDK -> SDK : ResponseNormalizer.normalize(payload, gateway)
-SDK --> Comercio : PaymentResult(TRANSACTION: status=APPROVED)
+SDK -> SDK : ResponseNormalizer.\nnormalize(payload,\ngateway)
+SDK --> Comercio : PaymentResult(\nTRANSACTION:\nstatus=APPROVED)
 
 note over Comercio, Store
-  Para Wompi (punto 50): el simulador crea en PENDING
-  y resuelve a APPROVED en la primera consulta de estado,
-  reflejando el comportamiento asincrono de la pasarela real.
-  Para Mercado Pago con PSE: devuelve REDIRECT_REQUIRED
-  con redirectUrl; la consulta posterior por el id
-  ORD... devuelve APPROVED.
-  Para Rapyd con tarjeta: devuelve REDIRECT_REQUIRED
-  al hosted checkout; simula el pago y la consulta
+  Para Wompi (punto 50): el simulador crea en PENDING y resuelve a APPROVED en la
+  primera consulta de estado, reflejando el comportamiento asincrono de la pasarela
+  real. Para Mercado Pago con PSE: devuelve REDIRECT_REQUIRED con redirectUrl; la
+  consulta posterior por el id ORD... devuelve APPROVED. Para Rapyd con tarjeta:
+  devuelve REDIRECT_REQUIRED al hosted checkout; simula el pago y la consulta
   devuelve APPROVED.
 end note
 

@@ -1,6 +1,18 @@
 @startuml Sequence Diagram - Payment Creation
 title A - Creacion de Pago (pendiente + webhook)
 skinparam backgroundColor white
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam ParticipantFontSize 10
+skinparam ActorFontSize 10
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam SequenceGroupFontSize 10
+skinparam SequenceGroupHeaderFontSize 10
+skinparam SequenceDividerFontSize 10
+skinparam maxMessageSize 90
+hide footbox
 skinparam sequenceMessageAlign center
 skinparam ArrowColor #666666
 skinparam LifeLineBorderColor #666666
@@ -14,15 +26,16 @@ Comercio -> Facade : createPayment(request)
 Facade -> Adapter : createPayment(request)
 Adapter -> Pasarela : POST /payments (nativo)
 Pasarela --> Adapter : 201 Created\n(estado nativo = pendiente, token)
-Adapter -> Adapter : ResponseNormalizer.normalize(rawResponse, gateway)
+Adapter -> Adapter : ResponseNormalizer.\nnormalize(\nrawResponse,\ngateway)
 Adapter --> Facade : PaymentResult
-Facade --> Comercio : PaymentResult(PENDING) o PaymentResult(REDIRECT_REQUIRED)
+Facade --> Comercio : PaymentResult(PENDING) o\nPaymentResult(\nREDIRECT_REQUIRED)
 
 note over Comercio, Pasarela
-  Este flujo NO entrega el resultado final del pago.
-  La confirmacion (APROBADO, RECHAZADO, etc.) llega
-  despues mediante un webhook: ver diagrama
-  "Sequence Diagram - Webhook Conciliation".
+  Este flujo NO entrega el resultado final del
+  pago. La confirmacion (APROBADO, RECHAZADO,
+  etc.) llega despues mediante un webhook: ver
+  diagrama "Sequence Diagram - Webhook
+  Conciliation".
 end note
 
 @enduml

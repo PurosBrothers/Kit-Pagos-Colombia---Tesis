@@ -1,0 +1,151 @@
+{
+  "date": "2026-11-11",
+  "b": "http://localtest.me:4827",
+  "simulator": "http://127.0.0.1:4817",
+  "blockedOutsideLoopback": [],
+  "results": [
+    {
+      "label": "paso-3-wompi",
+      "gateway": "wompi",
+      "status": "APPROVED",
+      "tokenization": [
+        {
+          "method": "POST",
+          "url": "http://localhost:3000/v1/sim/wompi/tokens/cards",
+          "carriesPan": true
+        }
+      ],
+      "ordersRequest": [
+        {
+          "carriesPan": false,
+          "carriesCvcOrExpiry": false,
+          "bodyKeys": [
+            "gateway",
+            "payer",
+            "method",
+            "items"
+          ],
+          "methodKeys": [
+            "type",
+            "cardToken",
+            "installments"
+          ]
+        }
+      ],
+      "panOutsideTokenization": []
+    },
+    {
+      "label": "paso-4-mercadopago",
+      "gateway": "mercadopago",
+      "status": "APPROVED",
+      "tokenization": [
+        {
+          "method": "POST",
+          "url": "http://localhost:3000/v1/sim/mercadopago/card_tokens?public_key=TEST-simulador-kit-pagos-publica",
+          "carriesPan": true
+        }
+      ],
+      "ordersRequest": [
+        {
+          "carriesPan": false,
+          "carriesCvcOrExpiry": false,
+          "bodyKeys": [
+            "gateway",
+            "payer",
+            "method",
+            "items"
+          ],
+          "methodKeys": [
+            "type",
+            "cardToken",
+            "installments"
+          ]
+        }
+      ],
+      "panOutsideTokenization": []
+    },
+    {
+      "label": "paso-5-kushki",
+      "gateway": "kushki",
+      "status": "APPROVED",
+      "tokenization": [
+        {
+          "method": "POST",
+          "url": "http://localhost:3000/v1/sim/kushki/card/v1/tokens",
+          "carriesPan": true
+        }
+      ],
+      "ordersRequest": [
+        {
+          "carriesPan": false,
+          "carriesCvcOrExpiry": false,
+          "bodyKeys": [
+            "gateway",
+            "payer",
+            "method",
+            "items"
+          ],
+          "methodKeys": [
+            "type",
+            "cardToken",
+            "installments"
+          ]
+        }
+      ],
+      "panOutsideTokenization": []
+    },
+    {
+      "label": "paso-7-rapyd",
+      "gateway": "rapyd",
+      "status": "APPROVED",
+      "tokenization": [],
+      "ordersRequest": [
+        {
+          "carriesPan": false,
+          "carriesCvcOrExpiry": false,
+          "bodyKeys": [
+            "gateway",
+            "payer",
+            "method",
+            "items"
+          ],
+          "methodKeys": [
+            "type",
+            "installments"
+          ]
+        }
+      ],
+      "panOutsideTokenization": []
+    },
+    {
+      "label": "paso-9-wompi-declinada",
+      "gateway": "wompi",
+      "status": "DECLINED",
+      "tokenization": [
+        {
+          "method": "POST",
+          "url": "http://localhost:3000/v1/sim/wompi/tokens/cards",
+          "carriesPan": true
+        }
+      ],
+      "ordersRequest": [
+        {
+          "carriesPan": false,
+          "carriesCvcOrExpiry": false,
+          "bodyKeys": [
+            "gateway",
+            "payer",
+            "method",
+            "items"
+          ],
+          "methodKeys": [
+            "type",
+            "cardToken",
+            "installments"
+          ]
+        }
+      ],
+      "panOutsideTokenization": []
+    }
+  ]
+}

@@ -1,6 +1,18 @@
 @startuml Sequence Diagram - Network Error
 title Escenario 3 - Error de Red (Simulator API)
 skinparam backgroundColor white
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam ParticipantFontSize 10
+skinparam ActorFontSize 10
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam SequenceGroupFontSize 10
+skinparam SequenceGroupHeaderFontSize 10
+skinparam SequenceDividerFontSize 10
+skinparam maxMessageSize 150
+hide footbox
 skinparam sequenceMessageAlign center
 skinparam ArrowColor #666666
 skinparam LifeLineBorderColor #666666
@@ -10,29 +22,28 @@ participant "SDK KitPagos" as SDK
 participant "Simulator API\n(Fastify)" as SimAPI
 participant "Scenario Engine" as Engine
 
-Comercio -> SDK : createPayment(CreatePaymentRequest)
+Comercio -> SDK : createPayment(\nCreatePaymentRequest)
 SDK -> SimAPI : POST /v1/sim/{gateway}/payments\n(Header x-simulate-scenario: NETWORK_ERROR)
-SimAPI -> Engine : resolveScenario(headers, body) -> "NETWORK_ERROR"
+SimAPI -> Engine : resolveScenario(\nheaders, body) ->\n"NETWORK_ERROR"
 
 alt Timeout (SDK no responde dentro del umbral)
   Engine -->x SDK : sin respuesta\n(latencia inyectada > timeout)
   SDK -->x SDK : socket hang up / AbortError
-  SDK -> SDK : mapear a KitPagosError(GATEWAY_TIMEOUT\no CONNECTION_FAILED)
+  SDK -> SDK : mapear a KitPagosError(\nGATEWAY_TIMEOUT\no CONNECTION_FAILED)
 else Error de servidor simulado
   Engine --> SimAPI : 5xx (Wompi/MP/Rapyd) o 200 con\ncode="ERROR" (Kushki)
   SimAPI --> SDK : respuesta de error nativa
   SDK -> SDK : mapear codigo HTTP o body.code\n-> KitPagosErrorCode
 end
 
-SDK -->x Comercio : throw KitPagosError{code, gateway, originalPayload}
+SDK -->x Comercio : throw KitPagosError{\ncode, gateway,\noriginalPayload}
 
 note bottom
-  Kushki SIEMPRE devuelve HTTP 200: el adaptador debe leer
-  body.code/body.error, NO el status HTTP, para decidir
-  GATEWAY_SERVER_ERROR. Rapyd SI usa codigos HTTP
+  Kushki SIEMPRE devuelve HTTP 200: el adaptador debe leer body.code/body.error,
+  NO el status HTTP, para decidir GATEWAY_SERVER_ERROR. Rapyd SI usa codigos HTTP
   diferenciados (200/400/401), a diferencia de Kushki
-  (docs.rapyd.net/en/list-payments.html) — leer tambien
-  body.status.error_code para el detalle.
+  (docs.rapyd.net/en/list-payments.html) — leer tambien body.status.error_code
+  para el detalle.
 end note
 
 @enduml

@@ -1,0 +1,45 @@
+DEF-01, ejemplo de Mercado Pago contra el simulador: 2026-11-11 19:50:52 -0500
+Comando: npx tsx simulate-mercadopago-payment.ts en examples/, con el simulador en 127.0.0.1:4823
+y todo host fuera de loopback bloqueado por la precarga.
+
+=== Kit Pagos Colombia — Ejemplo de pago simulado con Mercado Pago ===
+
+Pasarela activa: MERCADOPAGO
+Endpoint:        http://localhost:3000/v1/sim/mercadopago
+
+Solicitud de pago:
+  Monto:      150000.00 COP (pesos directos, sin centavos)
+  Referencia: ORDER-MP-1794444653724
+  Pagador:    jaime.pavlich@example.com
+  Cuotas:     1
+
+Creando el pago...
+Transacción creada exitosamente:
+  ID en la pasarela:  ORD011PT31A1WLR
+  Pasarela de origen: MERCADOPAGO
+  Estado normalizado: APPROVED
+  Estado nativo:      processed (en minúsculas para auditoría)
+  Monto:              150000.00 COP
+  Referencia:         ORDER-MP-1794444653724
+  Pagador:            customer@mercadopago.com
+  Aprobada:           true
+  Estado final:       true
+
+Consultando el estado de la transacción en Mercado Pago...
+Transacción consultada exitosamente:
+  ID consultado:      ORD011PT31A1WLR
+  Estado normalizado: APPROVED
+  Estado nativo:      processed
+  Monto:              150000.00 COP
+
+=== Fin del ejemplo de Mercado Pago ===
+[remap-3000] peticiones reescritas de localhost:3000 a 127.0.0.1:4823: 4
+[remap-3000] peticiones reescritas de localhost:3000 a 127.0.0.1:4823: 0
+[remap-3000] peticiones reescritas de localhost:3000 a 127.0.0.1:4823: 0
+exit 0
+
+Rutas que recibió el simulador, en orden (sin la comprobación de /health del arranque):
+  GET  /v1/sim/mercadopago/card_tokens/a1b2c3d4e5f6ejemplonoreal
+  GET  /v1/sim/mercadopago/payment_methods/search?public_key=APP_USR_pub_ejemplo_no_real&bins=401354
+  POST /v1/sim/mercadopago/orders
+  GET  /v1/sim/mercadopago/orders/ORD011PT31A1WLR

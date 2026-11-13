@@ -1,0 +1,31 @@
+Checkout en http://localtest.me:4827. Webhooks en http://localtest.me:4827/webhooks/<pasarela>
+Pasarelas: Wompi (/webhooks/wompi), Mercado Pago (/webhooks/mercadopago), Kushki (/webhooks/kushki), Rapyd (/webhooks/rapyd).
+Cobra en la API de Simulación de http://localhost:4817.
+No encontré <raíz del worktree>/.env: el módulo de pagos usa solo las variables del entorno.
+Traza: cada petición que llega y cada llamada a una pasarela salen aquí con [checkout], sin llaves ni cuerpos.
+[checkout] navegador → tienda  POST /api/orders
+[checkout]   orden ORD-3C33D319: La Bodega de Chapinero · 1 botella por $58.000 COP, con tarjeta (llega solo el token), con Wompi → módulo de pagos
+[checkout]   tienda → pasarela  GET localhost:4817/v1/sim/wompi/merchants/pub_test_…_no_real → 200 · 18 ms
+[checkout]   tienda → pasarela  POST localhost:4817/v1/sim/wompi/transactions → 201 · estado PENDING · 7 ms
+[checkout]   orden ORD-3C33D319 ← creación: PENDING (nativo PENDING), transacción e90d1efc-a6b0-485d-8328-11f567425d6a
+[checkout] navegador ← tienda  POST /api/orders → 201 · 29 ms
+[checkout] pasarela → tienda   POST /webhooks/wompi
+[checkout]   orden ORD-3C33D319 ← webhook: DECLINED (nativo DECLINED)
+[checkout] pasarela ← tienda   POST /webhooks/wompi → 200 · 1 ms
+[checkout] navegador → tienda  GET /api/orders/ORD-3C33D319
+[checkout]   tienda → pasarela  GET localhost:4817/v1/sim/wompi/transactions/e90d1efc-a6b0-485d-8328-11f567425d6a → 200 · estado DECLINED · 1 ms
+[checkout]   orden ORD-3C33D319 ← consulta: DECLINED (nativo DECLINED) (sin cambios)
+[checkout] navegador ← tienda  GET /api/orders/ORD-3C33D319 → 200 · 2 ms
+[checkout] pasarela → tienda   POST /webhooks/wompi
+[checkout]   orden ORD-3C33D319 ← webhook: DECLINED (nativo DECLINED)
+[checkout] pasarela ← tienda   POST /webhooks/wompi → 200 · 0 ms
+[checkout] navegador → tienda  GET /api/orders/ORD-3C33D319
+[checkout]   tienda → pasarela  GET localhost:4817/v1/sim/wompi/transactions/e90d1efc-a6b0-485d-8328-11f567425d6a → 200 · estado DECLINED · 1 ms
+[checkout]   orden ORD-3C33D319 ← consulta: DECLINED (nativo DECLINED) (sin cambios)
+[checkout] navegador ← tienda  GET /api/orders/ORD-3C33D319 → 200 · 2 ms
+[checkout] pasarela → tienda   POST /webhooks/wompi
+[checkout] pasarela ← tienda   POST /webhooks/wompi → 401 · 0 ms
+[checkout] navegador → tienda  GET /api/orders/ORD-3C33D319
+[checkout]   tienda → pasarela  GET localhost:4817/v1/sim/wompi/transactions/e90d1efc-a6b0-485d-8328-11f567425d6a → 200 · estado DECLINED · 1 ms
+[checkout]   orden ORD-3C33D319 ← consulta: DECLINED (nativo DECLINED) (sin cambios)
+[checkout] navegador ← tienda  GET /api/orders/ORD-3C33D319 → 200 · 2 ms

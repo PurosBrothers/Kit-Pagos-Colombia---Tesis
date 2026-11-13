@@ -1,8 +1,17 @@
 @startuml Hexagonal Architecture Class Diagram
 title Diagrama de Clases de la Arquitectura Hexagonal - SDK Kit Pagos Colombia
 skinparam backgroundColor white
-skinparam classFontSize 12
-skinparam packageFontSize 14
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam classFontSize 10
+skinparam classAttributeFontSize 10
+skinparam classStereotypeFontSize 10
+skinparam packageFontSize 10
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam nodesep 6
+skinparam ranksep 14
 skinparam packageStyle rectangle
 skinparam class {
   BorderColor #666666
@@ -232,6 +241,14 @@ package "INFRAESTRUCTURA (Facade, Factory y Adapters)" #FFFFFF {
 }
 
 GatewayResponseNormalizer --> Transaction : construye
+ErrorHandler -[hidden]down- WebhookVerifier
+KushkiResponseNormalizer -[hidden]down- WompiWebhookHandler
+Amount -[hidden]down- PaymentMethod
+Currency -[hidden]down- PseBank
+Payer -[hidden]down- PendingRedirect
+RejectionReason -[hidden]down- KitPagosError
+PaymentMethod -[hidden]down- TransactionStatus
+PseBank -[hidden]down- Gateway
 
 note bottom of KitPagos
   Diseno "facade directo": sin capa

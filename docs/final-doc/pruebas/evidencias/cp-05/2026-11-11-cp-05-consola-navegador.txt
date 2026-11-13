@@ -1,0 +1,39 @@
+[info] [tienda B] pagar 1 botella con tarjeta por Wompi
+[info] [tienda B] tarjeta: el módulo de pagos la tokeniza en el navegador; al servidor de la tienda solo llega el token
+[info] [tienda B] navegador → tienda    GET /api/payments/config → 200 · configuración pública del módulo de pagos · 14 ms
+[info] [tienda B] navegador → pasarela  POST localhost:3000/v1/sim/wompi/tokens/cards (directo, sin pasar por la tienda) → 201 · id tok_sim_… · CREATED · 14 ms
+[info] [tienda B] navegador → tienda    POST /api/orders → 201 · orden ORD-0DD5A91D PENDING · 6 ms
+[info] [tienda B] abriendo la orden ORD-0DD5A91D
+[info] [tienda B] orden ORD-0DD5A91D: PENDING; la página la consulta sola
+[info] [tienda B] navegador → tienda    GET /api/orders/ORD-0DD5A91D → 200 · orden ORD-0DD5A91D APPROVED · 8 ms
+[info] [tienda B] orden ORD-0DD5A91D: APPROVED
+[info] [tienda B] pagar 1 botella con tarjeta por Mercado Pago
+[info] [tienda B] tarjeta: el módulo de pagos la tokeniza en el navegador; al servidor de la tienda solo llega el token
+[info] [tienda B] navegador → tienda    GET /api/payments/config → 200 · configuración pública del módulo de pagos · 13 ms
+[info] [tienda B] navegador → pasarela  POST localhost:3000/v1/sim/mercadopago/card_tokens (directo, sin pasar por la tienda) → 201 · id tok_sim_… · active · 8 ms
+[info] [tienda B] navegador → tienda    POST /api/orders → 201 · orden ORD-628AF73F APPROVED · 12 ms
+[info] [tienda B] abriendo la orden ORD-628AF73F
+[info] [tienda B] orden ORD-628AF73F: APPROVED
+[info] [tienda B] pagar 1 botella con tarjeta por Kushki
+[info] [tienda B] tarjeta: el módulo de pagos la tokeniza en el navegador; al servidor de la tienda solo llega el token
+[info] [tienda B] navegador → tienda    GET /api/payments/config → 200 · configuración pública del módulo de pagos · 14 ms
+[info] [tienda B] navegador → pasarela  POST localhost:3000/v1/sim/kushki/card/v1/tokens (directo, sin pasar por la tienda) → 201 · 6 ms
+[info] [tienda B] navegador → tienda    POST /api/orders → 201 · orden ORD-ADDA401F APPROVED · 8 ms
+[info] [tienda B] abriendo la orden ORD-ADDA401F
+[info] [tienda B] orden ORD-ADDA401F: APPROVED
+[info] [tienda B] pagar 1 botella con tarjeta por Rapyd
+[info] [tienda B] tarjeta: Rapyd la recibe en su propia página; la tienda no la ve
+[info] [tienda B] navegador → tienda    POST /api/orders → 201 · orden ORD-A6B3B6D1 PENDING · redirige al banco · 14 ms
+[info] [tienda B] redirigiendo a otra página para pagar: localhost:4817
+[info] [tienda B] orden ORD-A6B3B6D1: PENDING; la página la consulta sola
+[info] [tienda B] navegador → tienda    GET /api/orders/ORD-A6B3B6D1 → 200 · orden ORD-A6B3B6D1 APPROVED · 12 ms
+[info] [tienda B] orden ORD-A6B3B6D1: APPROVED
+[info] [tienda B] pagar 1 botella con tarjeta por Wompi
+[info] [tienda B] tarjeta: el módulo de pagos la tokeniza en el navegador; al servidor de la tienda solo llega el token
+[info] [tienda B] navegador → tienda    GET /api/payments/config → 200 · configuración pública del módulo de pagos · 14 ms
+[info] [tienda B] navegador → pasarela  POST localhost:3000/v1/sim/wompi/tokens/cards (directo, sin pasar por la tienda) → 201 · id tok_sim_… · CREATED · 5 ms
+[info] [tienda B] navegador → tienda    POST /api/orders → 201 · orden ORD-449A8E8A PENDING · 5 ms
+[info] [tienda B] abriendo la orden ORD-449A8E8A
+[info] [tienda B] orden ORD-449A8E8A: PENDING; la página la consulta sola
+[info] [tienda B] navegador → tienda    GET /api/orders/ORD-449A8E8A → 200 · orden ORD-449A8E8A DECLINED · 13 ms
+[info] [tienda B] orden ORD-449A8E8A: DECLINED

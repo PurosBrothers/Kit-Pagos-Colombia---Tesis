@@ -1,8 +1,15 @@
 @startuml Component Diagram - Simulador API
 title Diagrama de Componentes — API de Simulación (Fastify Container) — Nivel 3
 skinparam backgroundColor white
-skinparam rectangleFontSize 11
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam rectangleFontSize 10
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
 skinparam wrapWidth 190
+skinparam nodesep 6
+skinparam ranksep 18
 skinparam rectangle {
   BorderColor #666666
   ArrowColor #666666
@@ -14,23 +21,23 @@ rectangle "**Frontend del Comercio**\n\nConsume la API REST\npara iniciar pagos"
 rectangle "**Aplicacion del Comercio**\n\nRecibe webhooks firmados" as Comercio #A9A9A9
 rectangle "**SDK Kit Pagos**\n\nFachada llamada por\nla capa REST" as SDK #A9A9A9
 
-rectangle "API de Simulacion (Fastify / Node.js 18+)\n[container]" as System #FFFFFF {
-  rectangle "**Kit Pagos REST API**\n<i>[Fastify Plugin / TypeScript]\nkit-pagos-api/</i>\n\nExpone /v1/api.\nValida DTOs y delega\noperaciones al SDK" as RestApi #2E75B6
-  rectangle "**HTTP Routers de Simulacion**\n<i>[Fastify Plugins / TypeScript]\nroutes/</i>\n\nExpone /v1/sim/{pasarela}/*.\nElige escenarios y construye\nrespuestas nativas simuladas" as Router #2E75B6
-  rectangle "**CredentialResolver y\nKitPagosProvider**\n<i>[Servicios / TypeScript]</i>\n\nResuelve credenciales y\nprovee instancias del SDK" as Provider #2E75B6
-  rectangle "**Webhook Trigger Endpoint**\n<i>[REST Endpoint\nTypeScript]</i>\n\nPOST\n/v1/sim/webhooks/trigger.\nInvocacion manual con\nAPI_AUTH_TOKEN; emision\nautomatica opcional" as WebhookEndpoint #2E75B6
-  rectangle "**OpenAPI Provider**\n<i>[@fastify/swagger + UI]</i>\n\nGenera OpenAPI 3.0.3 y\nsirve Swagger UI en /docs" as OpenAPI #2E75B6
-  rectangle "**Gateway Mock Factory**\n<i>[Factory Pattern\nTypeScript]</i>\n\nConstruye payloads JSON\nemulando Wompi, Rapyd,\nMercado Pago y Kushki" as MockFactory #2E75B6
-  rectangle "**Signature Generator**\n<i>[Security Utility\nNode.js Crypto]</i>\n\nCalcula firmas\ncriptograficas\n(SHA-256, HMAC)" as SignatureGen #2E75B6
-  rectangle "**Transaction Store**\n<i>[In-Memory Store / TypeScript]\nstore/TransactionStore.ts</i>\n\nAlmacena transacciones\nsimuladas indexadas por ID\nnativo para consultas\nposteriores de estado" as Store #FFE0B2
+rectangle "API de Simulacion (Fastify / Node.js 18+)\n[container]" as System #FFFFFF;text:black {
+  rectangle "**Kit Pagos REST API**\n<i>[Fastify Plugin /</i>\n<i>TypeScript]</i>\n<i>kit-pagos-api/</i>\n\nExpone /v1/api.\nValida DTOs y delega\noperaciones al SDK" as RestApi #2E75B6
+  rectangle "**HTTP Routers de**\n**Simulacion**\n<i>[Fastify Plugins /</i>\n<i>TypeScript]</i>\n<i>routes/</i>\n\nExpone\n/v1/sim/{pasarela}/*.\nElige escenarios y\nconstruye respuestas\nnativas simuladas" as Router #2E75B6
+  rectangle "**CredentialResolver y**\n**KitPagosProvider**\n<i>[Servicios /</i>\n<i>TypeScript]</i>\n\nResuelve credenciales\ny provee instancias\ndel SDK" as Provider #2E75B6
+  rectangle "**Webhook Trigger**\n**Endpoint**\n<i>[REST Endpoint</i>\n<i>TypeScript]</i>\n\nPOST\n/v1/sim/webhooks/trigger.\nInvocacion manual\ncon API_AUTH_TOKEN;\nemision automatica\nopcional" as WebhookEndpoint #2E75B6
+  rectangle "**OpenAPI Provider**\n<i>[@fastify/swagger + UI]</i>\n\nGenera OpenAPI 3.0.3\ny sirve Swagger UI\nen /docs" as OpenAPI #2E75B6
+  rectangle "**Gateway Mock Factory**\n<i>[Factory Pattern</i>\n<i>TypeScript]</i>\n\nConstruye payloads\nJSON emulando Wompi,\nRapyd, Mercado Pago\ny Kushki" as MockFactory #2E75B6
+  rectangle "**Signature Generator**\n<i>[Security Utility</i>\n<i>Node.js Crypto]</i>\n\nCalcula firmas\ncriptograficas\n(SHA-256, HMAC)" as SignatureGen #2E75B6
+  rectangle "**Transaction Store**\n<i>[In-Memory Store /</i>\n<i>TypeScript]</i>\n<i>store/TransactionStore.ts</i>\n\nAlmacena transacciones\nsimuladas indexadas\npor ID nativo para\nconsultas posteriores\nde estado" as Store #FFE0B2;text:black
 }
 
-Frontend --> RestApi : Patron 2\n[HTTPS /v1/api]
-Comercio --> SDK : Patron 1: Backend -> SDK
-RestApi --> Provider : Resuelve gateway y\ncredenciales
+Frontend --> RestApi : Patron 2\n[HTTPS\n/v1/api]
+Comercio --> SDK : Patron 1:\nBackend -> SDK
+RestApi --> Provider : Resuelve\ngateway y\ncredenciales
 Provider --> SDK : Invocacion local\n[KitPagos]
-SDK --> Router : Patron 2: llamada HTTP\nal simulador en el mismo\nproceso o despliegue
-SDK --> Router : Patron 1: modo simulacion\n[HTTP /v1/sim]
+SDK --> Router : Patron 2:\nllamada HTTP\nal simulador\nen el mismo\nproceso o\ndespliegue
+SDK --> Router : Patron 1:\nmodo\nsimulacion\n[HTTP\n/v1/sim]
 Dev --> Router : Headers control\n[HTTPS]
 Dev --> WebhookEndpoint : Solicita webhook\n[HTTPS]
 Dev --> OpenAPI : Explora /docs\n[HTTPS]
@@ -38,24 +45,27 @@ Dev --> OpenAPI : Explora /docs\n[HTTPS]
 Router --> MockFactory : Construye respuesta
 MockFactory --> SignatureGen : Solicita firma
 WebhookEndpoint --> SignatureGen : Solicita firma
-MockFactory --> Store : Guarda transaccion simulada
+MockFactory --> Store : Guarda\ntransaccion\nsimulada
 Router --> Store : Consulta estado
 
 note bottom of RestApi
-  Frontera intencional: /v1/api vive en
-  kit-pagos-api/, separado de routes/
-  que implementa /v1/sim.
+  Frontera intencional: /v1/api
+  vive en kit-pagos-api/,
+  separado de routes/ que
+  implementa /v1/sim.
 end note
 
 note bottom of SDK
-  Patron 3, Frontend -> SDK unificado
-  de pasarelas: futuro, no implementado.
-  Viabilidad en investigacion (#110).
+  Patron 3, Frontend -> SDK
+  unificado de pasarelas: futuro,
+  no implementado. Viabilidad en
+  investigacion (#110).
 end note
 
 note bottom of MockFactory
-  "PayU" reemplazado por "Rapyd" tras la adquisicion
-  (ver architecture-log.md, punto 15/17).
+  "PayU" reemplazado por "Rapyd"
+  tras la adquisicion (ver
+  architecture-log.md, punto 15/17).
 end note
 
 @enduml

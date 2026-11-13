@@ -1,0 +1,91 @@
+\section{Casos de prueba}
+\label{sec:casos}
+
+Este apartado resume los siete casos de prueba diseñados: seis funcionales clave y uno de atributo de calidad (confiabilidad y resiliencia). Desarrolla completo el caso de ejemplo, CP-01; los otros seis tienen la misma estructura y están en los anexos (Sección~\ref{sec:anexos}). Cada caso tiene una ficha (identificador, autor, fechas, ejecutor, descripción, tipo, precondiciones y ambiente) y una tabla de procedimiento paso a paso. Las columnas de resultado obtenido, estado y notas tienen la corrida del 11/11/2026.
+
+\newcommand{\FichaCasoAux}[1]{%
+\begin{table}[H]
+\centering
+\small
+\renewcommand{\arraystretch}{1.18}
+\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.55cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{2.55cm}|>{\raggedright\arraybackslash}X|}
+\hline
+\textbf{Id:} & \FichaId & \textbf{Autor:} & \FichaAutor \\ \hline
+\textbf{Fecha de creación:} & \FichaFechaCreacion & \textbf{Título:} & \FichaTitulo \\ \hline
+\textbf{Ejecutor:} & \FichaEjecutor & \textbf{Fecha de ejecución:} & \FichaFechaEjecucion \\ \hline
+\multicolumn{4}{|l|}{\textbf{Descripción:}} \\ \hline
+\multicolumn{4}{|>{\raggedright\arraybackslash}p{\dimexpr\textwidth-2\tabcolsep-2\arrayrulewidth\relax}|}{\FichaDescripcion} \\ \hline
+\multicolumn{4}{|>{\raggedright\arraybackslash}p{\dimexpr\textwidth-2\tabcolsep-2\arrayrulewidth\relax}|}{\textbf{Tipo:} \FichaTipo} \\ \hline
+\multicolumn{4}{|l|}{\textbf{Precondiciones:}} \\ \hline
+\multicolumn{4}{|>{\raggedright\arraybackslash}p{\dimexpr\textwidth-2\tabcolsep-2\arrayrulewidth\relax}|}{\FichaPrecondiciones} \\ \hline
+\multicolumn{4}{|l|}{\textbf{Ambiente:}} \\ \hline
+\multicolumn{4}{|>{\raggedright\arraybackslash}p{\dimexpr\textwidth-2\tabcolsep-2\arrayrulewidth\relax}|}{#1} \\ \hline
+\end{tabularx}
+\caption{Ficha del caso \FichaId}
+\end{table}
+}
+
+\newcommand{\FichaCaso}[9]{%
+  \def\FichaId{#1}%
+  \def\FichaAutor{#2}%
+  \def\FichaFechaCreacion{#3}%
+  \def\FichaTitulo{#4}%
+  \def\FichaEjecutor{#5}%
+  \def\FichaFechaEjecucion{#6}%
+  \def\FichaDescripcion{#7}%
+  \def\FichaTipo{#8}%
+  \def\FichaPrecondiciones{#9}%
+  \FichaCasoAux
+}
+
+\newenvironment{TablaPasos}[1]{%
+\small
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{2.5pt}
+\begin{xltabular}{\textwidth}{|>{\centering\arraybackslash}p{0.7cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{1.6cm}|>{\centering\arraybackslash}p{1.2cm}|>{\raggedright\arraybackslash}p{1.4cm}|}
+\caption{#1}\\
+\hline
+\textbf{Paso} & \textbf{Acciones} & \textbf{Datos} & \textbf{Resultado esperado} & \textbf{Resultado obtenido} & \textbf{Estado} & \textbf{Notas} \\ \hline
+\endfirsthead
+\multicolumn{7}{c}{\tablename~\thetable{} -- continuación}\\
+\hline
+\textbf{Paso} & \textbf{Acciones} & \textbf{Datos} & \textbf{Resultado esperado} & \textbf{Resultado obtenido} & \textbf{Estado} & \textbf{Notas} \\ \hline
+\endhead
+\hline
+\multicolumn{7}{r}{Continúa en la página siguiente}\\
+\endfoot
+\hline
+\endlastfoot
+}{%
+}
+
+\subsection{Resumen de los casos}
+
+La Tabla~\ref{tab:resumen-casos} consolida los casos de prueba diseñados, con su identificador, título, tipo de comprobación, componentes ejercitados y la sección donde está cada uno.
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.25}
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{1.15cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{2.1cm}|>{\raggedright\arraybackslash}p{3.6cm}|>{\raggedright\arraybackslash}p{2.1cm}|}
+    \hline
+    \textbf{Id} & \textbf{Título} & \textbf{Tipo} & \textbf{Ítems ejercitados} & \textbf{Ubicación} \\ \hline
+    CP-01 & Un mismo pago de tarjeta por las cuatro pasarelas & Funcional & SDK de servidor; \texttt{/v1/sim} & Sección~\ref{sec:cp01} \\ \hline
+    CP-02 & PSE de Wompi: redirección y consulta de estado & Funcional & SDK de servidor; \texttt{/v1/sim} & Anexo, Sección~\ref{sec:cp02} \\ \hline
+    CP-03 & Motivo de rechazo normalizado en Kushki y Mercado Pago & Funcional & SDK de servidor; \texttt{/v1/api}; \texttt{/v1/sim} & Anexo, Sección~\ref{sec:cp03} \\ \hline
+    CP-04 & Un webhook firmado actualiza el historial de la orden & Funcional & Prototipo B; \texttt{/v1/sim} & Anexo, Sección~\ref{sec:cp04} \\ \hline
+    CP-05 & Tokenización de la tarjeta en el navegador & Funcional & \texttt{KitPagosBrowser}; Prototipo B; \texttt{/v1/sim} & Anexo, Sección~\ref{sec:cp05} \\ \hline
+    CP-06 & API REST \texttt{/v1/api} de extremo a extremo & Funcional & \texttt{/v1/api}; Prototipo C & Anexo, Sección~\ref{sec:cp06} \\ \hline
+    CP-07 & Reintentos con retroceso exponencial & Confiabilidad & SDK de servidor; \texttt{/v1/sim} & Anexo, Sección~\ref{sec:cp07} \\ \hline
+  \end{tabularx}
+  \caption{Resumen de los casos de prueba}
+  \label{tab:resumen-casos}
+\end{table}
+
+\subsection{Formato de los casos}
+
+Cada caso usa la ficha y la tabla de pasos. Los campos de la ficha son: identificador, autor, fecha de creación, título, ejecutor y fecha de ejecución, descripción, tipo, precondiciones y ambiente de prueba. La tabla de procedimiento tiene siete columnas: número de paso, acciones, datos, resultado esperado, resultado obtenido, estado y notas. Las tres últimas tienen el resultado de la corrida real; las condiciones de esa corrida están en la Sección~\ref{sec:condiciones-corrida}.
+
+\input{sections/casos-prueba/cp-01}

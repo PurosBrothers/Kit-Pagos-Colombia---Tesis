@@ -62,13 +62,13 @@ Las herramientas y lenguajes seleccionados para el proyecto responden a dos crit
   \caption{Herramientas de desarrollo y arquitectura}
   \label{tab:herramientas-desarrollo}\\
   \endlastfoot
-  Node.js & A través de Fastify 5, Node.js actúa como servidor de la API de Simulación, y \texttt{@fastify/swagger} publica su especificación OpenAPI en \texttt{/docs} (\texttt{simulator-api/package.json}). Fastify fue preferido sobre Express por su mejor desempeño y su soporte nativo de TypeScript con tipado explícito de rutas y esquemas. Jest es el framework de pruebas para el SDK y la API de Simulación; se utiliza para pruebas unitarias sobre el núcleo y pruebas de integración sobre los adaptadores. Las rutas del simulador se prueban en memoria con \texttt{app.inject()} de Fastify, sin Supertest (issue \#6). \\
+  Node.js & A través de Fastify 5, Node.js actúa como servidor de la API de Simulación, y \texttt{@fastify/swagger} publica su especificación OpenAPI en \texttt{/docs} (\texttt{simulator-api/package.json}). Fastify fue preferido sobre Express por su mejor desempeño y su soporte nativo de TypeScript con tipado explícito de rutas y esquemas. Jest es el framework de pruebas para el SDK y la API de Simulación; se utiliza para pruebas unitarias sobre el núcleo y pruebas de integración sobre los adaptadores. Las rutas del simulador se prueban en memoria con \texttt{app.inject()} de Fastify, sin Supertest. \\
   \hline
   esbuild y ts-morph & esbuild empaqueta el módulo de navegador en un único archivo ES Module (\texttt{sdk/scripts/build-browser.js}). ts-morph recorre el árbol sintáctico de TypeScript para calcular las métricas CK (\texttt{sdk/scripts/ck-metrics.ts}). \\
   \hline
   GitHub & Es el sistema de control de versiones, y GitHub Actions es la plataforma de integración continua. Cada pull request hacia \texttt{devops} o \texttt{main} ejecuta las pruebas, la cobertura y las métricas CK (\texttt{ci.yml}); \texttt{final-doc.yml} compila los documentos en LaTeX, \texttt{publish.yml} publica el SDK y \texttt{deploy-landing.yml} publica la página de presentación en GitHub Pages. npm es el gestor de paquetes y el canal de distribución del SDK como librería open source. \\
   \hline
-  Render y ngrok & Render aloja la API de Simulación en su plan gratuito, configurada con \texttt{render.yaml}. ngrok, en su plan gratuito, da un dominio fijo para recibir los webhooks reales de las pasarelas en las tiendas de los prototipos (punto 120 del registro de arquitectura). \\
+  Render y ngrok & Render aloja la API de Simulación en su plan gratuito, configurada con \texttt{render.yaml}. ngrok, en su plan gratuito, da un dominio fijo para recibir los webhooks reales de las pasarelas en las tiendas de los prototipos. \\
   \hline
 \end{longtable}
 \end{center}
@@ -139,7 +139,7 @@ Las herramientas y lenguajes seleccionados para el proyecto responden a dos crit
   \caption{Herramientas de ofimática y presentación}
   \label{tab:herramientas-ofimatica}\\
   \endlastfoot
-  LaTeX con \texttt{latexmk} & Los documentos entregables del trabajo de grado (la memoria, el SRS, el SAD, el plan de pruebas y este SPMP) se escriben en LaTeX en \texttt{docs/final-doc/} y los compila la integración continua (\texttt{final-doc.yml}; issue \#167). Las versiones 1.0 de mayo de 2026 se escribieron en Word (el SRS) y en Google Docs (el SAD y este SPMP). La carta Gantt es una tabla de este documento. \\
+  LaTeX con \texttt{latexmk} & Los documentos entregables del trabajo de grado (la memoria, el SRS, el SAD, el plan de pruebas y este SPMP) se escriben en LaTeX en \texttt{docs/final-doc/} y los compila la integración continua (\texttt{final-doc.yml}). Las versiones 1.0 de mayo de 2026 se escribieron en Word (el SRS) y en Google Docs (el SAD y este SPMP). La carta Gantt es una tabla de este documento. \\
   \hline
   Hojas de cálculo & No se usaron: las métricas CK las calcula la integración continua y sus resultados quedan en el registro de arquitectura y en \texttt{docs/evaluation/}. \\
   \hline

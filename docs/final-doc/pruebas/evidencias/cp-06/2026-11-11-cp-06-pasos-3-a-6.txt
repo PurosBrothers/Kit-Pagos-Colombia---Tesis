@@ -1,0 +1,19 @@
+== Paso 3: petición 2 (creación)
+{"outcome":"TRANSACTION","transaction":{"gatewayTransactionId":"afd4fff6-d411-4713-a65a-0cf51655feaa","orderReference":"ORD-API-CP06-1","amount":"50000.00","currency":"COP","status":"PENDING","isApproved":false,"isPending":true,"isFinal":false,"payer":{"email":"postman.tester@example.com"},"rawStatus":"PENDING"},"rawStatus":"PENDING"}
+HTTP 201
+
+== Paso 4: petición 3 con ?gateway=wompi
+{"gateway":"wompi","transaction":{"gatewayTransactionId":"afd4fff6-d411-4713-a65a-0cf51655feaa","orderReference":"ORD-API-CP06-1","amount":"50000.00","currency":"COP","status":"APPROVED","isApproved":true,"isPending":false,"isFinal":true,"rawStatus":"APPROVED"}}
+HTTP 200
+
+== Paso 5: petición 3 sin ?gateway=
+{"code":"INVALID_REQUEST","message":"querystring must have required property 'gateway'"}
+HTTP 400
+
+== Paso 5: petición 3 con ?gateway=paypal
+{"code":"INVALID_REQUEST","message":"Unsupported gateway. Supported gateways: wompi, rapyd, mercadopago, kushki."}
+HTTP 400
+
+== Paso 6: petición 4
+{"pseBanks":[{"gateway":"wompi","banks":[{"code":"1","name":"Banco que aprueba"},{"code":"2","name":"Banco que declina"},{"code":"3","name":"Banco que simula un error"}]}]}
+HTTP 200

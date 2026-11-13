@@ -235,6 +235,30 @@ describe("GET /docs/json — especificación OpenAPI", () => {
     expect([200, 302]).toContain(response.statusCode);
   });
 
+  it("con API_AUTH_TOKEN configurado, /docs carga sin el token y /v1/api lo sigue pidiendo", async () => {
+    const app = buildApp({
+      logger: false,
+      authOptions: { expectedToken: "token_de_prueba_docs", logger: { warn: () => undefined } },
+    });
+
+    expect([200, 302]).toContain((await app.inject({ method: "GET", url: "/docs" })).statusCode);
+    expect((await app.inject({ method: "GET", url: "/docs/" })).statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/docs/json" })).statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/docs/yaml" })).statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/docs/static/swagger-ui.css" })).statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/v1/api/gateways" })).statusCode).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/v1/api/gateways",
+          headers: { authorization: "Bearer token_de_prueba_docs" },
+        })
+      ).statusCode,
+    ).toBe(200);
+    await app.close();
+  });
+
   it("rechaza con 400 e INVALID_REQUEST una petición que viola el schema de /payments antes de llegar al handler", async () => {
     const app = buildApp({ logger: false });
     // orderReference que excede maxLength: 100 definido en el schema

@@ -1,19 +1,118 @@
 \setcounter{subsection}{0}
 \section{VALIDACIÓN Y RESULTADOS}
 
+La validación del artefacto se apoya en dos cuerpos de evidencia que miden perímetros distintos y no deben confundirse. El primero es la ejecución del Plan de Pruebas del Proyecto (PTP) del 11 de noviembre de 2026, sobre el SDK 0.7.0-rc.2 y la API de Simulación 0.1.0 (Equipo del Proyecto, 2026d). Esa ejecución cubre el SDK, la API de Simulación, las pruebas de contrato, los ejemplos, los cuatro prototipos, la colección de Postman, OpenAPI y la carga. El segundo es el informe comparativo de la Fase 5, que mide únicamente el módulo de pagos \texttt{src/payments/} de los prototipos B y D para comparar la integración con y sin el framework. Las cifras de esta sección se transcriben de esos dos documentos, sin recalcularlas ni estimarlas. Cada una remite a la tabla del informe comparativo, al caso CP correspondiente o al archivo de evidencia que la respalda.
+
 \subsection{Estrategia de validación}
-% Relacionar cada prueba/medición con los criterios definidos en la metodología y requisitos.
+\label{sec:vii-estrategia}
+
+La validación combina dos tipos de prueba. Las automatizadas corren en cada cambio; las de aceptación se ejecutan a mano y dejan su evidencia. Lo que las ordena es el ambiente: cada tipo de prueba dice dónde corre y qué permite concluir. Contra un sandbox real no se puede afirmar un desenlace concreto, y contra el simulador sí; por eso los casos funcionales se apoyan en el simulador y la carga solo corre contra él. Cada caso declara de antemano el resultado esperado, de modo que se pueda decidir si pasó sin depender de la interpretación de quien lo ejecuta (Myers et al., 2004). Los criterios de cobertura se eligen para ejercitar las decisiones del código, no solo sus líneas (Ammann \& Offutt, 2016).
+
+La Tabla~\ref{tab:casos-memoria} resume los siete casos de sistema y aceptación, el atributo o la función que verifican y el ambiente en que se ejecutaron. Los siete quedaron aprobados. CP-01 y CP-04 fallaron en la primera corrida por dos defectos de documentación y precondición, no por el comportamiento del framework; los dos se corrigieron y los casos volvieron a pasar. El detalle de pasos, datos y salidas está en el PTP y en \path{docs/final-doc/pruebas/evidencias/}.
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{1.25cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{5.6cm}|}
+    \hline
+    \textbf{Caso} & \textbf{Qué verifica} & \textbf{Ambiente} \\ \hline
+    CP-01 & El mismo pago de tarjeta por las cuatro pasarelas produce igual estado normalizado, monto y referencia. & Simulador local \\ \hline
+    CP-02 & PSE de Wompi: la creación devuelve redirección y la consulta resuelve el pago. & Simulador local \\ \hline
+    CP-03 & El motivo de rechazo llega normalizado y completo por Kushki y Mercado Pago. & Simulador en memoria \\ \hline
+    CP-04 & Un webhook firmado actualiza el historial de la orden y uno alterado se rechaza. & Simulador y prototipo B \\ \hline
+    CP-05 & La tarjeta se tokeniza en el navegador y el servidor recibe solo un token opaco. & Simulador, B y navegador \\ \hline
+    CP-06 & La API REST \texttt{/v1/api} conserva la semántica del SDK de extremo a extremo. & Simulador, C y Render \\ \hline
+    CP-07 & Los reintentos solo aplican a operaciones idempotentes y respetan el retroceso. & Simulador y suites del SDK \\ \hline
+  \end{tabularx}
+  \caption{Casos de prueba de sistema y aceptación}
+  \label{tab:casos-memoria}
+\end{table}
+
+Los criterios de entrada y salida del plan se cumplieron. Para entrar, el repositorio debe estar en la versión que se va a probar, con las dependencias instaladas y el SDK compilado. Para salir, el plan fija cinco condiciones. Los siete casos deben tener resultado y las suites deben estar en verde. El contrato debe haberse ejecutado o su omisión, justificado; la carga debe cumplir su criterio, y no puede quedar un defecto de severidad alta sin decisión. La corrida cumplió las cinco. La única parte que usó credenciales reales fue la prueba de contrato, en una sola ejecución serial contra los sandboxes.
 
 \subsection{Resultados de pruebas y calidad}
-% Reportar pruebas unitarias, integración, contrato, CI y métricas CK con versión, comando y evidencia.
+\label{sec:vii-pruebas}
+
+La Tabla~\ref{tab:suites-memoria} resume los resultados de la corrida del 11 de noviembre de 2026; sus filas son las de la tabla de métricas de la corrida del PTP. Las suites del SDK y de la API de Simulación corrieron sin red externa ni credenciales; las de contrato corrieron contra los sandboxes de las cuatro pasarelas, y las de los prototipos, en local.
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.1cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{4.4cm}|}
+    \hline
+    \textbf{Suite} & \textbf{Resultado} & \textbf{Cobertura y métricas} \\ \hline
+    SDK & 58 suites y 1088 pruebas & 97,95~\% sentencias, 91,80~\% ramas, 98,19~\% funciones, 98,50~\% líneas \\ \hline
+    API de Simulación & 54 suites y 1301 pruebas & 97,25~\% sentencias, 89,16~\% ramas, 99,08~\% funciones, 97,52~\% líneas \\ \hline
+    Contrato & 4 suites y 25 pruebas & Una corrida serial contra los cuatro sandboxes; sin omisiones \\ \hline
+    Prototipos A, B, C y D & Suites y pruebas: A 5/60; B 6/165; C 6/139; D 10/239 & Sentencias y ramas: A 90,03/74,11; B 99,07/92,33; C 95,64/97,43; D 93,04/83,11 \\ \hline
+    Postman local y Render & 42/47 y 40/45 peticiones y aserciones & Cero fallas en las dos corridas \\ \hline
+    OpenAPI y carga & 40 rutas; 30 de 30 corridas & 8\,181\,054 peticiones, cero errores y cero bloqueos del guardián \\ \hline
+  \end{tabularx}
+  \caption{Resultados de las suites y de las mediciones de la corrida}
+  \label{tab:suites-memoria}
+\end{table}
+
+Las cifras de cobertura superan el umbral del 80~\% configurado en cada dimensión. La suite del SDK incluye 56 suites unitarias y 2 de integración; la del simulador, 13 unitarias y 41 de integración. Ese mismo día, después de la corrida, la documentación \texttt{/docs} quedó exenta del token de la API, y la suite del simulador pasó a 54 suites y 1302 pruebas con el mismo 97,25~\% de sentencias. La cobertura de los prototipos en la Tabla~\ref{tab:suites-memoria} es la de todo su \texttt{src/}, sin \texttt{server.ts}; la de la evaluación comparativa se limita a \texttt{src/payments/} y por eso no coincide.
+
+Las pruebas de contrato comprueban el supuesto más expuesto del proyecto: que cada pasarela real acepte las peticiones que arma el SDK. No esperan \texttt{APPROVED}, porque el desenlace del sandbox no lo controla el proyecto; esperan que la petición se acepte y que la respuesta tenga la forma prevista. En la carga, las 30 corridas terminaron sin errores ni respuestas que no fueran 2xx, y el guardián de red confirmó que ninguna petición salió de la máquina. Con 10 conexiones, \texttt{GET /health}, la línea base sin SDK, sostuvo una mediana de 18\,477 peticiones por segundo, y \texttt{POST /v1/api/payments}, que crea un cobro de tarjeta de Wompi a través del SDK, 2\,660. Esas cifras son de una sola máquina, un Apple M4, con la herramienta de carga y la API en el mismo proceso, y se informan sin umbral porque el SRS no fija uno.
+
+Las métricas CK del código del artefacto se calculan con el script propio del SDK. La última corrida, del 12 de noviembre de 2026, fue sobre el SDK 0.7.0-rc.2 y la API de Simulación 0.1.0. En ella, las 35 clases del SDK y las 28 del simulador quedaron dentro de los umbrales de la definición de terminado. El SDK lo logra con tres excepciones registradas, y el simulador, con una. Las excepciones no se ocultan: se registran con su clase, su valor y la razón. Las métricas de acoplamiento y complejidad se usan aquí como diagnóstico del diseño, no como una calificación absoluta (Chidamber \& Kemerer, 1994; McCabe, 1976). El detalle por archivo y por clase de los prototipos se presenta en la evaluación comparativa.
 
 \subsection{Demostración del artefacto}
-% Mostrar flujos y resultados reproducibles; distinguir simulación de interacción con una pasarela real.
+\label{sec:vii-demostracion}
+
+La demostración se apoya en los siete casos. CP-01 ejecutó el mismo pago de 150\,000 COP por Wompi, Mercado Pago, Kushki y Rapyd con una sola llamada a \texttt{kitPagos.createPayment()}; las cuatro devolvieron \texttt{APPROVED} con el mismo monto y la misma referencia, y la reconsulta fue estable. CP-02 creó un pago PSE en Wompi, recibió la redirección con estado nativo \texttt{PENDING} y, al consultar, obtuvo \texttt{APPROVED}; el código de banco se tomó de \texttt{getPseBanks()} y no se escribió a mano. CP-03 comprobó que un rechazo de Kushki y uno de Mercado Pago llegan con \texttt{rejectionCode} y \texttt{rejectionCategory}, y que una transacción aprobada no tiene ese campo. CP-04 verificó un webhook firmado de Wompi en el prototipo B: la notificación se registró con origen \texttt{webhook}, dejó la orden en \texttt{DECLINED}, un webhook repetido no volvió a \texttt{PENDING} y uno alterado recibió 401 sin cambiar la orden. CP-05 confirmó que el número de tarjeta viaja solo del navegador a la tokenización, que el servidor recibe \texttt{cardToken} sin número, CVV ni vencimiento y que Rapyd usa su página alojada. CP-06 recorrió \texttt{/v1/api} con Postman, con \texttt{curl}, con el prototipo C y con un humo de Render; la creación respondió 201 con \texttt{"50000.00"} y la consulta sin pasarela respondió 400. CP-07 comprobó que \texttt{createPayment()} no reintenta y que las lecturas idempotentes sí, con retroceso exponencial y un tope.
+
+Los dos defectos registrados fueron de severidad baja y ya están corregidos. DEF-01 encontró que el estado nativo de Mercado Pago es \texttt{processed} y no \texttt{approved}, como decían un paso del caso, el texto del ejemplo y el README; el SDK lo normalizaba bien, y se corrigieron los tres textos. DEF-02 encontró que la precondición de CP-04 pedía solo \texttt{WOMPI\_EVENTS\_SECRET}, cuando el simulador necesita también las llaves pública y privada para armar el perfil de Wompi; se corrigió la precondición y el caso pasó. Ningún defecto de severidad alta quedó abierto.
+
+La demostración distingue tres niveles de confianza. Contra el simulador, el desenlace es determinista y el caso puede afirmar \texttt{APPROVED} o \texttt{DECLINED}. Contra los sandboxes, las pruebas de contrato solo confirman que la pasarela aceptó la petición y respondió con la forma esperada. Y contra una pasarela en producción no se ejecutó ningún cobro: esa frontera se declara como límite del alcance y se retoma en la discusión.
 
 \subsection{Evaluación comparativa de Fase 5}
-% Depende de prototipos A/B y del informe en docs/evaluation/.
-% Incluir las seis variables del plan solo con datos observados, protocolo, commits y evidencia reproducibles.
-% No completar con estimaciones, cifras provisionales ni hipótesis del plan.
+\label{sec:vii-evaluacion}
+
+El experimento compara dos implementaciones del mismo checkout mínimo de comercio electrónico. El prototipo D integra las cuatro pasarelas de forma directa, con \texttt{fetch} y los formatos nativos de cada proveedor; es el control y representa lo que hace hoy un desarrollador colombiano. El prototipo B integra las cuatro a través de \texttt{kit-pagos-colombia} 0.7.0-rc.2, con tokenización en el navegador; es el tratamiento y representa lo que propone la tesis. Fuera de la integración de pagos, los dos comparten todo: el esqueleto, el servidor, el contrato \texttt{PaymentsPort}, las rutas y las dependencias. Solo cambia la vitrina, porque D vende cómics y B vinos, y esa excepción se declara como límite. Las variables 1 y 2 se cuentan sobre \texttt{src/payments/} y \texttt{test/payments/}, y la 6 sobre \texttt{src/payments/}; la excepción no toca esas carpetas.
+
+La hipótesis quedó escrita antes de medir. Decía que en B una pasarela nueva sería solo configuración: sin mapeo de monto, traducción de estados, verificación de firma ni flujo de consulta propios, y sin cambios en el esqueleto ni en el modelo de datos. En D, en cambio, cada pasarela exigiría escribir todas esas piezas. La Tabla~\ref{tab:seis-variables-memoria} transcribe las seis variables medidas; la variable 3, las métricas CK, ocupa cuatro filas. Cada fila es la de su variable en la tabla resumen de \path{docs/evaluation/recoleccion-seis-variables.md}, y la columna de diferencia es la del informe comparativo, sin recalcular.
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{2.5cm}|}
+    \hline
+    \textbf{Variable} & \textbf{Prototipo D (control)} & \textbf{Prototipo B (tratamiento)} & \textbf{Diferencia} \\ \hline
+    LOC de integración & 1\,308 & 310 & $-76{,}30$~\% \\ \hline
+    Líneas para agregar tres pasarelas & $+1\,042/-5$ & $+67/-14$ & $-93{,}57$~\% \\ \hline
+    WMC total & 375 & 66 & $-82{,}40$~\% \\ \hline
+    RFC promedio & 36,17 & 22,00 & $-39{,}17$~\% \\ \hline
+    MAX\_CC & 19 & 10 & $-47{,}37$~\% \\ \hline
+    CBO promedio & 5,67 & 7,0 & $+23{,}53$~\% \\ \hline
+    Conceptos nativos & 10 identificadores, 18 ocurrencias & 0 y 0 & Eliminados \\ \hline
+    Pasarelas alcanzables & 4 de 4 & 4 de 4 & Paridad \\ \hline
+    Cobertura de pruebas (sentencias, ramas, funciones y líneas) & 90,03/81,08/83,18/96,19~\% & 100/97,59/100/100~\% & $+9{,}97$ y $+16{,}51$ pp \\ \hline
+  \end{tabularx}
+  \caption{Las seis variables de la evaluación comparativa de Fase 5}
+  \label{tab:seis-variables-memoria}
+\end{table}
+
+La lectura de las cifras es la siguiente. El módulo de pagos de B escribe 310 líneas de integración frente a 1\,308 de D, un 76,30~\% menos. Para sumar Mercado Pago, Kushki y Rapyd, B agrega 67 líneas y elimina 14; D agrega 1\,042 y elimina 5, una reducción del 93,57~\% en líneas agregadas. De esas 67 líneas de B, 58 son configuración en \texttt{gateways.ts} y 9 ajustan el módulo común para Kushki y Rapyd; ninguna reescribe el mapeo, la firma o la consulta. El WMC total baja de 375 a 66 y el MAX\_CC de 19 a 10, que es el umbral del DoD; el RFC promedio baja de 36,17 a 22,00. El CBO promedio, en cambio, sube de 5,67 a 7,0: el módulo de B reúne más tipos externos en cada archivo, sobre todo en \texttt{index.ts}. El SDK le quita al comercio complejidad y tamaño, pero no le reduce el acoplamiento por archivo, sino que lo redistribuye.
+
+La variable de conceptos nativos es la más directa para la hipótesis. El script versionado busca 14 identificadores propios de las pasarelas, con fronteras de palabra y sin comentarios. En D aparecen 10 identificadores distintos en 18 ocurrencias; en B, ninguno, verificado con la opción que falla si encuentra uno. En pasarelas alcanzables hay paridad: B y D cobran con tarjeta y PSE en las cuatro. Solo el PSE de Kushki queda sin identificador de cobro, y les pasa igual a los dos: el sandbox de Kushki deja la transferencia en \texttt{initializedTransaction}, y el simulador local la aprueba con el webhook firmado. La cobertura de pruebas de B es mayor con menos pruebas, 165 frente a 239, porque la lógica compleja de las pasarelas vive en el SDK y no en el módulo de pagos del comercio.
+
+La hipótesis se confirma casi entera en el eje medido. De las 67 líneas que B agrega para las tres pasarelas, 58 son configuración. Ninguno de los tres cambios de pasarela de B toca el esqueleto ni el modelo de datos, ni escribe el mapeo de monto, la traducción de estados, la verificación de firma o el flujo de consulta. Las otras 9 líneas no son configuración y se reportan como tal. «Configuración» tampoco significa «gratis»: cada pasarela de B trae su propia suite, con 51, 65 y 121 líneas en \texttt{test/payments/} para Mercado Pago, Kushki y Rapyd. Además, el costo de construir y mantener el SDK queda fuera del perímetro de la medición. Las cifras, el protocolo completo, los diffs por pasarela y los artefactos de reproducción están en \path{docs/evaluation/informe-comparativo-fase-5.md} y en \path{docs/evaluation/recoleccion-seis-variables.md}.
 
 \subsection{Discusión y amenazas a la validez}
-% Analizar resultados favorables y adversos, sesgos, alcance de los sandboxes y límites del estudio.
+\label{sec:vii-discusion}
+
+Los resultados favorables son consistentes entre sí: menos código, menos complejidad, menos exposición a conceptos nativos, menos esfuerzo para agregar pasarelas y más cobertura con menos pruebas. El resultado adverso también es claro: el acoplamiento por archivo de B es mayor, y el costo de construir el SDK no entra en la comparación. La conclusión correcta no es que el framework sea más barato de construir, sino que reduce lo que le cuesta al comercio integrar y mantener sus pasarelas. Esa distinción es la que importa para el problema del \textit{vendor lock-in}, y es la que recoge el capítulo VIII.
+
+La primera amenaza es que quienes construyeron el framework son los mismos que miden si sirve. Ese sesgo no desaparece por declararlo. Lo contiene que cinco de las seis variables se obtienen con un script o un comando de Git que un tercero puede repetir: \texttt{cloc}, el medidor de métricas CK, el contador de conceptos nativos, los diffs y Jest con cobertura. La sexta descansa en identificadores que emitieron los sandboxes. Así, la evaluación no depende de confiar en el equipo, sino de que cualquiera pueda recalcular las cifras.
+
+La segunda amenaza es que un experto habría escrito un D mejor. D se construyó con la documentación oficial de cada pasarela y sus ejemplos, pero nada garantiza que sea la mejor integración directa posible; si no lo es, la ventaja de B aparece inflada. La tercera es que un solo autor escribió las pasarelas nuevas en B y en D, y eso tiene dos efectos. D pudo heredar lo que el SDK ya había resuelto, lo que achica la diferencia a favor de la tesis. Y el orden de construcción favorece en tiempo al segundo prototipo, por lo que el tiempo de implementación se excluyó como evidencia principal. La cuarta es que las vitrinas no son idénticas, aunque las variables medidas no las tocan.
+
+La quinta amenaza es el alcance de los ambientes. Nada se cobró en producción: la evidencia de las pasarelas se tomó en sandboxes y en el simulador local. Los webhooks reales de Kushki no se midieron porque su consola UAT no permitía entrar, y las notificaciones de Mercado Pago en modo de prueba exigieron identificar que las firma la aplicación del vendedor de prueba. Esos límites acotan la lectura, pero no la invalidan: el objeto de la tesis es el código de integración del comercio, que sí se midió completo. La sexta amenaza es que dos prototipos no son una muestra: no hay significancia estadística ni se pretende tenerla. Es un estudio de caso comparativo, uno de los métodos de evaluación que el Design Science Research admite para un artefacto (Hevner et al., 2004). Las cifras describen estos dos prototipos, con estas cuatro pasarelas y este equipo.
+
+La literatura sobre integraciones de pago respalda esa cautela. Aué et al. (2018) analizaron 2,43 millones de respuestas de error de la API de una empresa de pagos. La mayoría de las fallas se debía a datos de la petición inválidos o ausentes, es decir, a lo que envía quien integra. Por eso el proyecto invirtió en pruebas de contrato y en un simulador determinista. Aun así, ningún conjunto finito de pruebas demuestra que una integración sea correcta para siempre. La conclusión se formula en el alcance del estudio y deja abiertas la validación en producción y la ampliación a nuevas pasarelas como trabajo futuro.

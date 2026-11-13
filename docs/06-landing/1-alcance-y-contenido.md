@@ -69,7 +69,7 @@ Al lado, la tabla de estados nativos que ya imprime el ejemplo 10, porque es la 
 |---|---|---|
 | Wompi | `APPROVED` | `APPROVED` |
 | Rapyd | `CLO` | `APPROVED` |
-| Mercado Pago | `approved` | `APPROVED` |
+| Mercado Pago | `processed` | `APPROVED` |
 | Kushki | `APPROVAL` | `APPROVED` |
 
 Cuatro vocabularios, y uno —`CLO`— que no significa "pagado" sino "cerrado".
@@ -106,7 +106,7 @@ Esta sección no es humildad decorativa. Es lo que separa un trabajo de grado de
 
 ### 3.5 Cómo empezar
 
-Muestra la vía más rápida: la **capa REST**, que permite probar el flujo con una sola petición `curl` sin necesidad de escribir código en TypeScript ni configurar proyectos locales. A continuación, detalla la instalación del SDK vía npm (`npm install kit-pagos-colombia`) y la ejecución local con la API de Simulación. Enlaza a [03-sdk/4-guia-de-implementacion.md](../03-sdk/4-guia-de-implementacion.md) para la guía completa. La página no duplica la guía de implementación: la anuncia.
+Muestra la vía más rápida: la **capa REST**, que permite probar el flujo con una sola petición `curl` sin necesidad de escribir código en TypeScript ni configurar proyectos locales. La petición va al ambiente `simulator` y lleva el token de la API, que Render exige en `/v1/api` desde el 11 de noviembre de 2026. La página no la manda desde el navegador, porque el token no puede ir en una página pública, y el indicador de estado consulta `/health`. A continuación, detalla la instalación del SDK vía npm (`npm install kit-pagos-colombia`) y la ejecución local con la API de Simulación. Enlaza a [03-sdk/4-guia-de-implementacion.md](../03-sdk/4-guia-de-implementacion.md) para la guía completa. La página no duplica la guía de implementación: la anuncia.
 
 ### 3.6 El contexto académico
 

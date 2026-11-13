@@ -24,8 +24,9 @@ async function registerOpenApiPlugin(app: FastifyInstance): Promise<void> {
           "## Autenticación\n\n" +
           "Las operaciones protegidas requieren `Authorization: Bearer <token>` cuando el token " +
           "está configurado en `API_AUTH_TOKEN` o `SIMULATOR_API_AUTH_TOKEN`. Sin token, el servicio " +
-          "opera abierto en desarrollo local. `/v1/sim` y `/health` son rutas públicas, salvo " +
-          "`/v1/sim/webhooks/trigger`, que también requiere el token cuando está configurado.\n\n" +
+          "opera abierto en desarrollo local. `/v1/sim`, `/health` y esta documentación (`/docs`) " +
+          "son rutas públicas, salvo `/v1/sim/webhooks/trigger`, que también requiere el token " +
+          "cuando está configurado. Para probar `/v1/api` desde aquí, pega el token en «Authorize».\n\n" +
           "## Credenciales de pasarela\n\n" +
           "Los endpoints bajo `/v1/api` aceptan credenciales de pasarela opcionales mediante " +
           "cabeceras `x-gateway-*`. Si se omiten, el servidor usa las suyas propias, lo que " +

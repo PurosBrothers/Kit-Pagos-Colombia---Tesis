@@ -1,0 +1,98 @@
+@startuml 05-bpmn-requerimientos
+skinparam backgroundColor white
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam legendFontSize 10
+skinparam swimlaneTitleFontSize 10
+skinparam wrapWidth 110
+skinparam padding 2
+skinparam ArrowColor #333333
+skinparam activity {
+  BackgroundColor #E8EEF8
+  BorderColor #4A6FA5
+  DiamondBackgroundColor #FFF2CC
+  DiamondBorderColor #B7950B
+  StartColor #2E7D32
+  EndColor #C62828
+}
+skinparam note {
+  BackgroundColor #F1F5EC
+  BorderColor #8A9A7A
+}
+skinparam swimlane {
+  BorderColor #5B7BA6
+  TitleFontColor #1F3A6E
+  TitleFontStyle bold
+}
+skinparam legend {
+  BackgroundColor white
+  BorderColor #5B7BA6
+}
+
+title <b>Administración de Requerimientos (Basado en SPMP – Sección 5.1)</b>
+
+|Gestión de\nRequerimientos|
+start
+-> Inicio;
+repeat
+  :<&plus> <b>1. Identificar necesidades y problemas</b>;
+  note right: <&file> Acta de Reunión\n(REF-01)
+  :<&plus> <b>2. Capturar requerimientos iniciales</b>;
+  note right: <&file> Lista de\nRequerimientos\nIniciales\n(REF-02)
+  :<&plus> <b>3. Clasificar requerimientos</b>;
+  :<&plus> <b>4. Documentar requerimientos en el SRS</b>;
+  note right: <&file> Especificación de\nRequerimientos\ndel Sistema – SRS\n(REF-03)
+  :<&plus> <b>5. Refinar requerimientos</b>;
+  note right: <&file> Matriz de\nTrazabilidad\n(REF-04)\n(versión inicial)
+  if (¿Requerimientos\ncompletos y\nclaros?) then (Sí)
+    |Análisis y\nPriorización|
+    :<&plus> <b>7. Analizar y priorizar requerimientos</b>;
+    note right: <&file> Matriz de\nPriorización\n(REF-05)
+    :<&plus> <b>8. Validar consistencia y factibilidad</b>;
+    note right: <&file> Matriz de\nTrazabilidad\n(actualizada)\n(REF-04)
+    :<&plus> <b>9. Baseline de requerimientos</b>;
+    note right
+      <&file> SRS – Línea Base
+      aprobada
+      (REF-03)
+      - - > <&hard-drive> Almacén de
+      Requerimientos
+    end note
+    |Validación y\nAprobación|
+    :<&plus> <b>10. Revisar y aprobar requerimientos</b>;
+    if (¿Aprobados?) then (Sí)
+      :<&plus> <b>11. Publicar y comunicar línea base</b>;
+      note right
+        - - > <&file> SRS – Línea Base
+        publicada
+        (REF-03)
+        - - > <&hard-drive> Almacén de
+        Requerimientos
+      end note
+      split
+        -[dashed]->
+      split again
+        -[hidden]->
+        |Trazabilidad y\nControl|
+        :<&plus> <b>12. Control de cambios a requerimientos</b>;
+      end split
+      |Trazabilidad y\nControl|
+      :<&plus> <b>13. Actualizar artefactos y trazabilidad</b>;
+      -> Fin;
+      stop
+    else (No)
+    endif
+  else (No)
+  endif
+  |Gestión de\nRequerimientos|
+  :<&plus> <b>6. Retroalimentar con interesados</b>;
+repeat while ()
+
+legend bottom left
+  |= Convenciones BPMN 2.0 |= Artefactos (creación / refinamiento) |
+  | <&plus> Subproceso\nRombo: Compuerta Exclusiva\n<&file> Objeto de datos (nota)\n<&hard-drive> Almacén de datos\nFlecha continua: Flujo de secuencia\nFlecha discontinua: Flujo de mensaje\n- - > Asociación (artefacto) | <b>REF-01:</b> Acta de Reunión\n<b>REF-02:</b> Lista de Requerimientos Iniciales\n<b>REF-03:</b> Especificación de Requerimientos\n   del Sistema (SRS) (Línea Base / publicada)\n<b>REF-04:</b> Matriz de Trazabilidad\n   (versión inicial / actualizada)\n<b>REF-05:</b> Matriz de Priorización |
+endlegend
+@enduml

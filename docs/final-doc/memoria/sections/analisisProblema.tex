@@ -3,10 +3,10 @@
 \sloppy
 
 \subsection{Requisitos funcionales y no funcionales}
-Los requisitos de Kit Pagos Colombia están en el SRS v2.0 (Equipo del Proyecto, 2026b). La matriz de trazabilidad (\path{docs/project-management/traceability-matrix.md}) registra, para cada uno, sus componentes, su estado, sus issues, sus pull requests y sus pruebas. Este capítulo los resume y remite al SRS para el texto normativo, de modo que un cambio de requisitos no deje dos versiones.
+Los requisitos de Kit Pagos Colombia están en el SRS v2.0 (Equipo del Proyecto, 2026b). La matriz de trazabilidad (\path{docs/project-management/traceability-matrix.md}) registra, para cada uno, los componentes que lo implementan, su estado y las pruebas que lo cubren. Este capítulo los resume y remite al SRS para el texto normativo, de modo que un cambio de requisitos no deje dos versiones.
 
 \subsubsection{Requisitos funcionales (RF-01 a RF-19)}
-El SRS v2.0 (sección 6.1) especifica diecinueve requisitos funcionales, y la matriz de trazabilidad los registra todos como implementados. RF-13 tiene un límite declarado: siete de las 43 operaciones de la API de Simulación no tienen esquema (issue \#106, PR \#137; punto 109 del registro de arquitectura). Aquí se agrupan por componente:
+El SRS v2.0 (sección 6.1) especifica diecinueve requisitos funcionales, y la matriz de trazabilidad los registra todos como implementados. RF-13 tiene un límite declarado: siete de las 43 operaciones de la API de Simulación no tienen esquema. Aquí se agrupan por componente:
 
 \paragraph{A. SDK}
 \begin{itemize}
@@ -71,9 +71,9 @@ Las restricciones adicionales del modelo (el «+») se presentan en la sección 
 \subsubsection{Supuestos y límites de los sandboxes}
 El SPMP 2.0 (sección 1.3.1) declara dos supuestos técnicos (Equipo del Proyecto, 2026c). El primero es que las APIs de las cuatro pasarelas se mantienen estables durante el desarrollo. Para PayU no se cumplía: Rapyd ya la había adquirido, y por eso el proyecto la reemplazó. El segundo es que los sandboxes están disponibles. Lo estuvieron, pero no permiten varios flujos de punta a punta:
 \begin{itemize}
-    \item Wompi entrega en el mismo momento la URL del banco de PSE y el estado final del pago (punto 43 del registro de arquitectura).
-    \item En la Orders API de Mercado Pago, la única que cobra PSE, las credenciales de prueba reciben \texttt{401} (punto 45).
-    \item Kushki no deja consultar los cobros síncronos con tarjeta hechos en el sandbox (punto 54).
+    \item Wompi entrega en el mismo momento la URL del banco de PSE y el estado final del pago.
+    \item En la Orders API de Mercado Pago, la única que cobra PSE, las credenciales de prueba reciben \texttt{401}.
+    \item Kushki no deja consultar los cobros síncronos con tarjeta hechos en el sandbox.
 \end{itemize}
 Esos flujos se prueban contra la API de Simulación, que tiene sus propios límites declarados en la matriz de trazabilidad. Las combinaciones sin evidencia de cómo responde la pasarela real devuelven \texttt{501} (fila RF-10). Los datos de prueba de Rapyd y del PSE de Mercado Pago no llegan al simulador, porque en esos flujos decide la página del banco o de la pasarela; esos desenlaces se eligen con los montos reservados (fila RF-15).
 
@@ -125,7 +125,7 @@ La Tabla~\ref{tab:trazabilidad-oe-rf} relaciona cada objetivo específico (OE-01
 \begin{table}[H]
 \renewcommand{\arraystretch}{1.2}
 \centering
-\begin{tabular}{|p{3.2cm}|p{6.8cm}|p{4.2cm}|}
+\begin{tabular}{|p{3.2cm}|p{6.7cm}|p{4.2cm}|}
 \hline
 \textbf{Objetivo específico} & \textbf{Requisitos funcionales que lo sustentan} & \textbf{Evidencia en el repositorio} \\ \hline
 OE-01 (Análisis técnico) & RF-01, RF-02, RF-03, RF-11, RF-14, RF-18, RF-19 & Documentación de pasarelas, lenguaje ubicuo y \texttt{docs/testing-data/}. \\ \hline
@@ -143,8 +143,8 @@ OE-06 (Evaluación formal) & Sin RF directo: lo exigen el hito H5 y la metodolog
 La versión 1.0 del SPMP, de mayo de 2026, no contemplaba cuatro elementos del artefacto. La versión 2.0 (sección 1.2.2) y el SRS v2.0 los incorporan, y los seis objetivos específicos no cambiaron (\path{thesis-objectives.md}, sección 4):
 
 \begin{enumerate}
-    \item \textbf{Rapyd en lugar de PayU:} la versión 1.0 nombraba a PayU entre las cuatro pasarelas. El 14 de marzo de 2025, Rapyd terminó de comprar PayU GPO en América Latina; el proyecto cambió entonces PayU por Rapyd, y con ello el algoritmo de firma de los webhooks (punto 15 del registro de arquitectura).
-    \item \textbf{La capa REST propia (\texttt{/v1/api}):} en la versión 1.0, la API de Simulación solo imitaba a las cuatro pasarelas (\texttt{/v1/sim}). La Iteración 3 le sumó \texttt{/v1/api}, que ofrece por HTTP las operaciones del kit; desde entonces el simulador tiene dos superficies (issue \#108; punto 125). Con ella, un cliente consume el kit sin instalar la biblioteca de Node.js.
+    \item \textbf{Rapyd en lugar de PayU:} la versión 1.0 nombraba a PayU entre las cuatro pasarelas. El 14 de marzo de 2025, Rapyd terminó de comprar PayU GPO en América Latina; el proyecto cambió entonces PayU por Rapyd, y con ello el algoritmo de firma de los webhooks.
+    \item \textbf{La capa REST propia (\texttt{/v1/api}):} en la versión 1.0, la API de Simulación solo imitaba a las cuatro pasarelas (\texttt{/v1/sim}). La Iteración 3 le sumó \texttt{/v1/api}, que ofrece por HTTP las operaciones del kit; desde entonces el simulador tiene dos superficies. Con ella, un cliente consume el kit sin instalar la biblioteca de Node.js.
     \item \textbf{El patrón P2 y el prototipo C:} la versión 1.0 solo describía la integración desde el servidor y excluía las interfaces de usuario para flujos de pago. El prototipo C (\path{prototypes/checkout-frontend-rest/}) cobra desde el navegador contra \texttt{/v1/api} con las cuatro pasarelas. La versión 2.0 nombra P2 y reescribe la exclusión para dejar claro que las tiendas de los prototipos y el cliente del prototipo C demuestran el kit contra los sandboxes y no son interfaces de pago para producción.
-    \item \textbf{Alcance del patrón P3 (tokenización unificada en el navegador):} La versión 1.0 del SPMP no lo contemplaba. El issue \#110 lo investigó y recomendó no convertirlo en un objetivo. Lo que existe de él es \texttt{KitPagosBrowser}, que tokeniza con Wompi, Mercado Pago y Kushki; Rapyd no ofrece tokenización en el navegador y cobra la tarjeta en su página alojada. El SRS v2.0 lo registra como RF-17, y el SPMP 2.0 lo describe como un patrón de integración implementado en parte, no como un objetivo nuevo.
+    \item \textbf{Alcance del patrón P3 (tokenización unificada en el navegador):} La versión 1.0 del SPMP no lo contemplaba. Se investigó y se recomendó no convertirlo en un objetivo. Lo que existe de él es \texttt{KitPagosBrowser}, que tokeniza con Wompi, Mercado Pago y Kushki; Rapyd no ofrece tokenización en el navegador y cobra la tarjeta en su página alojada. El SRS v2.0 lo registra como RF-17, y el SPMP 2.0 lo describe como un patrón de integración implementado en parte, no como un objetivo nuevo.
 \end{enumerate}

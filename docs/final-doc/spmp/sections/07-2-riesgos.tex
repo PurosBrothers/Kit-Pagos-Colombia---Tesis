@@ -20,22 +20,22 @@ La Tabla~\ref{tab:riesgos-materializados} reúne los riesgos que se materializar
   \caption{Riesgos que se materializaron.}
   \label{tab:riesgos-materializados}\\
   \endlastfoot
-  Cambio en una pasarela & Rapyd había completado la adquisición de PayU GPO en América Latina, y el mecanismo de firma de los webhooks cambió & Punto 15 del registro de arquitectura & PayU se reemplazó por Rapyd con un adaptador nuevo, sin tocar el dominio \\
+  Cambio en una pasarela & Rapyd había completado la adquisición de PayU GPO en América Latina, y el mecanismo de firma de los webhooks cambió & Registro de arquitectura & PayU se reemplazó por Rapyd con un adaptador nuevo, sin tocar el dominio \\
   \hline
-  Límites de los sandboxes & Los sandboxes no permiten varios flujos de punta a punta, y las credenciales «de sandbox» de Mercado Pago resultaron ser de producción & Puntos 43, 45, 48 y 95 & El simulador siguió simulando los flujos que los sandboxes no dejan completar, con las formas medidas (punto 86) \\
+  Límites de los sandboxes & Los sandboxes no permiten varios flujos de punta a punta, y las credenciales «de sandbox» de Mercado Pago resultaron ser de producción & Registro de arquitectura & El simulador siguió simulando los flujos que los sandboxes no dejan completar, con las formas medidas \\
   \hline
-  Métrica de complejidad mal calculada & El guion calculaba WMC como conteo de métodos y no veía la complejidad & Punto 34 & Se corrigió la fórmula, el tope de WMC subió de 15 a 20 y se agregó MAX\_CC $\le 10$ \\
+  Métrica de complejidad mal calculada & El guion calculaba WMC como conteo de métodos y no veía la complejidad & Registro de arquitectura & Se corrigió la fórmula, el tope de WMC subió de 15 a 20 y se agregó MAX\_CC $\le 10$ \\
   \hline
   Retraso del desarrollo & La Iteración 3 se extendió sobre las Fases 5 y 6 & Tabla~\ref{tab:carta-gantt}; \texttt{metho\-dology.\allowbreak md}, sección 10.2 & Las Fases 5 y 6 se comprimieron para no mover la entrega del 9 de noviembre \\
   \hline
-  Exposición de credenciales & En el ensayo de los webhooks en vivo, el log local del simulador guardó cabeceras con credenciales de Kushki & Issues \#165 y \#188; PR \#187 & El PR \#187 dejó las credenciales fuera del log, y el \#188 revisó que el log de Render no las tuviera \\
+  Exposición de credenciales & En el ensayo de los webhooks en vivo, el log local del simulador guardó cabeceras con credenciales de Kushki & Registro de arquitectura & Las credenciales se dejaron fuera del log, y se revisó que el log de Render no las tuviera \\
   \hline
 \end{longtable}
 \end{center}
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\textwidth]{figuras/06-bpmn-riesgos}
+  \includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{figuras/06-bpmn-riesgos}
   \caption{Diagrama BPMN para administración de riesgos}
   \label{fig:bpmn-riesgos}
 \end{figure}

@@ -1,29 +1,36 @@
 \section{Visión general de los requisitos funcionales}
-En la tabla 1 se presenta el listado consolidado de requisitos funcionales del framework, organizados por componente. Las prioridades se clasifican en Alta (esencial para el MVP), Media (importante pero no bloqueante) y Baja (deseable en versiones futuras).
+La Tabla~\ref{tab:req_func} reúne los requisitos funcionales del framework agrupados por componente. Cada requisito tiene una prioridad: Alta si el MVP no funciona sin él, Media si importa pero no bloquea la entrega y Baja si puede esperar a una versión posterior.
 
-\begin{table}[htbp]
-\centering
-\caption{Requisitos funcionales}
-\label{tab:req_func}
+\begingroup
 \renewcommand{\arraystretch}{1.3}
-\begin{tabularx}{\textwidth}{|l|X|l|l|}
+\begin{longtable}{|l|>{\raggedright\arraybackslash}p{0.53\textwidth}|>{\raggedright\arraybackslash}p{0.17\textwidth}|l|}
+\caption{Requisitos funcionales}
+\label{tab:req_func}\\
 \hline
 \textbf{ID} & \textbf{Descripción del requisito} & \textbf{Componente} & \textbf{Prioridad} \\ \hline
-RF-01 & El sistema debe permitir crear una intención de pago especificando pasarela, monto, moneda, referencia de orden y datos del pagador mediante una interfaz unificada. & SDK & Alta \\ \hline
-RF-02 & El sistema debe retornar una respuesta normalizada ante la creación de un pago, incluyendo el identificador de transacción, el estado inicial y la URL o token de pago según la pasarela. & SDK & Alta \\ \hline
-RF-03 & El sistema debe permitir consultar el estado de una transacción por identificador y retornarlo mapeado a los estados normalizados: PENDIENTE, APROBADO, RECHAZADO, EXPIRADO o ERROR. & SDK & Alta \\ \hline
-RF-04 & El sistema debe validar la firma criptográfica de un webhook entrante utilizando el algoritmo correspondiente a cada pasarela y retornar un evento normalizado si la firma es válida. & SDK & Alta \\ \hline
-RF-05 & El sistema debe lanzar excepciones tipadas con código de error normalizado y mensaje descriptivo ante cualquier condición de fallo esperada (timeout, credenciales inválidas, recurso no encontrado). & SDK & Alta \\ \hline
+\endfirsthead
+\hline
+\textbf{ID} & \textbf{Descripción del requisito} & \textbf{Componente} & \textbf{Prioridad} \\ \hline
+\endhead
+RF-01 & El sistema debe permitir crear una intención de pago con tarjeta o PSE mediante una interfaz unificada, especificando pasarela, monto, moneda, referencia de orden, datos del pagador y método de pago. El resultado debe distinguir entre una transacción resuelta y una redirección requerida. & SDK & Alta \\ \hline
+RF-02 & El sistema debe normalizar la respuesta de creación y consulta a una \texttt{Transaction} con identificador, monto, moneda, pagador, estado normalizado, estado nativo (\texttt{rawStatus}) y, cuando exista, motivo de rechazo. & SDK & Alta \\ \hline
+RF-03 & El sistema debe permitir consultar el estado de una transacción por identificador y pasarela, mapeándolo a los seis estados normalizados \texttt{APPROVED}, \texttt{DECLINED}, \texttt{PENDING}, \texttt{EXPIRED}, \texttt{VOIDED} y \texttt{ERROR}. & SDK & Alta \\ \hline
+RF-04 & El sistema debe validar la firma criptográfica de un webhook entrante con el algoritmo de cada pasarela (Wompi SHA-256; Rapyd, Mercado Pago y Kushki HMAC-SHA256), dentro de una ventana de tolerancia, y retornar un evento normalizado. Cuando la notificación solo identifica la transacción, como en Mercado Pago, el evento retorna \texttt{PENDING} y el comercio completa la conciliación consultando el estado. & SDK & Alta \\ \hline
+RF-05 & El sistema debe lanzar \texttt{KitPagosError} con un código de \texttt{KitPagosErrorCode} ante condiciones de fallo esperadas, incluyendo timeout, credenciales inválidas, recurso no encontrado y operación no soportada. & SDK & Alta \\ \hline
 RF-06 & El sistema debe permitir cambiar la pasarela activa modificando únicamente el parámetro de configuración en la inicialización del framework, sin modificar el código de negocio del llamador. & SDK & Alta \\ \hline
-RF-07 & El sistema debe reintentar automáticamente una operación ante errores transitorios (timeout, respuestas 5xx) siguiendo una estrategia de backoff exponencial configurable, hasta un número máximo de intentos definido por el usuario. & SDK & Media \\ \hline
-RF-08 & El sistema debe garantizar que las credenciales de cada pasarela no sean expuestas en logs, mensajes de error ni en las respuestas del SDK. & SDK & Alta \\ \hline
-RF-09 & El sistema debe exponer endpoints REST que repliquen el comportamiento de creación de pago de cada pasarela soportada, accesibles sin credenciales reales. & API Simulación & Alta \\ \hline
-RF-10 & El sistema debe permitir configurar el escenario de respuesta de cada endpoint mediante un parámetro de la solicitud, soportando al menos: APROBADO, RECHAZADO, FONDOS\_INSUFICIENTES, TIMEOUT y ERROR\_RED. & API Simulación & Alta \\ \hline
+RF-07 & El sistema debe reintentar con retroceso exponencial y fluctuación las operaciones idempotentes (\texttt{getPaymentStatus} y \texttt{getPseBanks}) ante fallos transitorios, y no debe reintentar \texttt{createPayment}. & SDK & Media \\ \hline
+RF-08 & El sistema debe redactar credenciales, tokens y secretos de los mensajes, cuerpos y causas de los errores del SDK. & SDK & Alta \\ \hline
+RF-09 & El sistema debe exponer bajo \texttt{/v1/sim} endpoints que replican las APIs nativas de las cuatro pasarelas, con sus formatos de petición y respuesta, sin requerir credenciales reales. & API Simulación & Alta \\ \hline
+RF-10 & El sistema debe permitir elegir el escenario de respuesta de \texttt{/v1/sim} mediante la cabecera \texttt{x-simulator-scenario} o su alias \texttt{x-simulate-scenario}, los datos de prueba nativos de cada pasarela, los montos reservados o las marcas de credencial. El escenario se fija en la creación y las consultas no lo alteran. & API Simulación & Alta \\ \hline
 RF-11 & El sistema debe replicar la estructura exacta de las respuestas de error de cada pasarela en los escenarios de fallo configurados. & API Simulación & Alta \\ \hline
-RF-12 & El sistema debe permitir solicitar el envío de un webhook simulado hacia una URL destino, con el formato y firma correspondientes a la pasarela indicada. & API Simulación & Media \\ \hline
-RF-13 & El sistema debe exponer la especificación OpenAPI 3.0 de la API de simulación en un endpoint público (/docs), accesible a través de un navegador web. & API Simulación & Media \\ \hline
+RF-12 & El sistema debe disparar un webhook firmado hacia una URL destino configurada y emitir webhooks automáticamente cuando cambia el estado de un pago simulado. & API Simulación & Media \\ \hline
+RF-13 & El sistema debe publicar la especificación OpenAPI 3.0 de las rutas que declaran esquema en \texttt{/docs}, \texttt{/docs/json} y \texttt{/docs/yaml}. Las rutas de \texttt{/v1/api} declaran sus esquemas; las de \texttt{/v1/sim} los incorporan de forma progresiva. & API Simulación & Media \\ \hline
 RF-14 & El sistema debe proveer documentación de datos de prueba organizada por pasarela, incluyendo tarjetas de prueba, credenciales de sandbox y referencias de pago válidas para cada proveedor. & Documentación & Alta \\ \hline
 RF-15 & El sistema debe indicar el comportamiento esperado de cada dato de prueba (tarjeta aprobada, tarjeta rechazada, fondos insuficientes) junto con la fuente oficial del proveedor. & Documentación & Media \\ \hline
-\end{tabularx}
-\end{table}
+RF-16 & El sistema debe exponer las operaciones de Kit Pagos por REST bajo \texttt{/v1/api}: pasarelas disponibles, creación y consulta de pagos, bancos PSE y verificación de webhooks. & API Simulación (\texttt{/v1/api}) & Alta \\ \hline
+RF-17 & El sistema debe tokenizar la tarjeta en el navegador con \texttt{kit-pagos-colombia/browser} contra Wompi, Mercado Pago y Kushki, sin que el número pase por el servidor del comercio; Rapyd se rechaza con \texttt{UNSUPPORTED\_OPERATION}. & SDK (navegador) & Alta \\ \hline
+RF-18 & El sistema debe exponer el motivo de rechazo como código nativo y categoría normalizada (\texttt{INSUFFICIENT\_FUNDS}, \texttt{INVALID\_CARD\_DATA}, \texttt{CARD\_RESTRICTED}, \texttt{FRAUD\_SUSPICION}, \texttt{NETWORK\_ERROR}, \texttt{AUTHENTICATION\_FAILED}, \texttt{DUPLICATED\_PAYMENT} o \texttt{UNKNOWN}). & SDK & Media \\ \hline
+RF-19 & El sistema debe listar los bancos PSE disponibles por pasarela y traducir el código de compensación de ACH Colombia (\texttt{PseBankCode}) al código que exige cada proveedor. & SDK & Media \\ \hline
+\end{longtable}
+\endgroup
 

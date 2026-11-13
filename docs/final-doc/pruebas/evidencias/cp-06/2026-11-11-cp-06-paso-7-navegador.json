@@ -1,0 +1,16 @@
+{
+  "bank": "Banco que aprueba",
+  "bankPage": "localhost:4817/v1/sim/wompi/pse/redirect",
+  "title": "¡Gracias! Tu pago fue aprobado",
+  "detail": "Recibimos tu pedido y te avisaremos cuando salga para tu casa.",
+  "ref": "Pedido CEIBA-1794419556173 · Total $ 48.000",
+  "apiCalls": [
+    "GET localhost:4817/v1/api/gateways",
+    "GET localhost:4817/v1/api/pse-banks",
+    "GET localhost:4817/v1/api/pse-banks",
+    "POST localhost:4817/v1/api/payments",
+    "GET localhost:4817/v1/sim/wompi/pse/redirect",
+    "GET localhost:4817/v1/api/payments/15c43633-4d49-4c4f-ad81-48ea37faa615"
+  ],
+  "blockedOutsideLoopback": []
+}

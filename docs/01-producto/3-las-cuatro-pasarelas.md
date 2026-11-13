@@ -13,7 +13,7 @@ Casi todo lo que sigue está **medido contra los sandboxes reales** entre el 18 
 | | **Wompi** | **Mercado Pago** | **Kushki** | **Rapyd** |
 |---|---|---|---|---|
 | **Autenticación** | `Bearer` con llave pública | `Bearer` con access token | Header propio: `Private-Merchant-Id` o `Public-Merchant-Id` | Firma HMAC por petición, con `salt`, `timestamp` y `access_key` |
-| **Formato del monto** | `amount_in_cents`, entero en centavos | `transaction_amount`, pesos | Objeto con desglose de IVA | `amount`, pesos |
+| **Formato del monto** | `amount_in_cents`, entero en centavos | `total_amount` en texto en una orden, `transaction_amount` en un pago; pesos | Objeto con desglose de IVA | `amount`, pesos |
 | **Llamadas para cobrar con tarjeta** | 2 (token de aceptación + cobro) | 3 (marca, tipo y orden), desde la 0.6.0 | 1 | 1, y devuelve redirección |
 | **Llamadas para PSE** | 1 + sondeo | 1 | 2 (token + init) | 2 (cliente + pago) |
 | **Consulta de estado** | 1 ruta | 2 rutas, se elige por el formato del id | Hasta 3 tanteos | 2 rutas, se elige por el prefijo del id |
@@ -24,7 +24,7 @@ Casi todo lo que sigue está **medido contra los sandboxes reales** entre el 18 
 | **Firma en lo que el comercio envía** | Sí, obligatoria | No | No | Sí, en cada petición |
 | **Contenido del webhook** | El pago completo | Solo un identificador | El pago | El pago |
 
-La fila más reveladora es la de llamadas: el mismo cobro con tarjeta cuesta entre una y dos peticiones según la pasarela, y con PSE ninguna de las cuatro coincide con otra. No hay forma de que un comercio escriba un código y sirva para las cuatro, y eso es precisamente lo que el SDK absorbe.
+La fila más reveladora es la de llamadas: el mismo cobro con tarjeta cuesta entre una y tres peticiones según la pasarela, y con PSE ninguna de las cuatro coincide con otra. No hay forma de que un comercio escriba un código y sirva para las cuatro, y eso es precisamente lo que el SDK absorbe.
 
 ---
 

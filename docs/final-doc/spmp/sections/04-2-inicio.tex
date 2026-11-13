@@ -70,4 +70,4 @@ La siguiente tabla describe las tareas de configuración y mantenimiento de la i
 \end{longtable}
 \end{center}
 
-Ninguna credencial se versiona en el repositorio. Las de los sandboxes viven en archivos \texttt{.env} locales, que \texttt{.gitignore} excluye, y en las variables de entorno de Render, que \texttt{render.yaml} declara con \texttt{sync: false} para que no se escriban en el archivo. En GitHub Actions, el único secreto que nombran los workflows es \texttt{NPM\_TOKEN}, el de la publicación en npm (\texttt{publish.yml}).
+Ninguna credencial se versiona en el repositorio. Las de los sandboxes viven en archivos \texttt{.env} locales, que \texttt{.gitignore} excluye, y en Render, en un archivo secreto (\textit{Secret File}) \texttt{.env} que el servicio lee al arrancar. \texttt{render.yaml} declara esas variables con \texttt{sync: false} para que sus valores no se escriban en el archivo. En GitHub Actions, el único secreto que nombran los workflows es \texttt{NPM\_TOKEN}, el de la publicación en npm (\texttt{publish.yml}).

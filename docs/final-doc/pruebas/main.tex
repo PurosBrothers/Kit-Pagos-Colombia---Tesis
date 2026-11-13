@@ -1,18 +1,34 @@
 \documentclass[10pt]{article}
+\PassOptionsToPackage{obeyspaces,spaces}{url} % Los comandos con \path conservan sus espacios
 \input{../comun/estilo}
+\usepackage{float} % Permite usar [H] para posicionamiento exacto de tablas
+\usepackage{longtable} % Tablas que pueden partirse entre páginas
+\usepackage{xltabular} % Tablas tabularx que pueden partirse entre páginas
+\usepackage{xurl} % Saltos de línea en rutas, URL e identificadores largos
 
-\NombreDocumento{Plan de Pruebas}
-\VersionDocumento{0.1}
-\FechaDocumento{octubre de 2026}
+\NombreDocumento{Plan de Pruebas del Proyecto (PTP)}
+\VersionDocumento{0.4}
+\FechaDocumento{noviembre de 2026}
 
 \begin{document}
 
 \Portada
 
 \begin{HistorialDeCambios}
-  \Cambio{0.1}{28/10/2026}{Portada, historial de cambios e índices con el estilo común (issue \#167).}{Joan Emmanuel Orduz Chia}
+  \Cambio{0.1}{28/10/2026}{Portada, historial de cambios e índices con el estilo común.}{Joan Emmanuel Orduz Chia}
+  \Cambio{0.2}{09/11/2026}{Ítems de prueba, estrategia, siete casos diseñados y estructura de resultados.}{Andres Henao Niño, Joan Emmanuel Orduz Chia, Joshua Prieto Zambrano, David Estevan Rodriguez Jurado}
+  \Cambio{0.3}{09/11/2026}{Estrategia de carga aislada de las pasarelas, desglose por archivo de las pruebas unitarias y de integración, CP-02 a CP-07 en los anexos y correcciones de la revisión.}{Joan Emmanuel Orduz Chia}
+  \Cambio{0.4}{11/11/2026}{Resultados de la ejecución: los siete casos, las suites, las pruebas de contrato, la carga, los defectos con su corrección y las evidencias.}{Joan Emmanuel Orduz Chia}
 \end{HistorialDeCambios}
 
 \Indices
+
+\input{sections/01-introduccion}
+\input{sections/02-items-prueba}
+\input{sections/03-estrategia-pruebas}
+\input{sections/04-casos-prueba}
+\input{sections/05-resultados}
+\input{sections/06-referencias}
+\input{sections/07-anexos}
 
 \end{document}

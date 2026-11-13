@@ -5,7 +5,7 @@ La Figura \ref{fig:deployment} presenta el Diagrama de Despliegue construido baj
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.6\textwidth]{"../../architecture/Simulador API/Deploy Diagram - C4.png"}
+\includegraphics{"../../architecture/Simulador API/Deploy Diagram - C4.pdf"}
 \caption{Diagrama de despliegue de la API de simulación}
 \label{fig:deployment}
 \end{figure}
@@ -13,13 +13,13 @@ La Figura \ref{fig:deployment} presenta el Diagrama de Despliegue construido baj
 \subsection{Actores externos}
 
 \subsubsection{Desarrollador / Tester QA}
-Este actor es quien durante la fase de evaluación accede directamente a la API mediante un navegador o herramientas como Postman, con el fin de explorar los endpoints documentados, ejecutar los distintos escenarios de prueba disponibles (aprobado, rechazado, fondos insuficientes, timeout y error de red) y disparar manualmente el envío de webhooks sintéticos.
+Este actor es quien durante la fase de evaluación accede directamente a la API mediante un navegador o herramientas como Postman, con el fin de explorar los endpoints documentados, ejecutar los distintos escenarios de prueba disponibles (aprobado, rechazado, pendiente, expirado, timeout, respuesta lenta y error de red) y disparar manualmente el envío de webhooks sintéticos.
 
 \subsubsection{Aplicación del comercio}
 Representada como un sistema externo debido a que, como se mencionó, el SDK embebido dentro de ella no forma parte del alcance de esta vista; su única relevancia aquí es que constituye el consumidor real de la API cuando el SDK opera en modo simulación, y a la vez es el receptor de los webhooks que la API despacha de forma asíncrona.
 
 \subsection{Infraestructura de despliegue}
-La API se aloja dentro de una plataforma en la nube de tipo PaaS, la alternativa seleccionada corresponde a Render. Dentro de dicha plataforma, la aplicación corre sobre una instancia con runtime de Node.js en su versión 18 o superior, que es el mismo requisito de compatibilidad definido para el resto del proyecto. Finalmente, dentro de ese runtime se ejecuta el contenedor lógico de la API de Simulación, construido sobre Fastify y TypeScript, que expone tanto los endpoints de simulación bajo el patrón \texttt{/v1/sim/\{pasarela\}/*} como el endpoint de disparo manual de webhooks \texttt{/v1/sim/webhooks/trigger} y la documentación interactiva generada automáticamente en /docs mediante la especificación OpenAPI 3.0.
+La API se aloja en Render, una plataforma en la nube de tipo PaaS. El servicio se denomina \texttt{kit-pagos-colombia}, se despliega desde la rama \texttt{devops} con \texttt{rootDir: simulator-api} y runtime Node.js 20.x, compatible con el requisito \texttt{>=20.19} que declara el paquete. La infraestructura se define como código en \texttt{render.yaml}, que declara el servicio web, el comando de arranque, el health check en \texttt{/health} y las variables de entorno no secretas; los secretos se configuran en el panel de Render. La URL pública es \url{https://kit-pagos-colombia.onrender.com}. El plan gratuito duerme la instancia tras un periodo de inactividad, de modo que la primera petición puede tardar en despertar (\textit{cold start}); ese comportamiento se registra como riesgo técnico y se mitiga con un ping periódico durante la evaluación. Dentro del runtime se ejecuta el contenedor lógico de la API de Simulación, construido sobre Fastify y TypeScript, que expone las dos superficies HTTP: \texttt{/v1/sim/\{pasarela\}/*} y \texttt{/v1/sim/webhooks/trigger} para la simulación, \texttt{/v1/api/*} para las operaciones de Kit Pagos, y la documentación interactiva en \texttt{/docs} (con \texttt{/docs/json} y \texttt{/docs/yaml}) mediante OpenAPI 3.0.3.
 
 \subsection{Relaciones y Flujos de Comunicación}
 Las relaciones del diagrama reflejan tres flujos de comunicación, todos ellos sobre HTTPS. El primero corresponde a la exploración y prueba directa que realiza el Desarrollador o Tester QA sobre la API desplegada. El segundo corresponde a las solicitudes de pago que la Aplicación del Comercio envía hacia la API cuando el SDK se encuentra configurado en modo simulación, replicando así el mismo contrato que tendría una solicitud dirigida a una pasarela real. El tercero es el envío asíncrono de webhooks sintéticos firmados desde la API hacia la Aplicación del Comercio, que permite validar que el mecanismo de verificación de firmas del SDK funcione correctamente frente a eventos generados por el simulador.
