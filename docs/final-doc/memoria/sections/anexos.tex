@@ -1,30 +1,64 @@
 \section{ANEXOS}
 \label{sec:anexos}
 
-Los anexos reúnen los artefactos publicados y verificables del proyecto. No se duplican documentos completos: cada entrada describe qué contiene el artefacto y dónde se consulta. Las rutas de la tabla son relativas a la raíz del repositorio público del proyecto en GitHub, \url{https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis}. Lo mismo vale para las rutas del resto de la memoria que empiezan por una carpeta del repositorio, como \path{docs/evaluation/informe-comparativo-fase-5.md}. Todos los artefactos de la tabla están en ese repositorio, salvo el paquete publicado en npm.
+Los anexos del proyecto son cuatro documentos: el Documento de arquitectura de software (SAD), la Especificación de requisitos de software (SRS), el Plan de gestión del proyecto de software (SPMP) y el Plan de pruebas del proyecto (PTP). Cada uno está en una carpeta de \path{docs/final-doc/}, en el repositorio público del proyecto en GitHub, \url{https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis}. Además, la memoria remite a otros artefactos del mismo repositorio, salvo el paquete publicado en npm. No son anexos, y la segunda tabla los numera aparte. No se duplican documentos completos: cada entrada describe qué contiene el artefacto y dónde se consulta. Las rutas de las tablas son relativas a la raíz del repositorio, y estas tablas son el único lugar de la memoria donde aparecen.
+
+\newcounter{anexo}
+\newcommand{\letraanexo}[1]{\ifcase#1\or A\or B\or C\or D\or E\or F\or G\or H\or I\or J\or K\or L\or M\or N\or O\or P\or Q\or R\or S\or T\or U\or V\or W\or X\or Y\or Z\fi}
+\renewcommand{\theanexo}{\letraanexo{\value{anexo}}}
+\newcommand{\anexo}[1]{\refstepcounter{anexo}\label{#1}\theanexo}
+\newcounter{artefacto}
+\renewcommand{\theartefacto}{\arabic{artefacto}}
+\newcommand{\artefacto}[1]{\refstepcounter{artefacto}\label{#1}\theartefacto}
 
 {\small
 \renewcommand{\arraystretch}{1.25}
-\begin{xltabular}{\textwidth}{|>{\raggedright\arraybackslash}p{1.1cm}|>{\raggedright\arraybackslash}p{3.5cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{3.9cm}|}
+\begin{longtable}{|>{\raggedright\arraybackslash}p{1.1cm}|>{\raggedright\arraybackslash}p{3.3cm}|>{\raggedright\arraybackslash}p{4.9cm}|>{\raggedright\arraybackslash}p{4.4cm}|}
 \caption{Anexos del proyecto}\label{tab:anexos}\\
 \hline
-\textbf{Anexo} & \textbf{Artefacto} & \textbf{Contenido} & \textbf{Ruta o URL} \\ \hline
+\textbf{Anexo} & \textbf{Documento o artefacto} & \textbf{Contenido} & \textbf{Ruta o URL} \\ \hline
 \endfirsthead
 \caption[]{Anexos del proyecto (continuación)}\\
 \hline
-\textbf{Anexo} & \textbf{Artefacto} & \textbf{Contenido} & \textbf{Ruta o URL} \\ \hline
+\textbf{Anexo} & \textbf{Documento o artefacto} & \textbf{Contenido} & \textbf{Ruta o URL} \\ \hline
 \endhead
-A & Documento de Arquitectura de Software (SAD) v2.0 & Vistas C4, modelo de dominio, ASR, restricciones, decisiones de arquitectura y riesgos técnicos. & \path{docs/final-doc/sad/} \\ \hline
-B & Especificación de Requisitos de Software (SRS) v2.0 & Requisitos funcionales y no funcionales, actores y criterios de aceptación. & \path{docs/final-doc/srs/} \\ \hline
-C & Plan de Gestión del Proyecto (SPMP) v2.0 & Alcance, cronograma, roles, riesgos y plan de calidad. & \path{docs/final-doc/spmp/} \\ \hline
-D & Plan de Pruebas del Proyecto (PTP) v0.4 y evidencias & Estrategia, ítems, siete casos, resultados, defectos y salidas de la corrida. & \path{docs/final-doc/pruebas/} y \path{docs/final-doc/pruebas/evidencias/} \\ \hline
-E & Informe comparativo de la Fase 5 & Protocolo, las seis variables medidas, lectura por variable, veredicto y amenazas a la validez. & \path{docs/evaluation/informe-comparativo-fase-5.md} \\ \hline
-F & Recolección de las seis variables & Tabla de transacciones de la variable 5 y trazabilidad de las mediciones. & \path{docs/evaluation/recoleccion-seis-variables.md} \\ \hline
-G & Datos de métricas y conceptos nativos & Reportes CK por archivo y por clase, y conteo de conceptos nativos de los prototipos B y D. & \path{docs/evaluation/} (reportes CK y de conceptos nativos) \\ \hline
-H & Matriz de trazabilidad & Para cada requisito funcional, los componentes que lo implementan, su estado y las pruebas que lo cubren. & \path{docs/project-management/traceability-matrix.md} \\ \hline
-I & Diagramas y fuentes PlantUML & Diagramas C4 de contexto, contenedores y componentes, de despliegue del simulador, de clases y de secuencia, con sus fuentes editables. & \path{docs/architecture/SDK/} y \path{docs/architecture/Simulador}\texttt{~}\path{API/} \\ \hline
-J & Paquete npm y manual de uso & SDK publicado, módulo de navegador y documentación de instalación y configuración. & \url{https://www.npmjs.com/package/kit-pagos-colombia} y \path{docs/manual/} \\ \hline
-K & Datos de prueba por pasarela & Tarjetas, titulares, documentos y montos reservados para Wompi, Mercado Pago, Kushki y Rapyd. & \path{docs/testing-data/} \\ \hline
-L & Repositorio del proyecto & Código del SDK, la API de Simulación, los ejemplos, los prototipos y la documentación. & \url{https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis} \\ \hline
-\end{xltabular}
+\anexo{anx:sad} & Documento de arquitectura de software (SAD) v2.0 & Vistas C4, modelo de dominio, requisitos arquitectónicamente significativos, restricciones, decisiones de arquitectura (ADR) y riesgos técnicos. & \path{docs/final-doc/sad/} \\ \hline
+\anexo{anx:srs} & Especificación de requisitos de software (SRS) v2.0 & Requisitos funcionales y no funcionales, actores, historias de usuario y criterios de aceptación. & \path{docs/final-doc/srs/} \\ \hline
+\anexo{anx:spmp} & Plan de gestión del proyecto de software (SPMP) v2.0 y versión 1.0 & Objetivos del proyecto, alcance, ciclo de vida, cronograma, roles, riesgos y plan de calidad. La versión 1.0, de mayo de 2026, se conserva en PDF. & \path{docs/final-doc/spmp/} y \path{docs/final-doc/spmp/SPMP-original.pdf} \\ \hline
+\anexo{anx:pruebas} & Plan de pruebas del proyecto (PTP) v0.4 y evidencias & Estrategia, ítems, siete casos, resultados, defectos y salidas de la corrida. & \path{docs/final-doc/pruebas/} y \path{docs/final-doc/pruebas/evidencias/} \\ \hline
+\end{longtable}
+
+\bigskip
+\begin{longtable}{|>{\raggedright\arraybackslash}p{1.1cm}|>{\raggedright\arraybackslash}p{3.3cm}|>{\raggedright\arraybackslash}p{4.9cm}|>{\raggedright\arraybackslash}p{4.4cm}|}
+\caption{Artefactos del repositorio a los que remite la memoria}\label{tab:artefactos}\\
+\hline
+\textbf{Núm.} & \textbf{Documento o artefacto} & \textbf{Contenido} & \textbf{Ruta o URL} \\ \hline
+\endfirsthead
+\caption[]{Artefactos del repositorio a los que remite la memoria (continuación)}\\
+\hline
+\textbf{Núm.} & \textbf{Documento o artefacto} & \textbf{Contenido} & \textbf{Ruta o URL} \\ \hline
+\endhead
+\artefacto{anx:memoria} & Documento de memoria & Fuentes en LaTeX de este documento. & \path{docs/final-doc/memoria/} \\ \hline
+\artefacto{anx:objetivos} & Seguimiento de los objetivos del proyecto de grado & Texto aprobado de los objetivos, estado y ubicación de su evidencia, requisitos que la aportan, patrones de integración y diferencias con la versión 1.0 del SPMP. & \path{docs/project-management/thesis-objectives.md} \\ \hline
+\artefacto{anx:metodologia} & Metodología del proyecto & Fases e iteraciones, definición de terminado, fórmulas y umbrales de las métricas, su adaptación a archivo y excepciones admitidas. & \path{docs/project-management/methodology.md} \\ \hline
+\artefacto{anx:plan-eval} & Plan de evaluación de los prototipos & Diseño del experimento de la Fase 5, las seis variables, la hipótesis escrita antes de medir y las amenazas a la validez. & \path{docs/project-management/prototypes-evaluation-plan.md} \\ \hline
+\artefacto{anx:informe} & Informe comparativo de la Fase 5 & Protocolo, las seis variables medidas, lectura por variable, veredicto y amenazas a la validez. & \path{docs/evaluation/informe-comparativo-fase-5.md} \\ \hline
+\artefacto{anx:recoleccion} & Recolección de las seis variables & Tabla resumen de las variables, transacciones de la variable 5 y trazabilidad de las mediciones. & \path{docs/evaluation/recoleccion-seis-variables.md} \\ \hline
+\artefacto{anx:medicion} & Instrumentos y reportes de medición & Script de métricas CK, detector de conceptos nativos y reportes CK por archivo y por clase de los prototipos B y D. & \path{sdk/scripts/ck-metrics.ts}, \path{sdk/scripts/native-concepts.ts} y \path{docs/evaluation/} (reportes en JSON) \\ \hline
+\artefacto{anx:metricas} & Documentación de las métricas y de las pruebas & Qué mide cada métrica CK, cómo se calcula, las excepciones vigentes, las suites de pruebas y cómo se miden los prototipos. & \path{docs/04-metricas-y-pruebas/} \\ \hline
+\artefacto{anx:trazabilidad} & Matriz de trazabilidad & Para cada requisito funcional, los componentes que lo implementan, su estado y las pruebas que lo cubren. & \path{docs/project-management/traceability-matrix.md} \\ \hline
+\artefacto{anx:registro} & Registro de decisiones de arquitectura & Decisiones de diseño con la alternativa descartada, mediciones en los sandboxes, con su fecha y defectos encontrados. & \path{docs/architecture/architecture-log.md} \\ \hline
+\artefacto{anx:producto} & Caracterización de las pasarelas y conceptos de pago & Qué es una pasarela de pago, conceptos técnicos como PSE, firmas y montos, y la caracterización técnica de las cuatro pasarelas. & \path{docs/01-producto/} \\ \hline
+\artefacto{anx:arquitectura} & Documentación técnica de la arquitectura & Arquitectura hexagonal en el SDK, API de Simulación, capas y componentes, glosario del dominio y análisis de la representación del dinero. & \path{docs/02-arquitectura/} y \path{docs/architecture/money-representation-analysis.md} \\ \hline
+\artefacto{anx:diagramas} & Diagramas y fuentes PlantUML & Diagramas C4 de contexto, contenedores y componentes, de despliegue del simulador, de clases y de secuencia, con sus fuentes editables. & \path{docs/architecture/SDK/} y \path{docs/architecture/Simulador}\texttt{~}\path{API/} \\ \hline
+\artefacto{anx:datos} & Documentación de datos de prueba & Credenciales de sandbox, tarjetas, titulares, documentos, bancos, montos reservados y flujos medidos de las cuatro pasarelas. Cada dato declara su nivel de evidencia. & \path{docs/testing-data/} \\ \hline
+\artefacto{anx:paquete} & Paquete npm, guías y manual de uso & SDK publicado con su módulo de navegador, guía del paquete, guía de implementación y manual de instalación y configuración. & \url{https://www.npmjs.com/package/kit-pagos-colombia}, \path{sdk/README.md}, \path{docs/03-sdk/} y \path{docs/manual/} \\ \hline
+\artefacto{anx:sdk} & Código del SDK & Capas de dominio, aplicación e infraestructura, módulo de navegador, pruebas y scripts de calidad. & \path{sdk/src/}, \path{sdk/src-browser/} y \path{sdk/scripts/} \\ \hline
+\artefacto{anx:simulador} & API de Simulación, colección de Postman y despliegue & Rutas \texttt{/v1/sim} y \texttt{/v1/api}, escenarios, registro de excepciones de métricas, colección de Postman con sus entornos y configuración del despliegue en Render. & \path{simulator-api/}, \path{simulator-api/postman/} y \path{render.yaml} \\ \hline
+\artefacto{anx:ejemplos} & Ejemplos ejecutables & Doce programas que usan el SDK con la API de Simulación. & \path{examples/} \\ \hline
+\artefacto{anx:prototipos} & Prototipos A, B, C y D & A en \path{checkout-con-sdk-solo-back}, B en \path{checkout-con-sdk-front-back}, C en \path{checkout-frontend-rest} y D en \path{checkout-sin-solucion}, más el script que comprueba que B y D comparten el esqueleto. & \path{prototypes/} y \path{prototypes/check-skeleton-parity.sh} \\ \hline
+\artefacto{anx:ci} & Integración continua y publicación & Flujos de GitHub Actions: pruebas, métricas y compilación de cada componente, compilación de los cinco documentos y publicación en npm. & \path{.github/workflows/} \\ \hline
+\artefacto{anx:landing} & Página de presentación & Sitio estático que presenta el framework. & \path{landing/} y \url{https://purosbrothers.github.io/Kit-Pagos-Colombia---Tesis/} \\ \hline
+\artefacto{anx:repositorio} & Repositorio del proyecto & Código del SDK, la API de Simulación, los ejemplos, los prototipos y la documentación. & \url{https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis} \\ \hline
+\end{longtable}
 }
