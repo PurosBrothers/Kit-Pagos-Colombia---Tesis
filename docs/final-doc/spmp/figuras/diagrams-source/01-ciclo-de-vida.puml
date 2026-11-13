@@ -53,7 +53,7 @@ repeat
     repeat while (<&clock> Revisión interna y mejoras)
   }
   :<color:#1F3A6E><b>5. Demostración y evaluación</b></color>
-Demostración del artefacto y evaluación;
+Demostración del framework y evaluación;
   -[dashed]->
   |Director del Proyecto|
   :<&person> Revisión de entregables;

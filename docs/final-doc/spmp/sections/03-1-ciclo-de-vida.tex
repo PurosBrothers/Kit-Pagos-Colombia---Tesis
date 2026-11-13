@@ -84,7 +84,7 @@ Antes de justificar la elección de DSR, es necesario revisar los modelos que se
 
 El modelo en cascada estructura el desarrollo en fases secuenciales: análisis de requisitos, diseño, implementación, pruebas y despliegue, con transiciones unidireccionales entre ellas. Su mayor fortaleza es la claridad estructural que ofrece, lo que facilita la planificación anticipada y la documentación sistemática. Sin embargo, su rigidez resulta problemática para proyectos en los que el entendimiento del problema evoluciona a medida que se trabaja en él.
 
-En el caso del Kit Pagos Colombia, la fase de análisis de las APIs consiste en estudiar cuatro documentaciones técnicas distintas, y es habitual que ese proceso revele detalles que afecten las decisiones de diseño. El modelo en cascada no tiene mecanismos formales para incorporar esos hallazgos una vez que la fase de análisis ha cerrado. Adicionalmente, la dimensión investigativa del proyecto (evaluar el artefacto y compararlo con un enfoque alternativo) no tiene lugar natural dentro del ciclo cascada, que asume que el sistema se entrega y eso constituye el fin del proceso.
+En el caso del Kit Pagos Colombia, la fase de análisis de las APIs consiste en estudiar cuatro documentaciones técnicas distintas, y es habitual que ese proceso revele detalles que afecten las decisiones de diseño. El modelo en cascada no tiene mecanismos formales para incorporar esos hallazgos una vez que la fase de análisis ha cerrado. Adicionalmente, la dimensión investigativa del proyecto (evaluar el framework y compararlo con un enfoque alternativo) no tiene lugar natural dentro del ciclo cascada, que asume que el sistema se entrega y eso constituye el fin del proceso.
 
 \textbf{Modelo incremental}
 
@@ -96,7 +96,7 @@ Sin embargo, el modelo incremental no proporciona un marco metodológico para la
 
 Scrum es el marco de trabajo ágil más extendido. Organiza el desarrollo en sprints cortos con retrospectivas, backlog priorizado y participación activa de un Product Owner que representa las necesidades del usuario final. Sus fortalezas en adaptabilidad y entrega continua de valor son bien conocidas.
 
-El problema de aplicar Scrum como marco principal en este proyecto es doble. Por un lado, no hay un cliente externo: el Product Owner sería en la práctica el equipo mismo, lo que elimina el mecanismo de validación externa que Scrum presupone. Por otro lado, Scrum tampoco ofrece un marco para la contribución académica ni para la evaluación sistemática del artefacto contra un escenario de control. Un proyecto de grado no puede limitarse a entregar software funcional; debe justificar por qué ese software resuelve el problema mejor que las alternativas existentes, y para eso necesita un método.
+El problema de aplicar Scrum como marco principal en este proyecto es doble. Por un lado, no hay un cliente externo: el Product Owner sería en la práctica el equipo mismo, lo que elimina el mecanismo de validación externa que Scrum presupone. Por otro lado, Scrum tampoco ofrece un marco para la contribución académica ni para la evaluación sistemática del framework contra un escenario de control. Un proyecto de grado no puede limitarse a entregar software funcional; debe justificar por qué ese software resuelve el problema mejor que las alternativas existentes, y para eso necesita un método.
 
 Esto no significa que Scrum sea irrelevante para el proyecto. Dentro de la fase de desarrollo de DSR, los principios de Scrum son útiles para organizar el trabajo iterativo: el backlog permite priorizar componentes, los sprints cortos (de una semana) ayudan a mantener el ritmo, y las revisiones periódicas facilitan la detección temprana de problemas de implementación. Scrum se incorpora entonces como práctica interna de la fase 4, no como marco metodológico del proyecto completo.
 
@@ -104,9 +104,9 @@ Esto no significa que Scrum sea irrelevante para el proyecto. Dentro de la fase 
 
 DSR fue propuesto por Peffers et al. (2007) como metodología para proyectos cuyo resultado central es la construcción de un artefacto que resuelve un problema real. A diferencia de los modelos anteriores, DSR integra explícitamente la investigación y la construcción: no basta con que el sistema funcione, debe evaluarse su efectividad frente al problema que motivó su creación y los resultados deben comunicarse de forma rigurosa.
 
-Las seis fases adaptadas de DSR corresponden directamente a lo que este proyecto necesita hacer: identificar y caracterizar el problema de la fragmentación de las APIs colombianas de pago; definir los objetivos del framework y los criterios con que se medirá su éxito; diseñar la arquitectura del SDK y la API de simulación; construir el artefacto; demostrarlo y evaluarlo con las métricas CK; y comunicar los resultados a través del documento de grado y el repositorio público.
+Las seis fases adaptadas de DSR corresponden directamente a lo que este proyecto necesita hacer: identificar y caracterizar el problema de la fragmentación de las APIs colombianas de pago; definir los objetivos del framework y los criterios con que se medirá su éxito; diseñar la arquitectura del SDK y la API de simulación; construir el framework; demostrarlo y evaluarlo con las métricas CK; y comunicar los resultados a través del documento de grado y el repositorio público.
 
-Ninguno de los modelos anteriores ofrece ese recorrido completo. DSR es la única metodología que exige los tres elementos que este proyecto requiere: rigor en el diseño del artefacto, un mecanismo de evaluación experimental y un componente de comunicación académica.
+Ninguno de los modelos anteriores ofrece ese recorrido completo. DSR es la única metodología que exige los tres elementos que este proyecto requiere: rigor en el diseño del framework, un mecanismo de evaluación experimental y un componente de comunicación académica.
 
 \textbf{Prácticas específicas adoptadas}
 
