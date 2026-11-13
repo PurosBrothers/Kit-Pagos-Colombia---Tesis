@@ -2,7 +2,7 @@
 
 \subsection{Modelo de Ciclo de Vida}
 
-La naturaleza del proyecto determina cuál metodología se elige antes de analizar las alternativas. Cuando el aporte de un trabajo investigativo no es una teoría ni la observación de algún fenómeno, sino la construcción de un sistema que resuelve un problema real, la metodología más acorde al Kit Pagos Colombia es Design Science Research (DSR) (Peffers, K., Tuunanen, T., Rothenberger, M., \& Chatterjee, S, 2007). Esta metodología organiza el proceso alrededor de una pregunta central: ¿el artefacto fue construido correctamente y resuelve el problema para el que fue diseñado? Esas dos dimensiones, estructuran las fases del proyecto y le dan coherencia a la investigación.
+La naturaleza del proyecto determina cuál metodología se elige antes de analizar las alternativas. Cuando el aporte de un trabajo investigativo no es una teoría ni la observación de algún fenómeno, sino la construcción de un sistema que resuelve un problema real, la metodología más acorde al Kit Pagos Colombia es Design Science Research (DSR) (Peffers, K., Tuunanen, T., Rothenberger, M., \& Chatterjee, S, 2007). Esta metodología organiza el proceso alrededor de una pregunta central: ¿el artefacto fue construido correctamente y resuelve el problema para el que fue diseñado? Esas dos dimensiones estructuran las fases del proyecto y le dan coherencia a la investigación.
 
 % El original no tiene 3.1.1, y el texto cita la 3.1.3 en las secciones 5.2.1, 6, 7.1 y 7.4.
 \setcounter{subsubsection}{1}
@@ -10,7 +10,7 @@ La naturaleza del proyecto determina cuál metodología se elige antes de analiz
 
 \begin{itemize}
   \item \textbf{Identificación y definición del problema:} Consiste en estudiar las documentaciones técnicas de Wompi, Rapyd (que adquirió PayU GPO), Mercado Pago y Kushki para identificar sus diferencias en aspectos relevantes para su implementación tales como, autenticación, estructuras de respuesta, manejo de webhooks y comportamiento ante errores. El resultado de esta fase es una especificación técnica que traduce la fragmentación del ecosistema en requerimientos funcionales concretos para el framework. Esta fase produce el mapa del ecosistema y el repositorio de parámetros de prueba.
-  \item \textbf{Definición de objetivos:} A partir del análisis anterior se delimita el alcance del framework: qué operaciones debe soportar, bajo qué criterios se seleccionaron las pasarelas, cómo se medirá el éxito del proyecto y cuales son las características que deben tener los proyectos prototípicos usados en la evaluación. Esta fase produce el documento de alcance, los criterios de evaluación formalizados y el backlog inicial.
+  \item \textbf{Definición de objetivos:} A partir del análisis anterior se delimita el alcance del framework: qué operaciones debe soportar, bajo qué criterios se seleccionaron las pasarelas, cómo se medirá el éxito del proyecto y cuáles son las características que deben tener los proyectos prototípicos usados en la evaluación. Esta fase produce el documento de alcance, los criterios de evaluación formalizados y el backlog inicial.
   \item \textbf{Diseño:} Aquí las decisiones del documento de alcance se convierten en contratos arquitectónicos verificables: el modelo de dominio unificado del framework, los puertos de la arquitectura hexagonal, la especificación de los adaptadores por cada pasarela y el diseño de la API de simulación con sus escenarios de prueba. Esta fase produce un conjunto de artefactos de diseño que orientan el desarrollo sin ambigüedad y que también funcionan como criterios de corrección durante la implementación.
   \item \textbf{Desarrollo:} Es la fase más extensa del proyecto y la única que opera de forma iterativa internamente. Se construye en tres iteraciones dependientes:
   \begin{itemize}
@@ -18,7 +18,7 @@ La naturaleza del proyecto determina cuál metodología se elige antes de analiz
     \item Los adaptadores de cada pasarela con bajo acoplamiento, siendo independientes entre sí.
     \item La API de Simulación completa, la documentación de datos de prueba, la página de presentación y los prototipos B y D, los cuatro entregables que \texttt{methodology.md} (sección 2.1) asigna a esta iteración.
   \end{itemize}
-  El orden no es arbitrario: la arquitectura hexagonal impone que el núcleo y sus contratos existan antes de que cualquier adaptador pueda construirse correctamente. La versión 1.0 de este plan ponía los prototipos en la fase de demostración; sus issues quedaron en el hito de la Iteración 3 y se cerraron el 25 de octubre de 2026.
+  El orden no es arbitrario: la arquitectura hexagonal impone que el núcleo y sus contratos existan antes de que cualquier adaptador pueda construirse correctamente. La versión 1.0 de este plan ponía los prototipos en la fase de demostración; en la ejecución quedaron en el hito de la Iteración 3, y sus issues se cerraron el 25 de octubre de 2026.
   \item \textbf{Demostración y evaluación:} El framework se aplica en los proyectos prototípicos y sobre el código resultante se miden seis variables, entre ellas las métricas WMC, CBO y RFC de Chidamber y Kemerer (1994). El prototipo B, que usa el framework, se compara con el D, que integra las cuatro pasarelas directamente contra sus APIs nativas, lo que constituye el núcleo experimental del proyecto (\path{docs/project-management/prototypes-evaluation-plan.md}). En paralelo de esta evaluación, sucede la demostración, siendo esta el acto de integrar el framework en los prototipos.
   \item \textbf{Comunicación:} Esta fase comprende la consolidación del documento de trabajo de grado y la publicación del repositorio público con documentación suficiente para que un desarrollador externo pueda integrar el kit sin haber estado involucrado en el desarrollo del mismo. Aunque esta fase cierra formalmente el ciclo DSR, su redacción comienza desde las primeras fases: el documento de grado no es una actividad de cierre sino un artefacto que crece en paralelo con el proyecto.
 \end{itemize}
@@ -34,7 +34,7 @@ Los seis hitos que marcan el avance del ciclo de vida son:
   \item H4: los cuatro adaptadores y la API de simulación completos y con pruebas internas aprobadas; H5, los proyectos prototípicos evaluados con las métricas CK (Chidamber, Kemerer, 1994) registradas; y H6, el repositorio público publicado y el documento de grado entregado.
 \end{itemize}
 
-La Tabla~\ref{tab:hitos-reales} compara la semana en que el plan ubicaba cada hito con la fecha en que se alcanzó. Las semanas S01 a S18 de la versión 1.0 no tenían fechas; aquí se anclan al calendario con la Iteración 1 en la semana del 24 de agosto de 2026, como hace \texttt{methodology.md} (sección 10.2), así que la S01 empieza el 13 de julio. Las fechas reales salen del último issue cerrado de cada hito de GitHub, en hora de Colombia, y de las respuestas del equipo para las Fases 1 y 2.
+La Tabla~\ref{tab:hitos-reales} compara la semana en que el plan ubicaba cada hito con la fecha en que se alcanzó. Las semanas S01 a S18 de la versión 1.0 no tenían fechas. Aquí se anclan al calendario con la Iteración 1 en la semana del 24 de agosto de 2026, como hace \texttt{methodology.md} (sección 10.2), así que la S01 empieza el 13 de julio. Las fechas reales salen del último issue cerrado de cada hito de GitHub, en hora de Colombia, y de las respuestas del equipo para las Fases 1 y 2.
 
 \begin{center}
 \renewcommand{\arraystretch}{1.2}
@@ -67,7 +67,7 @@ La Tabla~\ref{tab:hitos-reales} compara la semana en que el plan ubicaba cada hi
 \end{longtable}
 \end{center}
 
-La Figura~\ref{fig:ciclo-de-vida} ilustra el ciclo de vida del proyecto. La fase 4 al ser el desarrollo se tomará como iterativa de manera interna a la misma con el fin de garantizar un desarrollo ágil.
+La Figura~\ref{fig:ciclo-de-vida} ilustra el ciclo de vida del proyecto. La fase 4, que corresponde al desarrollo, es iterativa internamente, con el fin de garantizar un desarrollo ágil.
 
 \begin{figure}[H]
   \centering
@@ -122,4 +122,4 @@ Para las pruebas, el framework se valida primero contra la API de simulación pr
 
 Para la revisión de código, se adopta una política estricta de pull requests: ningún cambio entra a las ramas \texttt{devops} y \texttt{main} sin un pull request revisado por al menos otro integrante (\texttt{CONTRIBUTING.md}). Esto funciona como mecanismo de control de calidad continuo y también como transferencia de conocimiento entre quienes trabajan en frentes distintos del framework.
 
-Para la evaluación con métricas CK, el diseño experimental se fija antes de medir y no se improvisa al llegar a la fase 5. Los proyectos prototípicos y la herramienta de medición se definen con anticipación, igual que las unidades sobre las que se calculan las métricas: archivos, desde la Fase 5 (\texttt{methodology.md}, sección 6.1.1). Así, la comparación entre integración directa e integración con el framework es reproducible y no queda sujeta a sesgos de selección posterior.
+Para la evaluación con métricas CK, el diseño experimental se fija antes de medir y no se improvisa al llegar a la fase 5. Los proyectos prototípicos y la herramienta de medición se definen con anticipación, igual que las unidades sobre las que se calculan las métricas, que en la Fase 5 pasaron a ser archivos (\texttt{methodology.md}, sección 6.1.1). Así, la comparación entre integración directa e integración con el framework es reproducible y no queda sujeta a sesgos de selección posterior.

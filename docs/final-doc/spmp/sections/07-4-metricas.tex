@@ -1,8 +1,8 @@
 \subsection{Métricas y Proceso de Medición}
 
-Para que el proyecto pueda ser gestionado efectivamente, es esencial medir el progreso, la calidad de los artefactos y la eficiencia del equipo. La versión 1.0 de este plan definía seis métricas, con su recolección en Notion y en hojas de cálculo, una revisión en la reunión de los jueves y un reporte consolidado al cierre de cada fase. Esas herramientas y reuniones no se usaron (sección 5.2). Las métricas que se miden en el proyecto son las que automatiza la integración continua y las que se leen en GitHub; las demás se dicen como no registradas.
+Para que el proyecto pueda ser gestionado efectivamente, es esencial medir el progreso, la calidad de los artefactos y la eficiencia del equipo. La versión 1.0 de este plan definía seis métricas, con su recolección en Notion y en hojas de cálculo, una revisión en la reunión de los jueves y un reporte consolidado al cierre de cada fase. Esas herramientas y reuniones no se usaron (sección 5.2). Las métricas que se miden en el proyecto son las que automatiza la integración continua y las que se leen en GitHub; las demás se declaran como no registradas.
 
-En resumen, las métricas del proyecto son las siguientes:
+Las métricas del proyecto son las siguientes:
 
 \begin{itemize}
   \item \textbf{Completitud de tareas}
@@ -20,7 +20,7 @@ La cobertura de pruebas mide el porcentaje de ramas, funciones, líneas y senten
   \item \textbf{Métricas de complejidad CK y MAX\_CC}
 \end{itemize}
 
-WMC (Weighted Methods per Class) mide la complejidad de los métodos de una clase como la suma de su complejidad ciclomática, y CBO (Coupling Between Object Classes), su acoplamiento con otras clases. RFC (Response For a Class) cuenta los métodos que pueden ejecutarse en respuesta a un mensaje a la clase, y MAX\_CC es la mayor complejidad ciclomática de uno de sus métodos. Sus referencias son las secciones 3.3.4, 5.2.3 y 7.5. Los umbrales vigentes son WMC $\le 20$, CBO $\le 5$, RFC $\le 20$ y MAX\_CC $\le 10$ (\texttt{methodology.md}, sección 6). La versión 1.0 ponía WMC $\le 15$ y no tenía MAX\_CC; el cambio se hizo cuando la fórmula de WMC pasó de contar métodos a sumar su complejidad. La integración continua las mide en cada pull request del SDK y del simulador, en modo guarda (\texttt{npm run metrics}; el simulador con su registro de excepciones, \texttt{simulator-api/ck-exceptions.json}). Para el experimento, las mismas métricas adaptadas a archivos se midieron sobre los prototipos B y D el 28 de octubre de 2026 (\texttt{docs/evaluation/}).
+WMC (Weighted Methods per Class) mide la complejidad de los métodos de una clase como la suma de su complejidad ciclomática, y CBO (Coupling Between Object Classes), su acoplamiento con otras clases. RFC (Response For a Class) cuenta los métodos que pueden ejecutarse en respuesta a un mensaje a la clase, y MAX\_CC es la mayor complejidad ciclomática de uno de sus métodos. Sus referencias son las secciones 3.3.4, 5.2.3 y 7.5. Los umbrales vigentes son WMC $\le 20$, CBO $\le 5$, RFC $\le 20$ y MAX\_CC $\le 10$ (\texttt{methodology.md}, sección 6). La versión 1.0 ponía WMC $\le 15$ y no tenía MAX\_CC; el tope subió a 20 y se agregó MAX\_CC cuando la fórmula de WMC pasó de contar métodos a sumar su complejidad (\texttt{methodology.md}, sección 6.1). La integración continua las mide en cada pull request del SDK y del simulador, en modo guarda (\texttt{npm run metrics}; el simulador con su registro de excepciones, \texttt{simulator-api/ck-exceptions.json}). Para el experimento, las mismas métricas adaptadas a archivos se midieron sobre los prototipos B y D el 28 de octubre de 2026 (\texttt{docs/evaluation/}).
 
 \begin{itemize}
   \item \textbf{Cumplimiento de hitos}
@@ -38,4 +38,4 @@ Esta métrica contabiliza los errores detectados durante la revisión de código
   \item \textbf{Tiempo de resolución de impedimentos críticos}
 \end{itemize}
 
-Esta métrica mide el tiempo requerido para resolver bloqueos críticos que afecten el desarrollo normal del proyecto, incluyendo problemas de infraestructura, integración o dependencias externas. La meta de la versión 1.0 era resolver cada impedimento crítico en un máximo de dos días hábiles. Los impedimentos se registran como issues con las etiquetas \texttt{bloqueante} o \texttt{urgente}; su tiempo de resolución se puede calcular con las fechas de apertura y cierre de cada issue, pero no se calculó durante el proyecto.
+Esta métrica mide el tiempo requerido para resolver bloqueos críticos que afecten el desarrollo normal del proyecto, incluyendo problemas de infraestructura, integración o dependencias externas. La meta del plan original era resolver cada impedimento crítico en un máximo de dos días hábiles. Los impedimentos se registran como issues con las etiquetas \texttt{bloqueante} o \texttt{urgente}; su tiempo de resolución se puede calcular con las fechas de apertura y cierre de cada issue, pero no se calculó durante el proyecto.

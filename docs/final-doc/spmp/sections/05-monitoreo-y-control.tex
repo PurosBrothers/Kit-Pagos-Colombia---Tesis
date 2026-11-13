@@ -1,6 +1,6 @@
 \section{Monitoreo y Control del Proyecto}
 
-El presente numeral describe los mecanismos que el equipo de desarrollo del Kit Pagos Colombia usó para conocer el estado del proyecto, detectar desviaciones respecto a lo planeado y corregirlas. Los procesos aquí descritos son transversales a todas las fases del ciclo de vida DSR. Donde la versión 1.0 de este plan preveía un proceso que no se siguió, se dice, y se describe lo que se hizo en su lugar.
+El presente numeral describe los mecanismos que el equipo de desarrollo del Kit Pagos Colombia usó para conocer el estado del proyecto, detectar desviaciones respecto a lo planeado y corregirlas. Los procesos aquí descritos son transversales a todas las fases del ciclo de vida DSR. Donde la versión 1.0 de este plan preveía un proceso que no se siguió, se indica y se describe lo que se hizo en su lugar.
 
 \subsection{Administración de Requerimientos}
 
@@ -14,15 +14,15 @@ El primero es el Documento de Especificación de Requerimientos de Software (SRS
 
 El segundo es la Matriz de Trazabilidad de Requerimientos (\path{docs/project-management/traceability-matrix.md}), que vincula cada requerimiento con los componentes que lo implementan, las pruebas que lo verifican, su issue y su pull request. Permite detectar requerimientos huérfanos, componentes sin cobertura de prueba y el impacto de un cambio sobre el resto del sistema. La versión 1.0 la ubicaba en Google Spreadsheets; es un archivo del repositorio, y cada pull request que implementa, modifica o cierra un requerimiento actualiza su fila (\texttt{CONTRIBUTING.md}).
 
-El tercero es el registro de cambios. La versión 1.0 lo ubicaba en Notion, que no se usó. Cada solicitud de cambio es un issue de GitHub, con su discusión y el pull request que la materializa, y las decisiones técnicas que cambian el diseño quedan en el registro de arquitectura (\texttt{docs/architecture/architecture-log.md}).
+El tercero es el registro de cambios. El plan original lo ubicaba en Notion, que no se usó. Cada solicitud de cambio es un issue de GitHub, con su discusión y el pull request que la materializa, y las decisiones técnicas que cambian el diseño quedan en el registro de arquitectura (\texttt{docs/architecture/architecture-log.md}).
 
 \subsubsection{Proceso de administración de requerimientos}
 
 El proceso opera bajo las siguientes reglas. Cualquier integrante del equipo o el director puede proponer una modificación a los requerimientos. La propuesta se abre como un issue, con la descripción del cambio, su justificación y su impacto sobre el cronograma y los entregables, y se discute en el grupo del equipo o en la reunión semanal. Un cambio aprobado se implementa en un pull request que actualiza la Matriz de Trazabilidad, y el registro de arquitectura guarda la decisión cuando cambia el diseño.
 
-La versión 1.0 exigía además que ningún cambio entrara a la rama principal sin el SRS actualizado. Eso no se cumplió durante el desarrollo: el SRS pasó de la versión 1.0 de mayo a la 2.0 recién en octubre de 2026, cuando se reescribieron los requerimientos para reflejar el framework construido. Entre tanto, la matriz de trazabilidad y el registro de arquitectura fueron los que siguieron cada cambio.
+La versión 1.0 exigía además que ningún cambio entrara a la rama principal sin el SRS actualizado. Eso no se cumplió durante el desarrollo: el SRS pasó de la versión 1.0 de mayo a la 2.0 solo en octubre de 2026, cuando se reescribieron los requerimientos para reflejar el framework construido. Entre tanto, la matriz de trazabilidad y el registro de arquitectura fueron los que siguieron cada cambio.
 
-El diagrama BPMN del proceso de administración de requerimientos, que incluye los roles participantes, los puntos de decisión y los artefactos que se crean o refinan en cada paso, se presenta en la Figura~\ref{fig:bpmn-requerimientos}. Es el de la versión 1.0: donde dice Notion, el registro está en los issues y en el registro de arquitectura.
+La Figura~\ref{fig:bpmn-requerimientos} presenta el diagrama BPMN del proceso de administración de requerimientos, con los roles participantes, los puntos de decisión y los artefactos que se crean o refinan en cada paso. Es el diagrama del plan original: donde dice Notion, el registro está en los issues y en el registro de arquitectura.
 
 \begin{figure}[H]
   \centering
@@ -39,7 +39,7 @@ El propósito de este proceso es proveer al equipo y al director del proyecto de
 
 El progreso del proyecto se mide a través de las siguientes métricas.
 
-La completitud del backlog es la proporción de issues cerrados en el hito de la semana o de la fase en curso. Cada iteración tiene un hito por semana en GitHub. Un ítem se considera completado cuando su pull request se integra a \texttt{devops} y el issue se cierra con un comentario que explica la solución y enlaza el cambio; como \texttt{devops} no es la rama por omisión, GitHub no cierra los issues solo y el cierre es manual (\texttt{CONTRIBUTING.md}).
+La completitud del backlog es la proporción de issues cerrados en el hito de la semana o de la fase en curso. Cada iteración tiene un hito por semana en GitHub. Un ítem se considera completado cuando su pull request se integra a \texttt{devops} y el issue se cierra con un comentario que explica la solución y enlaza el cambio. Como \texttt{devops} no es la rama por omisión, GitHub no cierra los issues solo y el cierre es manual (\texttt{CONTRIBUTING.md}).
 
 El estado de los hitos del ciclo de vida es una métrica binaria que indica si cada uno de los seis hitos definidos en la sección 3.1.3 se alcanzó o no en la fecha comprometida. La Tabla~\ref{tab:hitos-reales} compara las fechas planeadas y las reales.
 
@@ -47,7 +47,7 @@ La cobertura de pruebas se expresa como el porcentaje de ramas, funciones, líne
 
 La versión 1.0 medía también el tiempo de respuesta de la API de simulación, con un máximo de 500~ms. Ese tiempo no se midió, y el SRS v2.0 quitó el requisito; tampoco se usa aquí.
 
-Los defectos se registran como issues de GitHub con la etiqueta \texttt{bug}, y los que detienen el trabajo llevan además \texttt{bloqueante} o \texttt{urgente}. La versión 1.0 los clasificaba por componente y por severidad (bloqueante, mayor y menor); esa clasificación no se usó.
+Los defectos se registran como issues de GitHub con la etiqueta \texttt{bug}, y los que detienen el trabajo llevan además \texttt{bloqueante} o \texttt{urgente}. El plan original los clasificaba por componente y por severidad (bloqueante, mayor y menor); esa clasificación no se usó.
 
 \subsubsection{Actividades de reporte de progreso}
 
