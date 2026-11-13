@@ -18,12 +18,12 @@ El SPMP formula el problema al presentar el proyecto (Equipo del Proyecto, 2026c
 El proyecto Kit Pagos Colombia surge a partir de un problema recurrente en el desarrollo de software colombiano: integrar pasarelas de pago sigue siendo un proceso fragmentado, repetitivo y, en muchos casos, innecesariamente complejo. Plataformas como Wompi, Rapyd, Mercado Pago y Kushki ofrecen servicios similares, pero cada una maneja estructuras distintas para autenticación, respuestas HTTP, validaciones y notificaciones asíncronas. En la práctica, esto obliga a los equipos de desarrollo a implementar varias veces la misma lógica, aumentando el tiempo de integración y la probabilidad de errores.
 \end{quote}
 
-Su sección 1.2.1 fija el propósito del trabajo: construir un artefacto de software contra esa fragmentación y evaluarlo. La versión 1.0 del SPMP, de mayo de 2026, nombraba a PayU en lugar de Rapyd. Rapyd completó la adquisición de PayU GPO en América Latina en marzo de 2025 y la reemplazó en el proyecto.
+Su sección 1.2.1 fija el propósito del trabajo: construir un framework contra esa fragmentación y evaluarlo. La versión 1.0 del SPMP, de mayo de 2026, nombraba a PayU en lugar de Rapyd. Rapyd completó la adquisición de PayU GPO en América Latina en marzo de 2025 y la reemplazó en el proyecto.
 
 Esta realidad técnica somete a los equipos de ingeniería a duplicar esfuerzos de implementación ante cada cambio de proveedor y aumenta la superficie de error en puntos críticos de seguridad, tales como la validación de webhooks y la tokenización de credenciales de pago.
 
 \subsubsection{Propuesta de solución}
-Para resolver ese problema, este trabajo desarrolló \textbf{Kit Pagos Colombia}, un artefacto de software con los cuatro componentes que describen el SRS v2.0 y el SPMP 2.0 (Equipo del Proyecto, 2026b, 2026c):
+Para resolver ese problema, este trabajo desarrolló \textbf{Kit Pagos Colombia}, un framework con los cuatro componentes que describen el SRS v2.0 y el SPMP 2.0 (Equipo del Proyecto, 2026b, 2026c):
 
 \begin{enumerate}
     \item \textbf{SDK de servidor en TypeScript (\texttt{kit-pagos-colombia}):} una biblioteca para Node.js con una interfaz común a las cuatro pasarelas para cobrar con tarjeta (crédito o débito) o con PSE, consultar el estado de un pago, listar los bancos PSE y verificar la firma de las notificaciones asíncronas (webhooks).
@@ -81,22 +81,22 @@ El alcance que describe el SPMP 2.0 (sección 1.2.2) es el que se construyó (Eq
 
 Para demostrar y medir esos patrones se construyeron cuatro proyectos prototípicos en \texttt{prototypes/}. A (\texttt{checkout-con-sdk-solo-back}) usa el SDK solo en el servidor, y B (\texttt{checkout-con-sdk-front-back}), el SDK y el módulo de navegador. C (\texttt{checkout-frontend-rest}) cobra desde el navegador contra \texttt{/v1/api}, y D (\texttt{checkout-sin-solucion}) integra las cuatro pasarelas a mano. B y D son el par del experimento de la Fase 5; A y C no participan en él (\path{thesis-objectives.md}, sección 5).
 
-Quedan fuera el efectivo, Nequi, Daviplata, las suscripciones y los reembolsos. Tampoco entran el procesamiento real de transacciones, el manejo del número de tarjeta en el servidor del comercio, otras pasarelas, la integración con sistemas contables o ERP, la conciliación financiera ni la continuidad de las APIs de los proveedores. Las tiendas de los prototipos y el cliente del prototipo C solo demuestran el kit contra los sandboxes: no son interfaces de pago para producción. La versión 1.0 del SPMP no contemplaba la API REST propia, el módulo de navegador, los prototipos A y C ni la página de presentación; el capítulo IV detalla esas diferencias.
+Quedan fuera el efectivo, Nequi, Daviplata, las suscripciones y los reembolsos. Kit Pagos Colombia tampoco actúa como procesador de pagos: no autoriza, liquida ni procesa cobros por su cuenta. Cuando crea un pago o consulta su estado, arma la petición, la envía a Wompi, Mercado Pago, Kushki o Rapyd y normaliza la respuesta; el procesamiento lo hace siempre la pasarela. Tampoco entran el manejo del número de tarjeta en el servidor del comercio, otras pasarelas, la integración con sistemas contables o ERP, la conciliación financiera ni la continuidad de las APIs de los proveedores. Las tiendas de los prototipos y el cliente del prototipo C solo demuestran el kit contra los sandboxes: no son interfaces de pago para producción. La versión 1.0 del SPMP no contemplaba la API REST propia, el módulo de navegador, los prototipos A y C ni la página de presentación; el capítulo IV detalla esas diferencias.
 
 Los entregables están publicados. El paquete \texttt{kit-pagos-colombia} está en npm, con la 0.6.0 en \texttt{latest} y la 0.7.0-rc.2 en \texttt{next} al 7 de noviembre de 2026 (Kit Pagos Colombia, 2026). La API de Simulación corre en Render; la documentación de datos de prueba y los prototipos están en el repositorio, y la página de presentación, en GitHub Pages.
 
 \subsubsection{Metodología, entregables y criterios aplicados}
-El marco metodológico del proyecto es \textbf{Design Science Research (DSR)} (Peffers et al., 2007), porque el resultado del trabajo es un artefacto de software que hay que construir y evaluar frente al problema que lo motivó. Peffers et al. proponen seis actividades en un orden nominal, que admite iterar y empezar por varias de ellas. El SPMP las adapta en seis fases (\path{docs/project-management/methodology.md}, sección 1): separa el diseño del desarrollo y junta la demostración con la evaluación.
+El marco metodológico del proyecto es \textbf{Design Science Research (DSR)} (Peffers et al., 2007), porque el resultado del trabajo es un framework que hay que construir y evaluar frente al problema que lo motivó. Peffers et al. proponen seis actividades en un orden nominal, que admite iterar y empezar por varias de ellas. El SPMP las adapta en seis fases (\path{docs/project-management/methodology.md}, sección 1): separa el diseño del desarrollo y junta la demostración con la evaluación.
 \begin{enumerate}
     \item \textbf{Identificación del problema:} Caracterización de la fragmentación de pasarelas en Colombia y levantamiento del repositorio de parámetros técnicos.
     \item \textbf{Definición de objetivos:} Especificación de requisitos, criterios de evaluación y diseño experimental comparativo.
     \item \textbf{Diseño:} Modelado del dominio transaccional, especificación de puertos de la arquitectura hexagonal y contratos de adaptadores.
-    \item \textbf{Desarrollo iterativo:} Construcción del artefacto en tres iteraciones sucesivas (Iteración 1: Núcleo del SDK; Iteración 2: Adaptadores de pasarela; Iteración 3: API de Simulación y soporte de validación), con prácticas de Scrum en ciclos semanales y una definición de terminado (DoD) que se verifica en cada pull request.
+    \item \textbf{Desarrollo iterativo:} Construcción del framework en tres iteraciones sucesivas (Iteración 1: Núcleo del SDK; Iteración 2: Adaptadores de pasarela; Iteración 3: API de Simulación y soporte de validación), con prácticas de Scrum en ciclos semanales y una definición de terminado (DoD) que se verifica en cada pull request.
     \item \textbf{Demostración y evaluación:} Construcción de los proyectos prototípicos y medición de las seis variables del plan de evaluación, entre ellas WMC, CBO y RFC.
     \item \textbf{Comunicación:} Elaboración de la memoria académica final, manuales técnicos y publicación del repositorio de código abierto.
 \end{enumerate}
 
-La Tabla~\ref{tab:entregables} sintetiza los entregables clave del artefacto, los criterios y estándares de ingeniería aplicados a cada uno y la evidencia técnica que respalda su ejecución.
+La Tabla~\ref{tab:entregables} sintetiza los entregables clave del framework, los criterios y estándares de ingeniería aplicados a cada uno y la evidencia técnica que respalda su ejecución.
 
 \begin{table}[H]
 \renewcommand{\arraystretch}{1.2}

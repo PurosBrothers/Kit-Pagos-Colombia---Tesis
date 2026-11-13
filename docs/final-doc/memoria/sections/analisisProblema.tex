@@ -80,7 +80,7 @@ Esos flujos se prueban contra la API de Simulación, que tiene sus propios lími
 \subsubsection{Exclusiones del alcance}
 El SPMP 2.0 (sección 1.2.2) delimita el alcance con estas exclusiones, que el capítulo II resume:
 \begin{quote}
-Quedan fuera el efectivo, Nequi, Daviplata, las suscripciones y los reembolsos. Tampoco se incluyen el procesamiento real de transacciones financieras, el manejo del número de tarjeta en el servidor del comercio ni otras pasarelas. Quedan fuera, además, la integración con sistemas contables o ERP, la conciliación financiera, las operaciones administrativas sobre las cuentas de los proveedores y la responsabilidad sobre la continuidad de sus APIs. El proyecto tampoco incluye interfaces de pago para producción: las tiendas de los prototipos y el cliente del prototipo C son demostraciones contra los sandboxes.
+Quedan fuera el efectivo, Nequi, Daviplata, las suscripciones y los reembolsos. Crear pagos, consultar su estado, listar los bancos PSE y verificar los webhooks sí está en el alcance, pero el framework no actúa como procesador. Para crear o consultar un pago, arma la petición, la envía a la pasarela y normaliza la respuesta; autorizar, liquidar y procesar el cobro le corresponde siempre a la pasarela. Tampoco se incluyen el manejo del número de tarjeta en el servidor del comercio ni otras pasarelas. Quedan fuera, además, la integración con sistemas contables o ERP, la conciliación financiera, las operaciones administrativas sobre las cuentas de los proveedores y la responsabilidad sobre la continuidad de sus APIs. El proyecto tampoco incluye interfaces de pago para producción: las tiendas de los prototipos y el cliente del prototipo C son demostraciones contra los sandboxes.
 \end{quote}
 La versión 1.0 del SPMP excluía las «interfaces de usuario para flujos de pago» y nombraba a PayU entre las cuatro pasarelas. Las dos diferencias se explican al final de este capítulo.
 
@@ -140,7 +140,7 @@ OE-06 (Evaluación formal) & Sin RF directo: lo exigen el hito H5 y la metodolog
 \end{table}
 
 \subsubsection{Diferencias entre la versión 1.0 del SPMP y lo construido}
-La versión 1.0 del SPMP, de mayo de 2026, no contemplaba cuatro elementos del artefacto. La versión 2.0 (sección 1.2.2) y el SRS v2.0 los incorporan, y los seis objetivos específicos no cambiaron (\path{thesis-objectives.md}, sección 4):
+La versión 1.0 del SPMP, de mayo de 2026, no contemplaba cuatro elementos del framework. La versión 2.0 (sección 1.2.2) y el SRS v2.0 los incorporan, y los seis objetivos específicos no cambiaron (\path{thesis-objectives.md}, sección 4):
 
 \begin{enumerate}
     \item \textbf{Rapyd en lugar de PayU:} la versión 1.0 nombraba a PayU entre las cuatro pasarelas. El 14 de marzo de 2025, Rapyd terminó de comprar PayU GPO en América Latina; el proyecto cambió entonces PayU por Rapyd, y con ello el algoritmo de firma de los webhooks.
