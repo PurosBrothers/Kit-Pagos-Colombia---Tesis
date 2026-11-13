@@ -1,6 +1,6 @@
 \section{Vista de contenedores}
 
-\subsection{Diagrama de Contenedores — Kit Pagos Colombia (Nivel 2)}
+\subsection{Diagrama de Contenedores --- Kit Pagos Colombia (Nivel 2)}
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{"../../architecture/SDK/Container Diagram - C4.pdf"}
@@ -15,7 +15,7 @@ El sistema está compuesto por tres contenedores principales que operan de forma
 
 El SDK Kit Pagos Colombia es el componente central del framework. Está desarrollado en TypeScript y se distribuye como un paquete npm compatible con Node.js 20.19 o superior. Su función principal es ofrecer una interfaz unificada para que los desarrolladores puedan crear pagos, consultar el estado de las transacciones y validar webhooks, sin tener que implementar de manera independiente la integración con cada pasarela. Internamente, el SDK utiliza una arquitectura hexagonal y cuenta con cuatro adaptadores, uno para cada pasarela soportada: Wompi, Rapyd, Mercado Pago y Kushki. Cada adaptador se encarga de transformar el contrato definido por el SDK al formato y las reglas específicas de la pasarela correspondiente. Para utilizarlo, el desarrollador instala el paquete mediante npm y configura las credenciales de las pasarelas que necesita. Cuando se trabaja en modo simulación, los adaptadores envían las solicitudes a la API de Simulación en lugar de comunicarse con las APIs reales de los proveedores. El paquete incluye además el subpaquete independiente \texttt{kit-pagos-colombia/browser}, con el que la página del comercio obtiene un token de Wompi, Mercado Pago o Kushki. La tarjeta viaja del navegador a la pasarela, y el servidor del comercio recibe solo el token.
 
-Los cuatro adaptadores —Wompi, Rapyd, Mercado Pago y Kushki— forman parte del mismo paquete npm y están implementados como módulos internos del SDK. Por esta razón, no se consideran contenedores independientes: no tienen un proceso propio ni pueden desplegarse de manera aislada. La responsabilidad específica de cada uno se detalla posteriormente en el diagrama de componentes de Nivel 3.
+Los cuatro adaptadores (Wompi, Rapyd, Mercado Pago y Kushki) forman parte del mismo paquete npm y están implementados como módulos internos del SDK. Por esta razón, no se consideran contenedores independientes: no tienen un proceso propio ni pueden desplegarse de manera aislada. La responsabilidad específica de cada uno se detalla posteriormente en el diagrama de componentes de Nivel 3.
 
 La API de Simulación es un servicio REST desarrollado con Fastify y Node.js 20.19 o superior, desplegado en Render y disponible mediante una URL pública HTTPS. Su objetivo es simular el comportamiento de las cuatro pasarelas para los principales escenarios utilizados durante las pruebas, evitando la necesidad de utilizar credenciales o realizar transacciones reales. En un mismo proceso conviven dos superficies HTTP que comparten puerto y despliegue: \texttt{/v1/sim} reproduce el comportamiento nativo de Wompi, Rapyd, Mercado Pago y Kushki, y \texttt{/v1/api} ofrece las operaciones de Kit Pagos por medio del SDK. Cada superficie tiene su prefijo y su módulo, de modo que la API REST se suma a las rutas de simulación en lugar de reemplazarlas.
 
@@ -26,7 +26,7 @@ La Documentación Centralizada corresponde a un contenedor estático publicado m
 \subsubsection{Relaciones entre contenedores}
 En producción, el SDK se comunica directamente con las pasarelas de pago mediante HTTPS. Para las pruebas, las solicitudes se redirigen hacia la API de Simulación, también mediante HTTPS y utilizando JSON. La API de Simulación incluye la especificación OpenAPI 3.0 en el endpoint /docs, desde donde se pueden consultar los endpoints y estructuras disponibles. En el flujo productivo, las pasarelas pueden enviar eventos de forma asíncrona hacia la aplicación mediante webhooks sobre HTTPS.
 
-\subsection{Diagrama de Contenedores — API de Simulación (Nivel 2)}
+\subsection{Diagrama de Contenedores --- API de Simulación (Nivel 2)}
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{"../../architecture/Simulador API/Container Diagram - C4.pdf"}
@@ -37,7 +37,7 @@ En producción, el SDK se comunica directamente con las pasarelas de pago median
 Este diagrama complementa el anterior con un enfoque específico en el flujo de simulación, mostrando con mayor detalle cómo interactúan el SDK, la API de Simulación, la Documentación Interactiva y la Aplicación del Comercio durante las pruebas de desarrollo.
 
 \subsubsection{Contenedores en el contexto de simulación}
-El SDK Kit Pagos Colombia aparece en este diagrama como el cliente de la API de Simulación. Cuando se configura en modo simulación, sus adaptadores redirigen las solicitudes hacia el simulador en lugar de comunicarse con las APIs reales de los proveedores. Este cambio se realiza mediante la configuración del entorno, por lo que la aplicación que utiliza el SDK no necesita modificar su código para pasar de un entorno de simulación a uno de producción.
+El SDK Kit Pagos Colombia aparece en este diagrama como el cliente de la API de Simulación. Cuando se configura en modo simulación, sus adaptadores redirigen las solicitudes hacia el simulador en lugar de comunicarse con las APIs reales de los proveedores. El cambio de destino se realiza mediante la configuración del entorno, por lo que la aplicación que utiliza el SDK no necesita modificar su código para pasar de un entorno de simulación a uno de producción.
 
 La API de Simulación Desplegada es el componente principal de este flujo. Recibe las solicitudes enviadas por los adaptadores del SDK y determina la respuesta que debe generar según el escenario configurado mediante los headers de control. A partir de esta información, la API genera una respuesta siguiendo el formato correspondiente a la pasarela que se está simulando. También permite generar webhooks sintéticos firmados hacia la Aplicación del Comercio cuando el Tester solicita explícitamente su envío. La API expone además la especificación OpenAPI 3.0 mediante el endpoint /docs. Desde allí, tanto el Desarrollador como el Tester pueden consultar los endpoints disponibles, los headers aceptados, los escenarios de simulación y ejemplos de respuesta. Esta documentación puede consultarse directamente desde el navegador o utilizarse como referencia para realizar pruebas desde herramientas como Postman. El servicio se encuentra desplegado en Render y cuenta con una URL pública mediante HTTPS, por lo que puede ser utilizado tanto por el SDK como directamente desde herramientas externas sin necesidad de realizar una configuración local del simulador.
 
