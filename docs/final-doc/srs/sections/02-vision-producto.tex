@@ -18,18 +18,18 @@ El framework está compuesto por cuatro componentes complementarios:
 El framework contempla tres patrones de integración:
 
 \begin{itemize}
-  \item \textbf{P1 --- Backend hacia SDK:} el servidor del comercio usa el SDK y habla con la pasarela. Es el patrón principal y el que usan los prototipos A y B; D integra las pasarelas a mano como control.
+  \item \textbf{P1 --- Backend hacia SDK:} el servidor del comercio usa el SDK y habla con la pasarela. Es el patrón principal y el que usan los prototipos A y B; el prototipo D integra las pasarelas a mano como control.
   \item \textbf{P2 --- Frontend hacia REST hacia SDK:} un cliente de navegador consume \texttt{/v1/api} sin instalar el SDK ni conocer la pasarela. Está implementado en el prototipo C.
   \item \textbf{P3 --- Frontend hacia SDK unificado:} \texttt{KitPagosBrowser} unifica la tokenización de tarjeta en el navegador para Wompi, Mercado Pago y Kushki. Rapyd no tokeniza en el navegador: redirige a su página alojada. Por eso P3 está implementado en parte y no sustituye la integración de pagos del backend.
 \end{itemize}
 
 \subsection{Alcance}
 
-El framework cubre las siguientes operaciones sobre las pasarelas integradas: creación de pagos con tarjeta o PSE, consulta del estado de una transacción, listado de bancos PSE, recepción y validación de webhooks, normalización de estados, motivos de rechazo y errores, tokenización de tarjeta en el navegador, y simulación determinista de las APIs de las pasarelas y de las operaciones de Kit Pagos.
+El framework cubre las siguientes operaciones sobre las pasarelas integradas: creación de pagos con tarjeta o PSE, consulta del estado de una transacción, listado de bancos PSE, recepción y validación de webhooks, y normalización de estados, motivos de rechazo y errores. También cubre la tokenización de tarjeta en el navegador y la simulación determinista de las APIs de las pasarelas y de las operaciones de Kit Pagos.
 
 Las pasarelas soportadas son Wompi, Rapyd (PayU GPO), Mercado Pago Colombia y Kushki.
 
-El framework NO cubre: efectivo, Nequi, Daviplata, suscripciones ni reembolsos; procesamiento directo del número de tarjeta en el servidor del comercio; protección de la página donde se escribe la tarjeta (la Content-Security-Policy y el monto son responsabilidad del comercio); gestión de cuentas de comercio; conciliación financiera; ni operaciones administrativas sobre las cuentas de los proveedores.
+El framework NO cubre efectivo, Nequi, Daviplata, suscripciones ni reembolsos. Tampoco cubre: procesamiento directo del número de tarjeta en el servidor del comercio; protección de la página donde se escribe la tarjeta (la Content-Security-Policy y el monto son responsabilidad del comercio); gestión de cuentas de comercio; conciliación financiera; ni operaciones administrativas sobre las cuentas de los proveedores.
 
 \subsection{Objetivo del producto}
 
