@@ -1,5 +1,5 @@
 \setcounter{subsection}{0}
-\section{CONSTRUCCIÓN E IMPLEMENTACIÓN DEL ARTEFACTO}
+\section{CONSTRUCCIÓN E IMPLEMENTACIÓN DEL FRAMEWORK}
 \sloppy
 
 Este capítulo describe la construcción del ecosistema \textit{Kit Pagos Colombia} durante la Fase 4 del proyecto (Equipo del Proyecto, 2026c). Dentro del enfoque de Investigación en Ciencias del Diseño (Hevner et al., 2004; Peffers et al., 2007), el diseño del Documento de Arquitectura de Software (Equipo del Proyecto, 2026a) se convirtió en código ejecutable. El trabajo se desarrolló en tres iteraciones incrementales. En ese recorrido, las pruebas contra los entornos de prueba (\textit{sandboxes}) de Wompi, Mercado Pago, Kushki y Rapyd mostraron diferencias entre la documentación pública y las respuestas reales de sus servicios HTTP. Cada hallazgo se registró en la bitácora de decisiones arquitectónicas y guio los ajustes sobre el paquete \texttt{kit-pagos-colombia}, su módulo de navegador, la API de Simulación y los cuatro prototipos de tienda. Los resultados cuantitativos de la evaluación comparativa pertenecen a la Fase 5 y se presentan en el Capítulo VII.
@@ -156,7 +156,7 @@ Los registros de datos de prueba por pasarela y la bitácora de arquitectura doc
 
 \subsection{Ejemplos y proyectos prototípicos}
 
-La validación práctica del artefacto y la preparación del experimento de la Fase 5 se materializaron en dos carpetas del repositorio: el paquete de doce programas ejecutables en \texttt{examples/} y las cuatro tiendas de comercio electrónico en \texttt{prototypes/}.
+La validación práctica del framework y la preparación del experimento de la Fase 5 se materializaron en dos carpetas del repositorio: el paquete de doce programas ejecutables en \texttt{examples/} y las cuatro tiendas de comercio electrónico en \texttt{prototypes/}.
 
 \subsubsection{Paquete de ejemplos ejecutables (\texttt{examples/})}
 
@@ -187,7 +187,7 @@ En \texttt{prototypes/} se construyeron cuatro implementaciones del mismo flujo 
 \end{tabular}
 \end{table}
 
-Los prototipos A y C muestran dos formas adicionales de adoptar los artefactos fuera de la comparación experimental. Sus características son las siguientes:
+Los prototipos A y C muestran dos formas adicionales de adoptar el framework fuera de la comparación experimental. Sus características son las siguientes:
 \begin{itemize}
     \item \textbf{Prototipo A (\texttt{checkout-con-sdk-solo-back}):} muestra cómo funciona el SDK cuando un comercio lo integra en su servidor Fastify (\texttt{PaymentService.ts}) pero conserva su propio código de navegador con \texttt{fetch} para tokenizar tarjetas. Con 54 pruebas automatizadas, calcula el monto en el servidor a partir del catálogo de yerba mate, verifica \textit{webhooks} sobre el cuerpo crudo (\texttt{rawBody}) en \texttt{/webhooks/\textless{}pasarela\textgreater{}}, busca órdenes por \texttt{orderReference} para la tarjeta de Rapyd y conserva \texttt{rawStatus} y \texttt{rejectionReason}.
     \item \textbf{Prototipo C (\texttt{checkout-frontend-rest}):} vuelve ejecutable el patrón de integración 2 mediante una tienda estática servida por \texttt{server.mjs} que consume \texttt{/v1/api} desde otro origen (\texttt{src/main.ts} y \texttt{src/tokenizer.ts}) sin instalar el SDK en un servidor propio. Consulta la lista de pasarelas y su modalidad \texttt{cardCapture} en \texttt{GET /v1/api/gateways}, y carga \texttt{KitPagosBrowser} desde jsDelivr solo cuando el comprador paga con tarjeta bajo \texttt{BROWSER\_TOKEN}. Esa descarga se protege con un mapa de importación con integridad de subrecurso (\textit{Subresource Integrity} SHA-384, verificada por \texttt{npm run check:sri}). Además, la prueba \texttt{test/no-gateway-names.test.ts} comprueba que el código del cliente no contenga ningún condicional con el nombre de una pasarela.

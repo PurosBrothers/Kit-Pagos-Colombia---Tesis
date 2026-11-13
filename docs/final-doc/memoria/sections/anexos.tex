@@ -1,4 +1,30 @@
 \section{ANEXOS}
-% Enumerar únicamente anexos publicados y verificables, de acuerdo con la propuesta aprobada.
-% Posibles anexos: diagramas fuente, matriz de trazabilidad, contratos, evidencia de pruebas,
-% manuales y el informe/datos reproducibles de Fase 5 cuando existan.
+\label{sec:anexos}
+
+Los anexos reúnen los artefactos publicados y verificables del proyecto. No se duplican documentos completos: cada entrada describe qué contiene el artefacto y dónde se consulta. Las rutas de la tabla son relativas a la raíz del repositorio público del proyecto en GitHub, \url{https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis}. Lo mismo vale para las rutas del resto de la memoria que empiezan por una carpeta del repositorio, como \path{docs/evaluation/informe-comparativo-fase-5.md}. Todos los artefactos de la tabla están en ese repositorio, salvo el paquete publicado en npm.
+
+{\small
+\renewcommand{\arraystretch}{1.25}
+\begin{xltabular}{\textwidth}{|>{\raggedright\arraybackslash}p{1.1cm}|>{\raggedright\arraybackslash}p{3.5cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{3.9cm}|}
+\caption{Anexos del proyecto}\label{tab:anexos}\\
+\hline
+\textbf{Anexo} & \textbf{Artefacto} & \textbf{Contenido} & \textbf{Ruta o URL} \\ \hline
+\endfirsthead
+\caption[]{Anexos del proyecto (continuación)}\\
+\hline
+\textbf{Anexo} & \textbf{Artefacto} & \textbf{Contenido} & \textbf{Ruta o URL} \\ \hline
+\endhead
+A & Documento de Arquitectura de Software (SAD) v2.0 & Vistas C4, modelo de dominio, ASR, restricciones, decisiones de arquitectura y riesgos técnicos. & \path{docs/final-doc/sad/} \\ \hline
+B & Especificación de Requisitos de Software (SRS) v2.0 & Requisitos funcionales y no funcionales, actores y criterios de aceptación. & \path{docs/final-doc/srs/} \\ \hline
+C & Plan de Gestión del Proyecto (SPMP) v2.0 & Alcance, cronograma, roles, riesgos y plan de calidad. & \path{docs/final-doc/spmp/} \\ \hline
+D & Plan de Pruebas del Proyecto (PTP) v0.4 y evidencias & Estrategia, ítems, siete casos, resultados, defectos y salidas de la corrida. & \path{docs/final-doc/pruebas/} y \path{docs/final-doc/pruebas/evidencias/} \\ \hline
+E & Informe comparativo de la Fase 5 & Protocolo, las seis variables medidas, lectura por variable, veredicto y amenazas a la validez. & \path{docs/evaluation/informe-comparativo-fase-5.md} \\ \hline
+F & Recolección de las seis variables & Tabla de transacciones de la variable 5 y trazabilidad de las mediciones. & \path{docs/evaluation/recoleccion-seis-variables.md} \\ \hline
+G & Datos de métricas y conceptos nativos & Reportes CK por archivo y por clase, y conteo de conceptos nativos de los prototipos B y D. & \path{docs/evaluation/} (reportes CK y de conceptos nativos) \\ \hline
+H & Matriz de trazabilidad & Para cada requisito funcional, los componentes que lo implementan, su estado y las pruebas que lo cubren. & \path{docs/project-management/traceability-matrix.md} \\ \hline
+I & Diagramas y fuentes PlantUML & Diagramas C4 de contexto, contenedores y componentes, de despliegue del simulador, de clases y de secuencia, con sus fuentes editables. & \path{docs/architecture/SDK/} y \path{docs/architecture/Simulador}\texttt{~}\path{API/} \\ \hline
+J & Paquete npm y manual de uso & SDK publicado, módulo de navegador y documentación de instalación y configuración. & \url{https://www.npmjs.com/package/kit-pagos-colombia} y \path{docs/manual/} \\ \hline
+K & Datos de prueba por pasarela & Tarjetas, titulares, documentos y montos reservados para Wompi, Mercado Pago, Kushki y Rapyd. & \path{docs/testing-data/} \\ \hline
+L & Repositorio del proyecto & Código del SDK, la API de Simulación, los ejemplos, los prototipos y la documentación. & \url{https://github.com/PurosBrothers/Kit-Pagos-Colombia---Tesis} \\ \hline
+\end{xltabular}
+}
