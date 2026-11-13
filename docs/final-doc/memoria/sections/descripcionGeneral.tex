@@ -1,8 +1,8 @@
 \setcounter{subsection}{0}
-\section{DESCRIPCIÓN DEL PROYECTO Y FORMULACIÓN DEL PROBLEMA}
+\section{DESCRIPCIÓN GENERAL}
 \sloppy
 
-\subsection{Problema y oportunidad}
+\subsection{Oportunidad, problema}
 
 \subsubsection{Contexto del problema}
 Según la Cámara Colombiana de Comercio Electrónico, Colombia cerró 2025 con 9,3 millones de compradores digitales (Cámara Colombiana de Comercio Electrónico, s.~f.). Ese año, el comercio electrónico representó el 2,4\,\% del comercio minorista del país, medido sobre las empresas que contabiliza el Departamento Administrativo Nacional de Estadística (DANE). Para un comercio que vende por internet, cobrar de forma segura y confiable es una condición para operar.
@@ -27,67 +27,65 @@ Para atender ese problema, este trabajo desarrolló \textbf{Kit Pagos Colombia},
 
 \begin{enumerate}
     \item \textbf{SDK de servidor en TypeScript (\texttt{kit-pagos-colombia}):} una biblioteca para Node.js con una interfaz común a las cuatro pasarelas. Con ella el comercio cobra con tarjeta (crédito o débito) o con PSE, consulta el estado de un pago, lista los bancos PSE y verifica la firma de los webhooks.
-    \item \textbf{Módulo de navegador (\texttt{kit-pagos-colombia/browser}):} tokeniza la tarjeta en la página del comprador con Wompi, Mercado Pago o Kushki. Así, el servidor del comercio recibe un token y nunca el número. No aplica a Rapyd, que cobra en su propia página de pago.
-    \item \textbf{API de Simulación:} un servidor de pruebas que atiende peticiones del protocolo de transferencia de hipertexto (HTTP, \textit{Hypertext Transfer Protocol}) en dos grupos de rutas. Bajo \texttt{/v1/sim/*} imita las rutas y los formatos de las cuatro pasarelas, a partir de lo medido en sus sandboxes. Permite elegir escenarios de aprobación, rechazo, expiración y tiempo de espera. Cuando no hay evidencia de cómo respondería la pasarela real, devuelve el código \texttt{501}, que indica una operación no implementada. Bajo \texttt{/v1/api} ofrece por HTTP las operaciones del SDK.
-    \item \textbf{Documentación de datos de prueba:} reúne, para cada pasarela, las credenciales de sandbox, las tarjetas, los documentos, los bancos y los flujos medidos, con el nivel de evidencia de cada afirmación (Anexo~\ref{anx:datos}).
+    \item \textbf{Módulo de navegador (\texttt{kit-pagos-colombia/browser}):} tokeniza la tarjeta en la página del comprador con Wompi, Mercado Pago o Kushki. Así, el servidor del comercio recibe un token y nunca el número de la tarjeta. No aplica a Rapyd, que cobra en su propia página de pago.
+    \item \textbf{API de Simulación:} un servidor de pruebas que atiende peticiones del protocolo de transferencia de hipertexto (HTTP, \textit{Hypertext Transfer Protocol}). Por un lado, imita las rutas y los formatos de las cuatro pasarelas a partir de lo medido en sus sandboxes y permite elegir escenarios de aprobación, rechazo, expiración y tiempo de espera. Por otro, ofrece por HTTP las operaciones del SDK para clientes que no instalan la biblioteca en un servidor propio.
+    \item \textbf{Documentación de datos de prueba:} reúne, para cada pasarela, las credenciales de sandbox, las tarjetas, los documentos, los bancos y los flujos medidos, con el nivel de evidencia de cada afirmación (Artefacto~\ref{anx:datos}).
 \end{enumerate}
 
 \subsubsection{Justificación de la solución}
-La propuesta se apoya en la arquitectura hexagonal (Cockburn \& Garrido de Paz, 2024), que separa la lógica del dominio de los detalles de transporte y formato de cada proveedor por medio de puertos y adaptadores. El comercio usa operaciones que significan lo mismo en cualquier pasarela, como \texttt{createPayment}, \texttt{getPaymentStatus} o \texttt{validateWebhook}, y cada adaptador resuelve las particularidades de su pasarela.
+El problema afecta sobre todo a desarrolladores individuales y a equipos pequeños que integran por primera vez una pasarela colombiana, porque cada integración les exige estudiar una documentación distinta y repetir lógica que ya existe en otras. Probar esa integración también cuesta: el sandbox de cada pasarela limita el uso, pide credenciales propias y no siempre permite provocar un error a voluntad. Los datos de prueba, además, están repartidos en la documentación de cada proveedor. Un conjunto de herramientas que unifique la interfaz, simule las pasarelas y reúna esos datos reduce ese esfuerzo inicial, que es el aporte de este proyecto.
+
+La solución se apoya en la arquitectura hexagonal (Cockburn \& Garrido de Paz, 2024), que separa la lógica del dominio de los detalles de transporte y formato de cada proveedor por medio de puertos y adaptadores. El comercio usa operaciones que significan lo mismo en cualquier pasarela, como crear un pago, consultar su estado o validar un webhook, y cada adaptador resuelve las particularidades de su proveedor.
 
 La solución también reduce tres riesgos de seguridad y de exactitud en los montos:
 \begin{itemize}
-    \item \textbf{Firmas mal verificadas:} el SDK verifica la firma de cada pasarela con su algoritmo y la compara en tiempo constante (\texttt{crypto.timingSafeEqual}), para que el tiempo de respuesta no revele la firma esperada. En Mercado Pago la firma no cubre el cuerpo de la notificación, así que el evento se entrega como \texttt{PENDING} y el comercio confirma el estado con \texttt{getPaymentStatus()}.
-    \item \textbf{Errores de redondeo en los montos:} el tipo \texttt{number} de JavaScript sigue el formato binario de IEEE 754 (Institute of Electrical and Electronics Engineers, 2019) y no representa con exactitud muchos montos decimales. El SDK guarda cada monto como una cadena decimal exacta dentro de un objeto de valor inmutable.
+    \item \textbf{Firmas mal verificadas:} el SDK verifica la firma de cada pasarela con su algoritmo y la compara en tiempo constante, para que el tiempo de respuesta no revele la firma esperada. Cuando la firma del proveedor no cubre el cuerpo de la notificación, como ocurre en Mercado Pago, el evento queda marcado como pendiente hasta que el comercio confirma el estado consultando a la pasarela.
+    \item \textbf{Errores de redondeo en los montos:} el tipo numérico de JavaScript sigue el formato binario del estándar IEEE 754, del Instituto de Ingenieros Eléctricos y Electrónicos (IEEE; Institute of Electrical and Electronics Engineers, 2019), y no representa con exactitud muchos montos decimales. El SDK guarda cada monto como una cadena decimal exacta dentro de un objeto de valor inmutable.
     \item \textbf{Dependencia de un solo proveedor (\textit{vendor lock-in}):} las diferencias entre pasarelas quedan en los adaptadores, de modo que cambiar de pasarela o sumar una segunda no debería obligar a reescribir la lógica de negocio del comercio. Cuánto cambia en la práctica el código del comercio es una de las variables de la evaluación.
 \end{itemize}
 
-El efecto sobre el esfuerzo de integración se midió en la evaluación de la Fase 5, con las métricas WMC, CBO y RFC y las demás variables del plan de evaluación. El capítulo III explica esas métricas, y el capítulo VII presenta los resultados.
+El efecto sobre el esfuerzo de integración se midió en la evaluación de la Fase 5, con tres métricas del conjunto de Chidamber y Kemerer (1994), conocido como CK: los métodos ponderados por clase (WMC, \textit{Weighted Methods per Class}), el acoplamiento entre objetos (CBO, \textit{Coupling Between Objects}) y la respuesta de una clase (RFC, \textit{Response For a Class}), junto con las demás variables del plan de evaluación. El capítulo III explica esas métricas, y el capítulo VII presenta los resultados.
 
-\subsection{Objetivos, alcance y entregables}
+\subsection{Descripción del proyecto}
 
-Esta sección presenta los objetivos de la propuesta aprobada del trabajo de grado, con la evidencia de cómo se cumplió cada uno. Después delimita lo que se construyó y lo que quedó por fuera, y describe la metodología con la que se produjeron los entregables, que resume la Tabla~\ref{tab:entregables}.
+Esta sección presenta los objetivos del proyecto junto con la evidencia de cómo se cumplió cada uno. Después delimita lo que se construyó y lo que quedó por fuera, y describe la metodología con la que se produjeron los entregables, que resume la Tabla~\ref{tab:entregables}.
 
 \subsubsection{Objetivo general}
-El objetivo general es el de la propuesta aprobada del trabajo de grado, que el SPMP recoge en su sección 1.2.3 (Equipo del Proyecto, 2026c):
-
-\begin{quote}
-\textit{Desarrollar el Kit Pagos Colombia para simplificar la integración de múltiples pasarelas de pago en el contexto colombiano.}
-\end{quote}
+Desarrollar el Kit Pagos Colombia, para simplificar la integración de múltiples pasarelas de pago en el contexto colombiano.
 
 \subsubsection{Objetivos específicos}
-La propuesta aprobada fijó seis objetivos específicos, que el SPMP recoge en la misma sección y que esta memoria identifica como OE-01 a OE-06. Se transcriben sin cambios, y después de cada uno se resume la evidencia de su cumplimiento y el lugar del documento donde se presenta.
+Para alcanzar el objetivo general se plantearon seis objetivos específicos (OE-01 a OE-06). Debajo de cada uno se resume la evidencia de su cumplimiento y el lugar del documento donde se desarrolla.
 
 \begin{itemize}
-    \item \textbf{OE-01:} \textit{Analizar las características técnicas, mecanismos de integración y consideraciones de seguridad de las cuatro pasarelas seleccionadas.} \\
-    \textbf{Evidencia:} el análisis describe, para cada pasarela, cómo autentica, en qué unidad recibe los montos, cómo cobra con tarjeta y con PSE y cómo firma sus notificaciones. El capítulo III lo resume, y el análisis completo está en la caracterización técnica de las cuatro pasarelas (Anexo~\ref{anx:producto}) y en la documentación de datos de prueba (Anexo~\ref{anx:datos}). Un glosario relaciona, además, cada término del dominio con su nombre en el código (Anexo~\ref{anx:arquitectura}).
+    \item \textbf{OE-01:} \textit{Analizar las características técnicas, mecanismos de integración y consideraciones de seguridad de las principales pasarelas de pago utilizadas en el contexto colombiano.} \\
+    \textbf{Evidencia:} el análisis describe, para cada pasarela, cómo autentica, en qué unidad recibe los montos, cómo cobra con tarjeta y con PSE y cómo firma sus notificaciones. El capítulo III lo resume, y el análisis completo está en la caracterización técnica de las cuatro pasarelas (Artefacto~\ref{anx:producto}) y en la documentación de datos de prueba (Artefacto~\ref{anx:datos}). Un glosario relaciona, además, cada término del dominio con su nombre en el código (Artefacto~\ref{anx:arquitectura}).
 
-    \item \textbf{OE-02:} \textit{Diseñar la arquitectura del framework aplicando la arquitectura hexagonal y patrones GoF.} \\
-    \textbf{Evidencia:} en el diseño, el dominio no depende de ninguna pasarela y cada pasarela es un adaptador de un mismo puerto. El catálogo GoF es el libro de patrones de Gamma et al. (1994), que se conoce así por sus cuatro autores (\textit{Gang of Four}). De ese catálogo, el SDK usa una fachada, una fábrica y una estrategia de normalización por pasarela. El capítulo V presenta el diseño, y el documento de arquitectura de software (SAD, \textit{Software Architecture Document}) v2.0 lo describe completo (Anexo~\ref{anx:sad}). Cada decisión quedó en el registro de decisiones de arquitectura (Anexo~\ref{anx:registro}).
+    \item \textbf{OE-02:} \textit{Diseñar la arquitectura de un framework de integración que permita unificar la interacción con múltiples pasarelas de pago, aplicando patrones de diseño y principios de extensibilidad.} \\
+    \textbf{Evidencia:} en el diseño, el dominio no depende de ninguna pasarela y cada pasarela es un adaptador de un mismo puerto. El catálogo GoF es el libro de patrones de Gamma et al. (1994), que se conoce así por sus cuatro autores (\textit{Gang of Four}). De ese catálogo, el SDK usa una fachada, una fábrica y una estrategia de normalización por pasarela. El capítulo V presenta el diseño, y el documento de arquitectura de software (SAD, \textit{Software Architecture Document}) v2.0 lo describe completo (Anexo~\ref{anx:sad}). Cada decisión quedó en el registro de decisiones de arquitectura (Artefacto~\ref{anx:registro}).
 
-    \item \textbf{OE-03:} \textit{Desarrollar un prototipo funcional del framework que implemente la interfaz unificada y los mecanismos de comunicación segura.} \\
-    \textbf{Evidencia:} el SDK está publicado en npm. Ofrece la fachada \texttt{KitPagos}, la fábrica de pasarelas, un adaptador por pasarela y el módulo de navegador que tokeniza la tarjeta. La comunicación segura se apoya en la verificación de firmas en tiempo constante, la tokenización en el navegador y el enmascaramiento de las credenciales en los mensajes de error. Sus pruebas unitarias y de integración corren con cada cambio. El capítulo VI describe su construcción y el VII, su validación (código y paquete en los Anexos~\ref{anx:sdk} y~\ref{anx:paquete}).
+    \item \textbf{OE-03:} \textit{Desarrollar un prototipo funcional del framework que implemente una interfaz unificada para la integración con múltiples pasarelas de pago, incluyendo mecanismos de comunicación segura y los elementos necesarios para su integración por parte de desarrolladores.} \\
+    \textbf{Evidencia:} el SDK está publicado en npm. Ofrece una fachada común, una fábrica de pasarelas, un adaptador por proveedor y el módulo de navegador que tokeniza la tarjeta. La comunicación segura se apoya en la verificación de firmas en tiempo constante, la tokenización en el navegador y el enmascaramiento de las credenciales en los mensajes de error. Sus pruebas unitarias y de integración se ejecutan con cada cambio. El capítulo VI describe su construcción y el VII, su validación (código y paquete en los Artefactos~\ref{anx:sdk} y~\ref{anx:paquete}).
 
-    \item \textbf{OE-04:} \textit{Implementar la API de simulación.} \\
-    \textbf{Evidencia:} bajo \texttt{/v1/sim/*}, la API de Simulación imita las rutas de las cuatro pasarelas. Elige el escenario por una cabecera (\texttt{x-simulator-scenario}), por los datos de prueba de cada pasarela, por montos reservados o por marcas en la credencial. Bajo \texttt{/v1/api} ofrece la interfaz REST propia del framework. Su especificación OpenAPI, que exige el requisito funcional RF-13, cubre \texttt{/v1/api} y las rutas de simulación de las cuatro pasarelas. Siete operaciones sin esquema quedan como un límite declarado. El capítulo VI la describe y el VII presenta su validación (código en el Anexo~\ref{anx:simulador}).
+    \item \textbf{OE-04:} \textit{Implementar una API que permita simular escenarios de interacción con pasarelas de pago, facilitando procesos de prueba durante el desarrollo.} \\
+    \textbf{Evidencia:} la API de Simulación imita las rutas de las cuatro pasarelas y permite controlar el desenlace de cada prueba por cabecera, dato de prueba de la pasarela, monto reservado o marca en la credencial. Además, ofrece una interfaz propia bajo el estilo de transferencia de estado representacional (REST, \textit{Representational State Transfer}) con las operaciones del framework y publica su especificación OpenAPI, con siete rutas sin esquema declaradas como límite. El capítulo VI la describe y el VII presenta su validación (código en el Artefacto~\ref{anx:simulador}).
 
-    \item \textbf{OE-05:} \textit{Consolidar los datos de prueba por pasarela para su documentación.} \\
-    \textbf{Evidencia:} la documentación de datos de prueba está organizada por pasarela. Reúne las tarjetas de prueba, las credenciales de sandbox validadas y los bancos PSE, y declara el nivel de evidencia de cada dato, que distingue lo medido en la API real de lo tomado de la documentación oficial. El capítulo VI resume cómo se construyó (Anexo~\ref{anx:datos}).
+    \item \textbf{OE-05:} \textit{Consolidar y documentar los mecanismos de acceso a los datos de prueba provistos por cada pasarela de pago en el contexto colombiano, facilitando su uso centralizado.} \\
+    \textbf{Evidencia:} la documentación de datos de prueba está organizada por pasarela. Reúne las tarjetas de prueba, las credenciales de sandbox validadas y los bancos PSE, y declara el nivel de evidencia de cada dato, que distingue lo medido en la API real de lo tomado de la documentación oficial. El capítulo VI resume cómo se construyó (Artefacto~\ref{anx:datos}).
 
-    \item \textbf{OE-06:} \textit{Evaluar el framework mediante su aplicación en proyectos prototípicos usando las métricas WMC, CBO y RFC de Chidamber y Kemerer (1994), comparando los resultados frente a una integración directa con las APIs nativas.} \\
-    \textbf{Evidencia:} la evaluación de la Fase 5 comparó en seis variables, entre ellas WMC, CBO y RFC, el prototipo B, que integra las cuatro pasarelas con el SDK, con el D, que las integra directamente. El diseño del experimento está en el plan de evaluación (Anexo~\ref{anx:plan-eval}), y las cifras, en el informe comparativo de la Fase 5 (Anexo~\ref{anx:informe}). Los instrumentos de medición están en el Anexo~\ref{anx:medicion}. El capítulo III explica las métricas y el VII presenta los resultados.
+    \item \textbf{OE-06:} \textit{Evaluar el framework mediante su aplicación en proyectos prototípicos definidos, especificando sus características y midiendo métricas asociadas a su implementación y nivel de abstracción, con el fin de analizar su impacto frente a enfoques tradicionales.} \\
+    \textbf{Evidencia:} la evaluación de la Fase 5 comparó en seis variables, entre ellas WMC, CBO y RFC, el prototipo B, que integra las cuatro pasarelas con el SDK, con el D, que las integra directamente. El diseño del experimento está en el plan de evaluación (Artefacto~\ref{anx:plan-eval}), y las cifras, en el informe comparativo de la Fase 5 (Artefacto~\ref{anx:informe}). Los instrumentos de medición están en el Artefacto~\ref{anx:medicion}. El capítulo III explica las métricas y el VII presenta los resultados.
 \end{itemize}
 
 \subsubsection{Alcance y exclusiones}
 El alcance que describe el SPMP 2.0 (sección 1.2.2) es el que se construyó (Equipo del Proyecto, 2026c). Cubre cuatro pasarelas, Wompi, Rapyd, Mercado Pago y Kushki, y dos métodos de pago, tarjeta y PSE. Las operaciones son crear un pago, consultar su estado, listar los bancos PSE y validar los webhooks. El framework admite tres patrones de integración, que el capítulo III describe. En P1 se integra desde el servidor del comercio con el SDK; en P2, desde un navegador a través de \texttt{/v1/api}, y en P3, con el módulo de navegador. P3 quedó implementado en parte, porque Rapyd no tokeniza la tarjeta en el navegador.
 
-Para demostrar y medir esos patrones se construyeron cuatro proyectos prototípicos (Anexo~\ref{anx:prototipos}). El prototipo A usa el SDK solo en el servidor, y el B, el SDK y el módulo de navegador. El C cobra desde el navegador a través de \texttt{/v1/api}, y el D integra las cuatro pasarelas a mano. B y D forman el par del experimento de la Fase 5; A y C no participan en él.
+Para demostrar y medir esos patrones se construyeron cuatro proyectos prototípicos (Artefacto~\ref{anx:prototipos}). El prototipo A usa el SDK solo en el servidor, y el B, el SDK y el módulo de navegador. El C cobra desde el navegador a través de \texttt{/v1/api}, y el D integra las cuatro pasarelas a mano. B y D forman el par del experimento de la Fase 5; A y C no participan en él.
 
-Quedan fuera el efectivo, Nequi, Daviplata, las suscripciones y los reembolsos. Kit Pagos Colombia tampoco actúa como procesador de pagos, porque no autoriza, liquida ni procesa cobros por su cuenta. Cuando crea un pago o consulta su estado, arma la petición, la envía a la pasarela y normaliza la respuesta, y el procesamiento lo hace siempre la pasarela. Tampoco se cubren otras pasarelas ni la recepción del número de tarjeta en el servidor del comercio. Quedan por fuera, además, la integración con sistemas contables o de planificación de recursos empresariales (ERP, \textit{Enterprise Resource Planning}), la conciliación financiera y la continuidad de las APIs de los proveedores. Las tiendas de los prototipos y el cliente del prototipo C solo demuestran el framework en los sandboxes, y no son interfaces de pago para producción. La versión 1.0 del SPMP no contemplaba la API REST propia, el módulo de navegador, los prototipos A y C ni la página de presentación; el capítulo IV detalla esas diferencias.
+Quedan fuera el efectivo, Nequi, Daviplata, las suscripciones y los reembolsos. Kit Pagos Colombia tampoco actúa como procesador de pagos, porque no autoriza, liquida ni procesa cobros por su cuenta. Cuando crea un pago o consulta su estado, arma la petición, la envía a la pasarela y normaliza la respuesta, y el procesamiento lo hace siempre la pasarela. Tampoco se cubren otras pasarelas ni la recepción del número de tarjeta en el servidor del comercio. Quedan por fuera, además, la integración con sistemas contables o de planificación de recursos empresariales (ERP, \textit{Enterprise Resource Planning}), la conciliación financiera y la continuidad de las APIs de los proveedores. Las tiendas de los prototipos y el cliente del prototipo C solo demuestran el framework en los sandboxes, y no son interfaces de pago para producción. La versión 1.0 del SPMP no contemplaba la API REST propia, el módulo de navegador, los prototipos A y C ni la página de presentación; el SPMP 2.0 (Anexo~\ref{anx:spmp}) detalla esas diferencias.
 
-Los entregables de software están publicados. El paquete \texttt{kit-pagos-colombia} está en npm (Kit Pagos Colombia, 2026). Al 7 de noviembre de 2026, la versión 0.6.0 tenía la etiqueta \texttt{latest}, la que npm instala por omisión, y la 0.7.0-rc.2, una versión candidata (rc, \textit{release candidate}), tenía la etiqueta \texttt{next}. La API de Simulación corre en Render, y la documentación de datos de prueba y los prototipos están en el repositorio. La página de presentación se publica en GitHub Pages (Anexos~\ref{anx:simulador}, \ref{anx:datos}, \ref{anx:prototipos} y~\ref{anx:landing}).
+Los entregables de software están publicados. El paquete \texttt{kit-pagos-colombia} está en npm (Kit Pagos Colombia, 2026). Al 7 de noviembre de 2026, la versión 0.6.0 tenía la etiqueta \texttt{latest}, la que npm instala por omisión, y la 0.7.0-rc.2, una versión candidata (rc, \textit{release candidate}), tenía la etiqueta \texttt{next}. La API de Simulación corre en Render, y la documentación de datos de prueba y los prototipos están en el repositorio. La página de presentación se publica en GitHub Pages (Artefactos~\ref{anx:simulador}, \ref{anx:datos}, \ref{anx:prototipos} y~\ref{anx:landing}).
 
-\subsubsection{Metodología, entregables y criterios aplicados}
+\subsubsection{Marco metodológico, entregables, estándares y justificación}
 El marco metodológico del proyecto es Design Science Research (DSR) (Peffers et al., 2007), porque el resultado del trabajo es un framework que hay que construir y evaluar frente al problema que lo motivó. Peffers et al. proponen seis actividades en un orden nominal, que admite iterar y empezar por varias de ellas. El SPMP las adapta en seis fases: separa el diseño del desarrollo y junta la demostración con la evaluación (Equipo del Proyecto, 2026c, sección 3.1).
 \begin{enumerate}
     \item \textbf{Identificación del problema:} caracterización de las diferencias entre las cuatro pasarelas y recopilación de sus parámetros técnicos y datos de prueba.
@@ -98,50 +96,50 @@ El marco metodológico del proyecto es Design Science Research (DSR) (Peffers et
     \item \textbf{Comunicación:} redacción del documento de memoria y del manual de uso, y publicación del repositorio de código abierto.
 \end{enumerate}
 
-La Tabla~\ref{tab:entregables} reúne los entregables del trabajo de grado: los cinco documentos y los entregables de software. Para cada uno indica los criterios y estándares que se aplicaron y dónde está la evidencia de su cumplimiento.
+La Tabla~\ref{tab:entregables} reúne los entregables del proyecto de grado: los cinco documentos y los entregables de software. Para cada uno indica los criterios y estándares que se aplicaron y dónde está la evidencia de su cumplimiento.
 
 {\small
 \renewcommand{\arraystretch}{1.2}
 \begin{xltabular}{\textwidth}{|>{\raggedright\arraybackslash}p{3.0cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{3.6cm}|}
-\caption{Entregables del trabajo de grado, criterios aplicados y evidencia}\label{tab:entregables}\\
+\caption{Entregables del proyecto de grado, criterios aplicados y evidencia}\label{tab:entregables}\\
 \hline
-\textbf{Entregable} & \textbf{Criterios y estándares aplicados} & \textbf{Evidencia} \\ \hline
+\textbf{Entregable} & \textbf{Estándar y criterios aplicados} & \textbf{Justificación y evidencia} \\ \hline
 \endfirsthead
-\caption[]{Entregables del trabajo de grado, criterios aplicados y evidencia (continuación)}\\
+\caption[]{Entregables del proyecto de grado, criterios aplicados y evidencia (continuación)}\\
 \hline
-\textbf{Entregable} & \textbf{Criterios y estándares aplicados} & \textbf{Evidencia} \\ \hline
+\textbf{Entregable} & \textbf{Estándar y criterios aplicados} & \textbf{Justificación y evidencia} \\ \hline
 \endhead
-\multicolumn{3}{|l|}{\textit{Documentos del trabajo de grado}} \\ \hline
+\multicolumn{3}{|l|}{\textit{Documentos del proyecto de grado}} \\ \hline
 Plan de gestión del proyecto de software (SPMP) v2.0 &
-  Recoge los objetivos de la propuesta aprobada. Adapta el ciclo de vida de DSR en seis fases (Peffers et al., 2007), define el cronograma, los riesgos, el plan de calidad y el control de cambios, y registra las diferencias con la versión 1.0. &
+  Recoge los objetivos del proyecto. Adapta el ciclo de vida de DSR en seis fases (Peffers et al., 2007), define el cronograma, los riesgos, el plan de calidad y el control de cambios, y registra las diferencias con la versión 1.0. &
   Capítulos II y IV; Anexo~\ref{anx:spmp}. \\ \hline
 Especificación de requisitos de software (SRS) v2.0 &
   Sigue la estructura de IEEE 830-1998. Especifica diecinueve requisitos funcionales y trece historias de usuario con sus criterios de aceptación, y clasifica los no funcionales con FURPS+. La matriz de trazabilidad relaciona cada requisito con sus componentes y sus pruebas. &
-  Capítulo IV; Anexos~\ref{anx:srs} y~\ref{anx:trazabilidad}. \\ \hline
+  Capítulo IV; Anexo~\ref{anx:srs} y artefacto~\ref{anx:trazabilidad}. \\ \hline
 Documento de arquitectura de software (SAD) v2.0 &
-  Usa las vistas del modelo C4 (Brown, s.~f.). Describe los requisitos arquitectónicamente significativos y las restricciones, y registra cada decisión como un ADR con su problema, su solución y sus consecuencias. &
-  Capítulo V; Anexos~\ref{anx:sad} y~\ref{anx:diagramas}. \\ \hline
+  Usa las vistas del modelo C4, que describe un sistema en cuatro niveles de detalle (Brown, s.~f.). Describe los requisitos arquitectónicamente significativos y las restricciones, y registra cada decisión como un registro de decisión de arquitectura (ADR, \textit{Architecture Decision Record}) con su problema, su solución y sus consecuencias. &
+  Capítulo V; Anexo~\ref{anx:sad} y artefacto~\ref{anx:diagramas}. \\ \hline
 Plan de pruebas del proyecto (PTP) v0.4 &
   Define la estrategia por tipo de prueba y ambiente. Sus siete casos declaran de antemano el resultado esperado (Myers et al., 2004), y el plan fija criterios de entrada y salida y registra los defectos y las evidencias de la corrida. &
   Capítulo VII; Anexo~\ref{anx:pruebas}. \\ \hline
 Documento de memoria &
-  Cumple la fase de comunicación de DSR (Peffers et al., 2007). Presenta el problema, el diseño, la construcción y la evaluación, con citas y referencias en formato APA. &
-  Este documento; fuentes en el Anexo~\ref{anx:memoria}. \\ \hline
+  Cumple la fase de comunicación de DSR (Peffers et al., 2007). Presenta el problema, el diseño, la construcción y la evaluación, con citas y referencias en el formato de la Asociación Estadounidense de Psicología (APA, \textit{American Psychological Association}). &
+  Este documento; fuentes en el Artefacto~\ref{anx:memoria}. \\ \hline
 \multicolumn{3}{|l|}{\textit{Entregables de software}} \\ \hline
 SDK y módulo de navegador &
-  Arquitectura hexagonal y patrones GoF. TypeScript en modo estricto y montos como objetos de valor inmutables con la escala de ISO 4217. La DoD exige una cobertura de pruebas de al menos 80\,\% y métricas CK dentro de sus umbrales. &
-  Capítulos V a VII; Anexos~\ref{anx:paquete} y~\ref{anx:sdk}. \\ \hline
+  Arquitectura hexagonal y patrones GoF. TypeScript en modo estricto y montos como objetos de valor inmutables con la escala de la norma ISO 4217, de la Organización Internacional de Normalización (ISO). La DoD exige una cobertura de pruebas de al menos 80\,\% y métricas CK dentro de sus umbrales. &
+  Capítulos V a VII; Artefactos~\ref{anx:paquete} y~\ref{anx:sdk}. \\ \hline
 API de Simulación &
   Servicio Fastify cuyas respuestas imitan lo medido en cada sandbox. Los escenarios se eligen por cabecera, dato de prueba, monto reservado o marca de credencial, la especificación OpenAPI 3.0 se valida y el estado vive en memoria. &
-  Capítulos VI y VII; Anexo~\ref{anx:simulador}. \\ \hline
+  Capítulos VI y VII; Artefacto~\ref{anx:simulador}. \\ \hline
 Documentación de datos de prueba &
   Nivel de evidencia declarado por dato. Cada uno está medido en la API real con fecha, medido solo hasta cierto punto del flujo o tomado de la documentación oficial sin comprobar. &
-  Capítulo VI; Anexo~\ref{anx:datos}. \\ \hline
+  Capítulo VI; Artefacto~\ref{anx:datos}. \\ \hline
 Proyectos prototípicos &
   Esqueleto común a B y D. La integración continua verifica que sea igual, y los dos implementan las mismas seis funciones de pago en las cuatro pasarelas. &
-  Capítulo VI; Anexo~\ref{anx:prototipos}. \\ \hline
+  Capítulo VI; Artefacto~\ref{anx:prototipos}. \\ \hline
 Informe comparativo de la evaluación &
   Seis variables contables por script. Entre ellas están WMC, CBO y RFC de Chidamber y Kemerer (1994), adaptadas a nivel de archivo; la hipótesis se escribió antes de medir y las amenazas a la validez están declaradas. &
-  Capítulo VII; Anexos~\ref{anx:plan-eval} a~\ref{anx:medicion}. \\ \hline
+  Capítulo VII; Artefactos~\ref{anx:plan-eval} a~\ref{anx:medicion}. \\ \hline
 \end{xltabular}
 }
