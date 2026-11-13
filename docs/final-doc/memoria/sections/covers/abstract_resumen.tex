@@ -4,12 +4,7 @@
 
 \vspace{0.25cm}
 
-% Write an English abstract (maximum 100 words) stating the integration problem,
-% the Kit Pagos Colombia artifact (SDK, simulation API and test-data documentation),
-% the method and only results that have been verified. Do not claim unmeasured benefits.
-
-
-
+Integrating several payment gateways in Colombia means repeating the work: Wompi, Mercado Pago, Kushki and Rapyd differ in authentication, amounts, statuses and signatures. This work applies Design Science Research to build the Kit Pagos Colombia framework: a TypeScript SDK with a hexagonal architecture that charges cards and PSE on all four, a simulation API and test-data documentation. In a case study, the prototype using the SDK needed 310 integration lines against 1,308 in the hand-integrated one, and 67 lines instead of 1,042 to add three gateways, although its average coupling was higher.
 
 \begin{center}
     {\textbf{RESUMEN}}
@@ -17,6 +12,4 @@
 
 \vspace{0.25cm}
 
-% Redacte un resumen de máximo 100 palabras: problema de integración, artefacto
-% (SDK, API de Simulación y documentación de datos), método y resultados verificados.
-% Debe corresponder al abstract en inglés; no afirme beneficios que la Fase 5 no haya medido.
+Integrar varias pasarelas de pago en Colombia obliga a repetir el trabajo: Wompi, Mercado Pago, Kushki y Rapyd difieren en autenticación, montos, estados y firmas. Con Design Science Research se construyó el framework Kit Pagos Colombia: un SDK en TypeScript con arquitectura hexagonal que cobra con tarjeta y PSE en las cuatro, una API de Simulación y documentación de datos de prueba. En un estudio de caso, el prototipo con el SDK necesitó 310 líneas de integración frente a 1\,308 del integrado a mano, y 67 líneas, no 1\,042, para sumar tres pasarelas, aunque su acoplamiento promedio fue mayor.
