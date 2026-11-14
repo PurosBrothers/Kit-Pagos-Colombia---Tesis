@@ -3,10 +3,10 @@
 \sloppy
 
 \subsection{Requisitos funcionales y no funcionales}
-Los requisitos de Kit Pagos Colombia están en el SRS v2.0 (Equipo del Proyecto, 2026b). La matriz de trazabilidad (Artefacto~\ref{anx:trazabilidad}) registra, para cada uno, los componentes que lo implementan, su estado y las pruebas que lo cubren. Este capítulo los resume y remite al SRS para el texto normativo, de modo que un cambio de requisitos no deje dos versiones.
+Los requisitos de Kit Pagos Colombia están en el SRS v2.0 (Anexo~\ref{anx:srs}). La matriz de trazabilidad (Artefacto~\ref{anx:trazabilidad}) registra, para cada uno, los componentes que lo implementan, su estado y las pruebas que lo cubren. Este capítulo los resume y remite al SRS para el texto normativo, de modo que un cambio de requisitos no deje dos versiones.
 
 \subsubsection{Requisitos funcionales (RF-01 a RF-19)}
-El SRS v2.0 (sección 6.1) especifica diecinueve requisitos funcionales (RF), y la matriz de trazabilidad los registra todos como implementados. RF-13 tiene un límite declarado: siete de las 43 operaciones de la API de Simulación no tienen esquema. Aquí se agrupan por componente:
+El SRS v2.0 (Anexo~\ref{anx:srs}) especifica diecinueve requisitos funcionales (RF), y la matriz de trazabilidad los registra todos como implementados. RF-13 tiene un límite declarado: siete de las 43 operaciones de la API de Simulación no tienen esquema. Aquí se agrupan por componente:
 
 \paragraph{A. SDK}
 \begin{itemize}
@@ -43,7 +43,7 @@ El SRS v2.0 (sección 6.1) especifica diecinueve requisitos funcionales (RF), y 
 Los requisitos cubren los tres patrones del capítulo III. P1, del servidor al SDK, descansa en RF-01 a RF-08, RF-18 y RF-19, y está implementado. P2, del navegador a \texttt{/v1/api}, descansa en RF-16 y está implementado, con el prototipo C como cliente. P3, la tokenización unificada en el navegador, corresponde a RF-17 y está implementado en parte, porque Rapyd no tokeniza en el navegador.
 
 \subsubsection{Criterios de calidad (clasificación FURPS+)}
-El SRS v2.0 (sección 7) clasifica los requisitos no funcionales con el modelo FURPS+, que los agrupa en funcionalidad, usabilidad, confiabilidad, rendimiento y soporte, más las restricciones que indica el signo «+». En resumen:
+El SRS v2.0 (Anexo~\ref{anx:srs}) clasifica los requisitos no funcionales con el modelo FURPS+, que los agrupa en funcionalidad, usabilidad, confiabilidad, rendimiento y soporte, más las restricciones que indica el signo «+». En resumen:
 \begin{itemize}
     \item \textbf{Funcionalidad y seguridad (\textit{functionality}):} las cuatro operaciones, con tarjeta tokenizada y con PSE, en las cuatro pasarelas. Las credenciales no aparecen en registros, mensajes de error ni respuestas del SDK, y la comunicación con las pasarelas usa HTTP cifrado (HTTPS). La firma de cada webhook se verifica antes de procesar el evento, con una ventana de tolerancia y una comparación en tiempo constante (\texttt{crypto.timingSafeEqual}).
     \item \textbf{Usabilidad (\textit{usability}):} el paquete se instala con \texttt{npm install kit-pagos-colombia}. La guía del paquete y la guía de implementación traen ejemplos de cobro, consulta, webhooks y errores (Artefacto~\ref{anx:paquete}), y un script (\texttt{npm run check:readme}) compila los fragmentos de código de la guía con la interfaz pública del SDK. La API de Simulación se ejecuta en local sin credenciales reales y publica su especificación OpenAPI.
@@ -59,7 +59,7 @@ Las restricciones adicionales del modelo (el «+») se presentan en la sección 
 \begin{enumerate}
     \item \textbf{Plataforma de ejecución:} el SDK y la API de Simulación se implementan en TypeScript con \texttt{strict: true} sobre Node.js. El paquete exige \texttt{engines.node >= 20.19.0}, porque con la versión 20.18 o una anterior el módulo de navegador no carga.
     \item \textbf{Gestión de dependencias:} el SDK tiene una sola dependencia de ejecución, \texttt{big.js}, para la aritmética decimal de los montos; la criptografía y la red usan los módulos nativos de la plataforma (\texttt{node:crypto} y \texttt{fetch}).
-    \item \textbf{Distribución y despliegue:} el SDK se publica en npm bajo la licencia Apache 2.0, con el código en un repositorio público de GitHub. La API de Simulación se ejecuta en local y en Render, en el plan gratuito, sin acuerdo de nivel de servicio (SRS v2.0, sección 7).
+    \item \textbf{Distribución y despliegue:} el SDK se publica en npm bajo la licencia Apache 2.0, con el código en un repositorio público de GitHub. La API de Simulación se ejecuta en local y en Render, en el plan gratuito, sin acuerdo de nivel de servicio (Anexo~\ref{anx:srs}).
 \end{enumerate}
 
 \subsubsection{Restricciones de seguridad y regulación}
@@ -69,7 +69,7 @@ Las restricciones adicionales del modelo (el «+») se presentan en la sección 
 \end{enumerate}
 
 \subsubsection{Supuestos y límites de los sandboxes}
-El SPMP 2.0 (sección 1.3.1) declara dos supuestos técnicos (Equipo del Proyecto, 2026c). El primero es que las APIs de las cuatro pasarelas se mantienen estables durante el desarrollo. Para PayU no se cumplía, porque Rapyd ya había comprado su operación en América Latina, y por eso el proyecto trabajó con Rapyd. El segundo es que los sandboxes están disponibles. Lo estuvieron, pero no permiten varios flujos de punta a punta:
+El SPMP 2.0 (Anexo~\ref{anx:spmp}) declara dos supuestos técnicos. El primero es que las APIs de las cuatro pasarelas se mantienen estables durante el desarrollo. Para PayU no se cumplía, porque Rapyd ya había comprado su operación en América Latina, y por eso el proyecto trabajó con Rapyd. El segundo es que los sandboxes están disponibles. Lo estuvieron, pero no permiten varios flujos de punta a punta:
 \begin{itemize}
     \item Wompi entrega en el mismo momento la URL del banco de PSE y el estado final del pago.
     \item En la Orders API de Mercado Pago, la única que cobra PSE, las credenciales de prueba reciben \texttt{401}.
@@ -78,12 +78,12 @@ El SPMP 2.0 (sección 1.3.1) declara dos supuestos técnicos (Equipo del Proyect
 Esos flujos se prueban con la API de Simulación, que tiene sus propios límites declarados en la matriz de trazabilidad. Las combinaciones sin evidencia de cómo responde la pasarela real devuelven \texttt{501} (fila RF-10 de la matriz). Los datos de prueba de Rapyd y del PSE de Mercado Pago no llegan al simulador, porque en esos flujos el desenlace lo decide la página del banco o de la pasarela. Esos desenlaces se eligen con los montos reservados (fila RF-15).
 
 \subsubsection{Exclusiones del alcance}
-El SPMP 2.0 (sección 1.2.2) delimita el alcance con exclusiones que el capítulo II resume. No se cubren el efectivo, Nequi ni Daviplata, y tampoco las suscripciones ni los reembolsos. El framework crea pagos, consulta su estado, lista los bancos PSE y verifica los webhooks, pero no es un procesador de pagos. Arma la petición, la envía a la pasarela y normaliza la respuesta, mientras que la autorización, la liquidación y el procesamiento del cobro son siempre de la pasarela. Quedan por fuera, además, sumar otras pasarelas, recibir el número de tarjeta en el servidor del comercio, integrarse con sistemas contables o ERP, conciliar los pagos y administrar las cuentas que el comercio tiene con cada proveedor. El proyecto tampoco responde por la continuidad de las APIs de las pasarelas ni entrega interfaces de pago para producción, porque las tiendas de los prototipos y el cliente del prototipo C son demostraciones en los sandboxes.
+El SPMP 2.0 (Anexo~\ref{anx:spmp}) delimita el alcance con exclusiones que el capítulo II resume. No se cubren el efectivo, Nequi ni Daviplata, y tampoco las suscripciones ni los reembolsos. El framework crea pagos, consulta su estado, lista los bancos PSE y verifica los webhooks, pero no es un procesador de pagos. Arma la petición, la envía a la pasarela y normaliza la respuesta, mientras que la autorización, la liquidación y el procesamiento del cobro son siempre de la pasarela. Quedan por fuera, además, sumar otras pasarelas, recibir el número de tarjeta en el servidor del comercio, integrarse con sistemas contables o ERP, conciliar los pagos y administrar las cuentas que el comercio tiene con cada proveedor. El proyecto tampoco responde por la continuidad de las APIs de las pasarelas ni entrega interfaces de pago para producción, porque las tiendas de los prototipos y el cliente del prototipo C son demostraciones en los sandboxes.
 
 La versión 1.0 del SPMP excluía las «interfaces de usuario para flujos de pago» y nombraba a PayU entre las cuatro pasarelas; el SPMP 2.0 (Anexo~\ref{anx:spmp}) y el seguimiento de los objetivos (Artefacto~\ref{anx:objetivos}) registran esas diferencias.
 
 \subsection{Especificación funcional}
-Esta sección describe los flujos principales. Las trece historias de usuario (HU) del SRS v2.0 (sección 6), con sus criterios de aceptación, detallan cada uno.
+Esta sección describe los flujos principales. Las trece historias de usuario (HU) del SRS v2.0 (Anexo~\ref{anx:srs}), con sus criterios de aceptación, detallan cada uno.
 
 \subsubsection{Flujo unificado de cobro con tarjeta}
 El cobro con tarjeta, de crédito o de débito, tiene dos etapas:
