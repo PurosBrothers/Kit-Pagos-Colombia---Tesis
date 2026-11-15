@@ -1,7 +1,7 @@
 \setcounter{subsection}{0}
 \section{DISEÑO DE LA SOLUCIÓN}
 
-El diseño de Kit Pagos Colombia se documentó en el SAD 2.0 (Equipo del Proyecto, 2026a). Este capítulo resume, sin reproducir ese documento, las decisiones que sostienen la propuesta del proyecto, y las relaciona con los requisitos y las restricciones que las originaron. La pregunta que guía el capítulo es por qué la arquitectura permite que un comercio integre varias pasarelas sin escribir el mapeo, la firma ni el flujo de consulta de cada una. La respuesta se organiza en seis partes: los criterios de diseño, la arquitectura hexagonal y el modelo de dominio, el diseño de los componentes, los patrones de integración, el tratamiento de la seguridad y los errores, y las tecnologías empleadas.
+El diseño de Kit Pagos Colombia se documentó en el SAD 2.0 (Anexo~\ref{anx:sad}). Este capítulo resume, sin reproducir ese documento, las decisiones que sostienen la propuesta del proyecto, y las relaciona con los requisitos y las restricciones que las originaron. La pregunta que guía el capítulo es por qué la arquitectura permite que un comercio integre varias pasarelas sin escribir el mapeo, la firma ni el flujo de consulta de cada una. La respuesta se organiza en seis partes: los criterios de diseño, la arquitectura hexagonal y el modelo de dominio, el diseño de los componentes, los patrones de integración, el tratamiento de la seguridad y los errores, y las tecnologías empleadas.
 
 \subsection{Criterios y decisiones de diseño}
 
@@ -80,7 +80,7 @@ Para elegir el escenario, el simulador mira en orden la cabecera \texttt{x-simul
 
 \subsection{Patrones de integración}
 
-El sistema implementa dos patrones de integración completos y un tercero en parte, como resume la Tabla~\ref{tab:patrones-memoria}. En P1, el servidor del comercio usa el SDK y este se comunica con la pasarela. En P2, una aplicación de navegador consume la API REST \texttt{/v1/api}, que a su vez usa el SDK; en simulación, el SDK llama por HTTP a \texttt{/v1/sim} dentro del mismo servicio. P3 es un SDK unificado en el navegador. De él existe el módulo \texttt{KitPagosBrowser}, que tokeniza la tarjeta en Wompi, Mercado Pago y Kushki y que el caso de prueba (CP) CP-05 del plan de pruebas verifica. El cobro sigue pasando por un servidor, el del comercio en P1 o \texttt{/v1/api} en P2, y Rapyd no tokeniza en el navegador: cobra la tarjeta en su página alojada.
+El sistema implementa dos patrones de integración completos y un tercero en parte, como resume la Tabla~\ref{tab:patrones-memoria}. En P1, el servidor del comercio usa el SDK y este se comunica con la pasarela. En P2, una aplicación de navegador consume la API REST \texttt{/v1/api}, que a su vez usa el SDK; en simulación, el SDK llama por HTTP a \texttt{/v1/sim} dentro del mismo servicio. P3 es un SDK unificado en el navegador. De él existe el módulo \texttt{KitPagosBrowser}, que tokeniza la tarjeta en Wompi, Mercado Pago y Kushki y que el caso de prueba (CP) CP-05 del plan de pruebas (Anexo~\ref{anx:pruebas}) verifica. El cobro sigue pasando por un servidor, el del comercio en P1 o \texttt{/v1/api} en P2, y Rapyd no tokeniza en el navegador: cobra la tarjeta en su página alojada.
 
 \begin{table}[H]
   \centering
