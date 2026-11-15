@@ -49,7 +49,7 @@ La representación del dinero es una fuente frecuente de defectos en el software
 \[
 0.1 + 0.2 = 0.30000000000000004
 \]
-En un sistema de cobro, comprobar con aritmética de \texttt{number} si un monto tiene a lo sumo dos decimales rechaza montos legítimos como \texttt{1.15} o \texttt{19.99}, como muestra el análisis de la representación del dinero del proyecto (Artefacto~\ref{anx:arquitectura}). La serialización también pierde información: \texttt{(19.90).toString()} devuelve \texttt{"19.9"}. Rapyd firma el cuerpo serializado de cada petición, y \texttt{"19.90"} y \texttt{"19.9"} producen firmas distintas (Artefacto~\ref{anx:producto}).
+En un sistema de cobro, comprobar con aritmética de \texttt{number} si un monto tiene a lo sumo dos decimales rechaza montos legítimos como \texttt{1.15} o \texttt{19.99}, como muestra el análisis de la representación del dinero en el SAD (Anexo~\ref{anx:sad}). La serialización también pierde información: \texttt{(19.90).toString()} devuelve \texttt{"19.9"}. Rapyd firma el cuerpo serializado de cada petición, y \texttt{"19.90"} y \texttt{"19.9"} producen firmas distintas (Artefacto~\ref{anx:producto}).
 
 Por eso el software financiero suele representar el dinero con enteros en la unidad menor de la moneda o con aritmética decimal exacta. La norma ISO 4217 (International Organization for Standardization, 2015) define cuántos decimales tiene cada divisa y le asigna dos al peso colombiano.
 

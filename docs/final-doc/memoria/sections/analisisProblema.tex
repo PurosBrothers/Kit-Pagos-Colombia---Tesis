@@ -80,7 +80,7 @@ Esos flujos se prueban con la API de Simulación, que tiene sus propios límites
 \subsubsection{Exclusiones del alcance}
 El SPMP 2.0 (Anexo~\ref{anx:spmp}) delimita el alcance con exclusiones que el capítulo II resume. No se cubren el efectivo, Nequi ni Daviplata, y tampoco las suscripciones ni los reembolsos. El framework crea pagos, consulta su estado, lista los bancos PSE y verifica los webhooks, pero no es un procesador de pagos. Arma la petición, la envía a la pasarela y normaliza la respuesta, mientras que la autorización, la liquidación y el procesamiento del cobro son siempre de la pasarela. Quedan por fuera, además, sumar otras pasarelas, recibir el número de tarjeta en el servidor del comercio, integrarse con sistemas contables o ERP, conciliar los pagos y administrar las cuentas que el comercio tiene con cada proveedor. El proyecto tampoco responde por la continuidad de las APIs de las pasarelas ni entrega interfaces de pago para producción, porque las tiendas de los prototipos y el cliente del prototipo C son demostraciones en los sandboxes.
 
-La versión 1.0 del SPMP excluía las «interfaces de usuario para flujos de pago» y nombraba a PayU entre las cuatro pasarelas; el SPMP 2.0 (Anexo~\ref{anx:spmp}) y el seguimiento de los objetivos (Artefacto~\ref{anx:objetivos}) registran esas diferencias.
+La versión 1.0 del SPMP excluía las «interfaces de usuario para flujos de pago» y nombraba a PayU entre las cuatro pasarelas; el SPMP 2.0 (Anexo~\ref{anx:spmp}) registra esas diferencias.
 
 \subsection{Especificación funcional}
 Esta sección describe los flujos principales. Las trece historias de usuario (HU) del SRS v2.0 (Anexo~\ref{anx:srs}), con sus criterios de aceptación, detallan cada uno.

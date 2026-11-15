@@ -106,7 +106,7 @@ Petición~8 & \path{curl -s https://kit-pagos-colombia.onrender.com/v1/api/gatew
 
 El caso elige la tarjeta de Wompi y no un PSE para la comprobación principal porque la creación con tarjeta devuelve \texttt{TRANSACTION} y obliga a consultar para ver el desenlace; así se ejercitan las dos rutas de lectura en una sola corrida. El PSE aparece en el prototipo C, donde el cliente sí necesita ver la redirección y la diferencia entre \texttt{TRANSACTION} y \texttt{REDIRECT\_REQUIRED}.
 
-El paso 1 vacía las tres variables de Wompi porque, con un perfil completo en el \path{.env}, el simulador verifica la firma de integridad con el secreto de ese perfil y no con el valor por omisión que trae el ambiente \texttt{local} de Postman (\path{simulator-api/postman/README.md}). Así el caso no necesita copiar un secreto real en ningún comando. El paso 7 vuelve al perfil del \path{.env}, porque C no envía credenciales y la API usa las del servidor.
+El paso 1 vacía las tres variables de Wompi porque, con un perfil completo en el \path{.env}, el simulador verifica la firma de integridad con el secreto de ese perfil y no con el valor por omisión que trae el ambiente local de la colección de Postman. Así el caso no necesita copiar un secreto real en ningún comando. El paso 7 vuelve al perfil del \path{.env}, porque C no envía credenciales y la API usa las del servidor.
 
 El humo de Render se mantiene separado de la aceptación local. Render es un servicio del nivel gratuito que puede tardar en despertar, y una caída del despliegue no dice nada sobre la corrección funcional de \texttt{/v1/api}; por eso se marca como bloqueado, no como fallo del caso. Render no se usa para la carga.
 

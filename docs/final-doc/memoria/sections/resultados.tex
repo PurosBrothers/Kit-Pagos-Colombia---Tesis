@@ -74,7 +74,7 @@ La demostración distingue tres niveles de confianza. Con el simulador, el desen
 
 El experimento compara dos implementaciones del mismo flujo de compra mínimo de una tienda en línea. El prototipo D integra las cuatro pasarelas de forma directa, con \texttt{fetch} y los formatos nativos de cada proveedor; es el control y representa lo que hace hoy un desarrollador colombiano. El prototipo B integra las cuatro con \texttt{kit-pagos-colombia} 0.7.0-rc.2, con tokenización en el navegador; es el tratamiento y representa lo que propone este trabajo. Fuera de la integración de pagos, los dos comparten todo: el esqueleto, el servidor, el contrato \texttt{PaymentsPort}, las rutas y las dependencias. Solo cambia la vitrina, porque D vende cómics y B vinos, y esa diferencia se declara como límite. Las variables 1 y 2 se cuentan sobre el módulo de pagos y sus pruebas, y la 6 sobre el módulo de pagos; la diferencia de vitrina no toca ninguno de los dos.
 
-La hipótesis quedó escrita antes de medir. Decía que en B una pasarela nueva sería solo configuración, sin mapeo de monto, traducción de estados, verificación de firma ni flujo de consulta propios, y sin cambios en el esqueleto ni en el modelo de datos. En D, en cambio, cada pasarela exigiría escribir todas esas piezas. La Tabla~\ref{tab:seis-variables-memoria} transcribe las seis variables medidas, y la variable 3, las métricas CK, ocupa cuatro filas. Cada fila es la de su variable en la recolección de las seis variables (Artefacto~\ref{anx:recoleccion}), y la columna de diferencia es la del informe comparativo (Artefacto~\ref{anx:informe}), sin recalcular.
+La hipótesis quedó escrita antes de medir. Decía que en B una pasarela nueva sería solo configuración, sin mapeo de monto, traducción de estados, verificación de firma ni flujo de consulta propios, y sin cambios en el esqueleto ni en el modelo de datos. En D, en cambio, cada pasarela exigiría escribir todas esas piezas. La Tabla~\ref{tab:seis-variables-memoria} recoge las seis variables medidas, y la variable 3, las métricas CK, ocupa cuatro filas. La columna de diferencia se calcula sobre esas cifras, sin una fuente aparte.
 
 \begin{table}[H]
   \centering
@@ -104,7 +104,28 @@ Las métricas CK se leen como explica el capítulo III, ahora con el archivo com
 
 La variable de conceptos nativos es la que responde de forma más directa a la hipótesis, porque cuenta cuánto vocabulario propio de las pasarelas aparece en el código del comercio. El script versionado busca 14 identificadores propios de las pasarelas, con límites de palabra y sin comentarios. En D aparecen 10 identificadores distintos en 18 ocurrencias; en B, ninguno, verificado con la opción que falla si encuentra uno. En pasarelas alcanzables hay paridad: B y D cobran con tarjeta y PSE en las cuatro. Solo el PSE de Kushki queda sin identificador de cobro, y les pasa igual a los dos, porque el sandbox de Kushki deja la transferencia en \texttt{initializedTransaction} y el simulador local la aprueba con el webhook firmado. La cobertura de pruebas de B es mayor con menos pruebas, 165 frente a 239. B cubre 9,97 puntos porcentuales (pp) más de sentencias y 16,51 pp más de ramas, porque la lógica compleja de las pasarelas está en el SDK y no en el módulo de pagos del comercio.
 
-La hipótesis se confirma casi por completo en lo que midió el experimento. De las 67 líneas que B agrega para las tres pasarelas, 58 son configuración. Ninguno de los tres cambios de pasarela de B toca el esqueleto ni el modelo de datos, ni escribe el mapeo de monto, la traducción de estados, la verificación de firma o el flujo de consulta. Las otras 9 líneas no son configuración y se reportan como tales. Que sean configuración tampoco quiere decir que no cuesten: cada pasarela de B trae su propia suite de pruebas, con 51, 65 y 121 líneas para Mercado Pago, Kushki y Rapyd. Además, el costo de construir y mantener el SDK queda fuera de lo que se midió. Las cifras, el protocolo completo, los cambios por pasarela y los instrumentos para reproducirlos están en el informe comparativo y en la recolección de las seis variables (Artefactos~\ref{anx:informe} a~\ref{anx:medicion}).
+La Tabla~\ref{tab:variable-5} recoge los identificadores que devolvieron los sandboxes el 22 de octubre de 2026, entre las 19:52 y las 20:05 UTC, sobre el commit \texttt{daad2aa}. El PSE de Kushki no tiene identificador: el ambiente de pruebas de aceptación no cierra la transferencia, y el simulador local la aprobó con un webhook firmado.
+
+\begin{table}[ht]
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.3cm}|>{\raggedright\arraybackslash}p{1.5cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{3.2cm}|}
+    \hline
+    \textbf{Pasarela} & \textbf{Método} & \textbf{Prototipo D} & \textbf{Prototipo B} & \textbf{Entorno} \\ \hline
+    Wompi & Tarjeta & \texttt{12066420-1792698761-45735} & \texttt{12066420-1792699478-43077} & Sandbox oficial \\ \hline
+    Wompi & PSE & \texttt{12066420-1792699420-82005} & \texttt{12066420-1792699521-88985} & Sandbox oficial \\ \hline
+    Mercado Pago & Tarjeta & \texttt{ORDTST01M5JKARCFRC71T3H34FGAGAJP} & \texttt{ORDTST01M5JKGA7Q1JR1PJTNAEMJ809S} & Sandbox oficial \\ \hline
+    Mercado Pago & PSE & \texttt{ORDTST01M5JJTYSECYGBJJ2GAGTJ329N} & \texttt{ORDTST01M5JJYAPD74JMX525CVFCPX6W} & Sandbox oficial \\ \hline
+    Kushki & Tarjeta & Ticket \texttt{169607708835281034} (\texttt{APPROVAL}) & Ticket \texttt{193524300384999562} (\texttt{APPROVAL}) & Sandbox UAT \\ \hline
+    Kushki & PSE & Sin identificador & Sin identificador & UAT no cierra; el simulador aprueba \\ \hline
+    Rapyd & Tarjeta & \texttt{checkout\_28ef91d4bf0491420f55af86f9a551de} & \texttt{checkout\_e5a177e8e6324e749d23729369fd9684} & Sandbox oficial, con 3-D Secure \\ \hline
+    Rapyd & PSE & \texttt{payment\_0e22b327ccacc8e50f93035361c224e5} (\texttt{CLO}) & \texttt{payment\_445f7ae11467f8792bf7b54e99a26269} (\texttt{CLO}) & Sandbox oficial \\ \hline
+  \end{tabularx}
+  \caption{Identificadores de cobro de la variable 5, medidos el 22 de octubre de 2026}
+  \label{tab:variable-5}
+\end{table}
+
+La hipótesis se confirma casi por completo en lo que midió el experimento. De las 67 líneas que B agrega para las tres pasarelas, 58 son configuración. Ninguno de los tres cambios de pasarela de B toca el esqueleto ni el modelo de datos, ni escribe el mapeo de monto, la traducción de estados, la verificación de firma o el flujo de consulta. Las otras 9 líneas no son configuración y se reportan como tales. Que sean configuración tampoco quiere decir que no cuesten: cada pasarela de B trae su propia suite de pruebas, con 51, 65 y 121 líneas para Mercado Pago, Kushki y Rapyd. Además, el costo de construir y mantener el SDK queda fuera de lo que se midió. Las cifras están en la Tabla~\ref{tab:seis-variables-memoria}, los identificadores de cobro en la Tabla~\ref{tab:variable-5} y los instrumentos en los scripts de métricas y de conceptos nativos (Artefacto~\ref{anx:medicion}).
 
 \subsection{Discusión y amenazas a la validez}
 \label{sec:vii-discusion}
