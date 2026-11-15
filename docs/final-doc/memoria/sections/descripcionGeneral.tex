@@ -20,7 +20,7 @@ El proyecto Kit Pagos Colombia surge a partir de un problema recurrente en el de
 
 A partir de ese problema, el SPMP (Anexo~\ref{anx:spmp}) fija el propósito del trabajo: construir y evaluar un framework que reduzca la fragmentación del proceso de integración.
 
-Esa fragmentación obliga a los equipos a repetir buena parte de la integración cada vez que cambian de proveedor. También multiplica las oportunidades de error en tareas sensibles para la seguridad, como validar los webhooks o tokenizar los datos de la tarjeta. El proveedor con el que se trabajó también cambió: la primera versión del SPMP que se envió en mayo de 2026, nombraba a PayU donde hoy aparece Rapyd, esto debido a que Rapyd ya había terminado de comprar en marzo de 2025 la unidad de pagos de PayU en América Latina, PayU GPO (\textit{Global Payment Organisation}).
+Esa fragmentación obliga a los equipos a repetir buena parte de la integración cada vez que cambian de proveedor. También multiplica las oportunidades de error en tareas sensibles para la seguridad, como validar los webhooks o tokenizar los datos de la tarjeta.
 
 \subsubsection{Propuesta de solución}
 Para atender ese problema, este trabajo desarrolló \textbf{Kit Pagos Colombia}, un framework de cuatro componentes descritos en la especificación de requisitos de software (SRS, \textit{Software Requirements Specification}) y el SPMP (Anexos~\ref{anx:srs} y~\ref{anx:spmp}):
@@ -29,22 +29,22 @@ Para atender ese problema, este trabajo desarrolló \textbf{Kit Pagos Colombia},
     \item \textbf{SDK de servidor en TypeScript (\texttt{kit-pagos-colombia}):} una biblioteca para Node.js con una interfaz común para las cuatro pasarelas. A través de ella el comercio cobra con tarjeta (crédito o débito) o con PSE, consulta el estado de un pago, lista los bancos PSE y verifica la firma de los webhooks.
     \item \textbf{Módulo de navegador (\texttt{kit-pagos-colombia/browser}):} tokeniza la tarjeta en la página del comprador con Wompi, Mercado Pago o Kushki. De esta manera, el servidor del comercio recibe un token y nunca el número de la tarjeta. Esto no aplica para Rapyd, que cobra en su propia página de pago.
     \item \textbf{API de Simulación:} un servidor de pruebas que atiende peticiones HTTP (\textit{Hypertext Transfer Protocol}). Por un lado, imita las rutas y los formatos de las cuatro pasarelas a partir de lo medido en sus sandboxes y permite elegir escenarios de aprobación, rechazo, expiración y tiempo de espera. Por otro, ofrece por HTTP las operaciones del SDK para clientes que no instalan la biblioteca en un servidor propio.
-    \item \textbf{Documentación de datos de prueba:} reúne para cada pasarela, las credenciales de sandbox, las tarjetas, los documentos, los bancos y los flujos medidos, con el nivel de evidencia de cada afirmación (Artefacto~\ref{anx:datos}).
+    \item \textbf{Documentación de datos de prueba:} reúne para cada pasarela las credenciales de sandbox, las tarjetas, los documentos, los bancos y los flujos medidos, con el nivel de evidencia de cada afirmación (Artefacto~\ref{anx:datos}).
 \end{enumerate}
 
 \subsubsection{Justificación de la solución}
 El problema afecta sobre todo a desarrolladores individuales y a equipos pequeños que integran por primera vez una pasarela colombiana, porque cada integración les exige estudiar una documentación distinta y repetir lógica que ya existe en otras. Probar esa integración también cuesta: el sandbox de cada pasarela limita el uso, pide credenciales propias y no siempre permite provocar un error a voluntad. Los datos de prueba, además, están repartidos en la documentación de cada proveedor. Un conjunto de herramientas que unifique la interfaz, simule las pasarelas y reúna esos datos reduce ese esfuerzo inicial, que es el aporte de este proyecto.
 
-Esa interfaz común se consigue con la arquitectura hexagonal (Cockburn \& Garrido de Paz, 2024), que separa la lógica del dominio de los detalles de transporte y formato de cada proveedor por medio de puertos y adaptadores. El comercio usa operaciones que significan lo mismo en cualquier pasarela, como crear un pago, consultar su estado o validar un webhook, de esta manera, cada adaptador resuelve las particularidades de su proveedor.
+Esa interfaz común se consigue con la arquitectura hexagonal (Cockburn \& Garrido de Paz, 2024), que separa la lógica del dominio de los detalles de transporte y formato de cada proveedor por medio de puertos y adaptadores. El comercio usa operaciones que significan lo mismo en cualquier pasarela, como crear un pago, consultar su estado o validar un webhook. De esta manera, cada adaptador resuelve las particularidades de su proveedor.
 
-La solución también reduce tres riesgos de seguridad y de exactitud en los montos:
+La solución también reduce tres riesgos el de seguridad, el de exactitud en los montos y el de dependencia de un solo proveedor:
 \begin{itemize}
     \item \textbf{Firmas mal verificadas:} el SDK verifica la firma de cada pasarela con su algoritmo y la compara en tiempo constante, para que el tiempo de respuesta no revele la firma esperada. Cuando la firma del proveedor no cubre el cuerpo de la notificación, como ocurre en Mercado Pago, el evento queda marcado como pendiente hasta que el comercio confirma el estado consultando a la pasarela.
     \item \textbf{Errores de redondeo en los montos:} el tipo numérico de JavaScript sigue el formato binario del estándar IEEE 754, del Instituto de Ingenieros Eléctricos y Electrónicos (IEEE; Institute of Electrical and Electronics Engineers, 2019), y no representa con exactitud muchos montos decimales. El SDK guarda un monto de hasta dos decimales como una cadena de texto, en un objeto de valor de solo lectura cuyas operaciones devuelven otro objeto.
     \item \textbf{Dependencia de un solo proveedor (\textit{vendor lock-in}):} las diferencias entre pasarelas quedan en los adaptadores, de modo que cambiar de pasarela o sumar una segunda no debería obligar a reescribir la lógica de negocio del comercio. 
 \end{itemize}
 
-El efecto sobre el esfuerzo de integración se midió en la Fase 5. El capítulo III explica las métricas y el VII presenta los resultados.
+El efecto sobre el esfuerzo de integración se midió en la Fase 5 del marco metodológico, mencionado más adelante en esta sección. El capítulo III explica las métricas y el VII presenta los resultados.
 
 \subsection{Descripción del proyecto}
 
@@ -58,10 +58,10 @@ Para alcanzar el objetivo general se plantearon seis objetivos específicos (OE-
 
 \begin{itemize}
     \item \textbf{OE-01:} \textit{Analizar las características técnicas, mecanismos de integración y consideraciones de seguridad de las principales pasarelas de pago utilizadas en el contexto colombiano.} \\
-    \textbf{Evidencia:} el análisis, describe para cada pasarela, cómo autentica, en qué unidad recibe los montos, cómo cobra con tarjeta y con PSE y cómo firma sus notificaciones. El capítulo III lo resume, y el análisis completo está en la caracterización técnica de las cuatro pasarelas (Artefacto~\ref{anx:producto}) y en la documentación de datos de prueba (Artefacto~\ref{anx:datos}).
+    \textbf{Evidencia:} el análisis describe para cada pasarela cómo autentica, en qué unidad recibe los montos, cómo cobra con tarjeta y con PSE y cómo firma sus notificaciones. El capítulo III lo resume, y el análisis completo está en la caracterización técnica de las cuatro pasarelas (Artefacto~\ref{anx:producto}) y en la documentación de datos de prueba (Artefacto~\ref{anx:datos}).
 
     \item \textbf{OE-02:} \textit{Diseñar la arquitectura de un framework de integración que permita unificar la interacción con múltiples pasarelas de pago, aplicando patrones de diseño y principios de extensibilidad.} \\
-    \textbf{Evidencia:} en el diseño, el dominio no depende de ninguna pasarela y cada pasarela es un adaptador de un mismo puerto. El catálogo GoF es el libro de patrones de Gamma et al. (1994), que se conoce así por sus cuatro autores (\textit{Gang of Four}). De ese catálogo, el SDK usa una fachada, que es la única clase que instancia el comercio y ofrece una sola interfaz para las cuatro pasarelas; una fábrica, que decide qué adaptador crear según la pasarela configurada; y una estrategia de normalización por pasarela, que traduce las respuestas de cada proveedor a los mismos estados. El capítulo V presenta el diseño, y el documento de arquitectura de software (SAD, \textit{Software Architecture Document}) lo describe completo (Anexo~\ref{anx:sad}).
+    \textbf{Evidencia:} en el diseño, el dominio no depende de ninguna pasarela y cada pasarela es un adaptador de un mismo puerto. Los patrones GoF (\textit{Gang of Four}) vienen del libro de Gamma et al. (1994). De ese catálogo, el SDK usa una fachada, que es la única clase que instancia el comercio y ofrece una sola interfaz para las cuatro pasarelas; una fábrica, que decide qué adaptador crear según la pasarela configurada; y una estrategia de normalización por pasarela, que traduce las respuestas de cada proveedor a los mismos estados. El capítulo V presenta el diseño, y el documento de arquitectura de software (SAD, \textit{Software Architecture Document}) lo describe completo (Anexo~\ref{anx:sad}).
 
     \item \textbf{OE-03:} \textit{Desarrollar un prototipo funcional del framework que implemente una interfaz unificada para la integración con múltiples pasarelas de pago, incluyendo mecanismos de comunicación segura y los elementos necesarios para su integración por parte de desarrolladores.} \\
     \textbf{Evidencia:} el SDK está publicado en npm y ofrece una fachada común, una fábrica de pasarelas, un adaptador por proveedor, y el módulo de navegador que tokeniza la tarjeta. La comunicación segura se apoya en la verificación de firmas en tiempo constante, la tokenización en el navegador y el enmascaramiento de las credenciales en los mensajes de error. Sus pruebas unitarias y de integración se ejecutan con cada cambio. El capítulo VI describe su construcción y el VII, su validación.
@@ -73,7 +73,7 @@ Para alcanzar el objetivo general se plantearon seis objetivos específicos (OE-
     \textbf{Evidencia:} la documentación de datos de prueba está organizada por pasarela. Reúne las tarjetas de prueba, las credenciales de sandbox validadas y los bancos PSE, y declara el nivel de evidencia de cada dato, que distingue lo medido en la API real de lo tomado de la documentación oficial. El capítulo VI resume cómo se construyó (Artefacto~\ref{anx:datos}).
 
     \item \textbf{OE-06:} \textit{Evaluar el framework mediante su aplicación en proyectos prototípicos definidos, especificando sus características y midiendo métricas asociadas a su implementación y nivel de abstracción, con el fin de analizar su impacto frente a enfoques tradicionales.} \\
-    \textbf{Evidencia:} se construyeron cuatro proyectos prototípicos. El A usa el \textbf{SDK solo en el servidor}. El B usa el \textbf{SDK en el servidor y el módulo de navegador en la página}. El C llama a la \textbf{API REST desde el navegador}. El D integra las cuatro pasarelas por su cuenta. La evaluación de la Fase 5 comparó en seis variables el B frente al D. Entre esas variables se midieron las métricas de Chidamber y Kemerer (1994): la complejidad ciclomática ponderada (WMC), el acoplamiento entre objetos (CBO) y el conjunto de respuestas de las clases (RFC). El capítulo III detalla estas definiciones y el capítulo VII presenta las cifras completas del experimento.
+    \textbf{Evidencia:} se construyeron cuatro proyectos prototípicos: el A usa el SDK solo en el servidor; el B, el SDK en el servidor y el módulo de navegador; el C llama a la API REST desde el navegador, y el D integra las cuatro pasarelas por su cuenta. La evaluación de la Fase 5 comparó el B frente al D en seis variables. Entre esas variables se midieron las métricas de Chidamber y Kemerer (1994): la complejidad ciclomática ponderada (WMC), el acoplamiento entre objetos (CBO) y el conjunto de respuestas de las clases (RFC). El capítulo III detalla estas definiciones y el capítulo VII presenta las cifras completas del experimento.
 \end{itemize}
 
 \subsubsection{Alcance y exclusiones}
@@ -87,7 +87,7 @@ El D integra las cuatro pasarelas por su cuenta y es la comparación del B en la
 
 Quedan fuera el efectivo, Nequi, Daviplata, las suscripciones y los reembolsos. Kit Pagos Colombia tampoco actúa como procesador de pagos, porque no autoriza, liquida ni procesa cobros por su cuenta. Cuando crea un pago o consulta su estado, arma la petición, la envía a la pasarela y normaliza la respuesta, y el procesamiento lo hace siempre la pasarela. 
 
-Tampoco entran la integración con sistemas contables o de planificación de recursos empresariales (ERP, \textit{Enterprise Resource Planning}), la conciliación financiera y la continuidad de las APIs de los proveedores. Las tiendas de los prototipos y el cliente del prototipo C solo demuestran el framework en los sandboxes, y no son interfaces de pago para producción. La versión inicial del SPMP no contemplaba la API REST propia, el módulo de navegador, los prototipos A y C ni la página de presentación; el SPMP anexo a la entrega final (Anexo~\ref{anx:spmp}) detalla esas diferencias.
+Tampoco se cubren otras pasarelas ni la recepción del número de tarjeta en el servidor del comercio ni la integración con sistemas contables o de planificación de recursos empresariales (ERP, \textit{Enterprise Resource Planning}), la conciliación financiera y la continuidad de las APIs de los proveedores. Las tiendas de los prototipos y el cliente del prototipo C solo demuestran el framework en los sandboxes, y no son interfaces de pago para producción. La versión inicial del SPMP nombraba a PayU donde hoy aparece Rapyd, esto debido a la compra de PayU GPO (\textit{Global Payment Organisation}) por parte de Rapyd en marzo de 2025, y no contemplaba la API REST propia, el módulo de navegador, los prototipos A y C ni la página de presentación; el SPMP anexo a la entrega (Anexo~\ref{anx:spmp}) detalla esas diferencias.
 
 \subsubsection{Marco metodológico, entregables, estándares y justificación}
 El marco metodológico del proyecto es Design Science Research (DSR) (Peffers et al., 2007), porque el resultado del trabajo es un framework que hay que construir y evaluar frente al problema que lo motivó. Peffers et al. proponen seis actividades en un orden nominal, que admite iterar y empezar por varias de ellas. El SPMP las adapta en seis fases: separa el diseño del desarrollo y junta la demostración con la evaluación (Anexo~\ref{anx:spmp}).
@@ -96,7 +96,7 @@ El marco metodológico del proyecto es Design Science Research (DSR) (Peffers et
     \item \textbf{Definición de objetivos:} especificación de requisitos, criterios de evaluación y diseño del experimento comparativo.
     \item \textbf{Diseño:} modelo del dominio de los pagos, puertos de la arquitectura hexagonal y contratos de los adaptadores.
     \item \textbf{Desarrollo iterativo:} construcción del framework en tres iteraciones: el núcleo del SDK, los adaptadores de pasarela, y la API de Simulación con el soporte de validación. El equipo aplicó prácticas de Scrum en ciclos semanales y una definición de terminado (DoD, \textit{Definition of Done}) que se verifica antes de integrar cada cambio.
-    \item \textbf{Demostración y evaluación:} construcción de los proyectos prototípicos y medición de las seis variables del plan de evaluación, entre ellas la complejidad ciclomática ponderada (WMC), el acoplamiento entre objetos (CBO) y el conjunto de respuestas de las clases (RFC)..
+    \item \textbf{Demostración y evaluación:} construcción de los proyectos prototípicos y medición de las seis variables del plan de evaluación, entre ellas la complejidad ciclomática ponderada (WMC), el acoplamiento entre objetos (CBO) y el conjunto de respuestas de las clases (RFC).
     \item \textbf{Comunicación:} redacción del documento de memoria y del manual de uso, y publicación del repositorio de código abierto.
 \end{enumerate}
 
@@ -123,7 +123,7 @@ Especificación de requisitos de software (SRS) &
 Documento de arquitectura de software (SAD) &
   Usa las vistas del modelo C4, que describe un sistema en cuatro niveles de detalle (Brown, s.~f.). Describe los requisitos arquitectónicamente significativos y las restricciones, y registra cada decisión como un registro de decisión de arquitectura (ADR, \textit{Architecture Decision Record}) con su problema, su solución y sus consecuencias. &
   Capítulo V; Anexo~\ref{anx:sad} y artefacto~\ref{anx:diagramas}. \\ \hline
-Plan de pruebas del proyecto (PTP) v0.4 &
+Plan de pruebas del proyecto (PTP) &
   Define la estrategia por tipo de prueba y ambiente. Sus siete casos declaran de antemano el resultado esperado (Myers et al., 2004), y el plan fija criterios de entrada y salida y registra los defectos y las evidencias de la corrida. &
   Capítulo VII; Anexo~\ref{anx:pruebas}. \\ \hline
 Documento de memoria &
@@ -143,7 +143,7 @@ Proyectos prototípicos &
   Esqueleto común a B y D. La integración continua verifica que sea igual, y los dos implementan las mismas seis funciones de pago en las cuatro pasarelas. &
   Capítulo VI; Artefacto~\ref{anx:prototipos}. \\ \hline
 Informe comparativo de la evaluación &
-  Seis variables contables por script. Entre ellas están la complejidad ciclomática ponderada (WMC), el acoplamiento entre objetos (CBO) y el conjunto de respuestas de las clases (RFC) de Chidamber y Kemerer (1994), adaptadas a nivel de archivo; la hipótesis se escribió antes de medir y las amenazas a la validez están declaradas. &
+  Seis variables medidas con scripts. Entre ellas están WMC, CBO y RFC de Chidamber y Kemerer (1994), adaptadas a nivel de archivo; la hipótesis se escribió antes de medir y las amenazas a la validez están declaradas. &
   Capítulo VII; Artefactos~\ref{anx:plan-eval} a~\ref{anx:medicion}. \\ \hline
 \end{xltabular}
 }
