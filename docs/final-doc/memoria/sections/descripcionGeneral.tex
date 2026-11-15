@@ -124,26 +124,26 @@ Documento de arquitectura de software (SAD) &
   Usa las vistas del modelo C4, que describe un sistema en cuatro niveles de detalle (Brown, s.~f.). Describe los requisitos arquitectónicamente significativos y las restricciones, y registra cada decisión como un registro de decisión de arquitectura (ADR, \textit{Architecture Decision Record}) con su problema, su solución y sus consecuencias. &
   Capítulo V; Anexo~\ref{anx:sad} y artefacto~\ref{anx:diagramas}. \\ \hline
 Plan de pruebas del proyecto (PTP) &
-  Define la estrategia por tipo de prueba y ambiente. Sus siete casos declaran de antemano el resultado esperado (Myers et al., 2004), y el plan fija criterios de entrada y salida y registra los defectos y las evidencias de la corrida. &
+  Define la estrategia por tipo de prueba y ambiente. Sus siete casos declaran de antemano el resultado esperado (Myers et al., 2004), y el plan fija criterios de entrada y salida, y registra los defectos junto con las evidencias de la corrida. &
   Capítulo VII; Anexo~\ref{anx:pruebas}. \\ \hline
 Documento de memoria &
-  Cumple la fase de comunicación de DSR (Peffers et al., 2007). Presenta el problema, el diseño, la construcción y la evaluación, con citas y referencias en el formato de la Asociación Estadounidense de Psicología (APA, \textit{American Psychological Association}). &
+  Cumple la fase de comunicación de DSR (Peffers et al., 2007). Presenta el problema, el diseño, la construcción y la evaluación, con citas y referencias en formato APA. &
   Este documento; fuentes en el Artefacto~\ref{anx:memoria}. \\ \hline
 \multicolumn{3}{|l|}{\textit{Entregables de software}} \\ \hline
 SDK y módulo de navegador &
-  Arquitectura hexagonal y patrones GoF. TypeScript en modo estricto y montos como objetos de valor inmutables con la escala de la norma ISO 4217, de la Organización Internacional de Normalización (ISO). La DoD exige una cobertura de pruebas de al menos 80\,\% y métricas CK dentro de sus umbrales. &
+  Arquitectura hexagonal y los patrones GoF. Escrito en TypeScript en modo estricto, utiliza montos como objetos de valor inmutables con la escala de la norma ISO 4217. Se sigue la definición de terminado (DoD) y se exige una cobertura de pruebas de al menos 80\,\% y métricas CK dentro de sus umbrales. &
   Capítulos V a VII; Artefactos~\ref{anx:paquete} y~\ref{anx:sdk}. \\ \hline
 API de Simulación &
-  Servicio Fastify cuyas respuestas imitan lo medido en cada sandbox. Los escenarios se eligen por cabecera, dato de prueba, monto reservado o marca de credencial, la especificación OpenAPI 3.0 se valida y el estado vive en memoria. &
+Servicio Fastify con dos grupos de rutas: \texttt{/v1/sim}, que imita las respuestas medidas en cada sandbox, y \texttt{/v1/api}, que expone por REST las operaciones del SDK. Los escenarios para los endpoints de simulación se eligen por cabecera, dato de prueba, monto reservado o marca de credencial, la especificación OpenAPI 3.0 se valida y el estado vive en memoria. &
   Capítulos VI y VII; Artefacto~\ref{anx:simulador}. \\ \hline
 Documentación de datos de prueba &
-  Nivel de evidencia declarado por dato. Cada uno está medido en la API real con fecha, medido solo hasta cierto punto del flujo o tomado de la documentación oficial sin comprobar. &
+Datos organizados por pasarela para probar la integración y distintos escenarios. Cada dato declara su nivel de evidencia: medido en la API real, con fecha; medido solo hasta cierto paso del flujo, o tomado de la documentación oficial sin comprobar. &
   Capítulo VI; Artefacto~\ref{anx:datos}. \\ \hline
 Proyectos prototípicos &
-  Esqueleto común a B y D. La integración continua verifica que sea igual, y los dos implementan las mismas seis funciones de pago en las cuatro pasarelas. &
+Cuatro tiendas en línea con el mismo flujo de compra: A, B, C y D. B y D implementan las mismas seis funciones de pago en las cuatro pasarelas. &
   Capítulo VI; Artefacto~\ref{anx:prototipos}. \\ \hline
 Informe comparativo de la evaluación &
-  Seis variables medidas con scripts. Entre ellas están WMC, CBO y RFC de Chidamber y Kemerer (1994), adaptadas a nivel de archivo; la hipótesis se escribió antes de medir y las amenazas a la validez están declaradas. &
+Compara B y D en seis variables. Entre ellas están WMC, CBO y RFC, adaptadas a nivel de archivo. La hipótesis se escribió antes de medir, y las amenazas a la validez se declaran en el capítulo VII. &
   Capítulo VII; Artefactos~\ref{anx:plan-eval} a~\ref{anx:medicion}. \\ \hline
 \end{xltabular}
 }
