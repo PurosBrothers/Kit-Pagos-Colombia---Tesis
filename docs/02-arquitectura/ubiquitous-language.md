@@ -70,12 +70,14 @@
 
 | Valor Canónico (SDK) | Wompi Nativo | Rapyd Nativo (`data.status`) | Rapyd Nativo (`type` de webhook) | Mercado Pago Nativo | Kushki Nativo |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `APPROVED` | `"APPROVED"` | `"CLO"` (+ `data.paid: true`) | `PAYMENT_COMPLETED` | `"approved"` | `"APPROVAL"` ⚠️ |
-| `DECLINED` | `"DECLINED"` | `"ERR"` ⚠️ (compartido con `ERROR`) | `PAYMENT_FAILED` | `"rejected"` | `"DECLINED"` |
-| `PENDING` | `"PENDING"` *(no genera webhook)* | `"ACT"` | `PAYMENT_SUCCEEDED` *(recibido, no resuelto)* | `"pending"` | N/A *(tarjeta es síncrona)* |
-| `EXPIRED` | N/A *(no documentado en webhook)* | `"EXP"` | `PAYMENT_EXPIRED` *(confirmado: cliente no completó el pago a tiempo)* | N/A *(no documentado)* | N/A |
-| `VOIDED` | `"VOIDED"` | `"CAN"` *(confirmado)* | `PAYMENT_CANCELED` *(confirmado: solo para pagos cancelables vía Cancel Payment)* | N/A | N/A |
+| `APPROVED` | `"APPROVED"` | `"CLO"` (+ `data.paid: true`) | `PAYMENT_COMPLETED` | `"processed"` (orden), `"approved"` (pago) | `"APPROVAL"` ⚠️ |
+| `DECLINED` | `"DECLINED"` | `"ERR"` ⚠️ (compartido con `ERROR`) | `PAYMENT_FAILED` | `"failed"` (orden), `"rejected"` (pago) | `"DECLINED"` |
+| `PENDING` | `"PENDING"` *(no genera webhook)* | `"ACT"` | `PAYMENT_SUCCEEDED` *(recibido, no resuelto)* | `"action_required"`, `"created"`, `"processing"` (orden); `"pending"`, `"in_process"` (pago) | N/A *(tarjeta es síncrona)* |
+| `EXPIRED` | N/A *(no documentado en webhook)* | `"EXP"` | `PAYMENT_EXPIRED` *(confirmado: cliente no completó el pago a tiempo)* | `"expired"` (orden) | N/A |
+| `VOIDED` | `"VOIDED"` | `"CAN"` *(confirmado)* | `PAYMENT_CANCELED` *(confirmado: solo para pagos cancelables vía Cancel Payment)* | `"canceled"` (orden), `"cancelled"` (pago) | N/A |
 | `ERROR` | `"ERROR"` | `"ERR"` ⚠️ (compartido con `DECLINED`) | `PAYMENT_FAILED` | N/A *(se modela en `status_detail`)* | N/A *(se modela en `code`)* |
+
+En Mercado Pago, «orden» es la Orders API, por la que el SDK cobra PSE y, desde la versión 0.6.0, tarjeta, y «pago» es la Payments API, que todavía responde la consulta de los pagos con tarjeta anteriores. La traducción completa de cada pasarela está en `sdk/src/domain/services/native-status.ts`.
 
 > ⚠️ **Alerta máxima — Kushki:** el valor nativo para pago exitoso es `"APPROVAL"`, no `"APPROVED"`. Comparar con `=== "APPROVAL"` en el adaptador de Kushki. Comparar con `=== "APPROVED"` causará que **todos** los pagos exitosos de Kushki sean marcados incorrectamente como estado desconocido.
 >

@@ -1,0 +1,11 @@
+Revisión de sdk/src/infrastructure/facade/KitPagos.ts en el commit 07e542e
+15:import { RetryHandler } from "../../application/services/RetryHandler";
+54: * La operacion getPaymentStatus() esta envuelta en RetryHandler con retroceso
+57: * en RetryHandler para evitar duplicidad de cobros (doble debito) ante timeouts
+113:  async createPayment(request: CreatePaymentRequest): Promise<PaymentResult> {
+122:   * Envuelto en RetryHandler para tolerar fallos transitorios de red con retroceso exponencial.
+124:  async getPaymentStatus(id: string): Promise<Transaction> {
+126:    const retryHandler = new RetryHandler({
+142:   * Va envuelto en `RetryHandler` como la consulta de estado, y por el mismo
+146:  async getPseBanks(): Promise<PseBank[]> {
+148:    const retryHandler = new RetryHandler({

@@ -1,0 +1,36 @@
+=== Kit Pagos Colombia — intercambiabilidad de las cuatro pasarelas ===
+
+El mismo pago, descrito una sola vez:
+  Monto:      150000.00 COP
+  Referencia: ORDER-INTERCHANGE-1794415810939
+  Pagador:    jaime.pavlich@example.com
+
+Cobrando por WOMPI...
+Cobrando por RAPYD...
+Cobrando por MERCADOPAGO...
+Cobrando por KUSHKI...
+
+=== Lo que devolvió cada pasarela ===
+
+Pasarela      Estado normalizado  Estado nativo  Monto          ID en la pasarela                      Reconsulta  
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+WOMPI         APPROVED            APPROVED       150000.00 COP  195434da-45f1-470c-9768-0e20ba335e38   APPROVED    
+RAPYD         APPROVED            CLO            150000.00 COP  payment_ba44ebc6aad002b41d292e1ca62fc809 APPROVED    
+MERCADOPAGO   APPROVED            processed      150000.00 COP  ORD01UZFRIED4YQ                        APPROVED    
+KUSHKI        APPROVED            APPROVAL       150000.00 COP  f3f5699bdacd421184                     APPROVED    
+
+La columna del estado nativo es la que cambia: APPROVED, CLO, approved
+y APPROVAL son la misma cosa dicha de cuatro formas. La del estado
+normalizado es la que el comercio programa contra, y es una sola.
+
+=== Verificación ===
+
+  Las 4 pasarelas coinciden en estado normalizado, monto y referencia.
+  El código del comercio fue idéntico para las cuatro.
+  Y consultar dos veces devuelve lo mismo en las cuatro, así que un reintento
+  por timeout no le cambia la respuesta al comercio (issue #124).
+
+[remap-3000] peticiones reescritas de localhost:3000 a 127.0.0.1:4817: 15
+[remap-3000] peticiones reescritas de localhost:3000 a 127.0.0.1:4817: 0
+[remap-3000] peticiones reescritas de localhost:3000 a 127.0.0.1:4817: 0
+cp-01 corrida 1 exit 0

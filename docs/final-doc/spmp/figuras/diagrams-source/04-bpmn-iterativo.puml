@@ -1,0 +1,87 @@
+@startuml 04-bpmn-iterativo
+skinparam backgroundColor white
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam legendFontSize 10
+skinparam swimlaneTitleFontSize 10
+skinparam wrapWidth 120
+skinparam padding 2
+skinparam ArrowColor #333333
+skinparam activity {
+  BackgroundColor #FFF2CC
+  BorderColor #B7950B
+  DiamondBackgroundColor #FFF2CC
+  DiamondBorderColor #B7950B
+  StartColor #2E7D32
+  EndColor #C62828
+}
+skinparam swimlane {
+  BorderColor #5B7BA6
+  TitleFontColor #1F3A6E
+  TitleFontStyle bold
+}
+skinparam legend {
+  BackgroundColor white
+  BorderColor #5B7BA6
+}
+
+title Kit Pagos Colombia — Ciclo de una Iteración · Iteración 1: Núcleo del SDK
+
+|Coordinador|
+|Equipo / Líder de Iteración|
+split
+  -[hidden]->
+  start
+  -> Inicio de Iteración;
+split again
+  -[hidden]->
+  |Coordinador|
+  :<&person> Reunión de Planificación de Iteración;
+  :<&person> Asignación de ítems del sprint //backlog//;
+end split
+|Equipo / Líder de Iteración|
+repeat
+  :<&plus> //Implementación//\n//+ Pruebas//; <<#E8F5E9>>
+  |Coordinador|
+  :<&person> Seguimiento semanal del backlog;
+  split
+    -> cada semana;
+    |Equipo / Líder de Iteración|
+    switch (¿Semana de cierre?)
+    case (Sí — semana\nde cierre)
+      :<&person> //Revisión técnica//
+//grupal del entregable//;
+    endswitch
+  split again
+    |Coordinador|
+    -[dashed]-> cada 2 semanas;
+    :<&person> Reporte quincenal
+al director;
+    -[dashed]->
+  end split
+  |Equipo / Líder de Iteración|
+repeat while (¿Criterios del\nhito alcanzados?) is (No — continuar) not (Sí)
+:<&person> //Merge PR a//
+//rama principal//
+//+ CI verde//;
+split
+  -> ;
+split again
+  -> No — ajustar alcance;
+  |Coordinador|
+  :<&person> Registro de bloqueantes y ajuste de backlog;
+end split
+|Equipo / Líder de Iteración|
+-> Hito H3 —
+Revisión técnica
+aprobada;
+stop
+
+legend bottom left
+  |= Símbolos |= Notas |
+  | <&person> Tarea de Usuario\n<&plus> Subproceso (verde)\nRombo o hexágono:\n   Exclusiva (Decisión)\nFlecha continua:\n   Flujo de Secuencia\nFlecha discontinua:\n   Flujo de Mensaje | • Cada iteración de la fase 4 (Desarrollo) sigue\n   este ciclo; el ejemplo es la Iteración 1.\n• El coordinador sigue el backlog cada semana y\n   reporta al director cada dos semanas.\n• La iteración cierra en el hito H3 cuando se\n   alcanzan sus criterios y el PR entra a la rama\n   principal con la CI en verde; si no, se continúa\n   o se registran bloqueantes y se ajusta el alcance. |
+endlegend
+@enduml

@@ -389,6 +389,22 @@ describe("WebhookVerifier", () => {
       expect(event.gateway).toBe(Gateway.WOMPI);
     });
 
+    it("should report Wompi's signed status as raw, and not the unsigned order reference", () => {
+      const payload = JSON.stringify({
+        event: "transaction.updated",
+        data: { transaction: { id: "wompi-tx-123", status: "DECLINED", reference: "ORD-1" } },
+      });
+
+      const event = verifier.parse(incoming(payload), Gateway.WOMPI);
+      expect(event.rawStatus).toBe("DECLINED");
+      expect(event.orderReference).toBeUndefined();
+    });
+
+    it("should leave the raw status out of a Wompi event without a transaction", () => {
+      const event = verifier.parse(incoming(JSON.stringify({ event: "nequi_token.updated", data: {} })), Gateway.WOMPI);
+      expect(event.rawStatus).toBeUndefined();
+    });
+
     it("normalizes Rapyd events (PAYMENT_COMPLETED)", () => {
       const payload = JSON.stringify({
         id: "wh_e0afb507504b5eb901449993fadba20f",
@@ -401,6 +417,53 @@ describe("WebhookVerifier", () => {
       expect(event.gatewayTransactionId).toBe("payment_rapyd-tx-456");
       expect(event.newStatus).toBe("APPROVED");
       expect(event.gateway).toBe(Gateway.RAPYD);
+    });
+
+    // Los campos son los que se midieron el 21 de octubre de 2026 en el pago que nació del
+    // checkout `checkout_e80da4bb1522ea81b352c913107b628e` del sandbox: ninguno apunta al
+    // checkout, y `merchant_reference_id` es la orden que mandó el comercio.
+    it("should report the order reference and the raw status of a Rapyd payment born from a checkout", () => {
+      const payload = JSON.stringify({
+        id: "wh_checkout_card",
+        type: "PAYMENT_COMPLETED",
+        data: {
+          id: "payment_26dad5c17da6deeec54ae4bfd426d49c",
+          status: "CLO",
+          paid: true,
+          merchant_reference_id: "ORD-0F12DA1A",
+        },
+      });
+
+      const event = verifier.parse(incoming(payload), Gateway.RAPYD);
+      expect(event.gatewayTransactionId).toBe("payment_26dad5c17da6deeec54ae4bfd426d49c");
+      expect(event.orderReference).toBe("ORD-0F12DA1A");
+      expect(event.rawStatus).toBe("CLO");
+    });
+
+    // La secuencia que mandó el sandbox el 21 de octubre de 2026 para la tarjeta con 3DS del
+    // pago `payment_f1e9b046c8ea06a4f06a56d070ebb440`: `PAYMENT_SUCCEEDED` en `ACT`, y en el
+    // mismo segundo `PAYMENT_UPDATED` en `ACT` y `PAYMENT_COMPLETED` en `CLO`.
+    it.each([
+      ["ACT", {}, "PENDING"],
+      ["CLO", { paid: true }, "APPROVED"],
+      ["ERR", { failure_code: "ERROR_PROCESSING_CARD - [51]" }, "DECLINED"],
+      ["ERR", { error_code: "ERROR_PROCESSING_CARD - [05]" }, "DECLINED"],
+      ["REV", {}, "VOIDED"],
+    ])("should read a Rapyd PAYMENT_UPDATED in %s by the payment's status, not as an error", (status, fields, expected) => {
+      const payload = JSON.stringify({
+        type: "PAYMENT_UPDATED",
+        data: { id: "payment_f1e9b046c8ea06a4f06a56d070ebb440", status, ...fields },
+      });
+
+      const event = verifier.parse(incoming(payload), Gateway.RAPYD);
+      expect(event.newStatus).toBe(expected);
+      expect(event.rawStatus).toBe(status);
+    });
+
+    it("should leave the order reference out of a Rapyd payment that does not carry it", () => {
+      const payload = JSON.stringify({ type: "PAYMENT_COMPLETED", data: { id: "payment_1", status: "CLO" } });
+
+      expect(verifier.parse(incoming(payload), Gateway.RAPYD).orderReference).toBeUndefined();
     });
 
     it("normalizes pending Rapyd events (PAYMENT_SUCCEEDED with data.status ACT)", () => {
@@ -448,6 +511,17 @@ describe("WebhookVerifier", () => {
       expect(event.gatewayTransactionId).toBe("mp-123");
       expect(event.newStatus).toBe("PENDING");
       expect(event.gateway).toBe(Gateway.MERCADOPAGO);
+    });
+
+    it("should report neither a raw status nor an order reference from Mercado Pago's unsigned body", () => {
+      const forged = JSON.stringify({
+        action: "order.processed",
+        data: { id: "ORD01", status: "processed", external_reference: "ORD-1" },
+      });
+
+      const event = verifier.parse(incoming(forged), Gateway.MERCADOPAGO);
+      expect(event.rawStatus).toBeUndefined();
+      expect(event.orderReference).toBeUndefined();
     });
 
     it("normalizes native Mercado Pago notifications without status to PENDING (2-step flow)", () => {
@@ -504,6 +578,8 @@ describe("WebhookVerifier", () => {
       expect(event.gatewayTransactionId).toBe("992823152575262637");
       expect(event.newStatus).toBe("APPROVED");
       expect(event.gateway).toBe(Gateway.KUSHKI);
+      expect(event.rawStatus).toBe("APPROVAL");
+      expect(event.orderReference).toBeUndefined();
     });
 
     // https://docs.kushki.com/co/en/notifications/one-time-payments/webhook-transfer-in/
@@ -527,6 +603,12 @@ describe("WebhookVerifier", () => {
       const event = verifier.parse(incoming(JSON.stringify(kushkiApprovedTransfer)), Gateway.KUSHKI);
       expect(event.gatewayTransactionId).toBe("96387bf4e4d4499a9101b50b0a5989df");
       expect(event.newStatus).toBe("APPROVED");
+      expect(event.rawStatus).toBe("approvedTransaction");
+    });
+
+    it("should leave the raw status out of a Kushki body without a status", () => {
+      const event = verifier.parse(incoming(JSON.stringify({ ticket_number: "1" })), Gateway.KUSHKI);
+      expect(event.rawStatus).toBeUndefined();
     });
 
     // Valores del ejemplo «Declined Transaction» de la misma página.

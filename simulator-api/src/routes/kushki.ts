@@ -1,5 +1,14 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { sendBankPage } from "../gateways/bankPage";
+import { compileSchemasAsIs } from "./schemas/compileSchemasAsIs";
+import {
+  getBankListSchema,
+  getChargeByTicketNumberSchema,
+  getTransferStatusSchema,
+  postCardChargesSchema,
+  postTransferInitSchema,
+  postTransferTokensSchema,
+} from "./schemas/kushki.schemas";
 import {
   KushkiChargeMockFactory,
   KushkiErrorMockFactory,
@@ -13,6 +22,13 @@ import {
   KushkiTransferStatus,
   KushkiTransferTokenRequestBody,
 } from "../gateways/kushki/types";
+import {
+  chargeDeclineFor,
+  chargeDeclineForCode,
+  isDeclinedAtTokenization,
+  TOKEN_DECLINE_BODY,
+} from "../gateways/kushki/testCards";
+import { cardTokenOutcomeFor, rememberCardTokenOutcome } from "../store/CardTokenOutcomes";
 import {
   centsFromKushkiAmount,
   headerScenario,
@@ -104,11 +120,12 @@ const DOCUMENT_OUTCOMES: ReadonlyMap<string, string> = new Map([
  * 7. POST /v1/sim/kushki/card/v1/tokens: la tokenización de tarjeta desde el navegador, con
  *    CORS (punto 106).
  *
- * Punto crítico del cobro con tarjeta, explícito en el issue: un **rechazo** viaja con el
- * mismo código HTTP que una aprobación, y la decisión de éxito o fallo vive únicamente en
- * el estado dentro del cuerpo. Es justo el comportamiento que rompe un adaptador que decide
- * mirando `response.ok`. Lo que cambió es el código: `201` y no `200`, porque es el que
- * responde Kushki al crear.
+ * El cobro con tarjeta responde `201` si se aprueba y `400` si el banco lo rechaza, con el
+ * código y el motivo en `details` (medido el 24 de octubre de 2026, punto 122). Antes el mock
+ * respondía el rechazo con `201` y `DECLINED` en el cuerpo, porque el issue decía que Kushki
+ * nunca usa el status HTTP para un rechazo de negocio; la cuenta UAT aprobaba todo y no se
+ * podía comprobar. La tarjeta decide el rechazo como en el sandbox (`testCards.ts`), y la
+ * cabecera y el monto reservado siguen funcionando, con el código genérico `017`.
  *
  * ## Los estados están en tablas, no en esta ruta
  *
@@ -141,6 +158,7 @@ function hasTransferIdLength(id: string): boolean {
 }
 
 export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
+  compileSchemasAsIs(app);
   const chargeMocks = new KushkiChargeMockFactory();
   const transferMocks = new KushkiTransferMockFactory();
   const errorBodies = new KushkiErrorMockFactory();
@@ -224,40 +242,47 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       if (!body.currency) {
         return reply.code(400).send({ code: "K055", message: "Tipo de moneda no permitido" });
       }
+      const cardNumber = String(card?.number);
+      if (isDeclinedAtTokenization(cardNumber)) {
+        return reply.code(400).send(TOKEN_DECLINE_BODY);
+      }
 
       const { token } = chargeMocks.buildCardToken();
       kushkiCardTokens.save(token, { totalAmountCents: Math.round(body.totalAmount * 100) });
+      // Se guarda el rechazo que da la tarjeta, nunca su número (`CardTokenOutcomes.ts`).
+      const decline = chargeDeclineFor(cardNumber);
+      if (decline) {
+        rememberCardTokenOutcome("kushki", token, { scenario: "DECLINED", statusDetail: decline.responseCode });
+      }
       return reply.code(201).send({ token });
     },
   );
 
   app.post(
     "/v1/sim/kushki/card/v1/charges",
+    {
+      schema: postCardChargesSchema,
+      preValidation: async (request: FastifyRequest, reply: FastifyReply) => {
+        if (invalidCredentialRequested(request, ["private-merchant-id"])) {
+          return reply.code(400).send(CARD_INVALID_CREDENTIAL);
+        }
+        const requestBody = request.body as KushkiCreateChargeRequestBody | undefined;
+        if (!requestBody?.token || requestBody.token === "simulated-token") {
+          return reply
+            .code(400)
+            .send({ code: "K001", message: "Cuerpo de la petición inválido." });
+        }
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      if (invalidCredentialRequested(request, ["private-merchant-id"])) {
-        return reply.code(400).send(CARD_INVALID_CREDENTIAL);
-      }
-
       const requestBody = request.body as KushkiCreateChargeRequestBody;
-      // Kushki.js tokeniza en el navegador y el simulador no ve la tarjeta: solo hay monto.
+      // La tarjeta decide si se tokenizó aquí; un token de otro lado solo trae el monto.
+      const fromToken = cardTokenOutcomeFor("kushki", requestBody?.token);
       const resolved = resolveScenario(request, {
+        gatewayData: fromToken?.scenario,
         wholePesos: wholePesosFromKushkiAmount(requestBody?.amount),
       });
       let scenario = resolved.scenario;
-
-      /*
-       * Sin token no hay cobro, y el error es el que responde Kushki de verdad.
-       *
-       * Medido contra `api-uat.kushkipagos.com`: `POST /card/v1/charges` con
-       * `token: "simulated-token"` —el literal que el SDK mandaba— responde
-       * `400 K001 "Cuerpo de la petición inválido"`. El mock viejo aceptaba cualquier
-       * token, así que el defecto era invisible para toda la suite (punto 50).
-       */
-      if (!requestBody?.token || requestBody.token === "simulated-token") {
-        return reply
-          .code(400)
-          .send({ code: "K001", message: "Cuerpo de la petición inválido." });
-      }
 
       /*
        * Nivel 1 — medido contra UAT el 17 de octubre de 2026: un token emitido por 48 000 y
@@ -309,10 +334,15 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
       let charge: KushkiChargeResponse;
 
       if (scenario === "DECLINED" || scenario === "REJECTED") {
-        // HTTP 201 y no 4xx: Kushki nunca usa el status HTTP para señalar
-        // un rechazo de negocio.
-        charge = chargeMocks.buildDeclinedResponse(requestBody);
-      } else if (scenario === "EXPIRED") {
+        // El registro se guarda para la consulta, y la creación responde el 400 medido.
+        const decline = chargeDeclineForCode(fromToken?.statusDetail);
+        const record = chargeMocks.buildDeclinedResponse(requestBody);
+        record.details.responseText = decline.responseText;
+        kushkiCharges.save(record.ticketNumber, record);
+        return reply.code(400).send(chargeMocks.buildDeclinedChargeError(record, decline));
+      }
+
+      if (scenario === "EXPIRED") {
         charge = chargeMocks.buildExpiredResponse(requestBody);
       } else if (scenario === "INITIALIZED" || scenario === "PENDING") {
         charge = chargeMocks.buildInitializedResponse(requestBody);
@@ -336,6 +366,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/v1/sim/kushki/charges/:ticketNumber",
+    { schema: getChargeByTicketNumberSchema },
     async (
       request: FastifyRequest<{ Params: { ticketNumber: string } }>,
       reply: FastifyReply,
@@ -421,6 +452,7 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/kushki/transfer/v1/bankList",
+    { schema: getBankListSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       if (invalidCredentialRequested(request, ["public-merchant-id"])) {
         return reply.code(403).send(TRANSFER_UNAUTHORIZED);
@@ -449,12 +481,23 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
    */
   app.post(
     "/v1/sim/kushki/transfer/v1/tokens",
+    {
+      schema: postTransferTokensSchema,
+      preValidation: async (request: FastifyRequest, reply: FastifyReply) => {
+        if (invalidCredentialRequested(request, ["public-merchant-id"])) {
+          return reply.code(403).send(TRANSFER_UNAUTHORIZED);
+        }
+        const body = request.body as KushkiTransferTokenRequestBody;
+        if (!body?.bankId) {
+          return reply.code(400).send({ code: "T001", message: "bankId es obligatorio" });
+        }
+        if (!body?.callbackUrl) {
+          return reply.code(400).send({ code: "T002", message: "callbackUrl es obligatorio" });
+        }
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      if (invalidCredentialRequested(request, ["public-merchant-id"])) {
-        return reply.code(403).send(TRANSFER_UNAUTHORIZED);
-      }
-
-      const body = request.body as KushkiTransferTokenRequestBody | undefined;
+      const body = request.body as KushkiTransferTokenRequestBody;
       const resolved = resolveScenario(request, {
         gatewayData: DOCUMENT_OUTCOMES.get(body?.documentNumber ?? ""),
         wholePesos: wholePesosFromKushkiAmount(body?.amount),
@@ -465,13 +508,6 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
 
       if (failure !== undefined) {
         return failure;
-      }
-
-      if (!body?.bankId) {
-        return reply.code(400).send({ code: "T001", message: "bankId es obligatorio" });
-      }
-      if (!body?.callbackUrl) {
-        return reply.code(400).send({ code: "T002", message: "callbackUrl es obligatorio" });
       }
 
       /*
@@ -549,12 +585,20 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
   /** Inicio de la transferencia, el paso 3. Devuelve la URL de redireccion. */
   app.post(
     "/v1/sim/kushki/transfer/v1/init",
+    {
+      schema: postTransferInitSchema,
+      preValidation: async (request: FastifyRequest, reply: FastifyReply) => {
+        if (invalidCredentialRequested(request, ["private-merchant-id"])) {
+          return reply.code(403).send(TRANSFER_UNAUTHORIZED);
+        }
+        const body = request.body as KushkiTransferInitRequestBody | undefined;
+        if (!body?.token || !body?.amount || !hasTransferIdLength(body.token)) {
+          return reply.code(400).send(INVALID_BODY);
+        }
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       // Solo la cabecera: el monto y el documento ya decidieron al pedir el token.
-      if (invalidCredentialRequested(request, ["private-merchant-id"])) {
-        return reply.code(403).send(TRANSFER_UNAUTHORIZED);
-      }
-
       const scenario = headerScenario(request);
       const body = request.body as KushkiTransferInitRequestBody;
 
@@ -675,39 +719,25 @@ export async function kushkiRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/kushki/transfer/v1/status/:token",
+    {
+      schema: getTransferStatusSchema,
+      preValidation: async (
+        request: FastifyRequest<{ Params: { token: string } }>,
+        reply: FastifyReply,
+      ) => {
+        if (invalidCredentialRequested(request, ["private-merchant-id"])) {
+          return reply.code(403).send(TRANSFER_UNAUTHORIZED);
+        }
+        if (!hasTransferIdLength(request.params.token)) {
+          return reply.code(400).send(INVALID_BODY);
+        }
+      },
+    },
     async (
       request: FastifyRequest<{ Params: { token: string } }>,
       reply: FastifyReply,
     ) => {
       const { token } = request.params;
-
-      // Antes que la longitud del identificador: el `403` lo da API Gateway, delante de la
-      // ruta. Que gane también con un identificador de otra longitud no se midió.
-      if (invalidCredentialRequested(request, ["private-merchant-id"])) {
-        return reply.code(403).send(TRANSFER_UNAUTHORIZED);
-      }
-
-      /*
-       * Un ticket de tarjeta consultado aquí no es una transferencia, y hay que decirlo.
-       *
-       * Es la contraparte del 403 que ya daba la ruta de tarjeta ante un token de
-       * transferencia, y hace falta por lo mismo: el adaptador prueba las dos rutas en
-       * orden, y si esta contestara a cualquier identificador, un cobro con tarjeta se
-       * reportaría con el vocabulario de transferencia —`approvedTransaction` en vez de
-       * `APPROVAL`— y el orden de las rutas nunca se ejercitaría.
-       *
-       * Nivel 1 — medido contra `api-uat.kushkipagos.com` el 5 de octubre de 2026: lo que
-       * decide la respuesta es la longitud. Un identificador de exactamente 32
-       * caracteres —hexadecimal o no, en mayúsculas o minúsculas— que no existe responde
-       * `400 T004 "No existe la transacción"`; uno de cualquier otra longitud (6, 18, 31,
-       * 33 y 36 medidos) responde `400 T001 "Cuerpo de la petición inválido."`. El ticket
-       * de tarjeta tiene 18 caracteres, así que cae en `T001`. El SDK traduce los dos a
-       * `INVALID_REQUEST`, y `isUnknownToRoute()` acepta ese código para pasar a la ruta
-       * de tarjeta.
-       */
-      if (!hasTransferIdLength(token)) {
-        return reply.code(400).send(INVALID_BODY);
-      }
 
       const transfer = kushkiTransfers.findById(token);
 

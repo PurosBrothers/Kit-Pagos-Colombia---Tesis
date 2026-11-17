@@ -24,11 +24,11 @@ Para las tres, el repositorio es la evidencia y no la presentación. La página 
 
 Toda la página existe para sostener esta afirmación:
 
-> **Integrás una vez. Cambiás de pasarela cambiando un valor.**
+> **Se integra una vez. Se cambia de pasarela cambiando un valor.**
 
 Y debajo, la aclaración honesta que la hace creíble en lugar de sonar a folleto:
 
-> Cuatro pasarelas colombianas, tarjeta y PSE, con los datos de prueba documentados para que puedas verificarlo vos.
+> Cuatro pasarelas colombianas, tarjeta y PSE, con los datos de prueba documentados, para poder verificarlo.
 
 Si una sección de la página no contribuye a sostener o a acotar esa frase, no va en la página.
 
@@ -69,7 +69,7 @@ Al lado, la tabla de estados nativos que ya imprime el ejemplo 10, porque es la 
 |---|---|---|
 | Wompi | `APPROVED` | `APPROVED` |
 | Rapyd | `CLO` | `APPROVED` |
-| Mercado Pago | `approved` | `APPROVED` |
+| Mercado Pago | `processed` | `APPROVED` |
 | Kushki | `APPROVAL` | `APPROVED` |
 
 Cuatro vocabularios, y uno —`CLO`— que no significa "pagado" sino "cerrado".
@@ -93,6 +93,12 @@ Una sección explícita de límites, redactada a partir de [01-producto/4-por-qu
 - Los **códigos de banco de PSE no son portables** entre pasarelas. El Kit Pagos unifica la forma de pedirlos, no los códigos.
 - El **token de tarjeta tampoco** es portable: lo emite el frontend de cada pasarela.
 - **Solo tarjeta y PSE.** No hay efectivo, ni Nequi, ni suscripciones, ni reembolsos.
+- **Ni el SDK ni los prototipos protegen la página de la tarjeta.**
+  - La Content-Security-Policy la manda el servidor del comercio, y los prototipos no la mandan.
+  - En el prototipo C, el monto lo decide el navegador.
+  - Los prototipos son demostraciones, no plantillas para producción.
+
+  Por lo mismo, la página no promete «cumplimiento PCI DSS»: el SDK mantiene la tarjeta fuera del servidor, pero la página del comercio sigue en su alcance (SAQ A-EP). El detalle está en el punto 114 del `architecture-log.md`.
 - **La redirección no desaparece.** PSE redirige al portal del banco en las cuatro; el SDK unifica cómo se pide, no elimina el paso.
 - Las **cifras comparativas todavía no existen**: las produce el experimento de la Fase 5.
 
@@ -100,7 +106,7 @@ Esta sección no es humildad decorativa. Es lo que separa un trabajo de grado de
 
 ### 3.5 Cómo empezar
 
-Muestra la vía más rápida: la **capa REST**, que permite probar el flujo con una sola petición `curl` sin necesidad de escribir código en TypeScript ni configurar proyectos locales. A continuación, detalla la instalación del SDK vía npm (`npm install kit-pagos-colombia`) y la ejecución local con la API de Simulación. Enlaza a [03-sdk/4-guia-de-implementacion.md](../03-sdk/4-guia-de-implementacion.md) para la guía completa. La página no duplica la guía de implementación: la anuncia.
+Muestra la vía más rápida: la **capa REST**, que permite probar el flujo con una sola petición `curl` sin necesidad de escribir código en TypeScript ni configurar proyectos locales. La petición va al ambiente `simulator` y lleva el token de la API, que Render exige en `/v1/api` desde el 11 de noviembre de 2026. La página no la manda desde el navegador, porque el token no puede ir en una página pública, y el indicador de estado consulta `/health`. A continuación, detalla la instalación del SDK vía npm (`npm install kit-pagos-colombia`) y la ejecución local con la API de Simulación. Enlaza a [03-sdk/4-guia-de-implementacion.md](../03-sdk/4-guia-de-implementacion.md) para la guía completa. La página no duplica la guía de implementación: la anuncia.
 
 ### 3.6 El contexto académico
 

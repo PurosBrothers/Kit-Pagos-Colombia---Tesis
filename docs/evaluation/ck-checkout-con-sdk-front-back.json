@@ -1,0 +1,47 @@
+{
+  "generatedAt": "2026-10-28T19:01:41.118Z",
+  "mode": "measure",
+  "roots": [
+    "prototypes/checkout-con-sdk-front-back/src/payments"
+  ],
+  "tsconfig": "prototypes/checkout-con-sdk-front-back/tsconfig.json",
+  "unit": "file",
+  "knownExceptionsApplied": false,
+  "thresholds": {
+    "WMC": 20,
+    "CBO": 5,
+    "RFC": 20,
+    "MAX_CC": 10
+  },
+  "totalClasses": 0,
+  "violatingClasses": 0,
+  "classes": [],
+  "totalFiles": 2,
+  "violatingFiles": 1,
+  "files": [
+    {
+      "file": "gateways.ts",
+      "WMC": 19,
+      "CBO": 0,
+      "RFC": 6,
+      "maxCC": 5,
+      "worstFunction": "credentials()",
+      "functionCount": 5,
+      "violations": []
+    },
+    {
+      "file": "index.ts",
+      "WMC": 47,
+      "CBO": 14,
+      "RFC": 38,
+      "maxCC": 10,
+      "worstFunction": "createPayments()",
+      "functionCount": 15,
+      "violations": [
+        "WMC 47 exceeds threshold (≤ 20)",
+        "CBO 14 exceeds threshold (≤ 5)",
+        "RFC 38 exceeds threshold (≤ 20)"
+      ]
+    }
+  ]
+}

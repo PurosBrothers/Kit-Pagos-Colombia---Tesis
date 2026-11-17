@@ -206,7 +206,7 @@ Para que este documento no repita el error del que reemplazó, la lista de lo qu
 
 - **Los escenarios de la API de Simulación tienen huecos declarados.** Desde el issue #122 hay rechazo, pendiente, espera y error técnico en las cuatro pasarelas, alcanzables desde el SDK (punto 83 del `architecture-log.md`); las combinaciones sin evidencia de la pasarela real siguen respondiendo `501` (sección 4 de [3-api-de-simulacion.md](3-api-de-simulacion.md)).
 - **El script de métricas CK ya no tiene la ruta fija contra `sdk/src`** (esta lista lo daba como pendiente). Desde el issue #130 acepta un proyecto externo con `--root` (punto 87 del `architecture-log.md`). Desde el #153 mide también la API de Simulación con su propio registro de excepciones, y la CI lo corre sobre el SDK y sobre el simulador (punto 107).
-- **Los proyectos prototípicos ya existen como código**: los tres están en `prototypes/` (`checkout-directo`, `checkout-con-sdk` y `checkout-frontend-rest`). Lo pendiente es el informe de la Fase 5, que los mide y los compara.
+- **Los proyectos prototípicos ya existen como código**: los tres están en `prototypes/` (`checkout-sin-solucion`, `checkout-con-sdk-front-back` y `checkout-frontend-rest`). Lo pendiente es el informe de la Fase 5, que los mide y los compara.
 ---
 
 ## 8. Qué sigue

@@ -1,0 +1,16 @@
+[info] [tienda C] config {api: http://localhost:4817/v1/api, ambiente: simulator, llavesPublicas: Array(0)}
+[info] [tienda C] tarjeta deshabilitada: Con el ambiente simulator, el SDK tokeniza la tarjeta contra localhost:3000, y esta API está en http://localhost:4817: el token no serviría y la tarjeta no se envía. Pague con PSE, arranque con «npm run start:local» y la API de Simulación en localhost:3000, o con «npm start», que cobra en el sandbox con la llave pública de la pasarela.
+[error] Failed to load resource: the server responded with a status of 404 (Not Found)
+[info] [tienda C] GET /v1/api/gateways -> 200
+[info] [tienda C] tarjeta con wompi: BROWSER_TOKEN (deshabilitada)
+[info] [tienda C] GET /v1/api/pse-banks?gateway=wompi -> 200
+[info] [tienda C] tarjeta con wompi: BROWSER_TOKEN (deshabilitada)
+[info] [tienda C] GET /v1/api/pse-banks?gateway=wompi -> 200
+[info] [tienda C] pedido CEIBA-1794419556173 {pasarela: wompi, metodo: PSE, monto: 48000.00}
+[info] [tienda C] POST /v1/api/payments -> 201
+[info] [tienda C] La pasarela pide redirigir al pagador para completar el pago. http://localhost:4817/v1/sim/wompi/pse/redirect?ticket_id=15c436334d494c4fad8148ea37faa615
+[error] Failed to load resource: the server responded with a status of 404 (Not Found)
+[info] [tienda C] config {api: http://localhost:4817/v1/api, ambiente: simulator, llavesPublicas: Array(0)}
+[info] [tienda C] retorno del pagador, orden CEIBA-1794419556173 ?retorno=1
+[info] [tienda C] GET /v1/api/payments/15c43633-4d49-4c4f-ad81-48ea37faa615?gateway=wompi -> 200
+[info] [tienda C] Estado final: APPROVED (nativo APPROVED). {gatewayTransactionId: 15c43633-4d49-4c4f-ad81-48ea37faa615, status: APPROVED, rawStatus: APPROVED, rejectionReason: undefined}

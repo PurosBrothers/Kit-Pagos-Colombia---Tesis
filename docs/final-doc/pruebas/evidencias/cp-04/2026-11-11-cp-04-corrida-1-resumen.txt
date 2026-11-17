@@ -1,0 +1,6 @@
+paso 4: 201 token en data.id: True
+paso 5: 201 order.id: True transactionId: True status: PENDING
+paso 6: 409 delivered: False receiverStatus: None
+paso 7: 200 status: DECLINED historial: [('creation', 'PENDING', 'PENDING'), ('query', 'DECLINED', 'DECLINED')]
+paso 8: 409 delivered: False receiverStatus: None | status: DECLINED historial: [('creation', 'PENDING'), ('query', 'DECLINED')]
+paso 9: orden después del reenvío alterado: DECLINED entradas: 2

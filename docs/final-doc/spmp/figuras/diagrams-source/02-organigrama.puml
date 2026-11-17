@@ -1,0 +1,45 @@
+@startwbs 02-organigrama
+skinparam backgroundColor white
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam legendFontSize 10
+<style>
+wbsDiagram {
+  FontName Helvetica
+  FontSize 10
+  LineColor #6A5ACD
+  node {
+    Padding 6
+    Margin 8
+    RoundCorner 6
+    HorizontalAlignment center
+  }
+  .director {
+    BackgroundColor #F1EFE8
+    LineColor #7A7A7A
+    FontColor #333333
+  }
+  .gestion {
+    BackgroundColor #E1F5EE
+    LineColor #2E8B6E
+    FontColor #0B4F3A
+  }
+  .miembro {
+    BackgroundColor #EEEDFE
+    LineColor #6A5ACD
+    FontColor #3C3489
+  }
+}
+</style>
+
+title Organigrama Kit Pagos Colombia
+
+* <b>PhD. Jaime Andrés Pavlich Mariscal</b>\nDirector del proyecto <<director>>
+** <b>Andres Henao Niño</b>\nGestión, backlog y comunicación con director <<gestion>>
+*** <b>Joshua Prieto Zambrano</b>\nNúcleo SDK y diseño hexagonal <<miembro>>
+*** <b>David Estevan Rodriguez Jurado</b>\nAdaptadores y API de simulación <<miembro>>
+*** <b>Joan Emmanuel Orduz Chia</b>\nMétricas CK y documentación <<miembro>>
+@endwbs

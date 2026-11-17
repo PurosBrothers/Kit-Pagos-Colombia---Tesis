@@ -1,0 +1,175 @@
+\setcounter{subsection}{0}
+\section{CONTEXTO DEL PROYECTO}
+\sloppy
+
+\subsection{Antecedentes}
+Este capítulo reúne lo que hay que saber para entender el problema y la forma de medir una solución: quién participa en un pago digital, cómo funcionan PSE, la tokenización, las credenciales, las firmas y los webhooks, y cómo se representa el dinero. Después presenta los tres marcos que se usaron para diseñar y evaluar el proyecto (la arquitectura hexagonal, Design Science Research y las métricas de Chidamber y Kemerer), describe las cuatro pasarelas tal como las documenta cada proveedor y revisa las soluciones que ya existen. Cómo se resolvió el problema se explica en los capítulos IV a VI.
+
+\subsubsection{Roles y cadena transaccional en un pago digital}
+En un pago en línea intervienen cinco actores:
+\begin{enumerate}
+    \item \textbf{Pagador:} el usuario final que entrega sus medios de pago (tarjeta débito o crédito, o sus credenciales bancarias) para comprar un bien o un servicio.
+    \item \textbf{Comercio (\textit{merchant}):} la aplicación que vende el producto y consume las interfaces de pago.
+    \item \textbf{Pasarela de pago (\textit{payment gateway}):} el intermediario que recibe la instrucción de cobro, la valida y la enruta hacia las redes financieras.
+    \item \textbf{Adquirente (\textit{acquirer}):} la entidad financiera afiliada a las redes de procesamiento que liquida los fondos recaudados y los abona en la cuenta del comercio.
+    \item \textbf{Franquicia y banco emisor:} la franquicia (Visa, Mastercard, American Express) gestiona la red de autorización, y el banco emisor de la tarjeta comprueba los fondos o el cupo, autoriza o rechaza el cobro y emite el código de aprobación.
+\end{enumerate}
+
+\subsubsection{PSE}
+PSE (Pagos Seguros en Línea) es el servicio de ACH Colombia con el que el comprador paga debitando su cuenta bancaria (ACH Colombia, s.~f.). El comprador elige su banco en la página del comercio, la pasarela lo redirige al portal de ese banco y allí autoriza el débito. El resultado llega después de la respuesta que crea el pago, por webhook o al consultar el estado.
+
+Esa forma de pagar complica la integración de tres maneras (Artefacto~\ref{anx:producto}). El resultado de crear un pago puede ser una redirección al banco en lugar de una transacción terminada, y el comprador necesita la lista de bancos antes de que el pago exista. Además, no hay un identificador común para los bancos: Mercado Pago identifica a Bancolombia como \texttt{1007}, y Rapyd, como \texttt{co\_pse\_bancolombia\_bank}. Lo único que comparten es el código de compensación de ACH Colombia, que para Bancolombia también es \texttt{1007}.
+
+\subsubsection{Tokenización y alcance de PCI DSS}
+El tratamiento de los datos de tarjeta lo regula el estándar de seguridad de datos de la industria de tarjetas de pago (\textit{Payment Card Industry Data Security Standard}, PCI DSS) (PCI Security Standards Council, 2024). Un comercio que almacena, procesa o transmite en sus servidores el número de la tarjeta (\textit{Primary Account Number}, PAN) o su código de seguridad entra en el alcance completo del estándar. Su cumplimiento se valida con el cuestionario de autoevaluación más extenso, el SAQ D (\textit{Self-Assessment Questionnaire} D).
+
+La tokenización en el cliente saca esos datos del servidor del comercio. La tarjeta se captura en el navegador o en la aplicación del comprador y se envía directamente a la pasarela, por campos alojados o por una llamada a su API de tokenización. La pasarela guarda la tarjeta y devuelve un token, un identificador con el que el comercio cobra y que no permite reconstruir el número. Eso deja al servidor fuera de los datos de la tarjeta, pero no a la página donde se escriben. Si el formulario es del comercio y la tarjeta se envía a la pasarela con JavaScript, el comercio queda en el cuestionario SAQ A-EP. Solo cuando todos los elementos de la página de pago vienen de la pasarela (campos en \textit{iframes} o redirección) puede aspirar a SAQ A.
+
+\subsubsection{Autenticación, llaves y modelos de credenciales}
+Para interactuar con una pasarela, el comercio se autentica con credenciales de API. Las pasarelas suelen separarlas en dos niveles. La llave pública se puede exponer en el navegador o en una aplicación móvil, y sus permisos son menores y cambian según la pasarela: tokenizar tarjetas, listar bancos o, en Wompi, crear transacciones firmadas con el secreto de integridad. La llave privada o secreta se usa solo en el servidor y, según la pasarela, autoriza cobros, consultas o reembolsos.
+
+Cada pasarela, además, transporta sus credenciales de forma distinta. Wompi y Mercado Pago usan la cabecera estándar \texttt{Authorization: Bearer}, Kushki usa cabeceras propias (\texttt{Public-Merchant-Id} y \texttt{Private-Merchant-Id}) y Rapyd exige firmar cada petición HTTP con un valor aleatorio (\textit{salt}) y una marca de tiempo.
+
+\subsubsection{Integridad de los mensajes y firmas}
+Los mensajes de un pago deben protegerse contra alteraciones en tránsito. Si un atacante cambiara el monto o el estado de una notificación, el comercio podría despachar mercancía que no se pagó o que se pagó por menos.
+
+Para asegurar la integridad, las cuatro pasarelas firman con un secreto compartido, en las peticiones del comercio, en los webhooks o en ambos, aunque no de la misma forma. Wompi calcula un resumen criptográfico (\textit{hash}) con el algoritmo SHA-256 (\textit{Secure Hash Algorithm} de 256 bits) sobre una cadena que incluye el secreto. Mercado Pago, Kushki y Rapyd usan HMAC-SHA256, un código de autenticación de mensajes basado en una función de resumen (HMAC, \textit{Hash-based Message Authentication Code}). En HMAC, el secreto es la llave del algoritmo y no parte del texto. En los dos casos, el receptor recalcula la firma con los mismos campos, y cualquier diferencia invalida el mensaje.
+
+\subsubsection{Notificaciones asíncronas (webhooks) y ataques contra su verificación}
+Muchos resultados de pago llegan después de la respuesta HTTP que crea el pago. En PSE, el pago espera a que el comprador autorice en su banco, y con tarjeta, una revisión antifraude puede dejarlo pendiente. Por eso las pasarelas usan webhooks: peticiones HTTP \texttt{POST} que la pasarela envía a una dirección pública del comercio cuando el pago cambia de estado.
+
+Para procesar un webhook de forma segura hay que evitar dos ataques:
+\begin{enumerate}
+    \item \textbf{Ataques de temporización (\textit{timing attacks}):} si la firma recibida se compara con la esperada mediante una comparación que se detiene en el primer carácter distinto, el tiempo de respuesta depende de cuántos caracteres coinciden. Un atacante que mida muchas veces puede reconstruir la firma válida carácter por carácter. La defensa es comparar en tiempo constante. Node.js ofrece para eso la función \texttt{crypto.timingSafeEqual}, que según su documentación no filtra información de tiempo que permita adivinar uno de los valores (Node.js, s.~f.).
+    \item \textbf{Ataques de repetición (\textit{replay attacks}):} un atacante que capture una notificación legítima de un pago aprobado puede reenviarla para que el comercio despache dos veces. Las cuatro pasarelas incluyen una marca de tiempo en lo que firman, de modo que el receptor puede rechazar los eventos cuya marca se aleje demasiado de la hora actual. El comercio, por su parte, debe recordar qué eventos ya procesó para no aplicar dos veces el mismo pago.
+\end{enumerate}
+
+\subsubsection{Representación monetaria y exactitud numérica}
+La representación del dinero es una fuente frecuente de defectos en el software financiero. En JavaScript, el tipo \texttt{number} sigue el formato binario de doble precisión de IEEE 754 (Institute of Electrical and Electronics Engineers, 2019), y el tipo \texttt{BigInt} solo representa enteros. Como la mayoría de las fracciones decimales no tiene representación exacta en base 2, aparecen errores de redondeo:
+\[
+0.1 + 0.2 = 0.30000000000000004
+\]
+En un sistema de cobro, comprobar con aritmética de \texttt{number} si un monto tiene a lo sumo dos decimales rechaza montos legítimos como \texttt{1.15} o \texttt{19.99}, como muestra el análisis de la representación del dinero en el SAD (Anexo~\ref{anx:sad}). La serialización también pierde información: \texttt{(19.90).toString()} devuelve \texttt{"19.9"}. Rapyd firma el cuerpo serializado de cada petición, y \texttt{"19.90"} y \texttt{"19.9"} producen firmas distintas (Artefacto~\ref{anx:producto}).
+
+Por eso el software financiero suele representar el dinero con enteros en la unidad menor de la moneda o con aritmética decimal exacta. La norma ISO 4217 (International Organization for Standardization, 2015) define cuántos decimales tiene cada divisa y le asigna dos al peso colombiano.
+
+\subsubsection{Arquitectura hexagonal}
+La arquitectura hexagonal, o de puertos y adaptadores, separa la lógica de la aplicación de las tecnologías con las que se comunica (Cockburn \& Garrido de Paz, 2024). La aplicación define puertos, interfaces que expresan lo que necesita o lo que ofrece, y cada tecnología externa se conecta por un adaptador que implementa ese puerto. Así, cambiar una tecnología externa solo exige escribir otro adaptador, sin tocar la lógica del núcleo.
+
+Para construir esa separación se usan patrones de diseño como los del catálogo GoF de Gamma et al. (1994). La fachada ofrece una interfaz sencilla a un conjunto de piezas, la fábrica decide qué objeto crear según la configuración, y la estrategia permite intercambiar un comportamiento sin cambiar a quien lo usa.
+
+\subsubsection{Design Science Research}
+Design Science Research (DSR) es un enfoque de investigación para problemas que se abordan construyendo y evaluando un artefacto (Hevner et al., 2004). Peffers et al. (2007) lo organizan en seis actividades: identificar el problema y motivarlo, definir los objetivos de la solución, diseñar y desarrollar, demostrar, evaluar y comunicar. El orden es nominalmente secuencial, pero el proceso admite iterar y empezar por distintas actividades. El capítulo II describe cómo el proyecto adapta esas actividades a sus fases.
+
+\subsubsection{Métricas de Chidamber y Kemerer}
+\label{sec:metricas-ck}
+Para saber si una integración resulta más sencilla con una solución que sin ella hace falta medirla, y el código ofrece medidas objetivas de su complejidad y de su acoplamiento. Chidamber y Kemerer (1994) propusieron seis métricas para el diseño orientado a objetos, que se conocen como el conjunto CK. Tres de ellas, WMC, CBO y RFC, son las que el proyecto usa para comparar el código de integración con y sin el framework (Anexo~\ref{anx:spmp}, sección 5.1.1). A esas tres se suma una cuarta, MAX\_CC, que se deriva de la complejidad ciclomática de McCabe (1976). La Tabla~\ref{tab:metricas-ck} resume qué mide cada una.
+
+Dos de ellas se basan en la complejidad ciclomática (CC) de una función, que es uno más el número de puntos de decisión que contiene, como un \texttt{if} o un ciclo. McCabe (1976) demostró que la CC es el número máximo de caminos linealmente independientes de la función, y propuso usarla para decidir cuántos caminos probar. Por ejemplo, una función con un \texttt{if} y dos operadores \texttt{\&\&} tiene una CC de 4.
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.4cm}|>{\raggedright\arraybackslash}p{4.2cm}|>{\raggedright\arraybackslash}X|}
+    \hline
+    \textbf{Métrica} & \textbf{Qué mide} & \textbf{Definición} \\ \hline
+    WMC, métodos ponderados por clase & Cuánto hace la clase en total & Suma de la CC de sus métodos \\ \hline
+    MAX\_CC, complejidad máxima & Cuánto hace su método más complejo & La CC más alta entre sus métodos \\ \hline
+    CBO, acoplamiento entre objetos & Con cuántas otras clases se relaciona & Número de clases externas distintas con las que la clase está acoplada \\ \hline
+    RFC, respuesta de una clase & Cuántos métodos pueden ejecutarse cuando la clase recibe una llamada & Sus métodos, más los métodos de otras clases que estos invocan \\ \hline
+  \end{tabularx}
+  \caption{Métricas de complejidad y acoplamiento que usa el proyecto}
+  \label{tab:metricas-ck}
+\end{table}
+
+\paragraph{Cómo se interpretan.} Un valor alto no es por sí solo un defecto. Indica dónde está la complejidad o el acoplamiento que habrá que leer, probar y mantener. Un WMC alto significa que la clase toma muchas decisiones y, por la propiedad que demostró McCabe, que tiene muchos caminos que probar. Un CBO alto indica que la clase conoce muchos tipos externos, de modo que un cambio en cualquiera de ellos puede obligar a modificarla. Un RFC alto indica que, para entender qué hace la clase cuando la llaman, hay que seguir muchos métodos, propios y ajenos. WMC y MAX\_CC se leen juntas porque responden preguntas distintas: una clase con muchos métodos pequeños suma un WMC alto sin tener ninguno difícil, y una clase con un WMC bajo puede esconder un único método muy complejo.
+
+\paragraph{Por qué estas métricas.} La pregunta que debía responder la evaluación es si usar el framework reduce el esfuerzo de integración que recae sobre el comercio. Ese esfuerzo se puede descomponer en tres cosas que sí se ven en el código: cuánta lógica tiene que escribir el desarrollador, de cuántas piezas ajenas depende y cuánta superficie de interacción debe entender para completar un pago. Cada métrica mide una de ellas. El WMC mide la lógica que se escribe: un valor menor con el framework indicaría que la capa de abstracción le ahorra complejidad al desarrollador. El CBO mide las dependencias: una integración directa con varias pasarelas obliga al código del comercio a conocer y referenciar las clases de cada proveedor, y se espera que el framework concentre ese acoplamiento en una sola interfaz. El RFC mide la superficie de interacción: un valor menor sugiere que el desarrollador necesita manejar menos piezas para una operación de pago, lo que se traduce en menor carga cognitiva (Anexo~\ref{anx:spmp}).
+
+Además de corresponder a la pregunta, estas métricas tienen respaldo como indicadores de calidad. Basili et al. (1996) estudiaron ocho sistemas construidos con los mismos requisitos y encontraron que el RFC y el CBO se relacionan con la probabilidad de que una clase tenga fallas, y que el WMC lo hace sobre todo en las clases nuevas o muy modificadas. Es decir, no solo cuentan tamaño: señalan el código donde es más probable que haya problemas. También son cuantitativas y reproducibles, porque las calcula un script sobre el código y no dependen de apreciaciones de quien evalúa. La cuarta, MAX\_CC, se agregó porque el WMC es una suma y no distingue entre muchas funciones simples y una sola muy compleja, y esa diferencia importa para saber dónde se concentra la dificultad.
+
+\paragraph{Por qué no otras.} Las otras tres métricas del conjunto CK no servían para comparar los prototipos de la evaluación. La profundidad del árbol de herencia (DIT, \textit{Depth of Inheritance Tree}) y el número de hijos (NOC, \textit{Number of Children}) miden la herencia, y en el código que se compara casi no hay jerarquías de herencia. La falta de cohesión entre métodos (LCOM, \textit{Lack of Cohesion in Methods}) compara cuántos pares de métodos de una clase comparten atributos y cuántos no, así que no tiene sentido en un módulo de funciones sin estado y sin atributos. Además, Basili et al. (1996) no encontraron relación significativa entre LCOM y las fallas.
+
+Fuera del conjunto CK había otras opciones, y cada una tiene un problema para este experimento. Las métricas de Halstead parten de contar operadores y operandos, y Heitlager et al. (2007) señalan que no hay una definición aceptada de qué es cada uno en lenguajes como Java o C\#. El índice de mantenibilidad combina el volumen de Halstead, la complejidad ciclomática promedio y las líneas de código en una sola fórmula ajustada con datos de otros sistemas. Los mismos autores objetan que ese valor no permite saber qué lo causa y que el promedio oculta las pocas funciones muy complejas, que en esta comparación son justamente las que interesan. Las métricas de componentes de Martin (2017), como la inestabilidad, la abstracción y la distancia a la secuencia principal, se calculan por componente: darían un solo valor por prototipo y no mostrarían en qué archivo se concentra la complejidad. Contar solo líneas de código mide el tamaño, pero no dice cómo se reparte la complejidad ni de cuántos tipos externos depende cada archivo. Por eso la evaluación mide las líneas de código como una variable aparte y no como sustituto de las métricas CK.
+
+\subsection{Pasarelas seleccionadas}
+El proyecto trabaja con cuatro pasarelas que operan en Colombia: Wompi, Mercado Pago, Kushki y Rapyd. La propuesta original señalaba que el mercado colombiano estaba dominado por Wompi, PayU Latam y Mercado Pago, a las que se sumaba Kushki como alternativa regional (Anexo~\ref{anx:spmp}, sección 1.2.4). Rapyd reemplazó a PayU porque había terminado de comprar PayU GPO, la unidad de pagos de PayU en América Latina, el 14 de marzo de 2025. Esta sección describe cada pasarela según la documentación de su proveedor.
+
+\subsubsection{Wompi}
+Wompi usa cuatro secretos: una llave pública, una llave privada, un secreto de integridad que firma las transacciones que crea el comercio y un secreto de eventos que firma los webhooks. Sus llamadas se autentican con la cabecera \texttt{Authorization: Bearer}. El monto se envía como un entero en centavos (\texttt{amount\_in\_cents}). Antes de crear cualquier transacción, con tarjeta o con PSE, exige un token de aceptación de términos (\textit{acceptance token}) de un solo uso. Con PSE, Wompi entrega la dirección web (URL, \textit{Uniform Resource Locator}) de redirección al banco cuando se consulta el estado de la transacción.
+
+La firma de integridad de una transacción es el SHA-256 de la referencia, el monto en centavos, la moneda y el secreto de integridad. El webhook trae la transacción completa, y su firma viaja en la cabecera \texttt{x-event-checksum}: es el SHA-256 de los valores de las propiedades que el cuerpo lista, la marca de tiempo y el secreto de eventos (Wompi, 2026).
+
+\subsubsection{Mercado Pago}
+Mercado Pago autentica con un \textit{access token} privado enviado como \texttt{Authorization: Bearer}. Cada creación de orden lleva la cabecera \texttt{X-Idempotency-Key}, una llave que impide que la misma orden se cree dos veces. El monto va en pesos, en la unidad mayor, y en su API de órdenes (\textit{Orders API}) no admite decimales. Tanto la tarjeta como PSE se cobran creando una orden, y el desenlace llega en la misma respuesta: la orden queda \texttt{processed} si se aprueba, \texttt{failed} si se rechaza y \texttt{processing} si queda pendiente. Con PSE se exigen además la dirección, el tipo y el número de documento y el teléfono del pagador.
+
+El webhook solo trae el identificador del recurso que cambió, sin los datos del pago. Su firma viaja en la cabecera \texttt{x-signature}, con una marca de tiempo y un valor \texttt{v1}, y es un HMAC-SHA256 de un manifiesto formado por ese identificador, la cabecera \texttt{x-request-id} y la marca de tiempo (Mercado Pago, 2026). Como la firma no cubre el cuerpo y el aviso no trae el estado del pago, el comercio tiene que consultarlo para conocerlo.
+
+\subsubsection{Kushki}
+Kushki usa cabeceras propias: \texttt{Public-Merchant-Id} identifica al comercio en las operaciones que en una integración real ocurren en el navegador, como listar bancos o tokenizar, y \texttt{Private-Merchant-Id}, en las que cobran. El monto va como un objeto, en pesos, con el desglose del impuesto al valor agregado (IVA) en los campos \texttt{subtotalIva0}, \texttt{subtotalIva}, \texttt{iva} e \texttt{ice}, cuyas partes deben sumar el total. La tarjeta se tokeniza en el navegador por una API REST de tokenización y el cobro se hace después con ese token. Con PSE, primero se listan los bancos y luego el pago toma tres llamadas: crear un token, iniciar la transferencia, que devuelve la URL del banco, y consultar el estado.
+
+Kushki notifica el evento completo. La firma viaja en la cabecera \texttt{x-\allowbreak kushki-\allowbreak signature} y es un HMAC-SHA256 en hexadecimal sobre el cuerpo y el valor de \texttt{x-\allowbreak kushki-\allowbreak id}, una marca de tiempo, separados por un punto (Kushki, 2026).
+
+\subsubsection{Rapyd}
+Rapyd no autentica con una llave fija en una cabecera. Cada petición lleva las cabeceras \texttt{access\_key}, \texttt{salt}, \texttt{timestamp} y \texttt{signature}. La firma es un HMAC-SHA256 con la llave secreta sobre el método en minúsculas, la ruta, el \textit{salt}, la marca de tiempo, la llave de acceso, la llave secreta y el cuerpo, y su resultado en hexadecimal se codifica en Base64 (Rapyd, 2026). El monto va en pesos, y como el cuerpo serializado forma parte de la firma, la forma exacta en que se escribe el número importa. Rapyd no tokeniza la tarjeta en el navegador: el cobro con tarjeta pasa por una página de pago alojada por Rapyd (\textit{hosted checkout page}). Con PSE, el comercio crea un pago cuyo tipo de método depende del banco, por ejemplo \texttt{co\_pse\_bancolombia\_bank}.
+
+El webhook trae la firma en la cabecera \texttt{signature}, junto con \texttt{salt}, \texttt{timestamp} y \texttt{access\_key}. Se calcula como en las peticiones del comercio, con HMAC-SHA256 en Base64, pero la URL del webhook registrada en el panel reemplaza al método y a la ruta.
+
+\subsubsection{Comparación}
+La Tabla~\ref{tab:comparativa-pasarelas} resume las diferencias técnicas entre las cuatro pasarelas.
+
+\begin{table}[H]
+\renewcommand{\arraystretch}{1.2}
+\centering
+\begin{tabular}{|p{2.9cm}|p{2.6cm}|p{2.6cm}|p{2.6cm}|p{2.6cm}|}
+\hline
+\textbf{Característica técnica} & \textbf{Wompi} & \textbf{Mercado Pago} & \textbf{Kushki} & \textbf{Rapyd} \\ \hline
+Autenticación saliente & Bearer con llave pública & Bearer con \textit{access token} & Cabecera Private-\allowbreak Merchant-\allowbreak Id & Firma HMAC por petición con \textit{salt} y fecha \\ \hline
+Unidad del monto & Entero en centavos (\texttt{amount\_\allowbreak in\_\allowbreak cents}) & Pesos (unidad mayor) & Pesos con desglose de IVA & Pesos, escritos con escala fija \\ \hline
+Cobro con tarjeta & 2 llamadas (token de aceptación + cobro) & Creación de una orden & Token del navegador + 1 llamada de cobro & Redirección a página alojada \\ \hline
+Cobro con PSE & Transacción + consulta de URL & Creación de una orden & Tres llamadas (token, inicio y estado) & Pago con un tipo de método por banco \\ \hline
+Algoritmo de firma en webhook & SHA-256 sobre campos concatenados & HMAC-SHA256 sobre manifiesto y \textit{request-id} & HMAC-SHA256 sobre cuerpo y marca de tiempo & HMAC-SHA256 en Base64 con \textit{salt} y fecha \\ \hline
+Contenido de la notificación & Transacción completa & Solo identificador del recurso & Transacción completa & Transacción completa \\ \hline
+\end{tabular}
+\caption{Comparativa técnica de las cuatro pasarelas de pago seleccionadas}
+\label{tab:comparativa-pasarelas}
+\end{table}
+
+\subsection{Análisis de contexto}
+Un desarrollador colombiano que necesita cobrar con varias pasarelas tiene hoy tres caminos. Puede usar una biblioteca de código abierto que unifique varias pasarelas, casi siempre pensada para otros mercados. Puede buscar paquetes publicados para las pasarelas colombianas. O puede integrar cada pasarela por su cuenta, con su API o con su SDK oficial. Para comparar esos caminos se usan cinco criterios que salen del problema descrito en el capítulo II: el lenguaje de programación, si la solución cubre las cuatro pasarelas del proyecto, si cubre PSE, si verifica los webhooks y si ofrece un simulador que imite a esas pasarelas para probar sin credenciales reales.
+
+\subsubsection{Bibliotecas de código abierto para varias pasarelas}
+Omnipay, escrita en PHP, define una interfaz común de pasarela con operaciones como \texttt{purchase}, \texttt{authorize}, \texttt{capture}, \texttt{refund} y \texttt{void}, y un método genérico, \texttt{acceptNotification}, para las notificaciones (The PHP League, s.~f.). Su lista de pasarelas incluye un adaptador de terceros para Mercado Pago, pero ninguno para Wompi, Kushki ni Rapyd, y no menciona PSE. Para pruebas ofrece una pasarela ficticia genérica, \texttt{Dummy}, que no imita a ninguna pasarela real (revisado el 7 de noviembre de 2026).
+
+ActiveMerchant, escrita en Ruby y distribuida con la licencia de código abierto MIT, del Instituto Tecnológico de Massachusetts, expone operaciones comunes de cobro (\texttt{purchase}, \texttt{authorize}, \texttt{refund} y \texttt{void}) sobre muchas pasarelas (Active Merchant, s.~f.). Tiene adaptadores para Wompi, Kushki, Mercado Pago y Rapyd, los cuatro con Colombia entre sus países, pero ninguno de esos adaptadores menciona PSE ni la verificación de webhooks (revisado el 2 de noviembre de 2026). Como Omnipay, trae una pasarela ficticia genérica para pruebas, \texttt{BogusGateway}.
+
+\subsubsection{Paquetes de npm para las pasarelas colombianas}
+El 7 de noviembre de 2026 se consultó el buscador del registro de npm, el repositorio de paquetes de Node.js, con ocho términos: «wompi kushki», «wompi rapyd», «wompi mercadopago», «kushki mercadopago», «pse colombia payment», «pasarelas de pago colombia», «wompi» y «kushki». De los primeros 25 resultados de cada consulta salieron 116 paquetes distintos. Aparte de \texttt{kit-pagos-colombia}, ninguno nombra en su descripción más de una de las cuatro pasarelas. Son SDK de una sola pasarela, complementos para plataformas de comercio electrónico y servidores de herramientas para asistentes. El único que se presenta como SDK unificado para América Latina, \texttt{@condorpay/sdk} 0.1.6, cubre en Colombia Wompi y los códigos QR (\textit{Quick Response}) de Bre-B.
+
+\subsubsection{Integración directa y orquestadores comerciales}
+La alternativa sin biblioteca común es integrar cada pasarela con su API o con su SDK oficial. El comercio termina con una forma distinta de configurar, de manejar errores y de verificar webhooks por cada pasarela, y cada cambio de proveedor obliga a tocar su código de pagos.
+
+También existen orquestadores comerciales de pagos: servicios en la nube que reciben la petición del comercio y la envían a una de varias pasarelas. Este trabajo no los evaluó ni comprobó sus conectores para Colombia o sus tarifas. Su modelo es distinto, porque el comercio depende de un intermediario externo en lugar de una biblioteca que corre en su propio servidor.
+
+La Tabla~\ref{tab:estado-arte} resume la comparación con los cinco criterios.
+
+\begin{table}[H]
+\renewcommand{\arraystretch}{1.2}
+\centering
+\begin{tabular}{|p{2.6cm}|p{1.8cm}|p{2.3cm}|p{2.1cm}|p{2.2cm}|p{1.8cm}|}
+\hline
+\textbf{Alternativa} & \textbf{Lenguaje} & \textbf{Las cuatro pasarelas} & \textbf{PSE} & \textbf{Webhooks} & \textbf{Simulador} \\ \hline
+Omnipay & PHP & No: solo Mercado Pago, de terceros & No aparece & No se revisó por pasarela & Solo una pasarela ficticia genérica \\ \hline
+ActiveMerchant & Ruby & Sí & No aparece en los cuatro adaptadores & No aparece en los cuatro adaptadores & Solo una pasarela ficticia genérica \\ \hline
+\texttt{@condorpay/sdk} & JavaScript (Node.js) & No: solo Wompi & No aparece & No aparece & No aparece \\ \hline
+Kit Pagos Colombia & TypeScript & Sí & Sí & Sí, con las cuatro firmas & Sí, la API de Simulación \\ \hline
+\end{tabular}
+\caption{Alternativas revisadas frente a los criterios de comparación, según su documentación y los adaptadores revisados}
+\label{tab:estado-arte}
+\end{table}
+
+\subsubsection{Síntesis de la brecha}
+Ninguna de las alternativas revisadas reúne a la vez las cuatro pasarelas, PSE, la verificación de webhooks y un simulador de esas pasarelas. ActiveMerchant es la más cercana en pasarelas, pero está escrita en Ruby y sus adaptadores para estas cuatro no cubren PSE ni los webhooks. Entre las bibliotecas de JavaScript revisadas no hay ninguna que cubra las cuatro. La revisión tiene límites: en npm se clasificó por la descripción de cada paquete, en GitHub solo se revisaron Omnipay y ActiveMerchant, y no incluyó servicios comerciales.
+
+Esa combinación de criterios es la brecha que este proyecto busca cubrir.

@@ -1,0 +1,35 @@
+=== Kit Pagos Colombia — pago con PSE simulado ===
+
+Bancos disponibles: 3
+Elegido:            Banco que aprueba  (1)
+
+Solicitud de pago:
+  Monto:        150000.00 COP
+  En centavos:  15000000 (lo que recibe Wompi)
+  Referencia:   ORDER-PSE-1794415812329
+  Pagador:      jaime.pavlich@example.com
+  Documento:    CC 1099888777
+  Método:       PSE contra el banco "1" (Banco que aprueba)
+  ¿Exige documento?  true
+
+Redirección pendiente:
+  URL del banco:   http://127.0.0.1:4817/v1/sim/wompi/pse/redirect?ticket_id=9a158ca31b44449d8772b3743de394e0
+  ID en pasarela:  9a158ca3-1b44-449d-8772-b3743de394e0
+  Pasarela:        WOMPI
+  Estado nativo:   PENDING
+
+En una integración real, aquí el comercio redirige al pagador a esa URL.
+El pago NO está aprobado todavía: sigue pendiente de que pague en el banco.
+
+Consultando el estado después de la redirección...
+  Estado normalizado:  APPROVED
+  Estado nativo:       APPROVED
+  ¿Aprobado?           true
+  ¿Estado final?       true
+  Referencia:          ORDER-PSE-1794415812329
+
+=== Fin del ejemplo ===
+[remap-3000] peticiones reescritas de localhost:3000 a 127.0.0.1:4817: 5
+[remap-3000] peticiones reescritas de localhost:3000 a 127.0.0.1:4817: 0
+[remap-3000] peticiones reescritas de localhost:3000 a 127.0.0.1:4817: 0
+cp-02 corrida 1 exit 0

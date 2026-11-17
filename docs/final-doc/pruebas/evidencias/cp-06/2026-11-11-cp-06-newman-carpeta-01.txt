@@ -1,0 +1,46 @@
+npm warn deprecated har-validator@5.1.5: this library is no longer supported
+npm warn deprecated uuid@3.4.0: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+npm warn deprecated uuid@8.3.2: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+npm warn deprecated @faker-js/faker@5.5.3: Please update to a newer version.
+newman
+
+Kit Pagos Colombia - Simulator API
+
+❏ 01. Capa REST Kit Pagos (/v1/api)
+↳ GET /v1/api/gateways
+  GET http://127.0.0.1:4817/v1/api/gateways [200 OK, 426B, 29ms]
+  ✓  GET /v1/api/gateways: responde 2xx
+  ✓  GET /v1/api/gateways: dice cómo recibe la tarjeta cada pasarela (punto 106)
+
+↳ POST /v1/api/payments
+  POST http://127.0.0.1:4817/v1/api/payments [201 Created, 609B, 69ms]
+  ✓  POST /v1/api/payments: responde 2xx
+
+↳ GET /v1/api/payments/:id
+  GET http://127.0.0.1:4817/v1/api/payments/f222c0f9-4adc-4937-9dde-142aa6e14747?gateway=wompi [200 OK, 530B, 7ms]
+  ✓  GET /v1/api/payments/:id: responde 2xx
+
+↳ GET /v1/api/pse-banks
+  GET http://127.0.0.1:4817/v1/api/pse-banks?gateway=wompi [200 OK, 428B, 6ms]
+  ✓  GET /v1/api/pse-banks: responde 2xx
+
+┌─────────────────────────┬──────────────────┬──────────────────┐
+│                         │         executed │           failed │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│              iterations │                1 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│                requests │                4 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│            test-scripts │                6 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│      prerequest-scripts │                1 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│              assertions │                5 │                0 │
+├─────────────────────────┴──────────────────┴──────────────────┤
+│ total run duration: 197ms                                     │
+├───────────────────────────────────────────────────────────────┤
+│ total data received: 964B (approx)                            │
+├───────────────────────────────────────────────────────────────┤
+│ average response time: 27ms [min: 6ms, max: 69ms, s.d.: 25ms] │
+└───────────────────────────────────────────────────────────────┘
+newman exit 0

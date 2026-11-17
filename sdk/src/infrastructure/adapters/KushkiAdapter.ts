@@ -18,6 +18,7 @@ import { assertSupportedPaymentMethod } from "./payment-method-support";
 import { resolveTaxBreakdown } from "./kushki-amount";
 import {
   CARD_CHARGE_PATH,
+  acceptDeclinedCharge,
   buildCardChargePayload,
   extractCardChargeRedirect,
   reclassifyKushkiCredentialError,
@@ -100,12 +101,14 @@ export class KushkiAdapter implements PaymentGatewayPort {
       return this.createTransferPayment(request);
     }
 
+    // Un rechazo del banco llega como 400 con el motivo en `details`, y sale como cobro
+    // rechazado; cualquier otro error sigue saliendo como error (punto 122).
     const rawResponse = await this.request(
       CARD_CHARGE_PATH,
       "POST",
       "private",
       buildCardChargePayload(request),
-    );
+    ).catch((error: unknown) => acceptDeclinedCharge(error, request));
 
     const redirect = extractCardChargeRedirect(rawResponse);
     if (redirect) {

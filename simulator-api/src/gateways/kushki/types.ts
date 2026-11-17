@@ -69,11 +69,10 @@ export interface KushkiCardTokenRequestBody {
 export type KushkiTransactionStatus = "APPROVAL" | "DECLINED" | "INITIALIZED";
 
 /**
- * Respuesta nativa de Kushki para POST /card/v1/charges y para la consulta
- * de estado. La creación y la consulta simulada responden HTTP 200,
- * incluso cuando transaction_status es
- * DECLINED: la decisión de éxito o fallo está en el cuerpo, nunca en el
- * código HTTP.
+ * Respuesta nativa de Kushki para POST /card/v1/charges y para la consulta de estado. Un
+ * cobro rechazado no sale así al crearse: Kushki lo responde con el `400` de
+ * `KushkiDeclinedChargeError` (punto 122). El registro sí se guarda con esta forma y
+ * `DECLINED`, para la consulta y el disparo de su webhook, que son facilidades del simulador.
  */
 /**
  * Respuesta de `POST /card/v1/charges` con `fullResponse: true`.
@@ -107,6 +106,29 @@ export interface KushkiChargeResponse {
       email?: string;
     };
   };
+}
+
+/**
+ * El `400` de un cobro con tarjeta que el banco rechazó.
+ *
+ * **Forma medida contra la API UAT** el 24 de octubre de 2026, con las cinco tarjetas de rechazo
+ * de `docs/testing-data/kushki.md` §1 (punto 122). El rechazo no viaja con el `201` de un
+ * aprobado: `code` y `message` son genéricos y el motivo va en `details`. `details.ticketNumber`
+ * llega vacío. El mock trae solo los campos cuyo significado se conoce; Kushki manda además
+ * `processorName`, `metadata`, `binCard`, `paymentBrand`, `merchantName`, `cardHolderName`,
+ * `lastFourDigitsOfCard`, `approvalCode`, `acquirerBank`, `processorError` y `processorMessage`.
+ */
+export interface KushkiDeclinedChargeError {
+  code: string;
+  message: string;
+  details: {
+    ticketNumber: "";
+    transactionId: string;
+    responseCode: string;
+    responseText: string;
+    approvedTransactionAmount: number;
+  };
+  transactionReference: string;
 }
 
 /**

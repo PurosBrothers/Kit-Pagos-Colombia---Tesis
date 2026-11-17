@@ -1,0 +1,98 @@
+@startuml 06-bpmn-riesgos
+skinparam backgroundColor white
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam legendFontSize 10
+skinparam swimlaneTitleFontSize 10
+skinparam wrapWidth 90
+skinparam padding 2
+skinparam ArrowColor #333333
+skinparam activity {
+  BackgroundColor #FFF2CC
+  BorderColor #B7950B
+  DiamondBackgroundColor #FFF2CC
+  DiamondBorderColor #B7950B
+  StartColor #2E7D32
+  EndColor #C62828
+}
+skinparam note {
+  BackgroundColor #F7F7F7
+  BorderColor #8A8A8A
+}
+skinparam swimlane {
+  BorderColor #5B7BA6
+  TitleFontColor #1F3A6E
+  TitleFontStyle bold
+}
+skinparam legend {
+  BackgroundColor white
+  BorderColor #1F3A6E
+}
+
+title <b>7.2 ANÁLISIS Y ADMINISTRACIÓN DE RIESGOS</b>\nGestionar riesgos técnicos, organizacionales y metodológicos que puedan afectar el cronograma, la calidad, la\narquitectura, la evaluación y la integración con las pasarelas de pago.
+
+|Coordinador\ndel equipo|
+start
+-> Inicio de\nrevisión semanal\nde riesgos;
+:<&document> Identificar riesgos técnicos y operativos;
+:<&person> Registrar riesgo en matriz de riesgos; <<#DCE8F7>>
+note right: <&file> Matriz de\nriesgos
+if (¿El riesgo requiere\ntratamiento?) then (No)
+  :Monitorear\nriesgo;
+  -> Riesgo en\nmonitoreo;
+  stop
+  note right
+    Los riesgos en
+    monitoreo se
+    revisan nuevamente
+    en las reuniones
+    semanales del
+    proyecto.
+  end note
+else (Sí)
+  |Equipo\ntécnico|
+  :<&plus> Analizar impacto y probabilidad;
+  note left: <&file> Matriz de\nriesgos
+  if (¿El riesgo es\ncrítico?) then (No)
+    :Definir plan de\nmitigación;
+    :<&document> Aplicar\nmitigación;
+    :Actualizar estado\ndel riesgo;
+    note right: <&file> Registro de\nacciones de\nmitigación
+    -> Riesgo mitigado\noperativamente;
+    stop
+  else (Sí)
+    :<&envelope-closed> Escalar al\ndirector; <<#FFF8E1>>
+    -[dashed]->
+    |Director del\nproyecto|
+    split
+      -[dashed]->
+    split again
+      -[hidden]->
+      :<&person> Revisión del\ndirector; <<#DCE8F7>>
+    end split
+    switch (Decisión del\ndirector)
+    case ( )
+      :<&envelope-closed> Aprobar ajuste; <<#FFF8E1>>
+    case ( )
+      :<&envelope-closed> Redefinir alcance; <<#FFF8E1>>
+    case ( )
+      :<&envelope-closed> Cambio metodológico; <<#FFF8E1>>
+    endswitch
+    :Implementar\nacciones\ncorrectivas;
+    :Actualizar matriz\nde riesgos;
+    note right: <&file> Matriz de riesgos\nactualizada
+    -> Riesgo mitigado\ncon aprobación\ndirectiva;
+    stop
+  endif
+endif
+
+legend bottom left
+  |= Símbolos |= EXPLICACIÓN DEL PROCESO |
+  | <&person> Tarea de Usuario\n   (azul)\n<&document> Tarea Manual\n<&plus> Subproceso\n<&envelope-closed> Evento de\n   Mensaje\nRombo o hexágono:\n   Exclusiva (XOR)\n<&file> Objeto de Datos\nNota: Anotación Textual\nFlecha continua:\n   Flujo de Secuencia\nFlecha discontinua:\n   Flujo de Mensaje | El proceso inicia en las revisiones semanales donde el equipo identifica riesgos\ntécnicos, organizacionales o metodológicos. Estos se registran en la matriz de\nriesgos gestionada por el coordinador.\n\nSe evalúa si el riesgo requiere tratamiento según su impacto potencial en el\nalcance, el cronograma, la evaluación o la calidad del proyecto.\n\nSi no requiere tratamiento, se monitorea y se revisa nuevamente en las\nreuniones semanales.\n\nSi requiere tratamiento, el equipo analiza su impacto y probabilidad para\ndeterminar si es crítico.\n\nSi no es crítico, se define y aplica un plan de mitigación y se actualiza el estado\ndel riesgo.\n\nSi es crítico, se escala al director del proyecto. El director revisa la situación y\ndecide entre aprobar ajustes, redefinir alcance o cambiar aspectos metodológicos.\n\nFinalmente, se implementan las acciones correctivas y se actualiza la matriz\nde riesgos.\n\nEste proceso es continuo y se repite durante todo el ciclo de vida del proyecto. |
+  |= Notas: |= |
+  | | Este proceso se ejecuta de forma continua durante todo el ciclo de vida del proyecto\ny se revisa en cada iteración o hito definido (H1–H6).\nLa matriz de riesgos es el artefacto central para el seguimiento y control de los\nriesgos del proyecto. |
+endlegend
+@enduml

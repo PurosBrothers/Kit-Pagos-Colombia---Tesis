@@ -436,6 +436,102 @@ describe("KushkiAdapter", () => {
       expect((error as KitPagosError).code).toBe(KitPagosErrorCode.INVALID_REQUEST);
       expect((error as KitPagosError).originalPayload).toEqual(body);
     });
+
+    /**
+     * La forma medida el 24 de octubre de 2026 con la tarjeta «Sin Fondos» de kushki.md §1: el
+     * mensaje es genérico, el motivo va en `details`, y `details.ticketNumber` llega vacío. Los
+     * valores de los identificadores son inventados.
+     */
+    function declinedChargeBody(responseCode: string, responseText: string): Record<string, unknown> {
+      return {
+        code: responseCode,
+        message: "Transacción declinada.",
+        details: {
+          ticketNumber: "",
+          transactionId: "883641052193877226",
+          responseCode,
+          responseText,
+          approvedTransactionAmount: 0,
+        },
+        transactionReference: "0b7d5e2a-3c4f-4a8e-9f61-2d0c7b9a4e15",
+      };
+    }
+
+    it("returns the 400 of a card the bank declined as a DECLINED transaction with its reason", async () => {
+      global.fetch = jest.fn().mockResolvedValue(
+        jsonErrorResponse(400, declinedChargeBody("021", "Tarjeta sin fondos")),
+      );
+
+      const transaction = expectTransaction(await new KushkiAdapter().createPayment(validRequest));
+
+      expect(transaction.getStatus()).toBe("DECLINED");
+      expect(transaction.rawStatus).toBe("DECLINED");
+      expect(transaction.rejectionReason?.rejectionCode).toBe("021");
+      expect(transaction.rejectionReason?.rejectionCategory).toBe("INSUFFICIENT_FUNDS");
+      expect(transaction.gatewayTransactionId.value).toBe("883641052193877226");
+      expect(transaction.orderReference.getValue()).toBe("ord-12345");
+      expect(transaction.amount.getValue()).toBe("50000.00");
+      expect(transaction.payer.email).toBe("cliente@example.com");
+    });
+
+    it("keeps a declined code without a category as UNKNOWN, not as an error", async () => {
+      global.fetch = jest.fn().mockResolvedValue(
+        jsonErrorResponse(400, declinedChargeBody("019", "Tarjeta no compatible")),
+      );
+
+      const transaction = expectTransaction(await new KushkiAdapter().createPayment(validRequest));
+
+      expect(transaction.getStatus()).toBe("DECLINED");
+      expect(transaction.rejectionReason?.rejectionCategory).toBe("UNKNOWN");
+    });
+
+    it("uses the transactionReference when the declined charge brings no transactionId", async () => {
+      const body = declinedChargeBody("017", "Tarjeta no válida");
+      delete (body.details as Record<string, unknown>).transactionId;
+      global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(400, body));
+
+      const transaction = expectTransaction(await new KushkiAdapter().createPayment(validRequest));
+
+      expect(transaction.gatewayTransactionId.value).toBe("0b7d5e2a-3c4f-4a8e-9f61-2d0c7b9a4e15");
+    });
+
+    // Medido el mismo día: el K001 de un token mal formado trae `details` con `field` y `errors`.
+    it("still throws a 400 whose details bring no responseCode", async () => {
+      const body = { code: "K001", message: "Cuerpo de la petición inválido.", details: { field: "token", errors: [] } };
+      global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(400, body));
+
+      const error = await new KushkiAdapter().createPayment(validRequest).catch((e: unknown) => e);
+
+      expect((error as KitPagosError).code).toBe(KitPagosErrorCode.INVALID_REQUEST);
+    });
+
+    // Medido el mismo día: el K220 de un token cobrado por otro monto trae `details` con su
+    // `responseCode` y un `transactionId`, como un rechazo; el código con `K` lo deja como error.
+    it("keeps the K220 that brings details as INVALID_REQUEST, not as a rejection", async () => {
+      const reason = "Monto de la transacción es diferente al monto de la venta inicial";
+      const body = {
+        code: "K220",
+        message: reason,
+        details: { ticketNumber: "", transactionId: "883641052193877227", responseCode: "K220", responseText: reason },
+        transactionReference: "1c8e6f3b-4d5a-4b9f-8a72-3e1d8c0b5f26",
+      };
+      global.fetch = jest.fn().mockResolvedValue(jsonErrorResponse(400, body));
+
+      const error = await new KushkiAdapter().createPayment(validRequest).catch((e: unknown) => e);
+
+      expect((error as KitPagosError).code).toBe(KitPagosErrorCode.INVALID_REQUEST);
+      expect((error as KitPagosError).message).toContain(`(K220: ${reason})`);
+    });
+
+    it("does not turn a 500 with a decline-shaped body into a rejection", async () => {
+      global.fetch = jest.fn().mockResolvedValue(
+        jsonErrorResponse(500, declinedChargeBody("021", "Tarjeta sin fondos")),
+      );
+
+      const error = await new KushkiAdapter().createPayment(validRequest).catch((e: unknown) => e);
+
+      expect((error as KitPagosError).code).toBe(KitPagosErrorCode.GATEWAY_SERVER_ERROR);
+    });
   });
 
   describe("getStatus()", () => {

@@ -1,6 +1,6 @@
 # Metodología del proyecto: memoria de referencia
 
-Este documento resume la metodología definida en el SPMP (`SPMP - Kit Pagos Colombia.md`) en la forma que necesitamos para el día a día de gestión en GitHub: crear milestones, escribir issues, y decidir en qué fase o iteración cae cada corrección o funcionalidad nueva. No sustituye al SPMP, que sigue siendo el documento formal y la fuente de verdad ante el director del trabajo de grado; esto es una traducción operativa de esa fuente para no tener que releer el documento completo cada vez que hay que abrir un issue.
+Este documento resume la metodología definida en el SPMP ([`SPMP-original.pdf`](../final-doc/spmp/SPMP-original.pdf)) en la forma que necesitamos para el día a día de gestión en GitHub: crear milestones, escribir issues, y decidir en qué fase o iteración cae cada corrección o funcionalidad nueva. No sustituye al SPMP, que sigue siendo el documento formal y la fuente de verdad ante el director del trabajo de grado; esto es una traducción operativa de esa fuente para no tener que releer el documento completo cada vez que hay que abrir un issue.
 
 Si el SPMP cambia (por ejemplo, si se ajustan fechas o el alcance de una iteración), este archivo debe actualizarse para que no quede desalineado, igual que hacemos con `architecture-log.md` respecto al SAD.
 
@@ -20,6 +20,8 @@ Scrum no desaparece: se usa como práctica interna dentro de la Fase 4 (Desarrol
 | 4 | Desarrollo iterativo | 7–13 | 45% | El framework construido, en tres iteraciones (ver sección 2) |
 | 5 | Demostración y evaluación | 13–16 | 15% | Prototipos con y sin el framework, métricas CK calculadas, informe comparativo |
 | 6 | Comunicación | 16–18 | 10% | Documento de grado, repositorio público publicado |
+
+Las semanas son las del plan de mayo de 2026. Lo que pasó está en el SPMP 2.0 (issue #192): la tabla de hitos de la sección 3.1.3 y la carta Gantt de la 4.3.2 ponen, al lado de cada semana planeada, la ventana real. Las Fases 1 y 2 se hicieron entre abril y junio de 2026, antes de la semana S01, y la Iteración 3 se extendió sobre las Fases 5 y 6 (sección 10.2).
 
 La Fase 4 es la única que opera de forma iterativa internamente, y es la única con la que vamos a interactuar constantemente desde GitHub Issues y Milestones mientras estemos en desarrollo.
 
@@ -55,7 +57,7 @@ La Iteración 3 cierra el artefacto completo, no solo la API de Simulación. Son
 | 1 | **API de Simulación completa** | Los escenarios de rechazo, timeout y error (implementados en el issue #122, punto 83 del `architecture-log.md`); despliegue en Render; colección Postman versionada | Sin escenarios de fallo no se puede completar la lista de verificación funcional de los prototipos |
 | 2 | **Documentación de datos** | El tercer componente del Kit Pagos: `docs/testing-data/` presentado como artefacto, con su nivel de evidencia y sus huecos por pasarela | Es lo que hace reproducible el experimento por alguien que no sea el equipo |
 | 3 | **Página de presentación** | El sitio que muestra el artefacto sin necesidad de clonar el repositorio | Es cómo el jurado y un evaluador externo acceden al resultado |
-| 4 | **Proyectos prototípicos completos** | Los prototipos A (integración directa, control) y B (con SDK, tratamiento), ejecutables y medibles | **Son el objeto de medición del experimento**: sin ellos no hay Fase 5 |
+| 4 | **Proyectos prototípicos completos** | Los prototipos D (integración directa, control) y B (con SDK, tratamiento), ejecutables y medibles | **Son el objeto de medición del experimento**: sin ellos no hay Fase 5 |
 
 Dos cosas que hay que resolver **antes** de que el cuarto entregable sea medible, y que no son trabajo de los prototipos:
 
@@ -102,7 +104,7 @@ Todo issue de código, sin excepción, debe responder no solo qué hay que hacer
 1. **Título**: corto, claro, orientado a la acción.
 2. **Responsable**: David, Joan, Henao o Joshua. La asignación se hace según complejidad, dependencias, carga de trabajo y necesidad de paralelización, no por rotación fija ni por buscar el mismo número de issues por persona.
 3. **Duración estimada**: fecha de inicio y de cierre. No todos los issues duran una semana; la duración depende de la complejidad real.
-4. **Ubicación**: la ruta o módulo exacto donde se hace el trabajo (por ejemplo `sdk/src/application/GatewayFactory.ts`), no solo "backend" o "SDK".
+4. **Ubicación**: la ruta o módulo exacto donde se hace el trabajo (por ejemplo `sdk/src/infrastructure/factories/GatewayFactory.ts`), no solo "backend" o "SDK".
 5. **Objetivo**: qué se pretende conseguir.
 6. **Contexto y justificación**: por qué se necesita, qué problema resuelve, qué componente habilita, qué dependencia tiene con otras partes.
 7. **Implementación**: qué debe hacer el desarrollador, con suficiente detalle para empezar sin tener que adivinar.
@@ -115,7 +117,7 @@ Además, todo issue debe declarar explícitamente sus dependencias con otros iss
 
 | Integrante | Rol (SPMP) | Frente principal | Nota |
 |---|---|---|---|
-| Andrés Henao Niño | Coordinador del equipo | Gestión operativa: backlog, calendario, comunicación con el director, actas | Referido como "Henao" en la documentación de arquitectura del repositorio |
+| Andrés Henao Niño | Coordinador del equipo | Gestión operativa: backlog, calendario, comunicación con el director | Referido como "Henao" en la documentación de arquitectura del repositorio |
 | Joshua Prieto Zambrano | Líder de arquitectura y núcleo SDK | Modelo de dominio, puertos, implementación del núcleo | Revisa que los adaptadores cumplan los contratos de puerto |
 | David Estevan Rodríguez Jurado | Líder de integración | Los cuatro adaptadores y la API de simulación | También consolida la documentación de datos de prueba |
 | Joan Emmanuel Orduz Chía | Líder de evaluación y documentación | Métricas CK, proyectos prototípicos, documento de grado | Autor de este repositorio en GitHub (`joan-orduz`) |
@@ -128,7 +130,7 @@ Un requerimiento se considera implementado exitosamente solo cuando se cumplen *
 
 1. El pull request asociado fue aprobado por al menos un integrante distinto al autor.
 2. Las pruebas automatizadas relevantes pasan en el pipeline de CI con cobertura igual o superior al 80%.
-3. El ítem en el tablero de seguimiento está en estado completado.
+3. El issue está cerrado, con un comentario que explica la solución y enlaza el cambio (`CONTRIBUTING.md`).
 4. Los valores de WMC, CBO, RFC y MAX_CC de las clases modificadas están dentro de los umbrales definidos (WMC ≤ 20, CBO ≤ 5, RFC ≤ 20, MAX_CC ≤ 10).
 5. La [Matriz de Trazabilidad](traceability-matrix.md) ha sido actualizada para reflejar el requerimiento como implementado.
 
@@ -165,6 +167,28 @@ Tres consecuencias de estas definiciones que conviene tener presentes al leer un
 
 **Umbrales:** el WMC subió de 15 a 20 al pasar de conteo de métodos a suma de complejidad ciclomática. No es un relajamiento del criterio: son escalas distintas y el 15 original no era comparable, y el cambio viene acompañado de `MAX_CC ≤ 10`, una restricción nueva que antes no existía y que es más estricta en lo que importa. El 20 es el valor que reporta el SATC de NASA para WMC canónico; el 10 de MAX_CC es el umbral clásico de McCabe.
 
+#### 6.1.1. Adaptación de métricas CK a unidades de archivo (Fase 5, issue #134)
+
+La suite de métricas CK (Chidamber & Kemerer) fue formulada originalmente para programación orientada a objetos basada en clases. En la evaluación de la Fase 5, esa definición estricta por clase presenta un obstáculo metodológico directo:
+
+- En el **Prototipo B (tratamiento, `checkout-con-sdk-front-back`)**, el módulo de pagos `src/payments/` no contiene ninguna clase: está compuesto por funciones puras de módulo (`index.ts`) y configuración declarativa tipada (`gateways.ts`). Medido solo por clases, el reporte arrojaba cero clases y ninguna métrica.
+- En el **Prototipo D (control, `checkout-sin-solucion`)**, cada pasarela declara una clase y entre 6 y 12 funciones auxiliares de módulo (cálculo de firmas, mapeo de payloads, utilidades de cabeceras) que la métrica por clase ignoraba por completo.
+
+Medir únicamente clases habría dado un reporte vacío en B y parcial en D, invalidando la comparación experimental. Por ello, el script `ck-metrics.ts` se extiende con `--unit file` (o `--unit all`), adaptando las cuatro métricas a nivel de archivo:
+
+| Métrica por archivo | Fórmula adaptada | Interpretación |
+|---|---|---|
+| **WMC (Weighted Methods per File)** | Suma de la complejidad ciclomática de todas las funciones y métodos declarados en el archivo (funciones de módulo, métodos de clase y lambdas/funciones flecha asignadas a constantes). En funciones anidadas, cada bifurcación pertenece al llamable inmediatamente contenedor. | Complejidad ciclomática total acumulada en el archivo. |
+| **MAX_CC** | La CC más alta entre todas las funciones y métodos declarados en el archivo, identificando la función de peor caso (`worstFunction`). | Complejidad máxima puntual dentro del archivo. |
+| **CBO (Coupling Between Objects por archivo)** | Conteo de tipos externos distintos importados en el archivo que aparecen en las firmas (parámetros y retorno) de todas sus funciones y métodos. | Dependencia estructural del archivo hacia tipos externos. |
+| **RFC (Response For a File)** | Número total de funciones y métodos declarados en el archivo, más el número de métodos externos invocados (con notación de punto cuyo receptor no empieza por `this.`) y llamadas directas a funciones no declaradas en el archivo. | Tamaño del conjunto de respuesta del archivo ante mensajes. |
+
+Esta adaptación preserva la semántica de Chidamber & Kemerer trasladando la frontera de encapsulamiento de la clase al módulo/archivo (`.ts`), lo que permite una medición simétrica y reproducible entre el código funcional de B y el código híbrido de D.
+
+**Lo que la medición por archivo de CK no mide (declarado):**
+- `browser/client.js` queda fuera del análisis estático de CK porque es código JavaScript del cliente web (no TypeScript analizable con el `tsconfig` del backend): son 117 líneas en D y 12 en B (medidas y reportadas en la variable 1 con `cloc`).
+- Una bifurcación a nivel de módulo que ocurra directamente en el cuerpo superior del archivo fuera de toda función o método (por ejemplo, una inicialización condicional en el arranque del módulo) no se cuenta dentro de la complejidad ciclomática de ninguna función, ya que las métricas CK evalúan unidades invocables (`callables`).
+
 ### 6.2. Excepciones documentadas
 
 Una violación de umbral puede ser consecuencia directa de una decisión arquitectónica ya registrada y no un defecto de diseño. Para esos casos el script mantiene un registro de excepciones (`KNOWN_EXCEPTIONS` en `ck-metrics.ts`), y cada entrada debe enlazar al punto del `architecture-log.md` que la justifica. **Agregar una clase a ese registro sin ese registro previo no es una resolución válida:** deja el umbral verde en el reporte y rojo en la realidad.
@@ -191,7 +215,7 @@ Si la tasa de completitud al cierre de una semana es inferior al 60% de las tare
 
 ## 7. Control de cambios de requerimientos
 
-Cualquier integrante o el director puede proponer un cambio a los requerimientos. Se registra la propuesta con descripción, justificación e impacto estimado sobre cronograma y entregables; el equipo la evalúa en la reunión semanal y decide por consenso (aprobar, rechazar o posponer). Si el cambio lo pidió el director, su aprobación es obligatoria antes de proceder. Un cambio aprobado actualiza, en este orden: el SRS, la [Matriz de Trazabilidad](traceability-matrix.md), y el backlog de GitHub Projects. Ningún cambio sobre la rama principal se acepta sin que el SRS esté actualizado primero.
+Cualquier integrante o el director puede proponer un cambio a los requerimientos. La propuesta se abre como un issue, con descripción, justificación e impacto estimado sobre cronograma y entregables; el equipo la evalúa en el grupo o en la reunión semanal y decide por consenso (aprobar, rechazar o posponer). Si el cambio lo pidió el director, su aprobación es obligatoria antes de proceder. Un cambio aprobado se implementa en un pull request que actualiza la [Matriz de Trazabilidad](traceability-matrix.md), y la decisión queda en el `architecture-log.md` cuando cambia el diseño. La versión 1.0 del SPMP exigía además que ningún cambio entrara a la rama principal sin el SRS actualizado; no se cumplió: el SRS pasó de la v1.0 de mayo a la v2.0 recién en el issue #169 (SPMP 2.0, sección 5.1.2).
 
 No requieren aprobación del director: ajustes al cronograma que no afecten los hitos principales, actualización de la tabla de riesgos, correcciones menores de redacción, actualización de métricas de progreso. Sí requieren su alineación: cambios en la metodología de evaluación, y en general cualquier cambio que toque alcance o hitos.
 
@@ -265,15 +289,17 @@ La entrega final del proyecto (Hito H6: documento de grado y repositorio públic
 
 `Iteración 1 – Núcleo del SDK · Semana 1` ya quedó fijada en GitHub como 24–31 de agosto de 2026 (milestone #2), con `Semana 2` cerrando el 7 de septiembre (milestone #3). Proyectando el mismo patrón de dos semanas por iteración para el resto de la Fase 4, y comprimiendo las Fases 5 y 6 para respetar el colchón de la sección 10.1, el cronograma completo queda así:
 
-| Bloque | Duración SPMP original | Duración en este plan | Ventana | Hito que cierra |
-|---|---|---|---|---|
-| Iteración 1 – Núcleo del SDK | 2 semanas | 2 semanas (sin cambio) | 24 ago – 7 sep | H3 parcial |
-| Iteración 2 – Adaptadores de pasarela | 2 semanas | 2 semanas (sin cambio) | 8 sep – 21 sep | H3 completo |
-| Iteración 3 – API de simulación y soporte de validación | 2 semanas | 2 semanas (sin cambio) | 22 sep – 5 oct | H4 |
-| Fase 5 – Demostración y evaluación | 3 semanas | **2 semanas (comprimida)** | 5 oct – 19 oct | H5 |
-| Fase 6 – Comunicación | 2 semanas | **1 semana (comprimida)** | 19 oct – 26 oct | H6 (contenido) |
-| Colchón de entrega | — | 2 semanas | 26 oct – 9 nov | — |
-| **Entrega final** | | | **9 nov 2026** | H6 (entrega) |
+| Bloque | Duración SPMP original | Duración en este plan | Ventana | Ventana real (primer y último cierre del hito) | Hito que cierra |
+|---|---|---|---|---|---|
+| Iteración 1 – Núcleo del SDK | 2 semanas | 2 semanas (sin cambio) | 24 ago – 7 sep | 20 ago – 15 sep | H3 parcial |
+| Iteración 2 – Adaptadores de pasarela | 2 semanas | 2 semanas (sin cambio) | 8 sep – 21 sep | 7 sep – 21 sep | H3 completo |
+| Iteración 3 – API de simulación y soporte de validación | 2 semanas | 2 semanas (sin cambio) | 22 sep – 5 oct | 27 sep – 9 nov | H4 |
+| Fase 5 – Demostración y evaluación | 3 semanas | **2 semanas (comprimida)** | 5 oct – 19 oct | 22 oct – 9 nov | H5 |
+| Fase 6 – Comunicación | 2 semanas | **1 semana (comprimida)** | 19 oct – 26 oct | desde el 31 oct, en curso | H6 (contenido) |
+| Colchón de entrega | — | 2 semanas | 26 oct – 9 nov | — | — |
+| **Entrega final** | | | **9 nov 2026** | | H6 (entrega) |
+
+La columna de la ventana real se agregó el 7 de noviembre de 2026 con los hitos de GitHub, en hora de Colombia, y se actualizó el 9 de noviembre, cuando cerraron la Iteración 3 y la Fase 5; coincide con la carta Gantt del SPMP 2.0 (sección 4.3.2). La compresión no alcanzó a proteger las fases: la Iteración 3 cerró 15 issues después del 5 de octubre y se solapó con las Fases 5 y 6, que se hicieron dentro del colchón.
 
 Este plan no le quita tiempo a la Fase 4: la única fase con margen cero para atrasarse es exactamente la que tiene más incertidumbre técnica (tres iteraciones de código real), así que cualquier atraso ahí consume directamente el colchón de la sección 10.1, no las fases posteriores.
 
@@ -296,7 +322,7 @@ Si al cierre de la Semana 1 de Iteración 1 (jueves antes del 31 de agosto) el t
 
 ## 11. Documentos relacionados
 
-- `SPMP - Kit Pagos Colombia.md` (fuera del repositorio, en Google Drive/Downloads): el documento formal completo. Este archivo es un resumen operativo, no un remplazo.
+- [`docs/final-doc/spmp/SPMP-original.pdf`](../final-doc/spmp/SPMP-original.pdf): el documento formal completo, la exportación de Google Docs de mayo de 2026. Este archivo es un resumen operativo, no un remplazo.
 - `Descripción de la Arquitectura del Software (SAD).docx.md` (fuera del repositorio): la fuente de verdad de la arquitectura. Ver `docs/architecture/architecture-log.md` para el registro de discrepancias pendientes de corregir ahí.
 - `docs/README.md`: el índice de la documentación, con el camino de lectura por concepto y el mapa de los cuatro entregables de la Iteración 3.
 - `docs/project-management/traceability-matrix.md`: la [Matriz de Trazabilidad](traceability-matrix.md), el artefacto de proceso de la condición 5 del DoD que registra el estado de implementación de cada requisito con su evidencia (issue, PR y pruebas).

@@ -1,0 +1,156 @@
+@startuml Domain Class Diagram - Simulation API
+title Dominio de la API de Simulación (tipos de simulator-api/src)
+skinparam backgroundColor white
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam classFontSize 10
+skinparam classAttributeFontSize 10
+skinparam classStereotypeFontSize 10
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam nodesep 12
+skinparam ranksep 16
+skinparam classAttributeIconSize 0
+skinparam class {
+  BorderColor #666666
+  ArrowColor #666666
+}
+
+class TriggerRequest <<Interfaz>> #C8E6C9 {
+  +gateway: Gateway
+  +transactionId: string
+}
+
+class ResolvedScenario <<Interfaz>> #C8E6C9 {
+  +scenario: string
+  +source: ScenarioSource
+  +queryFailure?: QueryFailure
+}
+
+enum ScenarioSource <<Tipo>> #FFF9C4 {
+  header
+  gateway_data
+  amount
+  default
+}
+
+enum QueryFailure <<Tipo>> #FFF9C4 {
+  QUERY_FLAPPING
+  QUERY_SERVER_ERROR
+  QUERY_SLOW
+}
+
+enum SimulatorScenario <<Enumeración>> #FFF9C4 {
+  APPROVED
+  APPROVAL
+  PENDING
+  DECLINED
+  REJECTED
+  EXPIRED
+  TIMEOUT
+  GATEWAY_TIMEOUT
+  NETWORK_ERROR
+  CONNECTION_ERROR
+  RATE_LIMIT
+  TOO_MANY_REQUESTS
+  SERVER_ERROR
+  INTERNAL_ERROR
+  BAD_GATEWAY
+  SERVICE_UNAVAILABLE
+  FLAPPING
+  DUPLICATE_PAYMENT
+  SLOW
+  MALFORMED_JSON
+  MALFORMED_BODY
+  HTML_ERROR
+  PENDING_THEN_DECLINED
+}
+
+class "TransactionStore<TRecord>" as TransactionStore <<Almacén>> #BBDEFB {
+  +save(id: string,\n    record: TRecord): void
+  +findById(id: string):\n    TRecord | undefined
+  +clear(): void
+  +size(): number
+}
+
+class WebhookSubject <<Tipo>> #C8E6C9 {
+  +gateway: Gateway
+  +kind: "transaction" | "payment" |\n    "order" | "charge" |\n    "transfer" | "checkout"
+  +record: registro nativo\n    (WompiTransaction,\n    RapydPayment, ...)
+}
+
+class SignatureGenerator <<Servicio>> #BBDEFB {
+  +generate(subject:\n    WebhookSubject):\n    OutgoingWebhook
+  +generateSequence(subject:\n    WebhookSubject):\n    OutgoingWebhook[]
+}
+
+class OutgoingWebhook <<Interfaz>> #C8E6C9 {
+  +gateway: Gateway
+  +query: string | null
+  +headers: Record<string, string>
+  +body: string
+}
+
+class WebhookDispatcher <<Servicio>> #BBDEFB {
+  +deliver(webhook:\n    OutgoingWebhook): Promise<\n    { receiverStatus: number }>
+}
+
+class WebhookDispatchConfig <<Interfaz>> #C8E6C9 {
+  +targetUrl?: string
+  +auto: boolean
+  +timeoutMs: number
+}
+
+enum Gateway <<Compartido>> #ECEFF1 {
+  WOMPI
+  RAPYD
+  MERCADOPAGO
+  KUSHKI
+}
+
+TriggerRequest -[hidden]down- ResolvedScenario
+ResolvedScenario -down-> ScenarioSource : source
+ResolvedScenario -down-> QueryFailure : queryFailure
+ResolvedScenario .down.> SimulatorScenario : scenario
+ScenarioSource -[hidden]down- SimulatorScenario
+TransactionStore .down. WebhookSubject : findById()\nda el record
+SignatureGenerator .up.> WebhookSubject : usa
+SignatureGenerator .down.> OutgoingWebhook : genera
+WebhookDispatcher .up.> OutgoingWebhook : entrega
+WebhookDispatcher -down-> WebhookDispatchConfig : config
+WebhookSubject -right-> Gateway : gateway
+OutgoingWebhook -right-> Gateway : gateway
+TriggerRequest -right-> Gateway : gateway
+TriggerRequest -[hidden]right- TransactionStore
+
+note left of TriggerRequest
+  Cuerpo de POST
+  /v1/sim/webhooks/trigger.
+  Cualquier otra clave, como
+  targetUrl, se rechaza con
+  INVALID_REQUEST.
+end note
+
+note right of SimulatorScenario
+  resolveScenario() toma la
+  cabecera x-simulator-scenario
+  o x-simulate-scenario, el dato
+  de prueba de la pasarela o un
+  monto de RESERVED_AMOUNTS,
+  en ese orden; si no hay
+  ninguno, APPROVED.
+end note
+
+note left of WebhookDispatchConfig
+  Sale de
+  SIMULATOR_WEBHOOK_TARGET_URL,
+  SIMULATOR_WEBHOOK_AUTO y
+  SIMULATOR_WEBHOOK_TIMEOUT_MS.
+end note
+
+note bottom of Gateway
+  Viene de kit-pagos-colombia,
+  el SDK; no se redefine aquí.
+end note
+@enduml

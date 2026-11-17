@@ -19,6 +19,9 @@ const SERVER_ENV = {
   KUSHKI_PUBLIC_MERCHANT_ID: "kushki_public_server",
   KUSHKI_PRIVATE_MERCHANT_ID: "kushki_private_server",
   KUSHKI_WEBHOOK_SECRET: "kushki_webhook_server",
+  RAPYD_API_ACCESS_KEY: "rapyd_access_server",
+  RAPYD_API_SECRET_KEY: "rapyd_secret_server",
+  RAPYD_WEBHOOK_URL: "https://comercio.example.com/webhooks/rapyd",
 };
 
 const TARGET = "http://127.0.0.1:9/hook";
@@ -105,6 +108,36 @@ describe("automatic webhook emission", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
     expect(body).toMatchObject({ token, status: "approvedTransaction" });
+  });
+
+  // La secuencia que mandó el sandbox el 21 de octubre de 2026 al pagar la tarjeta en la página de
+  // Rapyd (punto 118): dos avisos en `ACT` y después el desenlace, del mismo pago.
+  it("fires Rapyd's measured sequence when its hosted checkout is paid: two notices in ACT, then the outcome", async () => {
+    const fetchSpy = jest.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+    const app = simulator({ targetUrl: TARGET, auto: true });
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/sim/rapyd/checkout",
+      payload: {
+        amount: "50000.00",
+        currency: "COP",
+        country: "CO",
+        merchant_reference_id: "ORD-RAPYD",
+        payment_method_type_categories: ["card"],
+      },
+    });
+
+    await app.inject({ method: "GET", url: `/v1/sim/rapyd/checkout/${created.json().data.id}/pay` });
+    await settle();
+
+    const bodies = fetchSpy.mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body)));
+    expect(bodies.map((body) => [body.type, body.data.status, body.data.next_action])).toEqual([
+      ["PAYMENT_SUCCEEDED", "ACT", "3d_verification"],
+      ["PAYMENT_UPDATED", "ACT", "not_applicable"],
+      ["PAYMENT_COMPLETED", "CLO", undefined],
+    ]);
+    expect(new Set(bodies.map((body) => body.data.id)).size).toBe(1);
+    expect(bodies.map((body) => body.data.merchant_reference_id)).toEqual(["ORD-RAPYD", "ORD-RAPYD", "ORD-RAPYD"]);
   });
 
   it.each([

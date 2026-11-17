@@ -139,3 +139,68 @@ describe("Kushki POST /v1/sim/kushki/card/v1/tokens", () => {
     expect(res.statusCode).toBe(201);
   });
 });
+
+/** Las tarjetas de kushki.md §1, medidas contra UAT el 24 de octubre de 2026 (punto 122). */
+describe("Kushki test cards through the simulator", () => {
+  const app = buildApp();
+
+  beforeEach(() => resetSimulatorState());
+  afterAll(async () => {
+    await app.close();
+  });
+
+  async function tokenFor(number: string): Promise<string> {
+    const res = await app.inject({ method: "POST", url: TOKENS, headers: merchant, payload: { ...tokenBody, card: { ...card, number } } });
+    expect(res.statusCode).toBe(201);
+    return res.json().token;
+  }
+
+  it.each([
+    ["4349003000047015", "017", "Tarjeta no válida"],
+    ["4349008516656431", "019", "Tarjeta no compatible"],
+    ["4349001210846432", "021", "Tarjeta sin fondos"],
+    ["4349003243371321", "022", "Imposible verificar cvv"],
+    ["4349001386781322", "023", "Tarjeta bloqueada por el banco"],
+  ])("should decline the card %s at the charge with 400 %s (%s)", async (number, code, reason) => {
+    const res = await app.inject({ method: "POST", url: CHARGES, payload: chargeBody(await tokenFor(number), 48000) });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({
+      code,
+      message: "Transacción declinada.",
+      details: { ticketNumber: "", responseCode: code, responseText: reason },
+    });
+  });
+
+  it("should decline the «Declinada en Token» card when tokenizing, with 400 017", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: TOKENS,
+      headers: merchant,
+      payload: { ...tokenBody, card: { ...card, number: "4574441215190335" } },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ code: "017", message: "Transacción declinada." });
+  });
+
+  it("should approve the card the table lists as approved", async () => {
+    const res = await app.inject({ method: "POST", url: CHARGES, payload: chargeBody(await tokenFor("5451951574925480"), 48000) });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().details.transactionStatus).toBe("APPROVAL");
+  });
+
+  it("should let the header decide over the card, keeping the card's code", async () => {
+    const token = await tokenFor("4349001210846432");
+
+    const approved = await app.inject({
+      method: "POST",
+      url: CHARGES,
+      headers: { "x-simulate-scenario": "APPROVED" },
+      payload: chargeBody(token, 48000),
+    });
+
+    expect(approved.statusCode).toBe(201);
+  });
+});

@@ -319,6 +319,7 @@ describe("KitPagos", () => {
             id: "rapyd-pay-001",
             status: "CLO",
             paid: true,
+            merchant_reference_id: "ORD-RAPYD-1",
           },
         });
 
@@ -342,6 +343,8 @@ describe("KitPagos", () => {
         expect(event.gateway).toBe(Gateway.RAPYD);
         expect(event.gatewayTransactionId).toBe("rapyd-pay-001");
         expect(event.newStatus).toBe("APPROVED");
+        expect(event.rawStatus).toBe("CLO");
+        expect(event.orderReference).toBe("ORD-RAPYD-1");
       });
 
       it("should validate and parse a valid Mercado Pago webhook event", () => {

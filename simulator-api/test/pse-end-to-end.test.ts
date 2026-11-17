@@ -520,13 +520,15 @@ describe("PSE in the four gateways", () => {
         },
       });
 
-      const { ticketNumber } = created.json();
+      // El rechazo llega en un 400, con el identificador en `details` (punto 122).
+      const ticketNumber = created.json().details.transactionId;
 
       const response = await app.inject({
         method: "GET",
         url: `/v1/sim/kushki/charges/${ticketNumber}`,
       });
 
+      expect(created.statusCode).toBe(400);
       expect(response.statusCode).toBe(200);
       expect(response.json().ticketNumber).toBe(ticketNumber);
       expect(response.json().details.transactionStatus).toBe("DECLINED");

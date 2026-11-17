@@ -5,7 +5,7 @@ import { MercadoPagoOrderResponse, MercadoPagoPaymentResponse } from "../gateway
 import { RapydCheckout, RapydPayment } from "../gateways/rapyd/types";
 import { WompiTransaction } from "../gateways/wompi/types";
 import { onStatusChange, StatusChange } from "../state/StateMachine";
-import { SignatureGenerator, WebhookSubject, WebhookUnavailableError } from "./SignatureGenerator";
+import { OutgoingWebhook, SignatureGenerator, WebhookSubject, WebhookUnavailableError } from "./SignatureGenerator";
 import { WebhookDispatcher } from "./webhookDispatch";
 
 /** Cada máquina, con la pasarela y el recurso que mueve. */
@@ -27,6 +27,26 @@ function subjectOf({ machine, record }: StatusChange): WebhookSubject | undefine
       return { gateway: Gateway.RAPYD, kind: "payment", record: record as RapydPayment };
     default:
       return undefined;
+  }
+}
+
+/**
+ * Entrega los avisos de un cambio uno detrás de otro, en el orden en que la pasarela los manda.
+ * Una falla se registra y no detiene los siguientes.
+ */
+async function deliverInOrder(
+  webhooks: OutgoingWebhook[],
+  dispatcher: WebhookDispatcher,
+  log: FastifyBaseLogger,
+  context: Record<string, string>,
+): Promise<void> {
+  for (const webhook of webhooks) {
+    try {
+      const { receiverStatus } = await dispatcher.deliver(webhook);
+      log.info({ ...context, receiverStatus }, "Auto webhook delivered");
+    } catch (error) {
+      log.warn({ ...context, reason: (error as Error).name }, "Auto webhook delivery failed");
+    }
   }
 }
 
@@ -59,11 +79,7 @@ export function startAutoEmission(
     }
     const context = { machine: change.machine, from: change.from, to: change.to };
     try {
-      const webhook = generator.generate(subject);
-      void dispatcher
-        .deliver(webhook)
-        .then(({ receiverStatus }) => log.info({ ...context, receiverStatus }, "Auto webhook delivered"))
-        .catch((error: Error) => log.warn({ ...context, reason: error.name }, "Auto webhook delivery failed"));
+      void deliverInOrder(generator.generateSequence(subject), dispatcher, log, context);
     } catch (error) {
       const code = error instanceof WebhookUnavailableError ? error.code : (error as Error).name;
       log.warn({ ...context, code }, "Auto webhook skipped");

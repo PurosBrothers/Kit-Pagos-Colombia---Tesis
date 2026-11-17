@@ -1,8 +1,17 @@
 @startuml Hexagonal Architecture Class Diagram
 title Diagrama de Clases de la Arquitectura Hexagonal - SDK Kit Pagos Colombia
 skinparam backgroundColor white
-skinparam classFontSize 12
-skinparam packageFontSize 14
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam classFontSize 10
+skinparam classAttributeFontSize 10
+skinparam classStereotypeFontSize 10
+skinparam packageFontSize 10
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam nodesep 6
+skinparam ranksep 14
 skinparam packageStyle rectangle
 skinparam class {
   BorderColor #666666
@@ -51,7 +60,6 @@ package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
     --
     card(cardToken) : PaymentMethod
     pse(attributes) : PaymentMethod
-    cash(attributes) : PaymentMethod
   }
 
   class PseBank <<Value Object>> #C8E6C9 {
@@ -86,6 +94,8 @@ package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
     gatewayTransactionId : string
     newStatus : TransactionStatus
     gateway : Gateway
+    rawStatus : string | undefined
+    orderReference : string | undefined
   }
 
   class WebhookVerifier <<Servicio de Dominio>> #BBDEFB {
@@ -105,8 +115,8 @@ package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
     class KushkiWebhookHandler #BBDEFB
   }
 
-  class SdkError <<Error>> #F8BBD0 {
-    code : SdkErrorCode
+  class KitPagosError <<Error>> #F8BBD0 {
+    code : KitPagosErrorCode
     gateway : Gateway
     originalPayload : unknown
   }
@@ -123,7 +133,6 @@ package "DOMINIO (Nucleo Hexagonal)" #FFFFFF {
   enum PaymentMethodType #E0E0E0 {
     CARD
     PSE
-    CASH
   }
 
   enum Gateway #E0E0E0 {
@@ -181,7 +190,7 @@ package "APLICACION (Puertos y Servicios)" #FFFFFF {
   }
 
   class ErrorHandler <<Servicio de Aplicacion>> #2E75B6 {
-    handle(rawError, gateway) : SdkError
+    handle(rawError, gateway) : KitPagosError
     --
     <i>divide por forma del error,</i>
     <i>no por pasarela</i>
@@ -200,7 +209,7 @@ package "INFRAESTRUCTURA (Facade, Factory y Adapters)" #FFFFFF {
     createPayment(request) : Promise<PaymentResult>
     getPaymentStatus(id) : Promise<Transaction>
     getPseBanks() : Promise<PseBank[]>
-    validateWebhook(payload, headers) : WebhookEvent
+    validateWebhook(payload, headers, options?) : WebhookEvent
   }
 
   class SDKConfigurator <<Configuration Module>> #2E75B6 {
@@ -224,8 +233,7 @@ package "INFRAESTRUCTURA (Facade, Factory y Adapters)" #FFFFFF {
   KitPagos --> GatewayFactory : solicita adapter
   KitPagos --> RetryHandler : envuelve llamada
   KitPagos ..> WebhookVerifier : valida webhook
-  KitPagos --> ResponseNormalizer : normaliza respuesta
-  GatewayFactory ..> PaymentGatewayPort : instancia
+    GatewayFactory ..> PaymentGatewayPort : instancia
   WompiAdapter ..|> PaymentGatewayPort
   RapydAdapter ..|> PaymentGatewayPort
   MercadoPagoAdapter ..|> PaymentGatewayPort
@@ -233,13 +241,18 @@ package "INFRAESTRUCTURA (Facade, Factory y Adapters)" #FFFFFF {
 }
 
 GatewayResponseNormalizer --> Transaction : construye
+ErrorHandler -[hidden]down- WebhookVerifier
+KushkiResponseNormalizer -[hidden]down- WompiWebhookHandler
+Amount -[hidden]down- PaymentMethod
+Currency -[hidden]down- PseBank
+Payer -[hidden]down- PendingRedirect
+RejectionReason -[hidden]down- KitPagosError
+PaymentMethod -[hidden]down- TransactionStatus
+PseBank -[hidden]down- Gateway
 
 note bottom of KitPagos
   Diseno "facade directo": sin capa
   explicita de UseCases ni Controller.
-  Reemplaza al diagrama anterior con
-  CrearPagoUseCase / WebhookController
-  (ver architecture-log.md, punto 7).
 end note
 
 note right of GatewayResponseNormalizer
@@ -249,12 +262,11 @@ note right of GatewayResponseNormalizer
   detras de una interfaz, no con ramas
   de un condicional. Agregar Kushki es
   agregar una clase, sin tocar las otras.
-  (ver architecture-log.md, punto 34).
 end note
 
 note right of PaymentGatewayPort
-  El puerto crecio de tres metodos a
-  cuatro: elegir banco no es un paso
+  El puerto tiene cuatro metodos:
+  elegir banco no es un paso
   opcional de PSE, es parte del metodo
   de pago, y sin la lista el comercio
   tiene que hablarle directo a la
@@ -262,7 +274,6 @@ note right of PaymentGatewayPort
   opaco y con significado por pasarela:
   sale de getPseBanks() y entra en
   PaymentMethod.pse() sin transformarse.
-  (ver architecture-log.md, punto 47).
 end note
 
 @enduml

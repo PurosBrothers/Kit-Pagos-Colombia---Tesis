@@ -1,0 +1,38 @@
+Pruebas de contrato contra los sandboxes, corrida única del 11 de noviembre de 2026 (hora de Colombia, UTC-5).
+Inicio 2026-11-11 16:17:31 -0500 · fin 2026-11-11 16:18:38 -0500. Commit ebf63bc; sdk/src en el árbol 7e57c83 y sdk/test/sandbox en 375121f. Node.js 22.23.4.
+Orden: cd sdk && jest --config jest.sandbox.config.js test/sandbox/ (en serie, maxWorkers 1; sin repeticiones).
+Credenciales: las nueve llaves de pasarela del .env de Joan, en una copia temporal con permisos 600, borrada al terminar. Esta salida no incluye llaves, cabeceras ni cuerpos.
+Resultado: 4 de 4 suites; 25 de 25 pruebas pasaron, 0 fallaron y 0 se saltaron. Código de salida 0.
+
+test/sandbox/kushki.sandbox.test.ts · KUSHKI against the real sandbox (https://api-uat.kushkipagos.com) · 21.5 s
+  ✓ returns the PSE bank list, with code and name (852 ms)
+  ✓ charges a card and returns a readable transaction (2254 ms)
+  ✓ returns the 400 of a card without funds as a DECLINED transaction with its code (2471 ms)
+  ✓ allows tokenizing with KitPagosBrowser and charging with KitPagos (2178 ms)
+  ✓ rejects charging a browser token for another amount (1493 ms)
+  ✓ still answers 403 on the old route, same as on a made-up one (176 ms)
+  ✓ explains there is no card query, instead of blaming the credentials (8593 ms)
+  ✓ still returns a response without amount or status when fullResponse is not requested (2111 ms)
+
+test/sandbox/mercadopago.sandbox.test.ts · MERCADOPAGO against the real sandbox (https://api.mercadopago.com/v1) · 7.6 s
+  ✓ returns the PSE bank list, with code and name (440 ms)
+  ✓ should list exactly the entities of PseBankCode, each one with its achCode (131 ms)
+  ✓ charges a card as an order and returns a readable transaction (1919 ms)
+  ✓ tokenizes a card with KitPagosBrowser and charges through the server SDK (1877 ms)
+  ✓ returns a declined card order as a DECLINED transaction with its reason (2257 ms)
+  ✓ still refuses a card charge through the Payments API with these credentials (320 ms)
+  ✓ still requires the payment method id and type in a card order (550 ms)
+
+test/sandbox/rapyd.sandbox.test.ts · RAPYD against the real sandbox (https://sandboxapi.rapyd.net/v1) · 24.5 s
+  ✓ returns the PSE bank list, with code and name (1100 ms)
+  ✓ should keep every bank of the translation table in Rapyd's catalog (218 ms)
+  ✓ should list exactly the PSE banks the sandbox can charge (22104 ms)
+  ✓ creates a card checkout page and returns its URL (292 ms)
+  ✓ allows querying the checkout page before the payer pays (488 ms)
+  ✓ still rejects a card charge with a token on /payments (147 ms)
+
+test/sandbox/wompi.sandbox.test.ts · WOMPI against the real sandbox (https://sandbox.wompi.co/v1) · 11.7 s
+  ✓ returns the PSE bank list, with code and name (555 ms)
+  ✓ charges a card and leaves it queryable (5411 ms)
+  ✓ allows tokenizing with KitPagosBrowser and charging with KitPagos (2739 ms)
+  ✓ still rejects a transaction without an integrity signature (2892 ms)

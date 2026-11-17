@@ -199,6 +199,8 @@ Content-Type: application/json
 
 El monto es un **objeto con desglose de IVA**, no un número. `fullResponse: true` hace que la respuesta traiga el estado resuelto, y eso importa porque contra Kushki real el estado final de un cobro llega por webhook: sin este flag habría que esperarlo.
 
+**El rechazo del banco llega con un `400`, no con un `201`.** Medido el 24 de octubre de 2026 con las tarjetas de rechazo de `docs/testing-data/kushki.md` §1: `code` y `message` son genéricos («Transacción declinada.») y el motivo va en `details.responseCode` y `details.responseText` («Tarjeta sin fondos»). Los errores de la petición también son `400` y también pueden traer `details` (el `K220` de un token cobrado por otro monto lo trae), así que lo que separa un rechazo de un error es el código: numérico el del procesador, con `K` el de Kushki. Desde la 0.7.0-rc.2, `acceptDeclinedCharge()` devuelve ese `400` como una transacción `DECLINED` con su `rejectionReason`; antes llegaba como `INVALID_REQUEST` (punto 122 del `architecture-log.md`).
+
 ### PSE — 2 peticiones, con llaves distintas
 
 ```http

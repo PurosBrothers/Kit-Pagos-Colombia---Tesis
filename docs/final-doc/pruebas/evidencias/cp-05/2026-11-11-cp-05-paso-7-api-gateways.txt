@@ -1,0 +1,1 @@
+[('wompi', 'BROWSER_TOKEN'), ('mercadopago', 'BROWSER_TOKEN'), ('kushki', 'BROWSER_TOKEN'), ('rapyd', 'HOSTED_PAGE')]

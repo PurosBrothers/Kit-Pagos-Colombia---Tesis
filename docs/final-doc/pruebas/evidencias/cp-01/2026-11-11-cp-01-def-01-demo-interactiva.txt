@@ -1,0 +1,38 @@
+DEF-01, demo interactiva en sus ocho caminos contra el simulador: 2026-11-11 20:16:36 -0500 a 2026-11-11 20:16:40 -0500
+Comando: npx tsx interactive-demo.ts <pasarela> <método> en examples/, con el simulador en 127.0.0.1:4823
+y todo host fuera de loopback bloqueado por la precarga. Las demás respuestas, por omisión.
+
+Pasarela     Método   Llamadas al crear  Estado nativo final   Normalizado Salida
+wompi        tarjeta  2                  APPROVED              APPROVED    0
+wompi        pse      3                  APPROVED              APPROVED    0
+mercadopago  tarjeta  3                  processed             APPROVED    0
+mercadopago  pse      1                  processed             APPROVED    0
+kushki       tarjeta  1                  APPROVAL              APPROVED    0
+kushki       pse      2                  approvedTransaction   APPROVED    0
+rapyd        tarjeta  1                  CLO                   APPROVED    0
+rapyd        pse      2                  CLO                   APPROVED    0
+
+Llamadas de la creación, en orden:
+wompi tarjeta:
+  [1] GET /v1/sim/wompi/merchants/pub_test_demo_no_real
+  [2] POST /v1/sim/wompi/transactions
+wompi pse:
+  [1] GET /v1/sim/wompi/merchants/pub_test_demo_no_real
+  [2] POST /v1/sim/wompi/transactions
+  [3] GET /v1/sim/wompi/transactions/29ad11d4-2251-4480-a9f1-2cbbdb628bfc
+mercadopago tarjeta:
+  [1] GET /v1/sim/mercadopago/card_tokens/tok_demo_no_real
+  [2] GET /v1/sim/mercadopago/payment_methods/search?public_key=APP_USR_public_demo_no_real&bins=401354
+  [3] POST /v1/sim/mercadopago/orders
+mercadopago pse:
+  [1] POST /v1/sim/mercadopago/orders
+kushki tarjeta:
+  [1] POST /v1/sim/kushki/card/v1/charges
+kushki pse:
+  [1] POST /v1/sim/kushki/transfer/v1/tokens
+  [2] POST /v1/sim/kushki/transfer/v1/init
+rapyd tarjeta:
+  [1] POST /v1/sim/rapyd/checkout
+rapyd pse:
+  [1] POST /v1/sim/rapyd/customers
+  [2] POST /v1/sim/rapyd/payments

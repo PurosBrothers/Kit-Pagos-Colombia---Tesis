@@ -15,7 +15,7 @@ Servicio desplegado en vivo en Render: [https://kit-pagos-colombia.onrender.com]
 
 ## Documentación Interactiva OpenAPI 3.0
 
-El servicio implementa la especificación **OpenAPI 3.0.3** mediante los plugins oficiales `@fastify/swagger` y `@fastify/swagger-ui`. Los esquemas JSON validan estrictamente las peticiones antes de alcanzar los controladores y generan la documentación en tiempo de compilación/arranque sin riesgo de divergencia:
+El servicio implementa la especificación **OpenAPI 3.0.3** mediante los plugins oficiales `@fastify/swagger` y `@fastify/swagger-ui`. Los esquemas JSON validan las peticiones antes de alcanzar los controladores y generan la documentación al arrancar, sin riesgo de divergencia. En las rutas de simulación validan sin reescribir la petición ni la respuesta, para que el mock responda lo medido contra la pasarela; en `POST /v1/sim/mercadopago/orders` solo documentan (punto 109 del `architecture-log.md`):
 
 - **Swagger UI interactivo:** [`/docs`](https://kit-pagos-colombia.onrender.com/docs) (o `http://localhost:3000/docs` en local).
 - **Especificación OpenAPI en JSON:** [`/docs/json`](https://kit-pagos-colombia.onrender.com/docs/json).
@@ -97,7 +97,7 @@ El servidor provee 33 rutas organizadas por pasarela que emulan el comportamient
   - `GET /v1/sim/mercadopago/payments/:paymentId/bank_transfer` — Página de banco del PSE (ver abajo).
 - **Kushki (`/v1/sim/kushki`)** — 8:
   - `POST /v1/sim/kushki/card/v1/tokens` — Tokenización de tarjeta desde el navegador, con CORS; el token queda atado al monto (punto 106).
-  - `POST /v1/sim/kushki/card/v1/charges` — Cobro directo con tarjeta; con un token de otro monto, `400 K220`.
+  - `POST /v1/sim/kushki/card/v1/charges` — Cobro directo con tarjeta; con un token de otro monto, `400 K220`. Un rechazo responde `400` con el código del banco en `details`, como el UAT; las tarjetas de rechazo de `docs/testing-data/kushki.md` §1 dan cada una su código (punto 122).
   - `GET /v1/sim/kushki/charges/:ticketNumber` — Consulta de cargo con tarjeta.
   - `GET /v1/sim/kushki/transfer/v1/bankList` — Lista de bancos PSE.
   - `POST /v1/sim/kushki/transfer/v1/tokens` — Token de la transferencia, con el banco y la URL de retorno.

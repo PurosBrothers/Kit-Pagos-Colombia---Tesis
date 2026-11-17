@@ -1,5 +1,15 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { renderReturnLink, sendBankPage } from "../gateways/bankPage";
+import { compileSchemasAsIs } from "./schemas/compileSchemasAsIs";
+import {
+  getCheckoutByIdSchema,
+  getCheckoutPagarSchema,
+  getPaymentByIdSchema,
+  getPaymentMethodsCountrySchema,
+  postCheckoutSchema,
+  postCustomersSchema,
+  postPaymentsSchema,
+} from "./schemas/rapyd.schemas";
 import {
   RapydCheckoutMockFactory,
   RapydErrorMockFactory,
@@ -142,6 +152,7 @@ function unauthenticatedApiCall() {
 }
 
 export async function rapydRoutes(app: FastifyInstance): Promise<void> {
+  compileSchemasAsIs(app);
   const paymentMocks = new RapydPaymentMockFactory();
   const checkoutMocks = new RapydCheckoutMockFactory();
   const pseSetupMocks = new RapydPseSetupMockFactory();
@@ -181,7 +192,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
     "/v1/sim/rapyd/payment_methods/country",
   ]);
 
-  app.addHook("preHandler", async (request, reply) => {
+  app.addHook("preValidation", async (request, reply) => {
     if (!API_ROUTES.has(request.routeOptions.url ?? "")) {
       return;
     }
@@ -215,6 +226,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/v1/sim/rapyd/payments",
+    { schema: postPaymentsSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const requestBody = request.body as RapydCreatePaymentRequestBody;
       const resolved = resolveScenario(request, {
@@ -374,22 +386,25 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
    */
   app.post(
     "/v1/sim/rapyd/checkout",
+    {
+      schema: postCheckoutSchema,
+      preValidation: async (request: FastifyRequest, reply: FastifyReply) => {
+        const requestBody = request.body as RapydCreateCheckoutRequestBody | undefined;
+        if (!requestBody?.amount || !requestBody?.currency || !requestBody?.country) {
+          return reply.code(400).send({
+            status: {
+              error_code: "MISSING_REQUIRED_FIELD",
+              status: "ERROR",
+              message: "amount, currency and country are required.",
+              response_code: "MISSING_REQUIRED_FIELD",
+              operation_id: "",
+            },
+          });
+        }
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const requestBody = request.body as RapydCreateCheckoutRequestBody;
-
-      // Rapyd no crea una página sin monto, divisa y país; el mock tampoco, para que una
-      // prueba note si el adaptador dejara de mandar alguno.
-      if (!requestBody?.amount || !requestBody?.currency || !requestBody?.country) {
-        return reply.code(400).send({
-          status: {
-            error_code: "MISSING_REQUIRED_FIELD",
-            status: "ERROR",
-            message: "amount, currency and country are required.",
-            response_code: "MISSING_REQUIRED_FIELD",
-            operation_id: "",
-          },
-        });
-      }
 
       const resolved = resolveScenario(request, {
         wholePesos: wholePesosFromDecimal(requestBody.amount),
@@ -480,6 +495,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/rapyd/checkout/:checkoutId",
+    { schema: getCheckoutByIdSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { checkoutId } = request.params as { checkoutId: string };
       const checkout = rapydCheckouts.findById(checkoutId);
@@ -531,6 +547,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/rapyd/checkout/:checkoutId/pay",
+    { schema: getCheckoutPagarSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { checkoutId } = request.params as { checkoutId: string };
       const checkout = rapydCheckouts.findById(checkoutId);
@@ -598,6 +615,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/rapyd/checkout/:checkoutId/pagar",
+    { schema: getCheckoutPagarSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { checkoutId } = request.params as { checkoutId: string };
       return reply.redirect(`/v1/sim/rapyd/checkout/${encodeURIComponent(checkoutId)}/pay`, 308);
@@ -606,6 +624,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/v1/sim/rapyd/payments/:paymentId",
+    { schema: getPaymentByIdSchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { paymentId } = request.params as { paymentId: string };
 
@@ -687,22 +706,25 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
    */
   app.post(
     "/v1/sim/rapyd/customers",
+    {
+      schema: postCustomersSchema,
+      preValidation: async (request: FastifyRequest, reply: FastifyReply) => {
+        const requestBody = request.body as RapydCreateCustomerRequestBody | undefined;
+        if (!requestBody?.name) {
+          return reply.code(400).send({
+            status: {
+              error_code: "INVALID_CUSTOMER_NAME",
+              status: "ERROR",
+              message: "",
+              response_code: "INVALID_CUSTOMER_NAME",
+              operation_id: "",
+            },
+          });
+        }
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const requestBody = request.body as RapydCreateCustomerRequestBody;
-
-      // Rapyd valida el nombre antes que nada, y responde con un codigo propio
-      // distinto del de los campos que faltan.
-      if (!requestBody.name) {
-        return reply.code(400).send({
-          status: {
-            error_code: "INVALID_CUSTOMER_NAME",
-            status: "ERROR",
-            message: "",
-            response_code: "INVALID_CUSTOMER_NAME",
-            operation_id: "",
-          },
-        });
-      }
 
       return reply.code(200).send(pseSetupMocks.buildCustomerResponse(requestBody));
     },
@@ -717,6 +739,7 @@ export async function rapydRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get(
     "/v1/sim/rapyd/payment_methods/country",
+    { schema: getPaymentMethodsCountrySchema },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const failure = bankListFailure(request, reply, errorBodies, "rapyd");
       if (failure !== undefined) {

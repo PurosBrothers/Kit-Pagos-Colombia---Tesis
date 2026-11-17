@@ -1,0 +1,30 @@
+{
+  "name": "checkout-con-sdk-solo-back",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prototipo de e-commerce de Hierbas de Mate con Kit Pagos Colombia SDK exclusivamente en el Backend y tokenización nativa en Frontend",
+  "scripts": {
+    "dev": "ts-node src/server.ts",
+    "build": "tsc",
+    "prestart": "npm run build",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "test": "jest --runInBand",
+    "test:coverage": "jest --coverage --runInBand"
+  },
+  "dependencies": {
+    "fastify": "^5.11.0",
+    "kit-pagos-colombia": "0.7.0-rc.2"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.1.2",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  },
+  "overrides": {
+    "light-my-request": "6.6.0"
+  }
+}

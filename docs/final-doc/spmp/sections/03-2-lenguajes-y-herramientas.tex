@@ -1,0 +1,173 @@
+\subsection{Lenguajes y Herramientas}
+
+Las herramientas y lenguajes seleccionados para el proyecto responden a dos criterios principales: la coherencia con los objetivos técnicos del framework y la familiaridad del equipo. A continuación se describen por categoría.
+
+\subsubsection{Lenguajes de modelado}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{|P{0.5}|P{0.5}|}
+  \hline
+  \textbf{Herramienta} & \textbf{Justificación y aplicación en el proyecto} \\
+  \hline
+  \endfirsthead
+  \hline
+  \textbf{Herramienta} & \textbf{Justificación y aplicación en el proyecto} \\
+  \hline
+  \endhead
+  \caption{Lenguajes de Modelado.}
+  \label{tab:lenguajes-modelado}\\
+  \endlastfoot
+  UML & Es el lenguaje de modelado principal del proyecto. Se utiliza para los diagramas de clases del SDK, los diagramas de componentes de la arquitectura hexagonal y los diagramas de secuencia de las interacciones entre el framework y las pasarelas. Se escribe en PlantUML, y las fuentes se versionan junto a sus imágenes (\path{docs/architecture/*/diagrams-source/}). \\
+  \hline
+  BPMN 2.0 & Se usa para los procesos de gestión del proyecto: administración de requerimientos, control de cambios, gestión de riesgos y control de calidad, todos referenciados en este documento. \\
+  \hline
+\end{longtable}
+\end{center}
+
+\subsubsection{Lenguajes de programación}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{|P{0.5}|P{0.5}|}
+  \hline
+  \textbf{Herramienta} & \textbf{Justificación y aplicación en el proyecto} \\
+  \hline
+  \endfirsthead
+  \hline
+  \textbf{Herramienta} & \textbf{Justificación y aplicación en el proyecto} \\
+  \hline
+  \endhead
+  \caption{Lenguajes de Programación.}
+  \label{tab:lenguajes-programacion}\\
+  \endlastfoot
+  TypeScript & TypeScript es el lenguaje principal del proyecto, tanto para el SDK como para la API de simulación. La elección responde a que TypeScript es hoy el estándar de facto en el ecosistema JavaScript para proyectos de biblioteca: el tipado estático mejora la experiencia del desarrollador que consume el SDK (autocompletado, verificación en tiempo de compilación) y facilita la definición explícita de los contratos de los puertos de la arquitectura hexagonal. Adicionalmente, el ecosistema npm es el más amplio para distribución de librerías de software, y TypeScript compila a JavaScript, lo que garantiza compatibilidad con entornos Node.js y plataformas frontend modernas. \\
+  \hline
+\end{longtable}
+\end{center}
+
+\subsubsection{Herramientas de desarrollo y arquitectura}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{|P{0.5}|P{0.5}|}
+  \hline
+  \textbf{Herramienta} & \textbf{Justificación y aplicación en el proyecto} \\
+  \hline
+  \endfirsthead
+  \hline
+  \textbf{Herramienta} & \textbf{Justificación y aplicación en el proyecto} \\
+  \hline
+  \endhead
+  \caption{Herramientas de desarrollo y arquitectura}
+  \label{tab:herramientas-desarrollo}\\
+  \endlastfoot
+  Node.js & A través de Fastify 5, Node.js actúa como servidor de la API de Simulación, y \texttt{@fastify/swagger} publica su especificación OpenAPI en \texttt{/docs} (\texttt{simulator-api/package.json}). Fastify fue preferido sobre Express por su mejor desempeño y su soporte nativo de TypeScript con tipado explícito de rutas y esquemas. Jest es el framework de pruebas para el SDK y la API de Simulación; se utiliza para pruebas unitarias sobre el núcleo y pruebas de integración sobre los adaptadores. Las rutas del simulador se prueban en memoria con \texttt{app.inject()} de Fastify, sin Supertest. \\
+  \hline
+  esbuild y ts-morph & esbuild empaqueta el módulo de navegador en un único archivo ES Module (\texttt{sdk/scripts/build-browser.js}). ts-morph recorre el árbol sintáctico de TypeScript para calcular las métricas CK (\texttt{sdk/scripts/ck-metrics.ts}). \\
+  \hline
+  GitHub & Es el sistema de control de versiones, y GitHub Actions es la plataforma de integración continua. Cada pull request hacia \texttt{devops} o \texttt{main} ejecuta las pruebas, la cobertura y las métricas CK (\texttt{ci.yml}); \texttt{final-doc.yml} compila los documentos en LaTeX, \texttt{publish.yml} publica el SDK y \texttt{deploy-landing.yml} publica la página de presentación en GitHub Pages. npm es el gestor de paquetes y el canal de distribución del SDK como librería open source. \\
+  \hline
+  Render y ngrok & Render aloja la API de Simulación en su plan gratuito, configurada con \texttt{render.yaml}. ngrok, en su plan gratuito, da un dominio fijo para recibir los webhooks reales de las pasarelas en las tiendas de los prototipos. \\
+  \hline
+\end{longtable}
+\end{center}
+
+\subsubsection{Herramientas de análisis, modelado y documentación}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{|P{0.5}|P{0.5}|}
+  \hline
+  \textbf{Herramienta} & \textbf{Justificación y aplicación en el proyecto} \\
+  \hline
+  \endfirsthead
+  \hline
+  \textbf{Herramienta} & \textbf{Justificación y aplicación en el proyecto} \\
+  \hline
+  \endhead
+  \caption{Herramientas de análisis, modelado y documentación}
+  \label{tab:herramientas-documentacion}\\
+  \endlastfoot
+  PlantUML & Es la herramienta de los diagramas de arquitectura del repositorio: clases, componentes y secuencias. Las fuentes \texttt{.puml} se versionan y se exportan como imagen para los documentos. \\
+  \hline
+  LaTeX en el repositorio & La documentación académica está en \texttt{docs/final-doc/}: el SAD guarda las decisiones técnicas y lo medido, y cada documento se versiona con el código. No se usó Notion ni se generó documentación con TypeDoc. \\
+  \hline
+\end{longtable}
+\end{center}
+
+\subsubsection{Herramientas de gestión del proyecto y comunicación}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{|P{0.5}|P{0.5}|}
+  \hline
+  \textbf{Herramienta} & \textbf{Justificación y aplicación en el proyecto} \\
+  \hline
+  \endfirsthead
+  \hline
+  \textbf{Herramienta} & \textbf{Justificación y aplicación en el proyecto} \\
+  \hline
+  \endhead
+  \caption{Herramientas de gestión del proyecto y comunicación}
+  \label{tab:herramientas-gestion}\\
+  \endlastfoot
+  GitHub (hitos, issues y pull requests) & Se utiliza para la gestión del backlog y el seguimiento de tareas: cada fase e iteración es un hito, cada tarea un issue y cada cambio un pull request. El tablero de GitHub Projects no se usó. \\
+  \hline
+  Microsoft Teams & Medio de contacto para la comunicación formal (reuniones con el director, revisiones de entregables). \\
+  \hline
+  Whatsapp & Coordinación diaria entre los integrantes. \\
+  \hline
+  Postman y Newman & Postman documenta y ejecuta las colecciones de pruebas sobre los endpoints de la API de Simulación, versionadas en \texttt{simulator-api/postman/}; Newman las corre desde la línea de comandos contra el simulador local y contra Render. \\
+  \hline
+\end{longtable}
+\end{center}
+
+\subsubsection{Herramientas de ofimática y presentación}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{|P{0.5}|P{0.5}|}
+  \hline
+  \textbf{Herramienta} & \textbf{Justificación y aplicación en el proyecto} \\
+  \hline
+  \endfirsthead
+  \hline
+  \textbf{Herramienta} & \textbf{Justificación y aplicación en el proyecto} \\
+  \hline
+  \endhead
+  \caption{Herramientas de ofimática y presentación}
+  \label{tab:herramientas-ofimatica}\\
+  \endlastfoot
+  LaTeX con \texttt{latexmk} & Los documentos entregables del trabajo de grado (la memoria, el SRS, el SAD, el plan de pruebas y este SPMP) se escriben en LaTeX en \texttt{docs/final-doc/} y los compila la integración continua (\texttt{final-doc.yml}). Las versiones 1.0 de mayo de 2026 se escribieron en Word (el SRS) y en Google Docs (el SAD y este SPMP). La carta Gantt es una tabla de este documento. \\
+  \hline
+  Hojas de cálculo & No se usaron: las métricas CK las calcula la integración continua y sus resultados quedan en el registro de arquitectura y en \texttt{docs/evaluation/}. \\
+  \hline
+\end{longtable}
+\end{center}
+
+\subsubsection{Análisis de Alternativas y Justificación}
+
+\textbf{Lenguaje del SDK:}
+
+La alternativa más seria a TypeScript es Java. Las métricas CK de Chidamber y Kemerer fueron originalmente diseñadas para sistemas orientados a objetos Java, y existen herramientas consolidadas como CKJMExtended que calculan WMC, CBO y RFC directamente sobre bytecode. Una librería Java tendría menor adopción potencial y quedaría fuera del alcance del ecosistema npm, que es el canal de distribución más natural para un SDK de este tipo.
+
+Python fue considerado brevemente por su popularidad en scripting y análisis de datos, pero no es un lenguaje típico para SDKs de integración de pagos en entornos web colombianos y el ecosistema PyPI tiene menor penetración en ese contexto.
+
+La decisión de TypeScript implica que el cálculo de métricas CK se hace con ts-morph en lugar de herramientas Java consolidadas, lo que requiere implementar extractores de métricas personalizados.
+
+\textbf{API de simulación:}
+
+Express es la alternativa más conocida en el ecosistema Node.js, con amplia documentación y comunidad. Se descartó en favor de Fastify por dos razones. Fastify tiene soporte nativo para TypeScript con validación de esquemas mediante JSON Schema, lo que permite definir los contratos de los endpoints de la API de simulación de forma explícita y verificable. Además, su rendimiento es significativamente mejor que Express para el mismo código, lo que es relevante si la API de simulación necesita manejar múltiples requests concurrentes durante las pruebas. Spring Boot fue descartado por introducir una dependencia de Java en un proyecto cuyo SDK es TypeScript, generando un stack tecnológico heterogéneo innecesario.
+
+\textbf{Framework de pruebas:}
+
+Jest es el framework de pruebas más extendido en el ecosistema TypeScript/Node.js, con soporte nativo de cobertura de código, mocks integrados y una API coherente para pruebas unitarias e integración. Vitest, una alternativa más reciente compatible con Vite, ofrece mejor velocidad de ejecución pero tiene un ecosistema todavía en maduración. Mocha con Chai requiere configurar por separado el framework de aserciones, los simulacros y la cobertura, lo que añade complejidad de configuración sin beneficios sustanciales. Jest es la elección más directa y con menos fricción en la configuración.
+
+\textbf{CI/CD}
+
+Jenkins requiere servidor propio, configuración manual y mantenimiento continuo, lo que representa una carga operativa representativa. GitHub Actions se integra nativamente con el repositorio sin infraestructura adicional; los workflows se definen como archivos YAML versionados y su configuración para proyectos Node.js es directa. La elección de GitHub Actions también elimina la necesidad de una cuenta o servidor adicional.
+
+\textbf{Gestión de backlog}
+
+Jira es la herramienta más completa, pero tiene una curva de configuración alta y sus planes gratuitos tienen limitaciones para equipos que necesitan integración con GitHub. Linear es una alternativa moderna con buena integración con GitHub, pero introduce una herramienta externa adicional. GitHub se integra directamente con el código: los hitos, los issues y los pull requests del repositorio dan la trazabilidad entre tareas y cambios sin salir del entorno de trabajo, y el equipo no necesitó el tablero de GitHub Projects. Para un proyecto de esta escala, la integración nativa supera la funcionalidad adicional que ofrecen las alternativas.

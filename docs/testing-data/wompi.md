@@ -286,7 +286,7 @@ En la interfaz visual desplegada, selecciona una de las siguientes opciones del 
 
 2. **Obtener la URL de autenticación:** Al recibir la respuesta o consultar la transacción (`GET /transactions/:id`), ubica el campo:
 `data.payment_method.extra.async_payment_url`
-3. **Simular el Estado:** Redirige o abre dicha URL. Te llevará a una vista de prueba (*Bandbox*) donde podrás seleccionar manualmente el estado deseado (**APPROVED**, **DECLINED**, etc.) para finalizar el flujo.
+3. **Simular el Estado:** Redirija o abra dicha URL. Lo llevará a una vista de prueba (*Bandbox*) donde podrá seleccionar manualmente el estado deseado (**APPROVED**, **DECLINED**, etc.) para finalizar el flujo.
 
 ---
 
@@ -353,8 +353,8 @@ Utiliza la propiedad `sandbox_status` dentro del objeto `payment_method`:
 ### Paso a paso de implementación
 
 1. **Iniciar Transacción:** Crea la transacción con el método de pago BNPL Bancolombia a través de la API o Widget.
-2. **Redirección Sandbox:** Serás redirigido a la interfaz de pruebas de BNPL.
-3. **Selección de Estado:** En la página de prueba visual se desplegará una pantalla de simulación donde podrás hacer clic en el botón correspondiente al estado con el que deseas que termine la transacción (**Aprobada**, **Rechazada**, etc.).
+2. **Redirección Sandbox:** Será redirigido a la interfaz de pruebas de BNPL.
+3. **Selección de Estado:** En la página de prueba visual se desplegará una pantalla de simulación donde podrá hacer clic en el botón correspondiente al estado con el que desea que termine la transacción (**Aprobada**, **Rechazada**, etc.).
 
 ---
 

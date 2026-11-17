@@ -70,6 +70,30 @@ describeSandbox(Gateway.KUSHKI, (credentials, baseUrl) => {
   });
 
   /**
+   * Un rechazo del banco llega como `400`, con el motivo en `details.responseCode`, y el SDK lo
+   * devuelve como transacción rechazada (medido el 24 de octubre de 2026, punto 122). Si un día
+   * la cuenta vuelve a aprobar todo, como el 19 de septiembre, esta prueba lo dice.
+   */
+  it("returns the 400 of a card without funds as a DECLINED transaction with its code", async () => {
+    const { token } = await tokenizeKushkiCard(credentials, 20000, "4349001210846432");
+
+    const transaction = expectTransaction(
+      await kitPagos.createPayment({
+        amount: new Amount("20000"),
+        currency: new Currency("COP"),
+        orderReference: new OrderReference(uniqueReference("SBX-KUSHKI-DECLINED")),
+        payer: new Payer({ email: "jaime.pavlich@example.com" }),
+        paymentMethod: PaymentMethod.card(token),
+      }),
+    );
+
+    expect(transaction.getStatus()).toBe("DECLINED");
+    expect(transaction.gatewayTransactionId.value).toBeTruthy();
+    expect(transaction.rejectionReason?.rejectionCode).toBe("021");
+    expect(transaction.rejectionReason?.rejectionCategory).toBe("INSUFFICIENT_FUNDS");
+  });
+
+  /**
    * La tarjeta del navegador: `KitPagosBrowser` tokeniza contra `/card/v1/tokens` con el
    * merchant id público y `KitPagos` cobra ese token. Medido el 17 de octubre de 2026, el
    * mismo camino que la página de un comercio (punto 106 del `architecture-log.md`).

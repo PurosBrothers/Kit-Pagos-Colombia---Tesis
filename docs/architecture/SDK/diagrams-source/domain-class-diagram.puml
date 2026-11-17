@@ -1,0 +1,176 @@
+@startuml Domain Class Diagram - SDK
+title Diagrama de Clases del Dominio - SDK de Pagos Colombia\nFlujos: Creacion de Pago | Webhooks | Polling | Errores
+skinparam backgroundColor white
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam classFontSize 10
+skinparam classAttributeFontSize 10
+skinparam classStereotypeFontSize 10
+skinparam ArrowFontSize 10
+skinparam nodesep 6
+skinparam ranksep 14
+skinparam classAttributeIconSize 0
+skinparam class {
+  BorderColor #666666
+  ArrowColor #666666
+}
+
+class Error <<Nativo>> #ECEFF1
+
+class KitPagosError <<ErrorDominio>> #FFCDD2 {
+  +code: KitPagosErrorCode
+  +gateway: Gateway
+  +originalPayload: unknown
+  +cause?: unknown
+  --
+  +constructor(code, gateway, originalPayload,\n    message?, options?)
+}
+
+class WebhookVerifier <<ServicioDominio>> #BBDEFB {
+  +verify(webhook, context, gateway,\n    options?): boolean
+  +parse(webhook, gateway): WebhookEvent
+}
+
+enum KitPagosErrorCode {
+  INVALID_CREDENTIALS
+  GATEWAY_TIMEOUT
+  CONNECTION_FAILED
+  RATE_LIMIT_EXCEEDED
+  INVALID_REQUEST
+  RESOURCE_NOT_FOUND
+  RESOURCE_LOCKED
+  GATEWAY_SERVER_ERROR
+  MALFORMED_RESPONSE
+  WEBHOOK_SIGNATURE_INVALID
+  UNSUPPORTED_OPERATION
+  MAX_RETRIES_EXCEEDED
+  UNKNOWN_ERROR
+}
+
+enum Gateway {
+  WOMPI
+  RAPYD
+  MERCADOPAGO
+  KUSHKI
+}
+
+class Transaction <<Entidad>> #FFE0B2 {
+  +rawStatus: string
+  +authorizationCode?: string
+  --
+  +constructor(gatewayTransactionId,\n    orderReference, amount, currency,\n    payer, status, rawStatus,\n    rejectionReason?, authorizationCode?)
+  +getStatus(): TransactionStatus
+  +isApproved(): boolean
+  +isPending(): boolean
+  +isFinal(): boolean
+}
+
+class GatewayTransactionId <<ObjetoValor>> #C8E6C9 {
+  +value: string
+  --
+  +constructor(value, gateway)
+  +equals(other): boolean
+}
+
+class Payer <<ObjetoValor>> #C8E6C9 {
+  +email: string
+  +fullName?: string
+  +firstName?: string
+  +lastName?: string
+  +documentType?: string
+  +documentNumber?: string
+  +phone?: string
+  +phoneAreaCode?: string
+  +address?: PayerAddress
+  --
+  +constructor(attributes)
+}
+
+class ReturnUrlConfig <<ObjetoValor>> #C8E6C9 {
+  -returnUrl?: string | null
+  -returnUrls?: ReturnUrlsByResult
+  --
+  +constructor(returnUrl?, returnUrls?)
+  +resolveFor(status): string | null
+}
+
+enum TransactionStatus {
+  APPROVED
+  DECLINED
+  PENDING
+  EXPIRED
+  VOIDED
+  ERROR
+}
+
+class RejectionReason <<ObjetoValor>> #C8E6C9 {
+  +rejectionCode: string
+  --
+  +constructor(rejectionCode,\n    rejectionCategory)
+}
+
+class Amount <<ObjetoValor>> #C8E6C9 {
+  -value: string
+  --
+  +constructor(value)
+  {static} +fromMinorUnits(minor, currency): Amount
+  +getValue(): string
+  +getScale(): number
+  +toMinorUnits(currency): string
+  +toFixedScale(scale): string
+  +add(other): Amount
+  +subtract(other): Amount
+  +multiply(factor, scale, rounding?): Amount
+  +divide(divisor, scale, rounding?): Amount
+  +equals(other): boolean
+}
+
+class Currency <<ObjetoValor>> #C8E6C9 {
+  -code: string
+  --
+  +constructor(code = "COP")
+  +getCode(): string
+  +getMinorUnitExponent(): number
+  +equals(other): boolean
+}
+
+class OrderReference <<ObjetoValor>> #C8E6C9 {
+  -value: string
+  --
+  +constructor(value)
+  +getValue(): string
+  +equals(other): boolean
+}
+
+enum RejectionCategory {
+  INSUFFICIENT_FUNDS
+  INVALID_CARD_DATA
+  CARD_RESTRICTED
+  FRAUD_SUSPICION
+  NETWORK_ERROR
+  AUTHENTICATION_FAILED
+  DUPLICATED_PAYMENT
+  UNKNOWN
+}
+
+Error <|-- KitPagosError
+KitPagosError "1" --> "1" KitPagosErrorCode : tiene_codigo
+KitPagosError "1" --> "1" Gateway : originado_en
+WebhookVerifier ..> Gateway : usa
+
+Transaction "1" --> "1" TransactionStatus : tiene
+Transaction "1" *-- "1" GatewayTransactionId : contiene
+Transaction "1" *-- "1" OrderReference : contiene
+Transaction "1" *-- "1" Payer : contiene
+Transaction "1" *-- "1" Amount : contiene
+Transaction "1" *-- "1" Currency : contiene
+Transaction "1" *-- "0..1" RejectionReason : contiene
+GatewayTransactionId "1" --> "1" Gateway : emitido_por
+RejectionReason "1" --> "1" RejectionCategory : clasificada_como
+ReturnUrlConfig ..> TransactionStatus : usa
+Amount ..> Currency : usa
+
+RejectionCategory -[hidden]down- Error
+
+@enduml

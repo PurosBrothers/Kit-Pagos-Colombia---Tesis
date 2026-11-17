@@ -1,0 +1,14 @@
+Corrida de las suites del 11 de noviembre de 2026 (hora de Colombia, UTC-5), con Node.js 22.23.4.
+
+SDK y prototipos, sobre el commit 4f46917 (devops): inicio 2026-11-11 10:49:02 -0500 · fin 2026-11-11 10:50:42 -0500
+  SDK (npm test -- --coverage): 58 passed, 58 total; 1088 passed, 1088 total. Cobertura: 97.95 % sentencias, 91.8 % ramas, 98.19 % funciones, 98.5 % líneas.
+  Prototipo A, checkout-con-sdk-solo-back (Jest, npm test -- --coverage): 5 passed, 5 total; 60 passed, 60 total. Cobertura: 90.03 % sentencias, 74.11 % ramas, 96 % funciones, 90.87 % líneas.
+  Prototipo B, checkout-con-sdk-front-back (Jest, npm test -- --coverage): 6 passed, 6 total; 165 passed, 165 total. Cobertura: 99.07 % sentencias, 92.33 % ramas, 99.09 % funciones, 99.47 % líneas.
+  Prototipo C, checkout-frontend-rest (Vitest, npm test -- --coverage): archivos 6 passed (6); pruebas 139 passed (139). Cobertura: 95.64 % sentencias, 97.43 % ramas, 96.55 % funciones, 95.64 % líneas.
+  Prototipo D, checkout-sin-solucion (Jest, npm test -- --coverage): 10 passed, 10 total; 239 passed, 239 total. Cobertura: 93.04 % sentencias, 83.11 % ramas, 89.79 % funciones, 97.26 % líneas.
+
+API de Simulación, sobre el commit 07e542e (el script de carga y autocannon ya agregados), de 11:23:57 a 11:26:00:
+  npm ci, npm run lint, npx tsc --noEmit: código 0. npm test -- --coverage: 54 passed, 54 total; 1301 passed, 1301 total. Cobertura: 97.25 % sentencias, 89.16 % ramas, 99.08 % funciones, 97.52 % líneas.
+  Métricas CK con las excepciones del simulador (--mode guard): código 0; excepción registrada: KitPagosProvider CBO ≤ 7 (punto 107).
+
+No se ejecutaron las pruebas de contrato contra los sandboxes (npm run test:sandbox): quedan para decisión de Joan.

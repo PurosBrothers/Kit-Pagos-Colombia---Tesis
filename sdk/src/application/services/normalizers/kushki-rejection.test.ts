@@ -3,8 +3,8 @@ import { RejectionReason } from "../../../domain/value-objects/RejectionReason";
 
 /**
  * Un cobro con tarjeta pedido con `fullResponse: true`, con el código en `details.responseCode`
- * como lo documenta Kushki. El valor `"005"` es ilustrativo: la cuenta UAT aprueba todo y ningún
- * rechazo se pudo observar (docs/testing-data/kushki.md).
+ * como lo documenta Kushki. El valor `"005"` es ilustrativo, un código fuera de la tabla; los de
+ * la tabla se midieron el 24 de octubre de 2026 (docs/testing-data/kushki.md §1).
  */
 function cardCharge(transactionStatus: string, responseCode?: unknown): Record<string, unknown> {
   return {
@@ -42,6 +42,19 @@ describe("Kushki rejection reason", () => {
 
     expect(transaction.getStatus()).toBe("DECLINED");
     expect(transaction.rejectionReason).toEqual(new RejectionReason("005", "UNKNOWN"));
+  });
+
+  // Los códigos y motivos medidos el 24 de octubre de 2026 con las tarjetas de kushki.md §1.
+  it.each([
+    ["017", "Tarjeta no válida", "INVALID_CARD_DATA"],
+    ["019", "Tarjeta no compatible", "UNKNOWN"],
+    ["021", "Tarjeta sin fondos", "INSUFFICIENT_FUNDS"],
+    ["022", "Imposible verificar cvv", "INVALID_CARD_DATA"],
+    ["023", "Tarjeta bloqueada por el banco", "CARD_RESTRICTED"],
+  ])("should map the measured card code %s (%s) to %s", (code, _reason, category) => {
+    expect(normalizer.normalize(cardCharge("DECLINED", code)).rejectionReason).toEqual(
+      new RejectionReason(code, category as RejectionReason["rejectionCategory"]),
+    );
   });
 
   it("should not report a rejection for an approved charge, which also carries a responseCode", () => {

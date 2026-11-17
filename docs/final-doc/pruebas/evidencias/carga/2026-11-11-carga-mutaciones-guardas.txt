@@ -1,0 +1,21 @@
+Mutaciones de las guardas de scripts/carga.ts, 11 de noviembre de 2026, sobre el script antes de su commit.
+Cada una modifica el entorno o el script, lo corre con 1 s de medición y lo restaura.
+
+== M1 variable de pasarela en el entorno
+ABORTADO: el entorno define WOMPI_PUBLIC_KEY; córralo sin esas variables.
+exit 1
+== M2 .env en la raíz del checkout
+ABORTADO: hay un .env que el simulador leería (<checkout>/.env); córralo desde un checkout sin .env.
+exit 1
+== M3 escenario E2 con x-kit-pagos-environment: sandbox
+mutado: 1
+ABORTADO: el escenario E2 pide x-kit-pagos-environment: sandbox; solo se acepta simulator.
+exit 1
+== M4 SDK interno desviado a example.invalid
+mutado: 1
+CORRIDA NULA en el calentamiento de E3: el guardián bloqueó 5177 peticiones (example.invalid). No se reporta ninguna cifra.
+exit 1
+archivos en m4: 2026-11-11-carga-consola.txt 2026-11-11-carga-resumen.json
+resumen: valid False runs 0 bloqueos 5177
+script restaurado
+ls: ../.env: No such file or directory

@@ -1,0 +1,9 @@
+CP-04, nueva corrida tras corregir la precondición (DEF-02): 2026-11-11 16:34:09 -0500
+Simulador en 127.0.0.1:4817 con WOMPI_PUBLIC_KEY, WOMPI_PRIVATE_KEY, WOMPI_EVENTS_SECRET y KUSHKI_WEBHOOK_SECRET ficticios y SIMULATOR_WEBHOOK_TARGET_URL hacia B; B en el 4827 con los mismos secretos; sin .env.
+
+paso 4: 201 token en data.id: True
+paso 5: 201 order.id: True transactionId: True status: PENDING
+paso 6: 200 delivered: True receiverStatus: 200
+paso 7: 200 status: DECLINED historial: [('creation', 'PENDING', 'PENDING'), ('webhook', 'DECLINED', 'DECLINED')]
+paso 8: 200 delivered: True receiverStatus: 200 | status: DECLINED historial: [('creation', 'PENDING'), ('webhook', 'DECLINED'), ('webhook', 'DECLINED')]
+paso 9: orden después del reenvío alterado: DECLINED entradas: 3

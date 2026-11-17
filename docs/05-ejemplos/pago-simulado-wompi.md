@@ -135,7 +135,7 @@ Dos detalles de esa salida que vale la pena mirar: **el monto vuelve como `15000
 
 ## Lo más importante del ejemplo: con tarjeta hay que consultar
 
-Fijate en la secuencia de estados: **la creación devuelve `PENDING`, y la consulta devuelve `APPROVED`.**
+Fíjese en la secuencia de estados: **la creación devuelve `PENDING`, y la consulta devuelve `APPROVED`.**
 
 Eso no es una limitación del simulador: es lo que Wompi hace de verdad. Medido contra `sandbox.wompi.co`, `POST /transactions` responde `PENDING` con `finalized_at: null`, y la transacción se resuelve unos 600 ms después. **El desenlace de un cobro con tarjeta nunca está en la respuesta de la creación.**
 

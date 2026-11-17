@@ -1,0 +1,149 @@
+Suites: 1/1 · pruebas: 147/147 · fallidas: 0
+== scenario-through-sdk.test.ts (passed)
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi card: 10429 (RATE_LIMIT) arrives as RATE_LIMIT_EXCEEDED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi card: 10500 (SERVER_ERROR, alias INTERNAL_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi card: 10502 (BAD_GATEWAY) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi card: 10503 (SERVICE_UNAVAILABLE) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi card: 10504 (TIMEOUT, an immediate 504) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi card: 10001 (NETWORK_ERROR, alias CONNECTION_ERROR) arrives as CONNECTION_FAILED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi card: 10002 (FLAPPING, creation is not retried) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi card: 10004 (MALFORMED_JSON) arrives as MALFORMED_RESPONSE
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago card: 10429 (RATE_LIMIT) arrives as RATE_LIMIT_EXCEEDED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago card: 10500 (SERVER_ERROR, alias INTERNAL_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago card: 10502 (BAD_GATEWAY) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago card: 10503 (SERVICE_UNAVAILABLE) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago card: 10504 (TIMEOUT, an immediate 504) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago card: 10001 (NETWORK_ERROR, alias CONNECTION_ERROR) arrives as CONNECTION_FAILED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago card: 10002 (FLAPPING, creation is not retried) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago card: 10004 (MALFORMED_JSON) arrives as MALFORMED_RESPONSE
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd card: 10429 (RATE_LIMIT) arrives as RATE_LIMIT_EXCEEDED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd card: 10500 (SERVER_ERROR, alias INTERNAL_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd card: 10502 (BAD_GATEWAY) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd card: 10503 (SERVICE_UNAVAILABLE) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd card: 10504 (TIMEOUT, an immediate 504) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd card: 10001 (NETWORK_ERROR, alias CONNECTION_ERROR) arrives as CONNECTION_FAILED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd card: 10002 (FLAPPING, creation is not retried) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd card: 10004 (MALFORMED_JSON) arrives as MALFORMED_RESPONSE
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki card: 10429 (RATE_LIMIT) arrives as RATE_LIMIT_EXCEEDED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki card: 10500 (SERVER_ERROR, alias INTERNAL_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki card: 10502 (BAD_GATEWAY) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki card: 10503 (SERVICE_UNAVAILABLE) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki card: 10504 (TIMEOUT, an immediate 504) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki card: 10001 (NETWORK_ERROR, alias CONNECTION_ERROR) arrives as CONNECTION_FAILED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki card: 10002 (FLAPPING, creation is not retried) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki card: 10004 (MALFORMED_JSON) arrives as MALFORMED_RESPONSE
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi pse: 10429 (RATE_LIMIT) arrives as RATE_LIMIT_EXCEEDED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi pse: 10500 (SERVER_ERROR, alias INTERNAL_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi pse: 10502 (BAD_GATEWAY) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi pse: 10503 (SERVICE_UNAVAILABLE) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi pse: 10504 (TIMEOUT, an immediate 504) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi pse: 10001 (NETWORK_ERROR, alias CONNECTION_ERROR) arrives as CONNECTION_FAILED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi pse: 10002 (FLAPPING, creation is not retried) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi pse: 10004 (MALFORMED_JSON) arrives as MALFORMED_RESPONSE
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago pse: 10429 (RATE_LIMIT) arrives as RATE_LIMIT_EXCEEDED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago pse: 10500 (SERVER_ERROR, alias INTERNAL_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago pse: 10502 (BAD_GATEWAY) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago pse: 10503 (SERVICE_UNAVAILABLE) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago pse: 10504 (TIMEOUT, an immediate 504) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago pse: 10001 (NETWORK_ERROR, alias CONNECTION_ERROR) arrives as CONNECTION_FAILED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago pse: 10002 (FLAPPING, creation is not retried) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago pse: 10004 (MALFORMED_JSON) arrives as MALFORMED_RESPONSE
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd pse: 10429 (RATE_LIMIT) arrives as RATE_LIMIT_EXCEEDED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd pse: 10500 (SERVER_ERROR, alias INTERNAL_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd pse: 10502 (BAD_GATEWAY) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd pse: 10503 (SERVICE_UNAVAILABLE) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd pse: 10504 (TIMEOUT, an immediate 504) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd pse: 10001 (NETWORK_ERROR, alias CONNECTION_ERROR) arrives as CONNECTION_FAILED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd pse: 10002 (FLAPPING, creation is not retried) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd pse: 10004 (MALFORMED_JSON) arrives as MALFORMED_RESPONSE
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki pse: 10429 (RATE_LIMIT) arrives as RATE_LIMIT_EXCEEDED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki pse: 10500 (SERVER_ERROR, alias INTERNAL_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki pse: 10502 (BAD_GATEWAY) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki pse: 10503 (SERVICE_UNAVAILABLE) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki pse: 10504 (TIMEOUT, an immediate 504) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki pse: 10001 (NETWORK_ERROR, alias CONNECTION_ERROR) arrives as CONNECTION_FAILED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki pse: 10002 (FLAPPING, creation is not retried) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki pse: 10004 (MALFORMED_JSON) arrives as MALFORMED_RESPONSE
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi card: 10005 (MALFORMED_BODY) arrives as MALFORMED_RESPONSE
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago card: 10005 (MALFORMED_BODY) arrives as MALFORMED_RESPONSE
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd card: 10005 (MALFORMED_BODY) arrives as MALFORMED_RESPONSE
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki card: 10005 (MALFORMED_BODY) arrives as MALFORMED_RESPONSE
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd pse: 10005 (MALFORMED_BODY) arrives as MALFORMED_RESPONSE
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki pse: 10005 (MALFORMED_BODY) arrives as MALFORMED_RESPONSE
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi pse: 10005 (MALFORMED_BODY) arrives as RESOURCE_NOT_FOUND, from the creation poll
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago pse: 10005 (MALFORMED_BODY) arrives as MALFORMED_RESPONSE, for the missing bank URL
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi card: 10006 (HTML_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago card: 10006 (HTML_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd card: 10006 (HTML_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki card: 10006 (HTML_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi pse: 10006 (HTML_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago pse: 10006 (HTML_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd pse: 10006 (HTML_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki pse: 10006 (HTML_ERROR) arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi pse: 10100 (DECLINED) arrives as a DECLINED transaction
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header 10003 (SLOW) wompi card: the late 504 arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header 10003 (SLOW) mercadopago card: the late 504 arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header 10003 (SLOW) rapyd card: the late 504 arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header 10003 (SLOW) kushki card: the late 504 arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header 10003 (SLOW) wompi pse: the late 504 arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header 10003 (SLOW) mercadopago pse: the late 504 arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header 10003 (SLOW) rapyd pse: the late 504 arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header 10003 (SLOW) kushki pse: the late 504 arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header card: the business amounts arrive as a transaction or a redirect, not as an error (wompi card)
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header card: the business amounts arrive as a transaction or a redirect, not as an error (wompi card)
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header card: the business amounts arrive as a transaction or a redirect, not as an error (wompi card)
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header card: the business amounts arrive as a transaction or a redirect, not as an error (mercadopago card)
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header card: the business amounts arrive as a transaction or a redirect, not as an error (mercadopago card)
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header card: the business amounts arrive as a transaction or a redirect, not as an error (mercadopago card)
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header card: the business amounts arrive as a transaction or a redirect, not as an error (rapyd card)
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header card: the business amounts arrive as a transaction or a redirect, not as an error (rapyd card)
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header card: the business amounts arrive as a transaction or a redirect, not as an error (kushki card)
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header card: the business amounts arrive as a transaction or a redirect, not as an error (kushki card)
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header card: the business amounts arrive as a transaction or a redirect, not as an error (kushki card)
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header rapyd card: 10102 keeps the route's 501 and arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki pse: 10102 keeps the route's 501 and arrives as GATEWAY_SERVER_ERROR
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago pse: 10100 gets the order's native 402, which SDK 0.4 normalizes as DECLINED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi card: 10100 is normalized as DECLINED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi card: 10101 is normalized as PENDING
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header wompi card: 10102 is normalized as VOIDED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago card: 10100 is normalized as DECLINED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago card: 10101 is normalized as PENDING
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago card: 10102 is normalized as EXPIRED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki card: 10100 is normalized as DECLINED
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header kushki card: 10101 is normalized as PENDING
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header 10409 (DUPLICATE_PAYMENT): the second charge with the same reference gets the native 409
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago card: 10409 creates both charges with the same reference, as two orders
+  [passed] POST /v1/api/payments with a reserved amount and no scenario header mercadopago pse: 10409 creates both charges with the same reference, as two orders
+  [passed] GET /v1/api/payments/:id with a query failure chosen at creation wompi card: 10602 fails twice and RetryHandler ends with the transaction
+  [passed] GET /v1/api/payments/:id with a query failure chosen at creation mercadopago card: 10602 fails twice and RetryHandler ends with the transaction
+  [passed] GET /v1/api/payments/:id with a query failure chosen at creation rapyd card: 10602 fails twice and RetryHandler ends with the transaction
+  [passed] GET /v1/api/payments/:id with a query failure chosen at creation kushki card: 10602 fails twice and RetryHandler ends with the transaction
+  [passed] GET /v1/api/payments/:id with a query failure chosen at creation wompi pse: 10602 fails twice and RetryHandler ends with the transaction
+  [passed] GET /v1/api/payments/:id with a query failure chosen at creation mercadopago pse: 10602 fails twice and RetryHandler ends with the transaction
+  [passed] GET /v1/api/payments/:id with a query failure chosen at creation rapyd pse: 10602 fails twice and RetryHandler ends with the transaction
+  [passed] GET /v1/api/payments/:id with a query failure chosen at creation kushki pse: 10602 fails twice and RetryHandler ends with the transaction
+  [passed] GET /v1/api/pse-banks with a marked credential wompi: sim_flapping fails twice and RetryHandler ends with the list
+  [passed] GET /v1/api/pse-banks with a marked credential mercadopago: sim_flapping fails twice and RetryHandler ends with the list
+  [passed] GET /v1/api/pse-banks with a marked credential rapyd: sim_flapping fails twice and RetryHandler ends with the list
+  [passed] GET /v1/api/pse-banks with a marked credential kushki: sim_flapping fails twice and RetryHandler ends with the list
+  [passed] GET /v1/api/payments/:id with a query failure that does not recover wompi card: 10600 answers 500 every time and arrives as MAX_RETRIES_EXCEEDED
+  [passed] GET /v1/api/payments/:id with a query failure that does not recover mercadopago pse: 10600 answers 500 every time and arrives as MAX_RETRIES_EXCEEDED
+  [passed] GET /v1/api/payments/:id with a query failure that does not recover rapyd card: 10600 answers 500 every time and arrives as MAX_RETRIES_EXCEEDED
+  [passed] GET /v1/api/payments/:id with a query failure that does not recover kushki pse: 10600 answers 500 every time and arrives as MAX_RETRIES_EXCEEDED
+  [passed] GET /v1/api/payments/:id with a query failure that does not recover mercadopago card: 10604 answers SLOW (a late 504) and arrives as MAX_RETRIES_EXCEEDED
+  [passed] business outcomes read back through GET /v1/api/payments/:id wompi pse: 10101 is read back as PENDING
+  [passed] business outcomes read back through GET /v1/api/payments/:id mercadopago pse: 10101 is read back as PENDING
+  [passed] business outcomes read back through GET /v1/api/payments/:id mercadopago pse: 10102 is read back as EXPIRED
+  [passed] business outcomes read back through GET /v1/api/payments/:id rapyd pse: 10100 is read back as DECLINED
+  [passed] business outcomes read back through GET /v1/api/payments/:id rapyd pse: 10101 is read back as PENDING
+  [passed] business outcomes read back through GET /v1/api/payments/:id rapyd pse: 10102 is read back as EXPIRED
+  [passed] business outcomes read back through GET /v1/api/payments/:id kushki pse: 10100 is read back as DECLINED
+  [passed] business outcomes read back through GET /v1/api/payments/:id kushki pse: 10101 is read back as PENDING
+  [passed] business outcomes read back through GET /v1/api/payments/:id wompi card: 10100 is read back as DECLINED
+  [passed] business outcomes read back through GET /v1/api/payments/:id mercadopago card: 10100 is read back as DECLINED
+  [passed] business outcomes read back through GET /v1/api/payments/:id mercadopago card: 10102 is read back as EXPIRED
+  [passed] business outcomes read back through GET /v1/api/payments/:id kushki card: 10100 is read back as DECLINED
+  [passed] business outcomes read back through GET /v1/api/payments/:id rapyd card: 10101 is read back as PENDING
+  [passed] gateway test data through the SDK, without a scenario header Wompi: a token of card 4111111111111111 is created PENDING and read back DECLINED
+  [passed] gateway test data through the SDK, without a scenario header Mercado Pago: a token with cardholder OTHE is charged DECLINED
+  [passed] gateway test data through the SDK, without a scenario header Kushki PSE: payer document 100000002 is read back DECLINED

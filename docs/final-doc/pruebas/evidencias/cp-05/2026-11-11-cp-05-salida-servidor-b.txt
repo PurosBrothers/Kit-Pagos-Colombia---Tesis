@@ -1,0 +1,40 @@
+[checkout] navegador → tienda  GET /api/payments/config
+[checkout] navegador ← tienda  GET /api/payments/config → 200 · 0 ms
+[checkout] navegador → tienda  POST /api/orders
+[checkout]   orden ORD-0DD5A91D: La Bodega de Chapinero · 1 botella por $58.000 COP, con tarjeta (llega solo el token), con Wompi → módulo de pagos
+[checkout]   tienda → pasarela  GET localhost:4817/v1/sim/wompi/merchants/pub_test_…_no_real → 200 · 1 ms
+[checkout]   tienda → pasarela  POST localhost:4817/v1/sim/wompi/transactions → 201 · estado PENDING · 1 ms
+[checkout]   orden ORD-0DD5A91D ← creación: PENDING (nativo PENDING), transacción 4836cfbc-2363-4b8d-b0e4-c71eb3ba7215
+[checkout] navegador ← tienda  POST /api/orders → 201 · 4 ms
+[checkout] navegador → tienda  GET /orders/ORD-0DD5A91D
+[checkout] navegador ← tienda  GET /orders/ORD-0DD5A91D → 200 · 0 ms
+[checkout] navegador → tienda  GET /api/orders/ORD-0DD5A91D
+[checkout]   tienda → pasarela  GET localhost:4817/v1/sim/wompi/transactions/4836cfbc-2363-4b8d-b0e4-c71eb3ba7215 → 200 · estado APPROVED · 2 ms
+[checkout]   orden ORD-0DD5A91D ← consulta: APPROVED (nativo APPROVED)
+[checkout] navegador ← tienda  GET /api/orders/ORD-0DD5A91D → 200 · 3 ms
+[checkout] navegador → tienda  GET /orders/ORD-0DD5A91D
+[checkout] navegador ← tienda  GET /orders/ORD-0DD5A91D → 200 · 1 ms
+[checkout] navegador → tienda  GET /api/payments/config
+[checkout] navegador ← tienda  GET /api/payments/config → 200 · 0 ms
+[checkout] navegador → tienda  POST /api/orders
+[checkout]   orden ORD-628AF73F: La Bodega de Chapinero · 1 botella por $58.000 COP, con tarjeta (llega solo el token), con Mercado Pago → módulo de pagos
+[checkout]   tienda → pasarela  GET localhost:4817/v1/sim/mercadopago/card_tokens/tok_… → 200 · estado active · 1 ms
+[checkout]   tienda → pasarela  GET localhost:4817/v1/sim/mercadopago/payment_methods/search → 200 · 1 ms
+[checkout]   tienda → pasarela  POST localhost:4817/v1/sim/mercadopago/orders → 201 · estado processed · 4 ms
+[checkout]   orden ORD-628AF73F ← creación: APPROVED (nativo processed), transacción ORD01VG30KZT7D7
+[checkout] navegador ← tienda  POST /api/orders → 201 · 10 ms
+[checkout] navegador → tienda  GET /orders/ORD-628AF73F
+[checkout] navegador ← tienda  GET /orders/ORD-628AF73F → 200 · 0 ms
+[checkout] navegador → tienda  GET /api/payments/config
+[checkout] navegador ← tienda  GET /api/payments/config → 200 · 0 ms
+[checkout] navegador → tienda  POST /api/orders
+[checkout]   orden ORD-ADDA401F: La Bodega de Chapinero · 1 botella por $58.000 COP, con tarjeta (llega solo el token), con Kushki → módulo de pagos
+[checkout]   tienda → pasarela  POST localhost:4817/v1/sim/kushki/card/v1/charges → 201 · 3 ms
+[checkout]   orden ORD-ADDA401F ← creación: APPROVED (nativo APPROVAL), transacción 81782f65152d43e8a1
+[checkout] navegador ← tienda  POST /api/orders → 201 · 5 ms
+[checkout] navegador → tienda  GET /orders/ORD-ADDA401F
+[checkout] navegador ← tienda  GET /orders/ORD-ADDA401F → 200 · 0 ms
+[checkout] navegador → tienda  POST /api/orders
+[checkout]   orden ORD-A6B3B6D1: La Bodega de Chapinero · 1 botella por $58.000 COP, con tarjeta en la página de la pasarela, con Rapyd → módulo de pagos
+[checkout]   tienda → pasarela  POST localhost:4817/v1/sim/rapyd/checkout → 200 · estado NEW · 3 ms
+[checkout]   orden ORD-A6B3B6D1 ← creación: PENDING (nativo NEW), transacción checkout_45e836d9848fa8660b131c5cc4b03d53

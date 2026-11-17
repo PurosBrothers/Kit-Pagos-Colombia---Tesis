@@ -32,14 +32,17 @@ import { TransactionStatus } from "../value-objects/TransactionStatus";
  * define (ADR-01). Al revés sí se puede: los normalizadores, que son de
  * aplicación, importan de aquí.
  *
- * ## Por qué Rapyd no está
+ * ## Por qué Rapyd es una función y no una tabla
  *
- * Porque su manejador de webhook no traduce un estado sino un **tipo de evento**:
- * Rapyd manda un webhook distinto por resultado (`PAYMENT_COMPLETED`,
- * `PAYMENT_FAILED`) en vez de un evento único con un campo de estado variable.
- * Meterlo aquí obligaría a fingir que las dos cosas son lo mismo. Su normalizador
- * sí traduce estados nativos, pero no tiene con quién compartirlos, así que la
- * duplicación que este archivo corrige no existe en Rapyd.
+ * Su manejador de webhook traduce casi siempre un **tipo de evento**: Rapyd manda un
+ * webhook distinto por resultado (`PAYMENT_COMPLETED`, `PAYMENT_FAILED`) en vez de un
+ * evento único con un campo de estado variable. La excepción es `PAYMENT_UPDATED`, que
+ * no es un resultado sino un aviso de que el pago cambió: su resultado es el estado del
+ * pago, como en una consulta. Se midió el 21 de octubre de 2026 en el sandbox, con una
+ * tarjeta con 3DS: `PAYMENT_SUCCEEDED` (`ACT`), y en el mismo segundo `PAYMENT_UPDATED`
+ * (`ACT`) y `PAYMENT_COMPLETED` (`CLO`). Desde entonces el manejador comparte con el
+ * normalizador la traducción del estado del pago (punto 118), que no cabe en una tabla
+ * porque dos códigos se desambiguan con un segundo campo.
  */
 
 /**
@@ -117,6 +120,62 @@ export const MERCADOPAGO_NATIVE_STATUS: Readonly<Record<string, TransactionStatu
   expired: "EXPIRED",
   failed: "DECLINED",
 };
+
+/**
+ * Prefijo de `failure_code` que identifica un rechazo del procesador de tarjeta de Rapyd.
+ * Catalogo completo en docs.rapyd.net/en/card-network-errors.html; por ejemplo
+ * "ERROR_PROCESSING_CARD - [51]" es fondos insuficientes.
+ */
+export const RAPYD_CARD_DECLINE_PREFIX = "ERROR_PROCESSING_CARD";
+
+/**
+ * Estado de un pago de Rapyd. Necesita el pago completo y no solo el estado, porque dos de
+ * sus códigos son ambiguos por sí mismos y hay que leer un segundo campo para desambiguarlos.
+ */
+export function rapydPaymentStatus(
+  rawStatus: string,
+  payment: { paid?: unknown; failure_code?: unknown },
+): TransactionStatus {
+  const failureCode = String(payment.failure_code ?? "");
+
+  switch (rawStatus.toUpperCase()) {
+    case "CLO":
+      // "CLO" es "cerrado", no "pagado": son dos campos distintos y hay que
+      // leer los dos. Un pago cerrado sin `paid` no autoriza a decirle al
+      // comercio que cobro. La combinacion no esta documentada, asi que se
+      // degrada a ERROR en vez de a DECLINED: afirmar un rechazo seria
+      // afirmar que el banco respondio, y eso no se sabe.
+      return payment.paid === true ? "APPROVED" : "ERROR";
+    case "ACT":
+      // Activo: creado y esperando que el pagador lo complete. Es el estado en
+      // el que el comercio debe reintentar el polling.
+      return "PENDING";
+    case "NEW":
+      // No es un estado de pago sino de **checkout**: la página existe y nadie la
+      // completó todavía. Entra aquí porque desde el issue #64 un cobro con tarjeta en
+      // Rapyd devuelve un checkout, y consultarlo antes de que el pagador pague
+      // responde `status: "NEW"` con `payment.id` en null (ver `rapyd-checkout.ts`).
+      // Sin esta rama caía en `default` y un cobro recién creado se reportaba como
+      // ERROR, que es el mismo defecto que el punto 46 corrigió en los webhooks.
+      return "PENDING";
+    case "ERR":
+      // Rapyd no distingue el rechazo de negocio del fallo tecnico por
+      // `status` (es "ERR" en ambos casos). Se aplica el mismo criterio de
+      // desambiguacion por prefijo de `failure_code` que usa el manejador de
+      // webhooks para PAYMENT_FAILED, para que el mismo pago no se normalice
+      // distinto segun si llego por webhook o por consulta.
+      return failureCode.startsWith(RAPYD_CARD_DECLINE_PREFIX) ? "DECLINED" : "ERROR";
+    case "EXP":
+      return "EXPIRED";
+    case "REV":
+      // Revertido por Rapyd, con el motivo en `cancel_reason`. Este codigo
+      // resuelve el pendiente que ubiquitous-language.md dejaba abierto
+      // conjeturando "CAN": el valor real que documenta Rapyd es "REV".
+      return "VOIDED";
+    default:
+      return "ERROR";
+  }
+}
 
 /**
  * Busca un estado nativo en la tabla de su pasarela.

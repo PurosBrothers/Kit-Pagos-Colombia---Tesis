@@ -274,14 +274,32 @@ export function clientConfigFrom(env, options = {}, fileKeys = {}) {
 }
 
 /**
- * @param {{ root: string, env?: NodeJS.ProcessEnv, options?: CliOptions, fileKeys?: Record<string, string> }} settings
+ * Una línea de la traza de la terminal por cada petición que sirve. Los pagos no pasan por este
+ * servidor: van del navegador a la API, y su traza está en la consola del navegador.
+ *
+ * @param {string} method
+ * @param {string} pathname
+ * @param {number} status
+ * @param {number} ms
  */
-export function createStaticServer({ root, env = process.env, options = {}, fileKeys = {} }) {
+export function requestLine(method, pathname, status, ms) {
+  const note = pathname === "/config.json" ? " · la API, el ambiente y las llaves públicas para el navegador" : "";
+  return `[tienda C] ${method} ${pathname} → ${status} · ${ms} ms${note}`;
+}
+
+/**
+ * @param {{ root: string, env?: NodeJS.ProcessEnv, options?: CliOptions, fileKeys?: Record<string, string>, log?: (line: string) => void }} settings
+ */
+export function createStaticServer({ root, env = process.env, options = {}, fileKeys = {}, log }) {
   const rootDir = resolve(root);
   const config = JSON.stringify(clientConfigFrom(env, options, fileKeys));
 
   return createServer(async (request, response) => {
     const { pathname } = new URL(request.url ?? "/", "http://localhost");
+    if (log) {
+      const started = Date.now();
+      response.once("finish", () => log(requestLine(request.method ?? "GET", pathname, response.statusCode, Date.now() - started)));
+    }
 
     if (request.method !== "GET" && request.method !== "HEAD") {
       response.writeHead(405, { allow: "GET, HEAD" }).end();
@@ -326,8 +344,9 @@ export function createStaticServer({ root, env = process.env, options = {}, file
  * @param {NodeJS.ProcessEnv} env
  * @param {string} root
  * @param {string} [defaultEnvFile]
+ * @param {(line: string) => void} [log] la traza de la terminal; sin ella, el servidor no imprime nada
  */
-export function prepareServer(argv, env, root, defaultEnvFile = DEFAULT_ENV_FILE) {
+export function prepareServer(argv, env, root, defaultEnvFile = DEFAULT_ENV_FILE, log = undefined) {
   const options = parseArguments(argv);
   if (options.help) {
     return { help: USAGE };
@@ -345,7 +364,7 @@ export function prepareServer(argv, env, root, defaultEnvFile = DEFAULT_ENV_FILE
     sources,
     envFile: { path: envFile.path, found: envFile.found },
     port: options.port ?? (Number(env.PORT) || 4100),
-    server: createStaticServer({ root, env, options, fileKeys: envFile.publicKeys }),
+    server: createStaticServer({ root, env, options, fileKeys: envFile.publicKeys, log }),
   };
 }
 
@@ -357,14 +376,16 @@ export function prepareServer(argv, env, root, defaultEnvFile = DEFAULT_ENV_FILE
 export function startupSummary({ config, port, sources, envFile }) {
   const withKey = Object.entries(sources).map(([gateway, source]) => `${gateway} (${source})`);
   return [
-    `Prototipo C en http://localhost:${port}`,
+    `Prototipo C en http://localtest.me:${port}`,
     `  API:      ${config.apiBaseUrl}`,
     `  Ambiente: ${config.environment}`,
     `  Llaves públicas para tarjeta: ${withKey.length ? withKey.join(", ") : "ninguna; la tarjeta queda deshabilitada (pase el .env con --dotenv=<ruta>)"}`,
     `  Archivo .env: ${envFile.path}${envFile.found ? "" : " (no existe; no se leyó)"}`,
     ...(config.environment === "sandbox"
-      ? ["  En sandbox, alguna pasarela no deja volver a localhost: sirva la página por un túnel (guía de prueba)."]
+      ? ["  Ábrala en localtest.me y no en localhost: alguna pasarela no deja volver a localhost (guía de prueba)."]
       : []),
+    "  Traza: cada archivo que sirve sale aquí con [tienda C]. Los pagos van del navegador a la API:",
+    "         su traza está en la consola del navegador (F12), también con [tienda C].",
   ].join("\n");
 }
 
@@ -374,6 +395,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       process.argv.slice(2),
       process.env,
       fileURLToPath(new URL("./dist", import.meta.url)),
+      DEFAULT_ENV_FILE,
+      (line) => console.log(line),
     );
     if ("help" in prepared) {
       console.log(prepared.help);

@@ -55,7 +55,7 @@ npm run simulate:wompi
 
 Dos cosas que conviene entender de este arranque, porque explican casi todos los errores de la primera vez:
 
-- **`sdk/dist/` no está versionado.** Está en `.gitignore` y se genera con `npm run build`. Si acabás de clonar el repositorio, o si alguien cambió la superficie pública del SDK, hay que reconstruir antes de correr los ejemplos o el `typecheck`. Un `dist/` viejo hace que el `typecheck` de los ejemplos pase contra una API que ya no existe, y eso ya pasó.
+- **`sdk/dist/` no está versionado.** Está en `.gitignore` y se genera con `npm run build`. Si acaba de clonar el repositorio, o si alguien cambió la superficie pública del SDK, hay que reconstruir antes de correr los ejemplos o el `typecheck`. Un `dist/` viejo hace que el `typecheck` de los ejemplos pase contra una API que ya no existe, y eso ya pasó.
 - **El paquete de ejemplos depende del SDK por ruta de archivo** (`"kit-pagos-colombia": "file:../sdk"`) y lo importa **por su nombre público**, nunca por rutas relativas hacia `sdk/src`. Es deliberado: así cualquier tipo que falte en `sdk/src/index.ts` rompe la compilación de los ejemplos de inmediato. Fue así como se descubrió que faltaban cuatro tipos en la superficie pública (punto 21 del architecture-log).
 
 ---
@@ -129,7 +129,7 @@ En la raíz hay un `.env.example` que se copia a `.env` (que está en `.gitignor
    - Activan `npm run test:sandbox` en el SDK.
    - Sirven como perfil de respaldo (*fallback*) en la API de Simulación (`simulator-api` / `KitPagosProvider`), cuando un cliente REST no provee sus propias llaves en las cabeceras `x-gateway-*`.
 3. **Variables de la API de Simulación (REST Wrapper):**
-   - `API_AUTH_TOKEN`: Token Bearer estático exigido para autenticar las peticiones a la API REST (`/v1/api/*`). Las rutas de salud (`/health`) y los endpoints mock del simulador (`/v1/sim/*`) quedan exentos. Si no se define en `.env`, el servidor arranca en modo desarrollo abierto (sin autenticación), ideal para CI y desarrollo local.
+   - `API_AUTH_TOKEN`: Token Bearer estático exigido para autenticar las peticiones a la API REST (`/v1/api/*`). Las rutas de salud (`/health`), la documentación OpenAPI (`/docs`) y los endpoints mock del simulador (`/v1/sim/*`) quedan exentos. Si no se define en `.env`, el servidor arranca en modo desarrollo abierto (sin autenticación), ideal para CI y desarrollo local.
    - `SIMULATOR_SDK_BASE_URL`: URL base que las instancias del SDK creadas por `simulator-api` usan para conectarse al simulador local o remoto (por ejemplo en Render: `https://kit-pagos-colombia.onrender.com`). Si no se define, usa el propio proceso: `http://localhost:<PORT>/v1/sim/<pasarela>`, con 3000 cuando no hay `PORT`.
    - **Resolución dinámica de ambiente (`x-kit-pagos-environment`):** Las variables `<PASARELA>_BASE_URL` fueron eliminadas (Issue #123). El cliente declara el ambiente destino por petición (`simulator`, `sandbox` o `production`), y la API resuelve la URL desde un catálogo cerrado embebido en el SDK. Contra `simulator` se usan las credenciales del servidor; contra `sandbox` se permite el respaldo del servidor advirtiendo en `x-kit-pagos-warning` y en `warnings`; y contra `production` se exigen obligatoriamente credenciales del cliente en `x-gateway-*` respondiendo 401 si faltan (Punto 69 y 80 del `architecture-log.md`).
    - `WEBHOOK_TOLERANCE_SECONDS`: ventana contra reenvíos de `POST /v1/api/webhooks/:gateway`, en segundos. Sin definir usa la del SDK (300); `0` la desactiva.

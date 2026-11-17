@@ -1,0 +1,76 @@
+\section{Contexto y Alcance}
+
+\subsection{Diagrama de Contexto del Sistema --- Kit Pagos Colombia (Nivel 1)}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{"../../architecture/SDK/Context Diagram - C4.pdf"}
+\caption{Diagrama de Contexto de Kit Pagos Colombia}
+\label{fig:context_system}
+\end{figure}
+
+El diagrama de contexto del sistema muestra la posición de Kit Pagos Colombia dentro de su entorno, identificando los actores que interactúan con él y los sistemas externos con los que se comunica.
+
+\subsubsection{Actores del sistema}
+El sistema tiene dos tipos de usuario. El primero es el Desarrollador Junior o Senior, quien instala el framework en su entorno de trabajo mediante npm, lo configura con las credenciales de las pasarelas que desea utilizar y consume su interfaz unificada para integrar capacidades de pago en su aplicación. El segundo es el Tester o QA, quien interactúa con el framework principalmente a través de la API de simulación para validar flujos de pago en escenarios controlados sin depender de entornos reales ni de credenciales de producción.
+
+\subsubsection{Sistema principal}
+Kit Pagos Colombia actúa como intermediario técnico entre las aplicaciones de software y las pasarelas de pago colombianas. Su propósito es abstraer la heterogeneidad del ecosistema de proveedores, exponiéndose como una interfaz común, predecible y reutilizable. El sistema no autoriza, liquida ni procesa cobros por su cuenta. Arma cada petición y la envía a la pasarela seleccionada (Wompi, Mercado Pago, Kushki o Rapyd), que es la que siempre procesa el cobro. Lo que hace el framework es normalizar la comunicación, los formatos de respuesta y el manejo de errores, para que la aplicación consumidora no tenga que conocer las convenciones de ningún proveedor en particular.
+
+\subsubsection{Sistemas externos}
+El sistema se comunica con cuatro pasarelas de pago, cada una operando como sistema externo independiente:
+\begin{itemize}
+    \item \textbf{Wompi} es la pasarela de Bancolombia, con mayor penetración en el mercado colombiano. El framework envía solicitudes de creación de pago y consulta de estado a su API REST mediante HTTPS, y recibe notificaciones asíncronas de cambio de estado a través de webhooks firmados con SHA-256.
+    \item \textbf{Rapyd Latam} es la pasarela que sustituye a PayU Latam en el ecosistema de Kit Pagos Colombia, tras la adquisición de su operación en Latinoamérica en 2025. A diferencia de las otras tres pasarelas, Rapyd no recibe las credenciales dentro del cuerpo de la solicitud sino en los encabezados HTTP. Cada petición debe llevar un \texttt{access\_key} propio del comercio y una firma calculada con HMAC-SHA256. La firma se construye concatenando el método HTTP, la ruta del recurso al que se llama, una cadena aleatoria (salt), la marca de tiempo de la petición, el \texttt{access\_key}, el \texttt{secret\_key} y el cuerpo del mensaje; ese resultado se codifica luego en Base64. Para las notificaciones asíncronas la fórmula es prácticamente la misma, con dos diferencias: no incluye el método HTTP, y en vez de la ruta relativa usa la URL pública completa que el comercio configuró para recibir los webhooks. Esta segunda fórmula es importante porque implica que el adaptador necesita conocer de antemano esa URL como un dato de configuración, algo que ninguna de las otras tres pasarelas exige.
+    \item \textbf{Mercado Pago} es la plataforma de pagos de Mercado Libre para Colombia. La comunicación se realiza mediante autenticación Bearer y sus webhooks utilizan HMAC-SHA256.
+    \item \textbf{Kushki} es una pasarela de origen latinoamericano con operación activa en Colombia. La autenticación se realiza mediante el header Private-Merchant-Id y sus notificaciones asíncronas también usan HMAC-SHA256.
+\end{itemize}
+En todos los casos, la relación bidireccional refleja dos flujos distintos: las solicitudes salientes del framework hacia cada pasarela (creación de pago, consulta de estado) y los eventos entrantes que cada pasarela envía hacia el framework mediante webhooks cuando el estado de una transacción cambia.
+
+\subsection{Diagrama de Contexto de la API de Simulación --- Kit Pagos Colombia (Nivel 1)}
+\begin{figure}[htbp]
+\centering
+\includegraphics{"../../architecture/Simulador API/Context Diagram - C4.pdf"}
+\caption{Diagrama de Contexto específico de la API de Simulación}
+\label{fig:context_sim}
+\end{figure}
+
+Este diagrama complementa el anterior con un enfoque específico en el flujo de simulación, mostrando cómo interactúan los actores, la aplicación del comercio, el framework y las pasarelas reales durante las pruebas de desarrollo.
+
+\subsubsection{Actor}
+En el contexto de simulación, el Desarrollador y el Tester QA comparten el mismo rol: configurar escenarios de prueba en modo sandbox o simulación y validar que la integración responde correctamente ante cada uno de ellos. La distinción entre ambos perfiles se diluye en este flujo porque el objetivo es el mismo, verificar el comportamiento del sistema sin transacciones reales.
+
+\subsubsection{Aplicación del Comercio (Huésped)}
+La aplicación del comercio es el sistema externo que integra el SDK de Kit Pagos Colombia para aceptar pagos. En el contexto de simulación actúa como cliente del simulador: envía solicitudes de pago y consulta de estado hacia el framework mediante HTTPS y JSON. También recibe notificaciones asíncronas de cambio de estado a través de webhooks sintéticos generados por la API de simulación mediante HTTP POST.
+Este elemento es relevante en el diagrama porque evidencia que el framework no es el destino final de las solicitudes, sino un intermediario que procesa y redirige, y cuyo comportamiento debe ser transparente para la aplicación que lo consume.
+
+\subsubsection{Kit Pagos Colombia}
+En este diagrama el sistema aparece en su rol de simulador: recibe las solicitudes de la aplicación del comercio, las procesa internamente según el escenario configurado y retorna respuestas que replican el comportamiento de las pasarelas reales sin establecer conexión efectiva con ninguna de ellas.
+
+\subsubsection{Pasarelas Reales (sistemas externos de referencia)}
+En el contexto de simulación, las pasarelas reales (Wompi, Rapyd, Mercado Pago y Kushki) aparecen fuera del alcance del flujo activo. No se establece ninguna conexión real con ellas durante las pruebas de simulación. Su presencia en el diagrama cumple un propósito documental: son la referencia a partir de la cual la API de simulación construye sus respuestas, replicando con exactitud los formatos, los campos y los valores que cada proveedor retornaría en un entorno productivo real.
+
+\subsection{Prototipos del experimento de la Fase 5}
+Para evaluar el framework se escribieron cuatro versiones de una misma tienda reducida. Cada una muestra un producto, lo cobra con tarjeta o con PSE, informa el resultado al comprador, recibe la notificación asíncrona de la pasarela y consulta el estado del pago. Las cuatro cobran con Wompi, Mercado Pago, Kushki y Rapyd; lo que cambia es cómo integran los pagos. El catálogo, el carrito, las órdenes en memoria, las rutas y el contrato \texttt{PaymentsPort} son comunes, de modo que la comparación aísla el módulo de pagos.
+
+\begin{table}[htbp]
+\centering
+\caption{Prototipos del experimento de la Fase 5}
+\label{tab:prototipos}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|c|>{\raggedright\arraybackslash}p{3.6cm}|X|c|}
+\hline
+\textbf{Letra} & \textbf{Prototipo} & \textbf{Cómo integra los pagos} & \textbf{Papel} \\ \hline
+A & \texttt{checkout-\allowbreak{}con-\allowbreak{}sdk-\allowbreak{}solo-\allowbreak{}back} & \texttt{KitPagos} en el servidor. En la página, la tarjeta se tokeniza llamando a cada pasarela con \texttt{fetch}, sin \texttt{KitPagosBrowser}. & Demostración de alcance \\ \hline
+B & \texttt{checkout-\allowbreak{}con-\allowbreak{}sdk-\allowbreak{}front-\allowbreak{}back} & \texttt{KitPagos} en el servidor y \texttt{KitPagosBrowser} en la página. & Tratamiento \\ \hline
+C & \texttt{checkout-\allowbreak{}frontend-\allowbreak{}rest} & El navegador cobra contra \texttt{/v1/api}, sin servidor de pagos propio. & Demostración de alcance \\ \hline
+D & \texttt{checkout-\allowbreak{}sin-\allowbreak{}solucion} & Cada pasarela se integra a mano con \texttt{fetch}, igual que lo haría hoy un comercio que no usa Kit Pagos. & Control \\ \hline
+\end{tabularx}
+\end{table}
+
+\textbf{Roles en el experimento.} La comparación formal se hace entre D (control) y B (tratamiento): ambas implementan el mismo checkout y comparten el esqueleto, y solo difieren en el módulo de pagos. A comprueba si el SDK sigue siendo útil para un comercio que decide no usar \texttt{KitPagosBrowser}, y C demuestra el patrón de integración frontend contra la API REST; ninguna de las dos entra en la comparación de métricas.
+
+\textbf{Límites declarados.} Los prototipos no son plantillas para producción. Ninguno de los cuatro envía una cabecera \textit{Content-Security-Policy} en la página donde se escribe la tarjeta, por lo que un script malicioso podría leer el número; en C, además, el monto lo decide el navegador. Se dejaron así a propósito, porque el experimento compara el código del módulo de pagos y agregar la cabecera no altera esa comparación. Quien reutilice una de estas páginas en un comercio real debe incorporar primero las protecciones que describe el ADR-09.
+
+\subsection{Alcance del sistema}
+El sistema abarca exclusivamente la capa de integración entre la aplicación del comercio y las pasarelas de pago. No forma parte de su alcance el procesamiento directo de datos de tarjeta de crédito, la gestión de cuentas de comercio en cada proveedor, la conciliación financiera de transacciones, ni ninguna operación administrativa sobre las APIs de los proveedores. Cumplir PCI DSS les corresponde a las pasarelas y a los comercios que usan el framework, no al framework. Este se limita a delegar cada operación en el proveedor correspondiente y no guarda datos sensibles del pago.
+

@@ -8,3 +8,9 @@
 
 # Dependencies
 node_modules/
+
+# Local tools
+.concord/
+
+# Local PDF builds and artifacts
+docs/final-doc/dist/

@@ -19,8 +19,9 @@ function paymentOfCheckout(checkout: RapydCheckout): RapydCheckout["payment"] {
 }
 
 /**
- * Solo los tres eventos cuya página se consultó. `ACT` (esperando al pagador), `REV` y un
- * `CLO` sin pagar no tienen un evento documentado que el SDK traduzca con certeza.
+ * Los tres desenlaces cuya página se consultó. `REV` y un `CLO` sin pagar no tienen un evento
+ * documentado que el SDK traduzca con certeza. `ACT` sí tiene avisos medidos, pero solo como
+ * parte de la secuencia del checkout pagado (`rapydWebhookSequence`), no como estado propio.
  */
 function rapydEventType(payment: RapydPayment | RapydCheckout["payment"]): string {
   if (payment.status === "CLO" && payment.paid === true) return "PAYMENT_COMPLETED";
@@ -37,8 +38,11 @@ function rapydEventType(payment: RapydPayment | RapydCheckout["payment"]): strin
  * Los tipos de evento salen de las páginas de `PAYMENT_COMPLETED`, `PAYMENT_FAILED` y
  * `PAYMENT_EXPIRED`, consultadas el 6 de octubre de 2026 sin registrar su URL.
  */
-function signedWebhook(payment: RapydPayment | RapydCheckout["payment"], context: WebhookContext): OutgoingWebhook {
-  const type = rapydEventType(payment);
+function signedWebhook(
+  payment: RapydPayment | RapydCheckout["payment"],
+  context: WebhookContext,
+  type: string = rapydEventType(payment),
+): OutgoingWebhook {
   const credentials = context.secret(Gateway.RAPYD);
   if (!credentials.webhookUrl) {
     throw new WebhookUnavailableError(
@@ -75,4 +79,27 @@ export function rapydWebhook(
   context: WebhookContext,
 ): OutgoingWebhook {
   return signedWebhook(subject.kind === "payment" ? subject.record : paymentOfCheckout(subject.record), context);
+}
+
+/**
+ * Lo que manda el sandbox cuando se paga la tarjeta en su página, medido el 21 de octubre de
+ * 2026 con la tarjeta de prueba, que siempre pide 3DS: `PAYMENT_SUCCEEDED` con el pago en `ACT` y
+ * `next_action: "3d_verification"`, y en el mismo segundo `PAYMENT_UPDATED`, todavía en `ACT`, y
+ * `PAYMENT_COMPLETED` en `CLO` (punto 118). Los dos primeros no son desenlaces, y un comercio que los
+ * lea como tales rechaza un pago aprobado. Cualquier otro caso es un solo webhook.
+ */
+export function rapydWebhookSequence(
+  subject: Extract<WebhookSubject, { gateway: Gateway.RAPYD }>,
+  context: WebhookContext,
+): OutgoingWebhook[] {
+  const completed = rapydWebhook(subject, context);
+  if (subject.kind !== "checkout") return [completed];
+  const payment = paymentOfCheckout(subject.record);
+  if (payment.status !== "CLO" || payment.paid !== true) return [completed];
+  const pending = { ...payment, status: "ACT" as const, paid: false };
+  return [
+    signedWebhook({ ...pending, next_action: "3d_verification" } as RapydCheckout["payment"], context, "PAYMENT_SUCCEEDED"),
+    signedWebhook({ ...pending, next_action: "not_applicable" } as RapydCheckout["payment"], context, "PAYMENT_UPDATED"),
+    completed,
+  ];
 }

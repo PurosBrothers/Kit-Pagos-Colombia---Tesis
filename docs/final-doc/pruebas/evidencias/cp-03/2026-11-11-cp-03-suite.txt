@@ -1,0 +1,9 @@
+Suites: 1/1 · pruebas: 7/7 · fallidas: 0
+== rejection-reason.test.ts (passed)
+  [passed] a Mercado Pago card declined for cardholder OTHE Ruiz POST /v1/api/payments returns the SDK's rejectionCode and rejectionCategory
+  [passed] a Mercado Pago card declined for cardholder OTHE Ruiz GET /v1/api/payments/:id returns the same rejection reason
+  [passed] a Mercado Pago card declined for cardholder FUND Ruiz POST /v1/api/payments returns the SDK's rejectionCode and rejectionCategory
+  [passed] a Mercado Pago card declined for cardholder FUND Ruiz GET /v1/api/payments/:id returns the same rejection reason
+  [passed] a Kushki card declined with the test card 4349001210846432 POST /v1/api/payments returns DECLINED with the bank's code, not an INVALID_REQUEST
+  [passed] a Kushki card declined with the test card 4349008516656431 POST /v1/api/payments returns DECLINED with the bank's code, not an INVALID_REQUEST
+  [passed] an approved transaction has no rejectionReason

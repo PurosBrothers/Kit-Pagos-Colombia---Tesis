@@ -1,6 +1,6 @@
 {
   "name": "kit-pagos-colombia",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -30,6 +30,7 @@
     "test:sandbox": "jest --config jest.sandbox.config.js",
     "lint": "eslint .",
     "metrics": "ts-node --project scripts/tsconfig.json scripts/ck-metrics.ts",
+    "metrics:concepts": "ts-node --project scripts/tsconfig.json scripts/native-concepts.ts",
     "check:readme": "ts-node --project scripts/tsconfig.json scripts/check-readme.ts",
     "check:published": "ts-node --project scripts/tsconfig.json scripts/check-published-package.ts"
   },

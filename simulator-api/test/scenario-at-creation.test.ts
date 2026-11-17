@@ -306,15 +306,17 @@ const RESOURCES: Record<string, Resource> = {
     reference: MP_ORDER.external_reference,
   },
   "Kushki, card": {
-    create: async (app, scenario) =>
-      (
-        await app.inject({
-          method: "POST",
-          url: "/v1/sim/kushki/card/v1/charges",
-          headers: withScenario(scenario),
-          payload: KUSHKI_CHARGE,
-        })
-      ).json().ticketNumber,
+    create: async (app, scenario) => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/sim/kushki/card/v1/charges",
+        headers: withScenario(scenario),
+        payload: KUSHKI_CHARGE,
+      });
+
+      // El cobro rechazado llega en el `400`, con el identificador en `details` (punto 122).
+      return response.statusCode === 400 ? response.json().details.transactionId : response.json().ticketNumber;
+    },
     queryStatus: async (app, id) => {
       const { details } = (
         await app.inject({ method: "GET", url: `/v1/sim/kushki/charges/${id}` })

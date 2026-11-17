@@ -1,0 +1,80 @@
+\section{Monitoreo y Control del Proyecto}
+
+El presente numeral describe los mecanismos que el equipo de desarrollo del Kit Pagos Colombia usó para conocer el estado del proyecto, detectar desviaciones respecto a lo planeado y corregirlas. Los procesos aquí descritos son transversales a todas las fases del ciclo de vida DSR. Donde la versión 1.0 de este plan preveía un proceso que no se siguió, se indica y se describe lo que se hizo en su lugar.
+
+\subsection{Administración de Requerimientos}
+
+El propósito de este proceso es garantizar que cualquier cambio en los requerimientos del producto sea detectado, evaluado, trazado y controlado de forma sistemática, de modo que el equipo y el director del proyecto conozcan en todo momento el estado de los requerimientos y las implicaciones de cualquier modificación sobre el alcance, el cronograma y los entregables.
+
+\subsubsection{Artefactos del proceso}
+
+Los artefactos que se producen y mantienen como resultado de la administración de requerimientos son los siguientes.
+
+El primero es el Documento de Especificación de Requerimientos de Software (SRS), que constituye la línea base de requerimientos del proyecto. Recoge los requerimientos funcionales organizados por componente, las historias de usuario con sus criterios de aceptación y los requerimientos no funcionales bajo la clasificación FURPS+. La versión 1.0 es de mayo de 2026; desde octubre, el SRS está en LaTeX en \texttt{docs/final-doc/srs/} y es un ítem de configuración (sección 7.3).
+
+El segundo es la Matriz de Trazabilidad de Requerimientos (el Excel anexo del SRS, \path{docs/final-doc/srs/anexos/matriz-trazabilidad.xlsx}), que vincula cada requerimiento con los componentes que lo implementan, las pruebas que lo verifican, su issue y su pull request. Permite detectar requerimientos huérfanos, componentes sin cobertura de prueba y el impacto de un cambio sobre el resto del sistema. La versión 1.0 la ubicaba en Google Spreadsheets; es un archivo del repositorio, y cada pull request que implementa, modifica o cierra un requerimiento actualiza su fila, como fija este plan.
+
+El tercero es el registro de cambios. El plan original lo ubicaba en Notion, que no se usó. Cada solicitud de cambio es un issue de GitHub, con su discusión y el pull request que la materializa, y las decisiones técnicas que cambian el diseño quedan en el registro de arquitectura (SAD, sección 13).
+
+\subsubsection{Proceso de administración de requerimientos}
+
+El proceso opera bajo las siguientes reglas. Cualquier integrante del equipo o el director puede proponer una modificación a los requerimientos. La propuesta se abre como un issue, con la descripción del cambio, su justificación y su impacto sobre el cronograma y los entregables, y se discute en el grupo del equipo o en la reunión semanal. Un cambio aprobado se implementa en un pull request que actualiza la Matriz de Trazabilidad, y el registro de arquitectura guarda la decisión cuando cambia el diseño.
+
+La versión 1.0 exigía además que ningún cambio entrara a la rama principal sin el SRS actualizado. Eso no se cumplió durante el desarrollo: el SRS pasó de la versión 1.0 de mayo a la 2.0 solo en octubre de 2026, cuando se reescribieron los requerimientos para reflejar el framework construido. Entre tanto, la matriz de trazabilidad y el registro de arquitectura fueron los que siguieron cada cambio.
+
+La Figura~\ref{fig:bpmn-requerimientos} presenta el diagrama BPMN del proceso de administración de requerimientos, con los roles participantes, los puntos de decisión y los artefactos que se crean o refinan en cada paso. Es el diagrama del plan original: donde dice Notion, el registro está en los issues y en el registro de arquitectura.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth,height=0.93\textheight,keepaspectratio]{figuras/05-bpmn-requerimientos}
+  \caption{Diagrama BPMN administración de requerimientos}
+  \label{fig:bpmn-requerimientos}
+\end{figure}
+
+\subsection{Monitoreo y Control de Progreso}
+
+El propósito de este proceso es proveer al equipo y al director del proyecto de información objetiva sobre el avance real del proyecto frente al plan establecido, y definir las acciones correctivas cuando el progreso no es el esperado.
+
+\subsubsection{Unidades de medición del progreso}
+
+El progreso del proyecto se mide a través de las siguientes métricas.
+
+La completitud del backlog es la proporción de issues cerrados en el hito de la semana o de la fase en curso. Cada iteración tiene un hito por semana en GitHub. Un ítem se considera completado cuando su pull request se integra a \texttt{devops} y el issue se cierra con un comentario que explica la solución y enlaza el cambio. Como \texttt{devops} no es la rama por omisión, GitHub no cierra los issues solo y el cierre es manual, como fija este plan.
+
+El estado de los hitos del ciclo de vida es una métrica binaria que indica si cada uno de los seis hitos definidos en la sección 3.1.3 se alcanzó o no en la fecha comprometida. La Tabla~\ref{tab:hitos-reales} compara las fechas planeadas y las reales.
+
+La cobertura de pruebas se expresa como el porcentaje de ramas, funciones, líneas y sentencias cubiertas por pruebas automatizadas, medido sobre todo el SDK y sobre todo el simulador, no solo sobre el núcleo. El umbral mínimo es del 80\% (\texttt{coverageThreshold} de \texttt{sdk/jest.config.js} y \texttt{simulator-api/jest.config.js}), conforme al Plan de Aceptación (sección 3.3.1), y la integración continua lo verifica en cada pull request.
+
+La versión 1.0 medía también el tiempo de respuesta de la API de simulación, con un máximo de 500~ms. Ese tiempo no se midió, y el SRS v2.0 quitó el requisito; tampoco se usa aquí.
+
+Los defectos se registran como issues de GitHub con la etiqueta \texttt{bug}, y los que detienen el trabajo llevan además \texttt{bloqueante} o \texttt{urgente}. El plan original los clasificaba por componente y por severidad (bloqueante, mayor y menor); esa clasificación no se usó.
+
+\subsubsection{Actividades de reporte de progreso}
+
+El equipo se reunió con el director los lunes de 2 a 3 p.~m., por Microsoft Teams, y se coordinó a diario por un grupo de WhatsApp. En esas reuniones se mostró el avance del código, y los documentos se entregaron por versiones, que se ajustaron con la retroalimentación recibida. La versión 1.0 preveía, además, reuniones del equipo los lunes a las 10 a.~m. y los jueves a las 3 p.~m., un reporte quincenal al director, una demostración interna al cierre de cada iteración y un reporte consolidado al cerrar cada fase. Según el equipo, ninguna de esas actividades se hizo; en su lugar, cada cambio se verificó en su pull request.
+
+Un requerimiento se considera implementado cuando se cumplen simultáneamente las cinco condiciones de la definición de terminado (sección 7.5). El pull request asociado fue aprobado por al menos un integrante distinto al autor, y las pruebas automatizadas pasan en la integración continua con cobertura igual o superior al 80\%. El issue está cerrado. Las clases modificadas cumplen WMC $\le 20$, CBO $\le 5$, RFC $\le 20$ y MAX\_CC $\le 10$. Por último, la Matriz de Trazabilidad refleja el requerimiento como implementado.
+
+\subsubsection{Acciones correctivas}
+
+Las métricas de progreso se describen con su umbral y su responsable en la sección 7.4. Las acciones correctivas que se aplicaron son las siguientes.
+
+Cuando un valor de WMC, CBO, RFC o MAX\_CC supera su umbral, la integración continua rechaza el pull request: \texttt{npm run metrics} corre en modo guarda y termina con error (\texttt{sdk/scripts/ck-metrics.ts}). El autor corrige la violación en el código o, si la métrica mide algo que no es un problema de diseño, la registra como excepción documentada con su justificación (sección 7.4).
+
+Cuando la cobertura baja del 80\% en el SDK o en el simulador, Jest falla y el pull request no pasa la integración continua. El autor agrega las pruebas faltantes antes de pedir una nueva revisión.
+
+Cuando una iteración no cerró en su fecha, sus issues pendientes siguieron en el mismo hito y el cronograma se comprimió para no mover la entrega. Este plan redujo la Fase 5 de tres a dos semanas y la Fase 6 de dos a una, con dos semanas de colchón antes del 9 de noviembre. La Iteración 3 cerró 15 issues después del 5 de octubre, su fecha planeada; el último, el 9 de noviembre de 2026.
+
+La versión 1.0 preveía también reuniones extraordinarias cuando la completitud semanal bajara del 60\% y planes de recuperación presentados en la reunión quincenal. No se aplicaron: la completitud semanal no se registró como cifra.
+
+\subsection{Cierre del Proyecto}
+
+El propósito de esta sección es describir las acciones necesarias para cerrar cada fase del proyecto antes de cada entrega, así como las acciones de cierre final.
+
+\subsubsection{Cierre de fase}
+
+Una fase o iteración se cierra cuando su hito de GitHub no tiene issues abiertos. La versión 1.0 preveía un post-mortem de cada fase con sus resultados en Notion y un reporte gerencial por fase; según el equipo, no se hicieron. Los artefactos de cada fase quedan en el repositorio: el código y los documentos técnicos en GitHub, y los entregables académicos en LaTeX en \texttt{docs/final-doc/}, no en Google Drive.
+
+\subsubsection{Cierre final del proyecto}
+
+Al término del proyecto, el equipo publica el repositorio público del framework con su documentación y entrega el documento de trabajo de grado en su versión final al director y a la facultad, según los procedimientos académicos vigentes. Todos los artefactos quedan archivados en el repositorio, con acceso para el director y los evaluadores académicos.

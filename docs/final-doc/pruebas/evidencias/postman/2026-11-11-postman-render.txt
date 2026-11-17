@@ -1,0 +1,238 @@
+Colección de Postman contra Render, ambiente simulator. 2026-11-11 21:21:23 -0500 (hora de Colombia).
+Commit c7836d3e. Newman con --ignore-redirects y --timeout-request 120000.
+Destino: https://kit-pagos-colombia.onrender.com
+Secretos usados (sin valores): API_AUTH_TOKEN del archivo, WOMPI_INTEGRITY_SECRET del archivo, RAPYD_API_SECRET_KEY del archivo
+Peticiones que corren: 40. Las de /v1/api llevan x-kit-pagos-environment: simulator.
+Peticiones excluidas: 2
+  06. Webhooks > POST /v1/sim/webhooks/trigger: el disparador entrega el webhook al destino que tenga configurado Render
+  06. Webhooks > POST /v1/api/webhooks/:gateway: el disparador entrega el webhook al destino que tenga configurado Render
+Código de salida de Newman: 0.
+
+npm warn deprecated har-validator@5.1.5: this library is no longer supported
+npm warn deprecated uuid@3.4.0: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+npm warn deprecated uuid@8.3.2: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+npm warn deprecated @faker-js/faker@5.5.3: Please update to a newer version.
+(node:44058) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+newman
+
+Kit Pagos Colombia - Simulator API
+
+❏ 00. Diagnóstico
+↳ GET /health
+  GET https://kit-pagos-colombia.onrender.com/health [200 OK, 374B, 22.3s]
+  ✓  GET /health: responde 2xx
+
+❏ 01. Capa REST Kit Pagos (/v1/api)
+↳ GET /v1/api/gateways
+  GET https://kit-pagos-colombia.onrender.com/v1/api/gateways [200 OK, 614B, 165ms]
+  ✓  GET /v1/api/gateways: responde 2xx
+  ✓  GET /v1/api/gateways: dice cómo recibe la tarjeta cada pasarela (punto 106)
+
+↳ POST /v1/api/payments
+  POST https://kit-pagos-colombia.onrender.com/v1/api/payments [201 Created, 797B, 1227ms]
+  ✓  POST /v1/api/payments: responde 2xx
+
+↳ GET /v1/api/payments/:id
+  GET https://kit-pagos-colombia.onrender.com/v1/api/payments/0d4b8df8-cea4-43c9-88a1-a78c1b91bdde?gateway=wompi [200 OK, 718B, 145ms]
+  ✓  GET /v1/api/payments/:id: responde 2xx
+
+↳ GET /v1/api/pse-banks
+  GET https://kit-pagos-colombia.onrender.com/v1/api/pse-banks?gateway=wompi [200 OK, 616B, 144ms]
+  ✓  GET /v1/api/pse-banks: responde 2xx
+
+❏ 02. Simulador Wompi (/v1/sim/wompi)
+↳ GET /v1/sim/wompi/merchants/:publicKey
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/wompi/merchants/pub_test_wompi_key [200 OK, 541B, 114ms]
+  ✓  GET /v1/sim/wompi/merchants/:publicKey: responde 2xx
+
+↳ GET /v1/sim/wompi/terms
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/wompi/terms [200 OK, 779B, 106ms]
+  ✓  GET /v1/sim/wompi/terms: responde 2xx
+
+↳ GET /v1/sim/wompi/pse/financial_institutions
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/wompi/pse/financial_institutions [200 OK, 640B, 113ms]
+  ✓  GET /v1/sim/wompi/pse/financial_institutions: responde 2xx
+
+↳ GET /v1/sim/wompi/pse/redirect
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/wompi/pse/redirect [200 OK, 839B, 122ms]
+  ✓  GET /v1/sim/wompi/pse/redirect: responde 2xx
+
+↳ POST /v1/sim/wompi/tokens/cards
+  POST https://kit-pagos-colombia.onrender.com/v1/sim/wompi/tokens/cards [201 Created, 723B, 286ms]
+  ✓  POST /v1/sim/wompi/tokens/cards: responde 2xx
+
+↳ POST /v1/sim/wompi/transactions
+  ┌
+  │ `Using "CryptoJS" is deprecated. Use "require('crypto-
+  │ js')" instead.`
+  └
+  POST https://kit-pagos-colombia.onrender.com/v1/sim/wompi/transactions [201 Created, 648B, 191ms]
+  ✓  POST /v1/sim/wompi/transactions: responde 2xx
+
+↳ GET /v1/sim/wompi/transactions/:id
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/wompi/transactions/eccb83a1-fffb-43be-a027-16c0f6ed15e1 [200 OK, 644B, 109ms]
+  ✓  GET /v1/sim/wompi/transactions/:id: responde 2xx
+
+❏ 03. Simulador Mercado Pago (/v1/sim/mercadopago)
+↳ GET /v1/sim/mercadopago/payment_methods
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/payment_methods [200 OK, 818B, 108ms]
+  ✓  GET /v1/sim/mercadopago/payment_methods: responde 2xx
+
+↳ POST /v1/sim/mercadopago/card_tokens
+  POST https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/card_tokens?public_key=APP_USR_PUBLIC_KEY [201 Created, 902B, 116ms]
+  ✓  POST /v1/sim/mercadopago/card_tokens: responde 2xx
+
+↳ POST /v1/sim/mercadopago/payments
+  POST https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/payments [201 Created, 691B, 124ms]
+  ✓  POST /v1/sim/mercadopago/payments: responde 2xx
+
+↳ GET /v1/sim/mercadopago/payments/:id
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/payments/7626105935 [200 OK, 686B, 106ms]
+  ✓  GET /v1/sim/mercadopago/payments/:id: responde 2xx
+
+↳ GET /v1/sim/mercadopago/card_tokens/:id
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/card_tokens/tok_sim_mp_ndmlm39xec [200 OK, 816B, 112ms]
+  ✓  GET /v1/sim/mercadopago/card_tokens/:id: responde 2xx
+  ✓  GET /v1/sim/mercadopago/card_tokens/:id: devuelve el BIN de la tarjeta tokenizada
+
+↳ GET /v1/sim/mercadopago/payment_methods/search
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/payment_methods/search?public_key=APP_USR_PUBLIC_KEY&bins=424242 [200 OK, 494B, 111ms]
+  ✓  GET /v1/sim/mercadopago/payment_methods/search: responde 2xx
+  ✓  GET /v1/sim/mercadopago/payment_methods/search: resuelve la marca y el tipo del BIN
+
+↳ POST /v1/sim/mercadopago/orders (tarjeta, APRO)
+  POST https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/orders [201 Created, 1.16kB, 124ms]
+  ✓  POST /v1/sim/mercadopago/orders (tarjeta, APRO): responde 2xx
+  ✓  POST /v1/sim/mercadopago/orders (tarjeta, APRO): crea la orden aprobada
+
+↳ POST /v1/sim/mercadopago/card_tokens (titular OTHE)
+  POST https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/card_tokens?public_key=APP_USR_PUBLIC_KEY [201 Created, 902B, 110ms]
+  ✓  POST /v1/sim/mercadopago/card_tokens (titular OTHE): responde 2xx
+
+↳ POST /v1/sim/mercadopago/orders (tarjeta, OTHE)
+  POST https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/orders [402 Payment Required, 1.3kB, 140ms]
+  ✓  POST /v1/sim/mercadopago/orders (tarjeta, OTHE): responde 402 con la orden rechazada
+
+↳ POST /v1/sim/mercadopago/orders
+  POST https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/orders [201 Created, 1.06kB, 109ms]
+  ✓  POST /v1/sim/mercadopago/orders: responde 2xx
+
+↳ GET /v1/sim/mercadopago/orders/:id
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/orders/ORD012Z4ZHVZ5O0 [200 OK, 929B, 183ms]
+  ✓  GET /v1/sim/mercadopago/orders/:id: responde 2xx
+
+↳ GET /v1/sim/mercadopago/payments/:paymentId/bank_transfer
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/mercadopago/payments/857106526764/bank_transfer [200 OK, 846B, 112ms]
+  ✓  GET /v1/sim/mercadopago/payments/:paymentId/bank_transfer: responde 2xx
+
+❏ 04. Simulador Rapyd (/v1/sim/rapyd)
+↳ GET /v1/sim/rapyd/payment_methods/country
+  ┌
+  │ `Using "CryptoJS" is deprecated. Use "require('crypto-
+  │ js')" instead.`
+  └
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/rapyd/payment_methods/country?country=CO&currency=COP [200 OK, 1.21kB, 109ms]
+  ✓  GET /v1/sim/rapyd/payment_methods/country: responde 2xx
+
+↳ POST /v1/sim/rapyd/customers
+  ┌
+  │ `Using "CryptoJS" is deprecated. Use "require('crypto-
+  │ js')" instead.`
+  └
+  POST https://kit-pagos-colombia.onrender.com/v1/sim/rapyd/customers [200 OK, 638B, 151ms]
+  ✓  POST /v1/sim/rapyd/customers: responde 2xx
+
+↳ POST /v1/sim/rapyd/payments
+  ┌
+  │ `Using "CryptoJS" is deprecated. Use "require('crypto-
+  │ js')" instead.`
+  └
+  POST https://kit-pagos-colombia.onrender.com/v1/sim/rapyd/payments [201 Created, 979B, 290ms]
+  ✓  POST /v1/sim/rapyd/payments: responde 2xx
+
+↳ GET /v1/sim/rapyd/payments/:paymentId
+  ┌
+  │ `Using "CryptoJS" is deprecated. Use "require('crypto-
+  │ js')" instead.`
+  └
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/rapyd/payments/payment_285cd768f4ae3594a76f6c05334cbf8d [200 OK, 941B, 190ms]
+  ✓  GET /v1/sim/rapyd/payments/:paymentId: responde 2xx
+
+↳ GET /v1/sim/rapyd/complete-bank-payment
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/rapyd/complete-bank-payment?token=payment_285cd768f4ae3594a76f6c05334cbf8d [200 OK, 839B, 109ms]
+  ✓  GET /v1/sim/rapyd/complete-bank-payment: responde 2xx
+
+↳ POST /v1/sim/rapyd/checkout
+  ┌
+  │ `Using "CryptoJS" is deprecated. Use "require('crypto-
+  │ js')" instead.`
+  └
+  POST https://kit-pagos-colombia.onrender.com/v1/sim/rapyd/checkout [200 OK, 811B, 109ms]
+  ✓  POST /v1/sim/rapyd/checkout: responde 2xx
+
+↳ GET /v1/sim/rapyd/checkout/:checkoutId
+  ┌
+  │ `Using "CryptoJS" is deprecated. Use "require('crypto-
+  │ js')" instead.`
+  └
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/rapyd/checkout/checkout_b968b1c386cb6d6b0168546ef074806a [200 OK, 779B, 116ms]
+  ✓  GET /v1/sim/rapyd/checkout/:checkoutId: responde 2xx
+
+↳ GET /v1/sim/rapyd/checkout/:checkoutId/pay
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/rapyd/checkout/checkout_b968b1c386cb6d6b0168546ef074806a/pay [200 OK, 797B, 116ms]
+  ✓  GET /v1/sim/rapyd/checkout/:checkoutId/pay: responde 2xx
+
+❏ 05. Simulador Kushki (/v1/sim/kushki)
+↳ GET /v1/sim/kushki/transfer/v1/bankList
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/kushki/transfer/v1/bankList [200 OK, 567B, 108ms]
+  ✓  GET /v1/sim/kushki/transfer/v1/bankList: responde 2xx
+
+↳ POST /v1/sim/kushki/transfer/v1/tokens
+  POST https://kit-pagos-colombia.onrender.com/v1/sim/kushki/transfer/v1/tokens [201 Created, 408B, 119ms]
+  ✓  POST /v1/sim/kushki/transfer/v1/tokens: responde 2xx
+
+↳ POST /v1/sim/kushki/transfer/v1/init
+  POST https://kit-pagos-colombia.onrender.com/v1/sim/kushki/transfer/v1/init [201 Created, 624B, 138ms]
+  ✓  POST /v1/sim/kushki/transfer/v1/init: responde 2xx
+
+↳ GET /v1/sim/kushki/transfer/v1/status/:token
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/kushki/transfer/v1/status/d6504239a65d40d9b2ddb75e7dadcadc [200 OK, 873B, 104ms]
+  ✓  GET /v1/sim/kushki/transfer/v1/status/:token: responde 2xx
+
+↳ GET /v1/sim/kushki/transfer/v1/agent
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/kushki/transfer/v1/agent?token=d6504239a65d40d9b2ddb75e7dadcadc [200 OK, 895B, 106ms]
+  ✓  GET /v1/sim/kushki/transfer/v1/agent: responde 2xx
+
+↳ POST /v1/sim/kushki/card/v1/tokens
+  POST https://kit-pagos-colombia.onrender.com/v1/sim/kushki/card/v1/tokens [201 Created, 440B, 120ms]
+  ✓  POST /v1/sim/kushki/card/v1/tokens: responde 2xx
+  ✓  POST /v1/sim/kushki/card/v1/tokens: emite un token de 32 hexadecimales, como UAT
+
+↳ POST /v1/sim/kushki/card/v1/charges
+  POST https://kit-pagos-colombia.onrender.com/v1/sim/kushki/card/v1/charges [201 Created, 664B, 103ms]
+  ✓  POST /v1/sim/kushki/card/v1/charges: responde 2xx
+
+↳ GET /v1/sim/kushki/charges/:ticketNumber
+  GET https://kit-pagos-colombia.onrender.com/v1/sim/kushki/charges/45330f58ab954509a2 [200 OK, 659B, 123ms]
+  ✓  GET /v1/sim/kushki/charges/:ticketNumber: responde 2xx
+
+┌─────────────────────────┬────────────────────┬────────────────────┐
+│                         │           executed │             failed │
+├─────────────────────────┼────────────────────┼────────────────────┤
+│              iterations │                  1 │                  0 │
+├─────────────────────────┼────────────────────┼────────────────────┤
+│                requests │                 40 │                  0 │
+├─────────────────────────┼────────────────────┼────────────────────┤
+│            test-scripts │                 59 │                  0 │
+├─────────────────────────┼────────────────────┼────────────────────┤
+│      prerequest-scripts │                 10 │                  0 │
+├─────────────────────────┼────────────────────┼────────────────────┤
+│              assertions │                 45 │                  0 │
+├─────────────────────────┴────────────────────┴────────────────────┤
+│ total run duration: 29.3s                                         │
+├───────────────────────────────────────────────────────────────────┤
+│ total data received: 15.77kB (approx)                             │
+├───────────────────────────────────────────────────────────────────┤
+│ average response time: 715ms [min: 103ms, max: 22.3s, s.d.: 3.4s] │
+└───────────────────────────────────────────────────────────────────┘

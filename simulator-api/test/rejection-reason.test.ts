@@ -106,6 +106,49 @@ describe.each([
   });
 });
 
+async function kushkiCardToken(number: string): Promise<string> {
+  const tokenized = await app.inject({
+    method: "POST",
+    url: "/v1/sim/kushki/card/v1/tokens",
+    headers: { "public-merchant-id": SERVER_CREDENTIALS.KUSHKI_PUBLIC_MERCHANT_ID },
+    payload: {
+      card: { name: "Laura Martinez", number, cvv: "123", expiryMonth: "11", expiryYear: "30" },
+      totalAmount: 50000,
+      currency: "COP",
+    },
+  });
+  return tokenized.json().token;
+}
+
+/*
+ * La tarjeta decide el rechazo en el simulador, como en el UAT de Kushki, que lo responde con
+ * un `400` y el código en `details` (medido el 24 de octubre de 2026, punto 122). Con el SDK
+ * 0.6.0 ese `400` salía como `INVALID_REQUEST`; desde la 0.7.0-rc.2 es un rechazo.
+ */
+describe.each([
+  ["4349001210846432", "021", "INSUFFICIENT_FUNDS"],
+  ["4349008516656431", "019", "UNKNOWN"],
+])("a Kushki card declined with the test card %s", (number, rejectionCode, rejectionCategory) => {
+  it("POST /v1/api/payments returns DECLINED with the bank's code, not an INVALID_REQUEST", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/api/payments",
+      payload: {
+        gateway: "kushki",
+        amount: "50000.00",
+        currency: "COP",
+        orderReference: `KUSHKI-REJECTION-${Date.now()}-${++sequence}`,
+        payer: { email: "comprador@example.com", fullName: "Laura Martinez" },
+        paymentMethod: { type: "CARD", token: await kushkiCardToken(number), installments: 1 },
+      },
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(created.json().transaction.status).toBe("DECLINED");
+    expect(created.json().transaction.rejectionReason).toEqual({ rejectionCode, rejectionCategory });
+  });
+});
+
 it("an approved transaction has no rejectionReason", async () => {
   const created = await chargeMercadoPagoCard(await mercadoPagoCardToken("APRO Ruiz"));
 

@@ -1,0 +1,125 @@
+@startuml 07-bpmn-documentacion
+skinparam backgroundColor white
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 10
+skinparam titleFontSize 11
+skinparam ArrowFontSize 10
+skinparam NoteFontSize 10
+skinparam legendFontSize 10
+skinparam swimlaneTitleFontSize 10
+skinparam wrapWidth 120
+skinparam padding 2
+skinparam ArrowColor #333333
+skinparam activity {
+  BackgroundColor #FFF2CC
+  BorderColor #B7950B
+  DiamondBackgroundColor #FFF2CC
+  DiamondBorderColor #B7950B
+  StartColor #2E7D32
+  EndColor #C62828
+}
+skinparam note {
+  BackgroundColor #F7F7F7
+  BorderColor #8A8A8A
+}
+skinparam swimlane {
+  BorderColor #5B7BA6
+  TitleFontColor #1F3A6E
+  TitleFontStyle bold
+}
+skinparam legend {
+  BackgroundColor white
+  BorderColor #1F3A6E
+}
+
+title <b>7.3 ADMINISTRACIÓN DE CONFIGURACIÓN Y DOCUMENTACIÓN</b>\n<b>Proceso: Control de cambios a los ítems de configuración</b>
+
+|Solicitante\n(Equipo)|
+start
+-> Necesidad\nde cambio\nidentificada;
+:<&person> Crear solicitud de cambio (SC); <<#DCE8F7>>
+note right: <&file> Solicitud\nde cambio
+:Justificar y describir impacto del cambio; <<#DCE8F7>>
+|Coordinador de\nConfiguración|
+split
+  -[hidden]->
+  :<&document> Registrar y clasificar la solicitud de cambio;
+  note left: <&hard-drive> Registro de\nsolicitudes de\ncambio
+split again
+end split
+:<&plus> Revisar ítem de configuración afectado e impacto preliminar;
+note right: <&hard-drive> Base de ítems\nde configuración
+if (¿El cambio es\nmayor o crítico?) then (No)
+  :Aprobar cambio\nmenor;
+  :<&person> Comunicar\ndecisión;
+  -> Cambio\naprobado\n(menor);
+  stop
+else (Sí)
+endif
+:<&person> Convocar al CCB y enviar información;
+|CCB\n(Comité de Control\nde Cambios)|
+split
+split again
+  -[hidden]->
+  :<&person> Evaluar solicitud de cambio (alcance, calidad, cronograma, arquitectura, métricas);
+  if (¿Se aprueba\nel cambio?) then (No)
+  else (Sí)
+    (S)
+    detach
+  endif
+end split
+:<&person> Comunicar\nrechazo;
+-> Cambio\nrechazado;
+stop
+(S)
+split
+  :Aprobar cambio\ny definir plan;
+split again
+  -[hidden]->
+  (B)
+end split
+:<&person> Comunicar\naprobación;
+-[hidden]->
+|Responsable de\nImplementación|
+repeat :<&person> Planificar e implementar el cambio;
+  :<&plus> Actualizar ítems de configuración;
+  note left: <&hard-drive> Base de ítems\nde configuración
+  :<&document> Actualizar documentación asociada;
+  note right: <&file> Documentación\ndel proyecto
+  split
+    -> ;
+    (B)
+    detach
+  split again
+    :<&person> Registrar cambio implementado;
+    :<&person> Notificar cambio implementado;
+    split
+      -> Cambio\nimplementado;
+      stop
+    split again
+      (C)
+      detach
+    end split
+  split again
+    -[hidden]->
+    |Equipo de\nAseguramiento\nde Calidad|
+    :<&document> Verificar cambio implementado;
+  end split
+backward :Reportar incidencia y reabrir cambio;
+note right: - - > <&hard-drive> Registro de\nsolicitudes de cambio
+repeat while (¿Cambio\nverificado?) is (No) not (Sí)
+split
+split again
+  -[hidden]->
+  (C)
+end split
+:Cerrar solicitud\nde cambio;
+-> Cambio\ncerrado;
+stop
+
+legend bottom left
+  <&person> Tarea de Usuario   <&document> Tarea Manual   <&plus> Subproceso   Caja azul: tarea del Solicitante
+  Rombo: Exclusiva (XOR)   <&file> Objeto de Datos   <&hard-drive> Almacén de Datos
+  Flecha continua: Flujo de Secuencia   (B), (C), (S): conectores de la misma flecha
+endlegend
+@enduml

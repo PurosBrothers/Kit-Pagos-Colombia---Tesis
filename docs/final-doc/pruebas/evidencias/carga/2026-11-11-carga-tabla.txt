@@ -1,0 +1,15 @@
+Carga aislada, 2026-11-11: commit 07e542e, Node.js v22.23.4, Apple M4 (10 núcleos), autocannon 8.0.0.
+Válida: True. Completa: True. Bloqueos del guardián durante la carga: 0. Corridas: 30.
+Mediana de las tres repeticiones (entre paréntesis, el mínimo y el máximo). Latencias propias, en ms, sobre la duración de cada respuesta.
+
+escenario	conexiones	pet/s	p50	p95	p99	errores+no2xx	bucle p99 ms	RSS máx MB
+E1 GET /health	10	18477 (17777–19763)	0.45	0.83 (0.78–1.02)	1.35 (1.23–1.68)	0	14.7	254
+E1 GET /health	50	12687 (11122–18605)	2.65	8.11 (5.30–9.45)	13.18 (8.26–17.71)	0	22.3	204
+E2 GET /v1/api/gateways	10	18017 (16388–18260)	0.51	0.75 (0.73–1.04)	1.18 (1.06–1.58)	0	10.4	198
+E2 GET /v1/api/gateways	50	17484 (17299–17899)	2.70	3.57 (3.44–3.60)	4.70 (4.40–6.08)	0	11.6	206
+E3 GET /v1/api/pse-banks?gateway=wompi	10	3992 (3570–4151)	2.09	4.61 (4.59–5.16)	7.58 (6.74–7.70)	0	13.9	416
+E3 GET /v1/api/pse-banks?gateway=wompi	50	3769 (3473–3900)	11.63	22.97 (22.70–25.21)	33.23 (32.26–44.63)	0	18.6	418
+E4 GET /v1/api/payments/:id?gateway=wompi	10	4487 (3835–5670)	1.55	4.84 (3.17–4.94)	8.28 (5.00–11.67)	0	17.5	391
+E4 GET /v1/api/payments/:id?gateway=wompi	50	5772 (5655–5932)	7.84	10.79 (10.12–11.47)	20.01 (14.63–22.00)	0	14.6	404
+E5 POST /v1/api/payments	10	2660 (2261–2701)	3.28	5.77 (5.68–7.62)	7.38 (7.30–18.09)	0	12.7	523
+E5 POST /v1/api/payments	50	2371 (2348–2399)	19.87	26.91 (26.38–28.45)	46.12 (43.57–54.95)	0	17.4	524
