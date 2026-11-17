@@ -109,7 +109,7 @@ Los montos se representan como cadenas de texto con hasta dos decimales exactos,
 
 \subsection{Tecnologías y herramientas}
 
-La Tabla~\ref{tab:tecnologias-memoria} resume las tecnologías y su justificación. La elección buscó que el SDK, el simulador y los prototipos compartieran un solo lenguaje y un solo conjunto de herramientas, y que la evaluación se pudiera repetir. Dos decisiones no son obvias: Jest en el SDK y Vitest en el prototipo C, porque cada proyecto ya tenía su suite; y \texttt{ts-morph} para las métricas CK, porque lee el árbol sintáctico de TypeScript en lugar de contar líneas. El paquete se publica en npm como \texttt{kit-pagos-colombia}; la versión evaluada es la 0.7.0-rc.2, publicada con la etiqueta \texttt{next} (Kit Pagos Colombia, 2026).
+La Tabla~\ref{tab:tecnologias-memoria} resume las tecnologías y su justificación. La elección buscó que el SDK, el simulador y los prototipos compartieran un solo lenguaje y un solo conjunto de herramientas, y que la evaluación se pudiera repetir. Dos decisiones no son obvias: Jest en el SDK y Vitest en el prototipo C, porque cada proyecto ya tenía su suite; y \texttt{ts-morph} para las métricas CK, porque lee el árbol sintáctico de TypeScript en lugar de contar líneas. El paquete se publica en npm como \texttt{kit-pagos-colombia}. La versión evaluada es la 0.7.0-rc.2, publicada con la etiqueta \texttt{next} (Kit Pagos Colombia, 2026). Esta versión equivale a la 1.0.0, que es la versión estable publicada en npm. La numeración de prerelease se usó porque los prototipos necesitaban instalar el paquete desde npm con los cambios del desarrollo actual antes de integrarlos en \texttt{main}.
 
 \begin{table}[H]
   \centering
