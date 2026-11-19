@@ -5,7 +5,7 @@ Este capítulo expone las decisiones arquitectónicas de Kit Pagos Colombia y mu
 
 \subsection{Criterios y decisiones de diseño}
 
-El diseño partió de seis requisitos arquitectónicamente significativos (ASR, \textit{Architecturally Significant Requirements}) de prioridad alta: extensibilidad ante nuevas pasarelas, normalización uniforme de respuestas, verificación criptográfica de webhooks, protección de credenciales, reproducción determinista de escenarios de prueba y recuperación ante fallos de red transitorios. La Tabla~\ref{tab:asr-memoria} relaciona cada atributo de calidad con la decisión arquitectónica adoptada y su escenario de verificación. Cada decisión relevante quedó documentada como un registro de decisión de arquitectura (ADR, \textit{Architecture Decision Record}).
+El diseño partió de los requisitos arquitectónicamente significativos (ASR) de prioridad alta definidos en el SAD. La Tabla~\ref{tab:asr-memoria} relaciona cada atributo de calidad con la decisión arquitectónica adoptada y su escenario de verificación.
 
 \begin{table}[H]
   \centering
@@ -25,7 +25,7 @@ El diseño partió de seis requisitos arquitectónicamente significativos (ASR, 
   \label{tab:asr-memoria}
 \end{table}
 
-La descomposición del sistema siguió tres principios de diseño. El primero es la inversión de dependencias (Martin, 2017): el modelo de dominio no conoce detalles de HTTP ni de ningún proveedor, y son los adaptadores de infraestructura los que dependen de las abstracciones del núcleo. El segundo es la separación entre configuración y lógica de negocio, de modo que cambiar de proveedor sea una decisión de configuración. El tercero es poder probar cada pieza por separado: tanto el cliente HTTP (\texttt{fetch}) como el reloj empleado al validar la antigüedad de los webhooks pueden inyectarse en las pruebas para ejecutar toda la suite sin conexión de red. Este enfoque concuerda con el modelo de adaptadores para variaciones de pasarelas propuesto por Febrian et al. (2021) en líneas de productos de software.
+La descomposición del sistema siguió tres principios. El primero es que el modelo de dominio no conoce detalles de HTTP ni de ningún proveedor: son los adaptadores los que dependen de las abstracciones del núcleo. El segundo es la separación entre configuración y lógica de negocio, de modo que cambiar de proveedor sea una decisión de configuración. El tercero es poder probar cada pieza por separado, reemplazando las dependencias externas en las pruebas para ejecutar toda la suite sin conexión de red.
 
 \subsection{Arquitectura hexagonal y modelo de dominio}
 
@@ -36,7 +36,7 @@ El núcleo del SDK aplica la arquitectura hexagonal o de puertos y adaptadores (
     \item \textbf{Infraestructura (\texttt{infrastructure/}):} agrupa los cuatro adaptadores HTTP de pasarela, la validación de configuración (\texttt{SdkConfigurator}), la fábrica de adaptadores (\texttt{GatewayFactory}), la fachada pública (\texttt{KitPagos}) y el filtro de enmascaramiento de credenciales.
 \end{itemize}
 
-Los tres patrones GoF (Gamma et al., 1994) introducidos en el capítulo III se ven así en el código: \texttt{KitPagos} actúa como \textbf{Fachada} única ante el comercio; \texttt{GatewayFactory} opera como \textbf{Fábrica} al seleccionar e instanciar el adaptador que implementa \texttt{PaymentGatewayPort}; y cada normalizador de pasarela aplica el patrón \textbf{Estrategia} para traducir las respuestas nativas al modelo de dominio. A su vez, el dominio sigue el principio de lenguaje ubicuo del diseño guiado por el dominio (DDD, \textit{Domain-Driven Design}) de Evans (2003), asignando un identificador único en código a cada concepto del negocio (\texttt{Transaction}, \texttt{Amount}, \texttt{OrderReference}, \texttt{PseBank}, \texttt{RejectionReason}).
+Los patrones de diseño presentados en el capítulo III se reflejan así en el código: \texttt{KitPagos} actúa como \textbf{Fachada} única ante el comercio; \texttt{GatewayFactory} opera como \textbf{Fábrica} al instanciar el adaptador que implementa \texttt{PaymentGatewayPort}; y cada normalizador de pasarela aplica el patrón \textbf{Estrategia} para traducir las respuestas nativas al modelo de dominio.
 
 Las Figuras~\ref{fig:memoria-contenedores} y~\ref{fig:memoria-componentes} muestran las vistas de contenedores y de componentes del framework elaboradas bajo el modelo C4 (Brown, s.~f.).
 
@@ -98,13 +98,11 @@ La arquitectura soporta tres patrones de integración para el comercio, resumido
   \label{tab:patrones-memoria}
 \end{table}
 
-Esta combinación une el patrón Adaptador (Gamma et al., 1994) con los patrones de enrutador y normalizador de mensajes de integración empresarial (Hohpe \& Woolf, 2003). A diferencia del modelo de Hisyam y Manuaba (2022), orientado a dividir un mismo cobro entre múltiples billeteras en mercados del sudeste asiático, el diseño de Kit Pagos Colombia se enfoca en la intercambiabilidad de pasarelas y el desacoplamiento del módulo de pagos para comercios en Colombia.
-
 \subsection{Seguridad y tratamiento de errores}
 
-El diseño de seguridad evita que el servidor del comercio toque datos sensibles de tarjetas, siguiendo el estándar PCI DSS (PCI Security Standards Council, 2024) y las recomendaciones de seguridad en pasarelas de pago revisadas por Olanrewaju et al. (2017): en Wompi, Mercado Pago y Kushki el navegador envía la tarjeta directo al proveedor y entrega al servidor únicamente el token generado, mientras que en Rapyd el comprador ingresa la tarjeta en la página alojada de la pasarela. Adicionalmente, el módulo de navegador envía sus peticiones solo a los dominios oficiales de cada proveedor según el ambiente, los errores enmascaran cualquier llave o token antes de salir del SDK y los webhooks exigen validación criptográfica en tiempo constante dentro de una ventana temporal.
+El diseño de seguridad evita que el servidor del comercio toque datos sensibles de tarjetas, siguiendo el estándar PCI DSS (PCI Security Standards Council, 2024): en Wompi, Mercado Pago y Kushki el navegador envía la tarjeta directo al proveedor y entrega al servidor únicamente el token generado, mientras que en Rapyd el comprador ingresa la tarjeta en la página alojada de la pasarela. Adicionalmente, el módulo de navegador envía sus peticiones solo a los dominios oficiales de cada proveedor según el ambiente, los errores enmascaran cualquier llave o token antes de salir del SDK y los webhooks exigen validación criptográfica en tiempo constante dentro de una ventana temporal.
 
-En el manejo de errores, el diseño separa los fallos transitorios de red de los errores definitivos y de los rechazos de negocio, siguiendo los patrones de estabilidad de Nygard (2018) y la evidencia empírica sobre fallos de integración en APIs de pago de Aué et al. (2018). \texttt{RetryHandler} reintenta únicamente lecturas idempotentes (\texttt{getPaymentStatus} y \texttt{getPseBanks}) con espera exponencial, sin reintentar nunca \texttt{createPayment} para no generar cobros duplicados. Si un fallo técnico persiste, se traduce a un \texttt{KitPagosError} tipado. Por último, los montos se manejan siempre como cadenas decimales exactas sujetas a la escala de ISO~4217 para evitar las imprecisiones del formato binario IEEE~754 (International Organization for Standardization, 2015; Institute of Electrical and Electronics Engineers, 2019).
+En el manejo de errores, el diseño separa los fallos transitorios de red de los errores definitivos y de los rechazos de negocio. \texttt{RetryHandler} reintenta únicamente lecturas idempotentes (\texttt{getPaymentStatus} y \texttt{getPseBanks}) con espera exponencial, sin reintentar nunca \texttt{createPayment} para no generar cobros duplicados. Si un fallo técnico persiste, se traduce a un \texttt{KitPagosError} tipado. Por último, los montos se manejan siempre como cadenas decimales exactas sujetas a la escala de ISO~4217 para evitar las imprecisiones del formato binario IEEE~754 (International Organization for Standardization, 2015; Institute of Electrical and Electronics Engineers, 2019).
 
 \subsection{Tecnologías y herramientas}
 
