@@ -8,24 +8,24 @@ La validación de Kit Pagos Colombia se divide en dos partes. En la primera se p
 
 La verificación del sistema combinó pruebas automatizadas (unitarias, de integración y de contrato) con siete casos de prueba de aceptación (CP-01 a CP-07), en los cuales se definió de antemano el resultado esperado para cada operación (Myers et al., 2004). Los casos funcionales y las pruebas de carga se ejecutaron en la API de Simulación local para garantizar resultados reproducibles sin depender de la disponibilidad o de los filtros antifraude de los entornos externos, mientras que las pruebas de contrato se ejecutaron directamente en los sandboxes oficiales de Wompi, Mercado Pago, Kushki y Rapyd para comprobar la compatibilidad real con cada proveedor. Asimismo, en las pruebas automatizadas se midió la cobertura tanto de líneas como de ramas condicionales (Ammann \& Offutt, 2016).
 
-La Tabla~\ref{tab:casos-memoria} resume los siete casos de prueba de aceptación evaluados y el entorno utilizado en cada uno. Los siete casos finalizaron aprobados.
+La Tabla~\ref{tab:casos-memoria} consolida los siete casos de prueba de aceptación evaluados, con su identificador, título, tipo y componentes ejercitados según el Plan de Pruebas del Proyecto (PTP). Los siete casos finalizaron aprobados.
 
 \begin{table}[H]
   \centering
   \small
   \renewcommand{\arraystretch}{1.2}
-  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{1.25cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{5.2cm}|}
+  \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{1.2cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}p{2.2cm}|>{\raggedright\arraybackslash}p{4.1cm}|}
     \hline
-    \textbf{Caso} & \textbf{Qué verifica} & \textbf{Ambiente} \\ \hline
-    CP-01 & Un mismo cobro con tarjeta en las cuatro pasarelas produce igual estado normalizado, monto y referencia. & Simulador local \\ \hline
-    CP-02 & En PSE de Wompi, la creación devuelve una redirección al banco y la consulta posterior resuelve el pago aprobado. & Simulador local \\ \hline
-    CP-03 & El motivo de rechazo se entrega normalizado en Kushki y Mercado Pago sin lanzar errores técnicos. & Simulador en memoria \\ \hline
-    CP-04 & Un webhook con firma válida actualiza la orden y uno con firma alterada es rechazado. & Simulador y prototipo B \\ \hline
-    CP-05 & La tarjeta se tokeniza en el navegador y el servidor del comercio recibe únicamente el token. & Simulador, prototipo B y navegador \\ \hline
-    CP-06 & La interfaz REST \texttt{/v1/api} mantiene el mismo comportamiento del SDK de principio a fin. & Simulador local, prototipo C y Render \\ \hline
-    CP-07 & Los reintentos se aplican solo a consultas y nunca a la creación de un cobro. & Simulador y pruebas del SDK \\ \hline
+    \textbf{Id} & \textbf{Título} & \textbf{Tipo} & \textbf{Ítems ejercitados} \\ \hline
+    CP-01 & Un mismo pago de tarjeta por las cuatro pasarelas & Funcional & SDK de servidor; \texttt{/v1/sim} \\ \hline
+    CP-02 & PSE de Wompi: redirección y consulta de estado & Funcional & SDK de servidor; \texttt{/v1/sim} \\ \hline
+    CP-03 & Motivo de rechazo normalizado en Kushki y Mercado Pago & Funcional & SDK de servidor; \texttt{/v1/api}; \texttt{/v1/sim} \\ \hline
+    CP-04 & Un webhook firmado actualiza el historial de la orden & Funcional & Prototipo B; \texttt{/v1/sim} \\ \hline
+    CP-05 & Tokenización de la tarjeta en el navegador & Funcional & \texttt{KitPagosBrowser}; Prototipo B; \texttt{/v1/sim} \\ \hline
+    CP-06 & API REST \texttt{/v1/api} de extremo a extremo & Funcional & \texttt{/v1/api}; Prototipo C \\ \hline
+    CP-07 & Reintentos con retroceso exponencial & Confiabilidad & SDK de servidor; \texttt{/v1/sim} \\ \hline
   \end{tabularx}
-  \caption{Casos de prueba de sistema y aceptación}
+  \caption{Resumen de los casos de prueba}
   \label{tab:casos-memoria}
 \end{table}
 
@@ -59,13 +59,13 @@ Tanto el SDK como la API de Simulación superaron el umbral del 80~\% de cobertu
 
 La ejecución de los siete casos de aceptación permitió comprobar en la práctica los requisitos principales del sistema:
 \begin{itemize}
-    \item \textbf{CP-01 (intercambiabilidad en pagos con tarjeta):} el mismo cobro con tarjeta se envió a Wompi, Mercado Pago, Kushki y Rapyd mediante una única llamada a \texttt{kitPagos.createPayment()}, y las cuatro pasarelas devolvieron una transacción en estado \texttt{APPROVED} con el mismo monto y referencia.
-    \item \textbf{CP-02 (flujo asíncrono de PSE):} se inició un pago por PSE en Wompi a partir de un banco retornado por \texttt{getPseBanks()}, verificando la entrega inicial de la dirección de redirección en estado \texttt{PENDING} y su posterior actualización a \texttt{APPROVED} al consultar el estado.
-    \item \textbf{CP-03 (normalización de rechazos):} los pagos rechazados por el banco en Kushki y Mercado Pago se entregan como una transacción en estado \texttt{DECLINED} con su código y categoría de rechazo, sin interrumpir el flujo con excepciones técnicas.
-    \item \textbf{CP-04 (verificación de webhooks):} en el prototipo B, una notificación con firma válida actualiza el estado de la orden, un envío repetido no duplica el procesamiento y un mensaje con firma alterada se rechaza con estado HTTP \texttt{401}.
-    \item \textbf{CP-05 (tokenización en el navegador):} el número de la tarjeta y su código de seguridad (CVV, \textit{Card Verification Value}) se envían directamente desde el navegador hacia la pasarela, de modo que el servidor del comercio recibe únicamente el token resultante.
-    \item \textbf{CP-06 (consumo mediante la API REST \texttt{/v1/api}):} la creación y consulta de pagos a través de \texttt{/v1/api} funcionaron tanto en el entorno local (con Postman y el prototipo C) como en el servicio desplegado en Render.
-    \item \textbf{CP-07 (reintentos seguros):} \texttt{createPayment()} no se reintenta ante una falla de conexión (evitando cobros dobles), mientras que las consultas de estado y de bancos sí aplican los reintentos automáticos antes de reportar el error.
+    \item \textbf{CP-01 (Un mismo pago de tarjeta por las cuatro pasarelas):} el mismo cobro con tarjeta se envió a Wompi, Mercado Pago, Kushki y Rapyd mediante una única llamada a \texttt{kitPagos.createPayment()}, y las cuatro pasarelas devolvieron una transacción en estado \texttt{APPROVED} con el mismo monto y referencia.
+    \item \textbf{CP-02 (PSE de Wompi: redirección y consulta de estado):} se inició un pago por PSE en Wompi a partir de un banco retornado por \texttt{getPseBanks()}, verificando la entrega inicial de la dirección de redirección en estado \texttt{PENDING} y su posterior actualización a \texttt{APPROVED} al consultar el estado.
+    \item \textbf{CP-03 (Motivo de rechazo normalizado en Kushki y Mercado Pago):} los pagos rechazados por el banco en Kushki y Mercado Pago se entregan como una transacción en estado \texttt{DECLINED} con su código y categoría de rechazo, sin interrumpir el flujo con excepciones técnicas.
+    \item \textbf{CP-04 (Un webhook firmado actualiza el historial de la orden):} en el prototipo B, una notificación con firma válida actualiza el estado de la orden, un envío repetido no duplica el procesamiento y un mensaje con firma alterada se rechaza con estado HTTP \texttt{401}.
+    \item \textbf{CP-05 (Tokenización de la tarjeta en el navegador):} el número de la tarjeta y su código de seguridad (CVV, \textit{Card Verification Value}) se envían directamente desde el navegador hacia la pasarela, de modo que el servidor del comercio recibe únicamente el token resultante.
+    \item \textbf{CP-06 (API REST \texttt{/v1/api} de extremo a extremo):} la creación y consulta de pagos a través de \texttt{/v1/api} funcionaron tanto en el entorno local (con Postman y el prototipo C) como en el servicio desplegado en Render.
+    \item \textbf{CP-07 (Reintentos con retroceso exponencial):} \texttt{createPayment()} no se reintenta ante una falla de conexión (evitando cobros dobles), mientras que las consultas de estado y de bancos sí aplican los reintentos automáticos antes de reportar el error.
 \end{itemize}
 
 \subsection{Evaluación comparativa de la Fase 5}
