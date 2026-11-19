@@ -36,7 +36,7 @@ La fragmentación del ecosistema afecta especialmente a desarrolladores independ
 La interfaz unificada se apoya en la arquitectura hexagonal (Cockburn \& Garrido de Paz, 2024), que aísla el modelo de dominio de los detalles de protocolo mediante puertos y adaptadores. El comercio programa sus flujos de cobro, consulta y conciliación sobre un único contrato, mientras cada adaptador encapsula las reglas particulares de su pasarela. Con ello se mitigan tres riesgos frecuentes:
 \begin{itemize}
     \item \textbf{Verificación insegura de webhooks:} el SDK valida la firma criptográfica de cada proveedor y realiza la comparación en tiempo constante para prevenir ataques de temporización. Cuando la firma nativa no cubre el cuerpo del evento (como en Mercado Pago), el resultado se entrega como pendiente para que el comercio confirme el estado consultando a la pasarela.
-    \item \textbf{Errores de redondeo monetario:} dado que el tipo numérico de JavaScript sigue el punto flotante binario IEEE 754, del Instituto de Ingenieros Eléctricos y Electrónicos (IEEE; Institute of Electrical and Electronics Engineers, 2019), el SDK encapsula los montos en un objeto de valor inmutable basado en cadenas decimales exactas.
+    \item \textbf{Errores de redondeo monetario:} dado que el tipo numérico de JavaScript sigue el punto flotante binario IEEE 754, del Instituto de Ingenieros Eléctricos y Electrónicos (IEEE; Institute of Electrical and Electronics Engineers, 2019), el SDK encapsula los montos en un objeto inmutable utilizando cadenas de texto que guardan los decimales exactos.
     \item \textbf{Acoplamiento a un proveedor (\textit{vendor lock-in}):} al concentrar las diferencias de protocolo en los adaptadores, incorporar o cambiar una pasarela se reduce a un ajuste de configuración sin reescribir la lógica de negocio del comercio.
 \end{itemize}
 
@@ -51,23 +51,12 @@ Desarrollar el Kit Pagos Colombia, para simplificar la integración de múltiple
 Para alcanzar el objetivo general se formularon seis objetivos específicos (OE-01 a OE-06):
 
 \begin{itemize}
-    \item \textbf{OE-01:} \textit{Analizar las características técnicas, mecanismos de integración y consideraciones de seguridad de las principales pasarelas de pago utilizadas en el contexto colombiano.} \\
-    \textbf{Evidencia:} se caracterizaron los esquemas de autenticación, unidades monetarias, flujos de tarjeta y PSE y algoritmos de firma de Wompi, Mercado Pago, Kushki y Rapyd. El capítulo III sintetiza esta caracterización y el capítulo VI expone los hallazgos empíricos medidos en sus sandboxes.
-
-    \item \textbf{OE-02:} \textit{Diseñar la arquitectura de un framework de integración que permita unificar la interacción con múltiples pasarelas de pago, aplicando patrones de diseño y principios de extensibilidad.} \\
-    \textbf{Evidencia:} se diseñó una arquitectura hexagonal en la que el dominio permanece desacoplado de los proveedores externos a través de un puerto común y un adaptador por pasarela, combinando los patrones GoF (\textit{Gang of Four}) de Fachada, Fábrica y Estrategia (Gamma et al., 1994). El capítulo V desarrolla este diseño y sus vistas C4.
-
-    \item \textbf{OE-03:} \textit{Desarrollar un prototipo funcional del framework que implemente una interfaz unificada para la integración con múltiples pasarelas de pago, incluyendo mecanismos de comunicación segura y los elementos necesarios para su integración por parte de desarrolladores.} \\
-    \textbf{Evidencia:} el paquete \texttt{kit-pagos-colombia} fue publicado en el registro oficial de npm en su versión estable \texttt{1.0.0}, incluyendo la fachada de servidor, los cuatro adaptadores, el módulo de tokenización en navegador, la verificación de webhooks en tiempo constante y el enmascaramiento de credenciales en errores. Los capítulos VI y VII presentan su implementación y validación.
-
-    \item \textbf{OE-04:} \textit{Implementar una API que permita simular escenarios de interacción con pasarelas de pago, facilitando procesos de prueba durante el desarrollo.} \\
-    \textbf{Evidencia:} se implementó y desplegó la API de Simulación en Fastify, la cual replica las rutas nativas de las cuatro pasarelas bajo \texttt{/v1/sim} con escenarios deterministas y expone las operaciones del SDK mediante una interfaz REST documentada con OpenAPI bajo \texttt{/v1/api}.
-
-    \item \textbf{OE-05:} \textit{Consolidar y documentar los mecanismos de acceso a los datos de prueba provistos por cada pasarela de pago en el contexto colombiano, facilitando su uso centralizado.} \\
-    \textbf{Evidencia:} se construyó la guía centralizada de datos de prueba por pasarela con tarjetas, credenciales de sandbox, códigos bancarios PSE y clasificación por nivel de evidencia empírica, descrita en el capítulo VI.
-
-    \item \textbf{OE-06:} \textit{Evaluar el framework mediante su aplicación en proyectos prototípicos definidos, especificando sus características y midiendo métricas asociadas a su implementación y nivel de abstracción, con el fin de analizar su impacto frente a enfoques tradicionales.} \\
-    \textbf{Evidencia:} se construyeron cuatro tiendas prototípicas (A, B, C y D) y en la Fase 5 se comparó el prototipo B (integrado con el framework) frente al prototipo D (integrado directamente con cada proveedor) sobre seis variables cuantitativas, incluidas las métricas de Chidamber y Kemerer (1994): complejidad ponderada (WMC), acoplamiento entre objetos (CBO) y respuesta de una clase (RFC). El capítulo VII presenta los resultados completos.
+    \item \textbf{OE-01:} \textit{Analizar las características técnicas, mecanismos de integración y consideraciones de seguridad de las principales pasarelas de pago utilizadas en el contexto colombiano.}
+    \item \textbf{OE-02:} \textit{Diseñar la arquitectura de un framework de integración que permita unificar la interacción con múltiples pasarelas de pago, aplicando patrones de diseño y principios de extensibilidad.}
+    \item \textbf{OE-03:} \textit{Desarrollar un prototipo funcional del framework que implemente una interfaz unificada para la integración con múltiples pasarelas de pago, incluyendo mecanismos de comunicación segura y los elementos necesarios para su integración por parte de desarrolladores.}
+    \item \textbf{OE-04:} \textit{Implementar una API que permita simular escenarios de interacción con pasarelas de pago, facilitando procesos de prueba durante el desarrollo.} 
+    \item \textbf{OE-05:} \textit{Consolidar y documentar los mecanismos de acceso a los datos de prueba provistos por cada pasarela de pago en el contexto colombiano, facilitando su uso centralizado.}
+    \item \textbf{OE-06:} \textit{Evaluar el framework mediante su aplicación en proyectos prototípicos definidos, especificando sus características y midiendo métricas asociadas a su implementación y nivel de abstracción, con el fin de analizar su impacto frente a enfoques tradicionales.}
 \end{itemize}
 
 \subsubsection{Alcance y exclusiones}
