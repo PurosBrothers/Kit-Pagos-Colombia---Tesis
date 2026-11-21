@@ -22,6 +22,7 @@ export interface StatusRecord {
 
 export interface Order {
   id: string;
+  createdAt: string;
   /** El `id` de la pasarela que eligió el comprador, tal como lo dio `listGateways()`. */
   gateway: string;
   lines: OrderLine[];
@@ -53,11 +54,17 @@ export class OrderStore {
     const order: Order = {
       ...input,
       id: `ORD-${randomUUID().slice(0, 8).toUpperCase()}`,
+      createdAt: this.now().toISOString(),
       status: "PENDING",
       history: [],
     };
     this.orders.set(order.id, order);
     return order;
+  }
+
+  /** Órdenes de la sesión, de la más reciente a la más antigua. */
+  list(): Order[] {
+    return [...this.orders.values()].reverse();
   }
 
   get(id: string): Order | undefined {

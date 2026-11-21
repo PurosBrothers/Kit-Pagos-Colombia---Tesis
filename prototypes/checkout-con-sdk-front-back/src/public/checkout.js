@@ -25,6 +25,261 @@ function traceLine(...parts) {
   console.info("[tienda B]", ...parts);
 }
 
+const MONITOR_LOGS_KEY = "kit-pagos-prototipo-b:monitor-logs";
+const MONITOR_STAGES_KEY = "kit-pagos-prototipo-b:monitor-stages";
+const MONITOR_OPEN_KEY = "kit-pagos-prototipo-b:monitor-open";
+const MONITOR_PAUSE_KEY = "kit-pagos-prototipo-b:monitor-pause";
+const MONITOR_MAX_LOGS = 40;
+const STAGE_DEFAULTS = {
+  front: "En espera",
+  browser: "Tokenización",
+  backend: "KitPagos",
+  sandbox: "HTTP externo",
+  response: "Normalizada",
+};
+const TAG_BY_STAGE = {
+  front: "FRONT",
+  browser: "SDK-BROWSER→PASARELA",
+  backend: "SDK-BACK",
+  sandbox: "PASARELA",
+  response: "RESPUESTA",
+  error: "ERROR",
+};
+
+function readSessionJson(key, fallback) {
+  try {
+    const raw = sessionStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeSessionJson(key, value) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignora restricciones del navegador (p. ej. modo incógnito estricto).
+  }
+}
+
+function formatLogTime(iso) {
+  const date = iso ? new Date(iso) : new Date();
+  return Number.isNaN(date.getTime()) ? "--:--:--" : date.toTimeString().slice(0, 8);
+}
+
+function createMonitor() {
+  const root = document.getElementById("sdk-monitor");
+  const body = document.getElementById("sdk-monitor-body");
+  const toggleBtn = document.getElementById("monitor-toggle");
+  const collapseBtn = document.getElementById("monitor-collapse");
+  const clearBtn = document.getElementById("monitor-clear");
+  const pauseInput = document.getElementById("monitor-pause");
+  const continueBar = document.getElementById("monitor-continue-bar");
+  const continueText = document.getElementById("monitor-continue-text");
+  const continueBtn = document.getElementById("monitor-continue-btn");
+  const logList = document.getElementById("monitor-log");
+  const emptyHint = document.getElementById("monitor-empty");
+
+  let logs = readSessionJson(MONITOR_LOGS_KEY, []);
+  if (!Array.isArray(logs)) logs = [];
+  let stages = readSessionJson(MONITOR_STAGES_KEY, {});
+  if (!stages || typeof stages !== "object") stages = {};
+  let isOpen = readSessionJson(MONITOR_OPEN_KEY, false) === true;
+  let paused = readSessionJson(MONITOR_PAUSE_KEY, false) === true;
+  let pendingContinue;
+
+  function renderOpenState() {
+    if (!root || !body) return;
+    root.dataset.collapsed = isOpen ? "false" : "true";
+    body.hidden = !isOpen;
+    if (toggleBtn) toggleBtn.setAttribute("aria-expanded", String(isOpen));
+    if (collapseBtn) {
+      collapseBtn.setAttribute("aria-expanded", String(isOpen));
+      collapseBtn.textContent = isOpen ? "Minimizar" : "Expandir";
+    }
+  }
+
+  function renderStages() {
+    if (!root) return;
+    for (const stageEl of root.querySelectorAll(".sdk-stage")) {
+      const id = stageEl.dataset.stage;
+      const saved = stages[id] || { state: "idle", text: STAGE_DEFAULTS[id] || "" };
+      stageEl.dataset.state = saved.state;
+      const statusEl = stageEl.querySelector(".sdk-stage__status");
+      if (statusEl) statusEl.textContent = saved.text;
+    }
+  }
+
+  function buildLogItem(entry) {
+    const item = document.createElement("li");
+    item.className = "sdk-log__item";
+
+    const time = document.createElement("span");
+    time.className = "sdk-log__time";
+    time.textContent = formatLogTime(entry.at);
+
+    const tag = document.createElement("span");
+    const tagStyle = entry.level === "error" ? "error" : entry.stage || "front";
+    tag.className = `sdk-log__tag sdk-log__tag--${tagStyle}`;
+    tag.textContent = `[${entry.tag || TAG_BY_STAGE[entry.stage] || "SDK"}]`;
+
+    const label = document.createElement("span");
+    label.className = "sdk-log__label";
+    label.textContent = entry.label || "";
+
+    const detail = document.createElement("span");
+    detail.className = "sdk-log__detail";
+    detail.textContent = entry.detail ? `· ${entry.detail}` : "";
+
+    item.append(time, tag, label, detail);
+
+    if (typeof entry.durationMs === "number") {
+      const ms = document.createElement("span");
+      ms.className = "sdk-log__ms";
+      ms.textContent = `${Math.round(entry.durationMs)} ms`;
+      item.append(ms);
+    }
+    return item;
+  }
+
+  function renderLogs() {
+    if (!logList) return;
+    if (emptyHint) emptyHint.hidden = logs.length > 0;
+    logList.replaceChildren(...logs.map(buildLogItem));
+    logList.scrollTop = logList.scrollHeight;
+  }
+
+  function open() {
+    isOpen = true;
+    writeSessionJson(MONITOR_OPEN_KEY, true);
+    renderOpenState();
+  }
+
+  function setExpanded(next) {
+    isOpen = Boolean(next);
+    writeSessionJson(MONITOR_OPEN_KEY, isOpen);
+    renderOpenState();
+  }
+
+  function setStage(stage, state, text) {
+    stages[stage] = { state, text: text ?? STAGE_DEFAULTS[stage] ?? "" };
+    writeSessionJson(MONITOR_STAGES_KEY, stages);
+    renderStages();
+  }
+
+  function resetStages() {
+    stages = {};
+    writeSessionJson(MONITOR_STAGES_KEY, stages);
+    renderStages();
+  }
+
+  function log(entry) {
+    logs.push({
+      at: entry.at || new Date().toISOString(),
+      stage: entry.stage || "front",
+      level: entry.level || "info",
+      tag: entry.tag,
+      label: entry.label,
+      detail: entry.detail,
+      durationMs: entry.durationMs,
+    });
+    if (logs.length > MONITOR_MAX_LOGS) {
+      logs = logs.slice(-MONITOR_MAX_LOGS);
+    }
+    writeSessionJson(MONITOR_LOGS_KEY, logs);
+    renderLogs();
+  }
+
+  function appendBackendTrace(steps) {
+    if (!Array.isArray(steps) || steps.length === 0) return;
+    let sawSandbox = false;
+    for (const step of steps) {
+      if (step.stage === "sandbox") sawSandbox = true;
+      log({
+        at: step.at,
+        stage: step.stage,
+        level: step.level,
+        label: step.label,
+        detail: step.detail,
+        durationMs: step.durationMs,
+      });
+      const stageState = step.level === "info" ? "ok" : step.level;
+      const shortStatus =
+        step.stage === "sandbox" || step.stage === "response"
+          ? step.detail
+          : step.label;
+      setStage(step.stage, stageState, shortStatus);
+    }
+    if (!sawSandbox && (!stages.sandbox || stages.sandbox.state === "active")) {
+      setStage("sandbox", "idle", "Sin llamada externa");
+    }
+  }
+
+  function clear() {
+    logs = [];
+    stages = {};
+    writeSessionJson(MONITOR_LOGS_KEY, logs);
+    writeSessionJson(MONITOR_STAGES_KEY, stages);
+    if (pendingContinue) {
+      const resolve = pendingContinue;
+      pendingContinue = undefined;
+      if (continueBar) continueBar.hidden = true;
+      resolve();
+    }
+    renderStages();
+    renderLogs();
+  }
+
+  function waitForContinue(label) {
+    if (!continueBar || !continueBtn) return Promise.resolve();
+    open();
+    if (continueText) continueText.textContent = label || "Paso completado. Listo para continuar.";
+    continueBar.hidden = false;
+    return new Promise((resolve) => {
+      pendingContinue = resolve;
+      continueBtn.onclick = () => {
+        continueBar.hidden = true;
+        pendingContinue = undefined;
+        resolve();
+      };
+    });
+  }
+
+  if (pauseInput) {
+    pauseInput.checked = paused;
+    pauseInput.addEventListener("change", () => {
+      paused = pauseInput.checked;
+      writeSessionJson(MONITOR_PAUSE_KEY, paused);
+      if (!paused && pendingContinue) {
+        if (continueBar) continueBar.hidden = true;
+        const resolve = pendingContinue;
+        pendingContinue = undefined;
+        resolve();
+      }
+    });
+  }
+  toggleBtn?.addEventListener("click", () => setExpanded(!isOpen));
+  collapseBtn?.addEventListener("click", () => setExpanded(!isOpen));
+  clearBtn?.addEventListener("click", clear);
+
+  renderOpenState();
+  renderStages();
+  renderLogs();
+
+  return {
+    open,
+    setStage,
+    resetStages,
+    log,
+    appendBackendTrace,
+    shouldPause: () => paused,
+    waitForContinue,
+  };
+}
+
+const monitor = createMonitor();
+
 /** El sentido de la llamada y su ruta, sin la query y con las llaves tapadas. */
 function describeCall(method, url) {
   const parsed = new URL(url, window.location.href);
@@ -59,15 +314,43 @@ const nativeFetch = window.fetch.bind(window);
 window.fetch = async (input, init = {}) => {
   const url = typeof input === "string" ? input : input.url;
   const method = (init.method || "GET").toUpperCase();
+  const parsed = new URL(url, window.location.href);
+  const sameOrigin = parsed.origin === window.location.origin;
+  const shownTarget = KEY_PATTERNS.reduce(
+    (text, [pattern, replacement]) => text.replace(pattern, replacement),
+    `${parsed.host}${parsed.pathname}`,
+  );
   const started = performance.now();
   try {
     const response = await nativeFetch(input, init);
     const body = await response.clone().json().catch(() => undefined);
     const summary = summarize(body);
-    traceLine(`${describeCall(method, url)} → ${response.status}${summary ? ` · ${summary}` : ""} · ${Math.round(performance.now() - started)} ms`);
+    const durationMs = Math.round(performance.now() - started);
+    traceLine(`${describeCall(method, url)} → ${response.status}${summary ? ` · ${summary}` : ""} · ${durationMs} ms`);
+    if (!sameOrigin) {
+      monitor.log({
+        stage: "browser",
+        level: response.ok ? "ok" : "error",
+        tag: "SDK-BROWSER→PASARELA",
+        label: `${method} ${shownTarget}`,
+        detail: `HTTP ${response.status}${summary ? ` · ${summary}` : ""} · directo sin pasar por la tienda`,
+        durationMs,
+      });
+    }
     return response;
   } catch (error) {
+    const durationMs = Math.round(performance.now() - started);
     traceLine(`${describeCall(method, url)} → sin respuesta: ${error.message}`);
+    if (!sameOrigin) {
+      monitor.log({
+        stage: "browser",
+        level: "error",
+        tag: "SDK-BROWSER→PASARELA",
+        label: `${method} ${shownTarget}`,
+        detail: `Error de red: ${error.message}`,
+        durationMs,
+      });
+    }
     throw error;
   }
 };
@@ -187,6 +470,34 @@ function setUpStore(form) {
   const gatewaySelect = document.getElementById("gateway");
   // Los bancos de PSE son de cada pasarela: se piden una vez por pasarela.
   const banksByGateway = new Map();
+  const DEFAULT_TEST_CARD = {
+    number: "4242 4242 4242 4242",
+    expMonth: "12",
+    expYear: "30",
+    cvc: "123",
+    holder: "PEDRO PEREZ",
+  };
+  /* test-cards:start */
+  const TEST_CARDS = {
+    mercadopago: {
+      number: "4013 5406 8274 6260",
+      expMonth: "11",
+      expYear: "30",
+      cvc: "123",
+      holder: "APRO Ruiz",
+    },
+  };
+  /* test-cards:end */
+  let lastCardGateway = null;
+
+  function updateCardFieldsForGateway(gatewayId) {
+    const card = TEST_CARDS[String(gatewayId).toLowerCase()] ?? DEFAULT_TEST_CARD;
+    document.getElementById("cardNumber").value = card.number;
+    document.getElementById("expMonth").value = card.expMonth;
+    document.getElementById("expYear").value = card.expYear;
+    document.getElementById("cvc").value = card.cvc;
+    document.getElementById("cardHolder").value = card.holder;
+  }
 
   function selectedGateway() {
     const option = gatewaySelect.selectedOptions[0];
@@ -218,12 +529,20 @@ function setUpStore(form) {
   function showMethod() {
     show("");
     const isPse = selectedMethod() === "PSE";
-    const hosted = selectedGateway().cardCapture === "HOSTED_PAGE";
+    const gateway = selectedGateway();
+    const hosted = gateway.cardCapture === "HOSTED_PAGE";
     cardFields.hidden = isPse || hosted;
     hostedCard.hidden = isPse || !hosted;
     pseFields.hidden = !isPse;
-    if (isPse) loadPseBanks(gatewaySelect.value);
-    else payButton.disabled = false;
+    if (isPse) {
+      loadPseBanks(gatewaySelect.value);
+    } else {
+      payButton.disabled = false;
+      if (!hosted && gateway.id !== lastCardGateway) {
+        updateCardFieldsForGateway(gateway.id);
+        lastCardGateway = gateway.id;
+      }
+    }
   }
 
   form.addEventListener("change", (event) => {
@@ -272,12 +591,82 @@ function setUpStore(form) {
     show("");
     payButton.disabled = true;
     payButton.textContent = "Procesando el pago…";
+    let activeStage = "front";
     try {
       const selected = selectedMethod();
       const gateway = selectedGateway();
       const bottles = cartCount(cart);
+      const total = cartTotal();
+      monitor.open();
+      monitor.resetStages();
+      monitor.setStage("front", "active", "Preparando…");
+      monitor.log({
+        stage: "front",
+        tag: "FRONT",
+        label: `Iniciando pago con ${gateway.name}`,
+        detail: `${bottles} ${bottles === 1 ? "botella" : "botellas"} · ${pesos.format(total)} · ${selected === "PSE" ? "PSE" : "Tarjeta"}`,
+      });
+      monitor.setStage("front", "ok", `${pesos.format(total)} · ${gateway.name}`);
+
       traceLine(`pagar ${bottles} ${bottles === 1 ? "botella" : "botellas"} con ${selected === "PSE" ? "PSE" : "tarjeta"} por ${gateway.name}`);
-      const method = selected === "PSE" ? pseMethod() : await cardMethod(gateway);
+
+      let method;
+      if (selected === "PSE") {
+        activeStage = "browser";
+        method = pseMethod();
+        monitor.setStage("browser", "ok", "PSE · sin tarjeta");
+        monitor.log({
+          stage: "browser",
+          tag: "FRONT",
+          label: "Método PSE seleccionado",
+          detail: `Banco código ${method.bankCode} (${method.personType}) · no requiere tokenización`,
+        });
+      } else if (gateway.cardCapture === "HOSTED_PAGE") {
+        activeStage = "browser";
+        method = await cardMethod(gateway);
+        monitor.setStage("browser", "ok", "Página alojada");
+        monitor.log({
+          stage: "browser",
+          tag: "SDK-BROWSER",
+          label: "Tarjeta en página alojada",
+          detail: `${gateway.name} recibe la tarjeta fuera de la tienda`,
+        });
+      } else {
+        activeStage = "browser";
+        monitor.setStage("browser", "active", "Tokenizando…");
+        monitor.log({
+          stage: "browser",
+          tag: "SDK-BROWSER",
+          label: "KitPagosBrowser.tokenizeCard()",
+          detail: "Tarjeta permanece en el navegador; solicitando configuración pública",
+        });
+        method = await cardMethod(gateway);
+        const tokenHint = maskToken(method.cardToken);
+        monitor.setStage("browser", "ok", `Token ${tokenHint}`);
+        monitor.log({
+          stage: "browser",
+          level: "ok",
+          tag: "SDK-BROWSER",
+          label: "Tokenización completada",
+          detail: `Token ${tokenHint} generado · número de tarjeta y CVV no salieron al backend`,
+        });
+      }
+
+      activeStage = "backend";
+      monitor.setStage("backend", "active", "POST /api/orders…");
+      monitor.setStage("sandbox", "active", "Esperando…");
+      monitor.log({
+        stage: "backend",
+        tag: "FRONT→BACK",
+        label: "POST /api/orders",
+        detail:
+          method.type === "PSE"
+            ? `Envía orden PSE (banco ${method.bankCode})`
+            : method.cardToken
+              ? `Envía solo token ${maskToken(method.cardToken)} (cero datos sensibles de tarjeta)`
+              : "Envía intención de cobro en página alojada",
+      });
+
       const payer = {
         fullName: value("fullName"),
         email: value("email"),
@@ -299,11 +688,37 @@ function setUpStore(form) {
         body: JSON.stringify({ gateway: gateway.id, payer, method, items }),
       });
       const body = await response.json().catch(() => ({}));
+      if (Array.isArray(body.trace)) {
+        monitor.appendBackendTrace(body.trace);
+      }
       if (!body.order) throw new Error(body.error || `La tienda respondió ${response.status}`);
       // El carrito se queda hasta que la orden se apruebe: si el pago se rechaza, se reintenta sin armarlo otra vez.
+      const destination = body.redirectUrl || `/orders/${body.order.id}`;
+      const destinationLabel = body.redirectUrl
+        ? `Redirigiendo a ${new URL(body.redirectUrl).host} para completar el pago…`
+        : `Orden ${body.order.id} lista (${body.order.status}). Abrir detalle…`;
+      monitor.log({
+        stage: "response",
+        level: body.redirectUrl ? "warn" : "ok",
+        tag: "TIENDA",
+        label: body.redirectUrl ? "Redirección requerida" : `Orden ${body.order.id} lista`,
+        detail: body.redirectUrl ? new URL(body.redirectUrl).host : `/orders/${body.order.id}`,
+      });
       traceLine(body.redirectUrl ? `redirigiendo a otra página para pagar: ${new URL(body.redirectUrl).host}` : `abriendo la orden ${body.order.id}`);
-      window.location.assign(body.redirectUrl || `/orders/${body.order.id}`);
+      if (monitor.shouldPause()) {
+        payButton.textContent = "Esperando continuar…";
+        await monitor.waitForContinue(destinationLabel);
+      }
+      window.location.assign(destination);
     } catch (error) {
+      monitor.setStage(activeStage, "error", "Error");
+      monitor.log({
+        stage: activeStage,
+        level: "error",
+        tag: "ERROR",
+        label: "Fallo en el flujo de pago",
+        detail: error.message,
+      });
       show(`No se pudo completar el pago: ${error.message}`);
       payButton.disabled = false;
       render();
@@ -315,20 +730,44 @@ function setUpStore(form) {
 }
 
 async function refreshOrder(orderId) {
-  const { order } = await readJson(await fetch(`/api/orders/${encodeURIComponent(orderId)}`));
-  return order.status;
+  const response = await fetch(`/api/orders/${encodeURIComponent(orderId)}`);
+  const body = await response.json().catch(() => ({}));
+  if (Array.isArray(body.trace)) {
+    monitor.appendBackendTrace(body.trace);
+  }
+  if (!response.ok) {
+    monitor.setStage("response", "error", `HTTP ${response.status}`);
+    throw new Error(body.error || `La tienda respondió ${response.status}`);
+  }
+  monitor.setStage("front", "ok", `Orden ${orderId}`);
+  return body.order.status;
 }
 
 function setUpOrderPage(button) {
   const shown = document.getElementById("order-result").dataset.status;
   traceLine(`orden ${button.dataset.orderId}: ${shown}${shown === "PENDING" ? "; la página la consulta sola" : ""}`);
+  monitor.log({
+    stage: "response",
+    level: shown === "APPROVED" ? "ok" : shown === "PENDING" ? "warn" : "error",
+    tag: "ORDEN",
+    label: `Orden ${button.dataset.orderId} cargada`,
+    detail: `Estado actual: ${shown}`,
+  });
   if (shown === "APPROVED") saveCart({});
   renderCount(loadCart());
 
   button.addEventListener("click", async () => {
     show("Consultando…");
+    monitor.open();
+    monitor.setStage("front", "ok", `Orden ${button.dataset.orderId}`);
+    monitor.setStage("browser", "idle", "No aplica");
+    monitor.setStage("backend", "active", "Consultando…");
+    monitor.setStage("sandbox", "active", "Esperando…");
     try {
-      await refreshOrder(button.dataset.orderId);
+      const nextStatus = await refreshOrder(button.dataset.orderId);
+      if (monitor.shouldPause()) {
+        await monitor.waitForContinue(`Consulta finalizada (${nextStatus}). Recargar orden…`);
+      }
       window.location.reload();
     } catch (error) {
       show(`No se pudo consultar el estado: ${error.message}`);
@@ -354,8 +793,41 @@ function setUpOrderPage(button) {
   }, POLL_INTERVAL_MS);
 }
 
+function setUpOrdersList() {
+  const ordersMessage = document.getElementById("orders-message");
+  const buttons = document.querySelectorAll("button[data-refresh-order]");
+  for (const button of buttons) {
+    button.addEventListener("click", async () => {
+      const orderId = button.dataset.refreshOrder;
+      if (ordersMessage) ordersMessage.textContent = "";
+      button.disabled = true;
+      button.textContent = "Consultando…";
+      monitor.open();
+      monitor.setStage("front", "ok", `Orden ${orderId}`);
+      monitor.setStage("browser", "idle", "No aplica");
+      monitor.setStage("backend", "active", "Consultando…");
+      monitor.setStage("sandbox", "active", "Esperando…");
+      try {
+        const nextStatus = await refreshOrder(orderId);
+        if (monitor.shouldPause()) {
+          await monitor.waitForContinue(`Consulta de ${orderId} (${nextStatus}). Recargar lista…`);
+        }
+        window.location.reload();
+      } catch (error) {
+        if (ordersMessage) ordersMessage.textContent = `No se pudo consultar ${orderId}: ${error.message}`;
+        button.disabled = false;
+        button.textContent = "Consultar estado";
+      }
+    });
+  }
+}
+
+renderCount(loadCart());
+
 const form = document.getElementById("checkout-form");
 if (form) setUpStore(form);
 
 const refresh = document.getElementById("refresh-order");
 if (refresh) setUpOrderPage(refresh);
+
+setUpOrdersList();

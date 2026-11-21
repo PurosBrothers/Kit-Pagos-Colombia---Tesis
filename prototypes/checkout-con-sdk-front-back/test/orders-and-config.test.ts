@@ -1,4 +1,5 @@
 import { loadCheckoutConfig } from "../src/config";
+import { captureBackendCalls } from "../src/orders/backendTrace";
 import { OrderStore } from "../src/orders/OrderStore";
 import { formatPesos } from "../src/views/pages";
 
@@ -14,16 +15,30 @@ const payer = {
 describe("OrderStore", () => {
   const fixedNow = () => new Date("2026-10-13T12:00:00.000Z");
 
-  it("should create a pending order with a unique id and an empty history", () => {
+  it("should create a pending order with a unique id, creation date and an empty history", () => {
     const store = new OrderStore(fixedNow);
 
     const first = store.create({ gateway: "token-pay", lines: [], amountInPesos: 1000, payer, method: "CARD" });
     const second = store.create({ gateway: "token-pay", lines: [], amountInPesos: 1000, payer, method: "PSE" });
 
     expect(first.id).toMatch(/^ORD-[0-9A-F]{8}$/);
+    expect(first.createdAt).toBe("2026-10-13T12:00:00.000Z");
     expect(first.id).not.toBe(second.id);
     expect(first.status).toBe("PENDING");
     expect(first.history).toEqual([]);
+  });
+
+  it("should list orders from newest to oldest and empty when there are none", () => {
+    let seconds = 0;
+    const store = new OrderStore(() => new Date(Date.UTC(2026, 9, 13, 12, 0, seconds++)));
+
+    expect(store.list()).toEqual([]);
+
+    const first = store.create({ gateway: "token-pay", lines: [], amountInPesos: 1000, payer, method: "CARD" });
+    const second = store.create({ gateway: "hosted-pay", lines: [], amountInPesos: 2000, payer, method: "PSE" });
+
+    expect(store.list().map((order) => order.id)).toEqual([second.id, first.id]);
+    expect(second.createdAt).toBe("2026-10-13T12:00:01.000Z");
   });
 
   it("should find an order by the transaction id recorded on it", () => {
@@ -134,5 +149,89 @@ describe("loadCheckoutConfig", () => {
 describe("formatPesos", () => {
   it("should format whole pesos for Colombia", () => {
     expect(formatPesos(50000)).toMatch(/^\$50.000 COP$/);
+  });
+});
+
+describe("captureBackendCalls", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("should capture external gateway calls with masked keys, status and native status without disturbing outside calls", async () => {
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: { status: "PENDING" } }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: "failed" }), {
+          status: 422,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response("ok", { status: 200, headers: { "content-type": "text/plain" } }))
+      .mockResolvedValueOnce(new Response("not-json", { status: 200, headers: { "content-type": "application/json" } }))
+      .mockRejectedValueOnce(new Error("connect ECONNREFUSED"))
+      .mockResolvedValueOnce(new Response("outside", { status: 200 }));
+    globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+
+    const okRun = await captureBackendCalls(async () => {
+      await fetch("https://sandbox.example.co/v1/merchants/pub_test_secreto123?foo=bar");
+      await fetch(new URL("https://sandbox.example.co/v1/orders"), { method: "POST" });
+      await fetch(new Request("https://sandbox.example.co/health", { method: "HEAD" }));
+      await fetch("https://sandbox.example.co/broken-json");
+      return "done";
+    });
+
+    expect(okRun.result).toBe("done");
+    expect(okRun.error).toBeUndefined();
+    expect(okRun.steps).toHaveLength(4);
+    expect(okRun.steps[0]).toMatchObject({
+      stage: "sandbox",
+      level: "ok",
+      label: "GET sandbox.example.co/v1/merchants/pub_test_…",
+      detail: "HTTP 201 · nativo PENDING",
+    });
+    expect(okRun.steps[1]).toMatchObject({
+      stage: "sandbox",
+      level: "warn",
+      label: "POST sandbox.example.co/v1/orders",
+      detail: "HTTP 422 · nativo failed",
+    });
+    expect(okRun.steps[2]).toMatchObject({
+      stage: "sandbox",
+      level: "ok",
+      label: "HEAD sandbox.example.co/health",
+      detail: "HTTP 200",
+    });
+    expect(okRun.steps[3]).toMatchObject({
+      stage: "sandbox",
+      level: "ok",
+      label: "GET sandbox.example.co/broken-json",
+      detail: "HTTP 200",
+    });
+
+    const failedRun = await captureBackendCalls(async () => {
+      await fetch("https://sandbox.example.co/v1/pay", { method: "POST" });
+    });
+
+    expect(failedRun.result).toBeUndefined();
+    expect((failedRun.error as Error).message).toBe("connect ECONNREFUSED");
+    expect(failedRun.steps[0]).toMatchObject({
+      stage: "sandbox",
+      level: "error",
+      label: "POST sandbox.example.co/v1/pay",
+      detail: "Error de red: connect ECONNREFUSED",
+    });
+
+    // Global fetch is restored once all active captures end.
+    expect(globalThis.fetch).toBe(mockFetch);
+    const outsideRes = await fetch("https://sandbox.example.co/outside");
+    expect(await outsideRes.text()).toBe("outside");
   });
 });

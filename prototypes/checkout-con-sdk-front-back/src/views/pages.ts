@@ -84,12 +84,17 @@ const RIBBONS: Record<CheckoutEnvironment, string> = {
   simulator: "Tienda de demostración · cobra en la API de Simulación de Kit Pagos, sin dinero real",
 };
 
+const MONITOR_ENV_LABELS: Record<CheckoutEnvironment, string> = {
+  sandbox: "Sandbox real",
+  simulator: "Simulador local",
+};
+
 /** Datos para el script de la página, sin que un `<` cierre la etiqueta. */
 function jsonForScript(value: unknown): string {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
-function layout(title: string, main: string, environment: CheckoutEnvironment): string {
+function layout(title: string, main: string, environment: CheckoutEnvironment, orderCount = 0): string {
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -110,7 +115,11 @@ ${BOTTLE_SPRITE}
         <span class="brand__tagline">Vinos de Chile, Argentina y Colombia, desde Chapinero, en Bogotá</span>
       </span>
     </a>
-    <a class="cart-link" href="/#pedido">Tu pedido <span class="cart-link__count" id="cart-count">0</span></a>
+    <nav class="masthead__nav" aria-label="Navegación de la tienda">
+      <a class="nav-link" href="/orders">Mis pedidos <span class="nav-link__count" id="orders-count">${orderCount}</span></a>
+      <a class="cart-link" href="/#pedido">Tu pedido <span class="cart-link__count" id="cart-count">0</span></a>
+      <button type="button" class="monitor-toggle" id="monitor-toggle" aria-controls="sdk-monitor" aria-expanded="false">Monitor SDK</button>
+    </nav>
   </div>
 </header>
 ${main}
@@ -119,6 +128,35 @@ ${main}
   <p class="footer__legal">El exceso de alcohol es perjudicial para la salud (Ley 30 de 1986). Prohíbase el expendio de bebidas embriagantes a menores de edad (Ley 124 de 1994).</p>
   <p class="footer__small">Prototipo B de Kit Pagos Colombia: cobra con el SDK <code>kit-pagos-colombia</code>.</p>
 </footer>
+<section class="sdk-monitor" id="sdk-monitor" aria-label="Monitor del flujo SDK en vivo" data-collapsed="true">
+  <div class="sdk-monitor__bar">
+    <div class="sdk-monitor__title">
+      <span class="sdk-monitor__dot" aria-hidden="true"></span>
+      <strong>Monitor SDK en vivo</strong>
+      <span class="sdk-monitor__env">${MONITOR_ENV_LABELS[environment]}</span>
+    </div>
+    <div class="sdk-monitor__controls">
+      <label class="sdk-monitor__pause"><input type="checkbox" id="monitor-pause"> Modo paso a paso</label>
+      <button type="button" class="sdk-monitor__btn" id="monitor-clear">Limpiar</button>
+      <button type="button" class="sdk-monitor__btn" id="monitor-collapse" aria-expanded="false">Expandir</button>
+    </div>
+  </div>
+  <div class="sdk-monitor__body" id="sdk-monitor-body" hidden>
+    <ol class="sdk-pipeline" aria-label="Etapas del pago">
+      <li class="sdk-stage" data-stage="front" data-state="idle"><span class="sdk-stage__num">1</span><strong>Frontend</strong><small class="sdk-stage__status">En espera</small></li>
+      <li class="sdk-stage" data-stage="browser" data-state="idle"><span class="sdk-stage__num">2</span><strong>SDK Navegador</strong><small class="sdk-stage__status">Tokenización</small></li>
+      <li class="sdk-stage" data-stage="backend" data-state="idle"><span class="sdk-stage__num">3</span><strong>Backend SDK</strong><small class="sdk-stage__status">KitPagos</small></li>
+      <li class="sdk-stage" data-stage="sandbox" data-state="idle"><span class="sdk-stage__num">4</span><strong>Pasarela</strong><small class="sdk-stage__status">HTTP externo</small></li>
+      <li class="sdk-stage" data-stage="response" data-state="idle"><span class="sdk-stage__num">5</span><strong>Respuesta</strong><small class="sdk-stage__status">Normalizada</small></li>
+    </ol>
+    <div class="sdk-monitor__continue-bar" id="monitor-continue-bar" hidden>
+      <span id="monitor-continue-text"></span>
+      <button type="button" class="sdk-monitor__continue" id="monitor-continue-btn">Continuar →</button>
+    </div>
+    <p class="sdk-log__empty" id="monitor-empty">Oprime «Pagar» o «Consultar estado» para ver cada salto del flujo en tiempo real.</p>
+    <ol class="sdk-log" id="monitor-log"></ol>
+  </div>
+</section>
 <script type="module" src="/assets/checkout.js"></script>
 </body>
 </html>`;
@@ -156,6 +194,7 @@ export function storePage(
   products: readonly Product[],
   environment: CheckoutEnvironment,
   gateways: readonly GatewayOption[],
+  orderCount = 0,
 ): string {
   const catalog = products.map(({ id, title, priceInPesos }) => ({ id, title, priceInPesos }));
   return layout(
@@ -260,6 +299,7 @@ export function storePage(
 </main>
 <script type="application/json" id="catalog-data">${jsonForScript(catalog)}</script>`,
     environment,
+    orderCount,
   );
 }
 
@@ -296,7 +336,12 @@ function summaryLines(order: Order): string {
 }
 
 /** La orden: el resultado para el comprador y, plegado, el historial con el estado nativo (función 6). */
-export function orderPage(order: Order, environment: CheckoutEnvironment, gatewayName: string): string {
+export function orderPage(
+  order: Order,
+  environment: CheckoutEnvironment,
+  gatewayName: string,
+  orderCount = 0,
+): string {
   const result = RESULTS[order.status];
   return layout(
     `Orden ${order.id} · La Bodega de Chapinero`,
@@ -312,6 +357,7 @@ export function orderPage(order: Order, environment: CheckoutEnvironment, gatewa
     <dl class="totals"><div class="totals__grand"><dt>Total</dt><dd>${formatPesos(order.amountInPesos)}</dd></div></dl>
     <div class="result__actions">
       <button type="button" class="pay" id="refresh-order" data-order-id="${escapeHtml(order.id)}">Consultar el estado</button>
+      <a class="secondary" href="/orders">Ver mis pedidos</a>
       <a class="secondary" href="/">Seguir comprando</a>
     </div>
     <p class="form-error" id="message" role="status"></p>
@@ -328,19 +374,98 @@ export function orderPage(order: Order, environment: CheckoutEnvironment, gatewa
   </article>
 </main>`,
     environment,
+    orderCount,
   );
 }
 
-export function notFoundPage(environment: CheckoutEnvironment): string {
+function orderSummaryCard(order: Order, gatewayLabel: string): string {
+  const items = order.lines.map((line) => `${line.quantity} × ${line.title}`).join(", ");
+  const latestNative = order.history[order.history.length - 1]?.nativeStatus ?? "—";
+  const eventsCount = order.history.length;
+  const decline =
+    order.status === "DECLINED" && order.declineReason
+      ? ` · Rechazo ${escapeHtml(describeDecline(order.declineReason))}`
+      : "";
+  const refreshButton = order.transactionId
+    ? `<button type="button" class="refresh-inline" data-refresh-order="${escapeHtml(order.id)}">Consultar estado</button>`
+    : "";
+
+  return `<li class="order-item" data-order-id="${escapeHtml(order.id)}" data-status="${order.status}">
+      <div class="order-item__top">
+        <div class="order-item__title">
+          <a class="order-item__id" href="/orders/${escapeHtml(order.id)}">${escapeHtml(order.id)}</a>
+          <span class="badge badge--${order.status}">${STATUS_LABELS[order.status]}</span>
+          <span class="order-item__date">${escapeHtml(order.createdAt)}</span>
+        </div>
+        <strong class="order-item__total">${formatPesos(order.amountInPesos)}</strong>
+      </div>
+      <p class="order-item__meta">${order.method === "CARD" ? "Tarjeta" : "PSE"} con ${escapeHtml(gatewayLabel)} · ${escapeHtml(order.payer.fullName)} · ${escapeHtml(items)}</p>
+      <p class="order-item__audit">Transacción: <code>${escapeHtml(order.transactionId ?? "sin crear")}</code> · Estado nativo: <code>${escapeHtml(latestNative)}</code> · ${eventsCount} ${eventsCount === 1 ? "evento" : "eventos"}${decline}</p>
+      <div class="order-item__actions">
+        <a class="secondary" href="/orders/${escapeHtml(order.id)}">Ver detalle y auditoría</a>
+        ${refreshButton}
+      </div>
+    </li>`;
+}
+
+/** Historial de órdenes de la sesión con estado normalizado, estado nativo y consulta puntual. */
+export function ordersPage(
+  orders: readonly Order[],
+  environment: CheckoutEnvironment,
+  gatewayName: (id: string) => string,
+): string {
+  const approved = orders.filter((order) => order.status === "APPROVED").length;
+  const pending = orders.filter((order) => order.status === "PENDING").length;
+  const failed = orders.filter((order) => order.status === "DECLINED" || order.status === "ERROR").length;
+  const body =
+    orders.length === 0
+      ? `<article class="result__card">
+    <h2>Sin pedidos todavía</h2>
+    <p>Todavía no has hecho ningún pedido en esta sesión.</p>
+    <div class="result__actions"><a class="pay" href="/">Ir al catálogo</a></div>
+  </article>`
+      : `<section class="orders-kpis" aria-label="Resumen de pedidos">
+    <div class="kpi"><span class="kpi__label">Total</span><strong class="kpi__value">${orders.length}</strong></div>
+    <div class="kpi"><span class="kpi__label">Aprobados</span><strong class="kpi__value">${approved}</strong></div>
+    <div class="kpi"><span class="kpi__label">Pendientes</span><strong class="kpi__value">${pending}</strong></div>
+    <div class="kpi"><span class="kpi__label">Rechazados / Error</span><strong class="kpi__value">${failed}</strong></div>
+  </section>
+  <ul class="orders-list">
+    ${orders.map((order) => orderSummaryCard(order, gatewayName(order.gateway))).join("\n    ")}
+  </ul>`;
+
+  return layout(
+    "Mis pedidos · La Bodega de Chapinero",
+    `<main class="orders-page">
+  <div class="orders-header">
+    <div>
+      <h1>Mis pedidos</h1>
+      <p>Seguimiento de las órdenes de esta sesión con su estado normalizado y el estado nativo devuelto por cada pasarela.</p>
+    </div>
+    <a class="secondary" href="/">Volver a la tienda</a>
+  </div>
+  <p class="form-error" id="orders-message" role="alert"></p>
+  ${body}
+</main>`,
+    environment,
+    orders.length,
+  );
+}
+
+export function notFoundPage(environment: CheckoutEnvironment, orderCount = 0): string {
   return layout(
     "Orden no encontrada · La Bodega de Chapinero",
     `<main class="result">
   <article class="result__card">
     <h1>Orden no encontrada</h1>
     <p>No tenemos una orden con ese número.</p>
-    <div class="result__actions"><a class="secondary" href="/">Volver a la tienda</a></div>
+    <div class="result__actions">
+      <a class="secondary" href="/orders">Ver mis pedidos</a>
+      <a class="secondary" href="/">Volver a la tienda</a>
+    </div>
   </article>
 </main>`,
     environment,
+    orderCount,
   );
 }

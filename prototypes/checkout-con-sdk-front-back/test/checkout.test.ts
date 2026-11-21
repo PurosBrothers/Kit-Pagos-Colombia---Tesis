@@ -57,6 +57,13 @@ describe("checkout skeleton", () => {
       expect(res.body).toContain('id="cart-lines"');
       expect(res.body).toContain('id="card-fields"');
       expect(res.body).toContain('id="pse-fields"');
+      expect(res.body).toContain('id="sdk-monitor"');
+      expect(res.body).toContain('id="monitor-toggle"');
+      expect(res.body).toContain('id="monitor-pause"');
+      expect(res.body).toContain('id="monitor-log"');
+      for (const stage of ["front", "browser", "backend", "sandbox", "response"]) {
+        expect(res.body).toContain(`data-stage="${stage}"`);
+      }
       expect(res.body).toContain('src="/assets/checkout.js"');
     });
 
@@ -213,6 +220,74 @@ describe("checkout skeleton", () => {
       expect(res.statusCode).toBe(404);
       expect(res.body).toContain("Orden no encontrada");
     });
+
+    it("should show an empty orders history page when no orders exist yet", async () => {
+      const res = await app.inject({ method: "GET", url: "/orders" });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["content-type"]).toContain("text/html");
+      expect(res.body).toContain("Mis pedidos");
+      expect(res.body).toContain("Todavía no has hecho ningún pedido en esta sesión.");
+      expect(res.body).toContain('id="orders-count">0<');
+    });
+
+    it("should list session orders newest-first with audit metadata, decline reason and refresh only when a transaction exists", async () => {
+      const first = (await createOrder(card)).json().order;
+
+      payments.createPayment.mockResolvedValueOnce({
+        transactionId: "tx-declined",
+        status: "DECLINED",
+        nativeStatus: "rejected_custom",
+        declineReason: { code: "021", category: "INSUFFICIENT_FUNDS" },
+      });
+      const second = (
+        await app.inject({
+          method: "POST",
+          url: "/api/orders",
+          payload: {
+            gateway: "token-pay",
+            payer: { ...payer, fullName: "<script>xss</script>" },
+            method: card,
+            items: oneBottle,
+          },
+        })
+      ).json().order;
+
+      payments.createPayment.mockRejectedValueOnce(new PaymentTechnicalError("timeout"));
+      const third = (await createOrder(card)).json().order;
+
+      const fourth = (await createOrder(pse)).json().order;
+      await app.inject({ method: "GET", url: `/api/orders/${fourth.id}` });
+
+      const listRes = await app.inject({ method: "GET", url: "/orders" });
+
+      expect(listRes.statusCode).toBe(200);
+      expect(listRes.body).toContain('id="orders-count">4<');
+      expect(listRes.body.indexOf(fourth.id)).toBeLessThan(listRes.body.indexOf(third.id));
+      expect(listRes.body.indexOf(third.id)).toBeLessThan(listRes.body.indexOf(second.id));
+      expect(listRes.body.indexOf(second.id)).toBeLessThan(listRes.body.indexOf(first.id));
+      expect(listRes.body).toContain("badge--APPROVED");
+      expect(listRes.body).toContain("badge--DECLINED");
+      expect(listRes.body).toContain("badge--ERROR");
+      expect(listRes.body).toContain("PSE con Token Pay");
+      expect(listRes.body).toContain("2 eventos");
+      expect(listRes.body).toContain("rejected_custom");
+      expect(listRes.body).toContain("Rechazo 021 (INSUFFICIENT_FUNDS)");
+      expect(listRes.body).not.toContain("<script>xss</script>");
+      expect(listRes.body).toContain("&lt;script&gt;xss&lt;/script&gt;");
+      expect(listRes.body).toContain(`data-refresh-order="${first.id}"`);
+      expect(listRes.body).toContain(`data-refresh-order="${second.id}"`);
+      expect(listRes.body).toContain(`data-refresh-order="${fourth.id}"`);
+      expect(listRes.body).not.toContain(`data-refresh-order="${third.id}"`);
+
+      const homeRes = await app.inject({ method: "GET", url: "/" });
+      expect(homeRes.body).toContain('href="/orders"');
+      expect(homeRes.body).toContain('id="orders-count">4<');
+
+      const detailRes = await app.inject({ method: "GET", url: `/orders/${first.id}` });
+      expect(detailRes.body).toContain('href="/orders"');
+      expect(detailRes.body).toContain("Ver mis pedidos");
+    });
   });
 
   describe("the store's trace", () => {
@@ -348,16 +423,69 @@ describe("checkout skeleton", () => {
       expect(order.history[0]).toEqual(expect.objectContaining({ source: "creation", status: "DECLINED", declineReason }));
     });
 
-    it("should mark the order ERROR and answer 502 on a technical failure that survived the retries", async () => {
+    it("should mark the order ERROR, return technical trace and answer 502 on a technical failure", async () => {
       payments.createPayment.mockRejectedValueOnce(new PaymentTechnicalError("La pasarela no respondió"));
 
-      const res = await createOrder(card);
+      const res = await createOrder({ type: "CARD", cardToken: "tok_test_123456", installments: 1 });
 
       expect(res.statusCode).toBe(502);
       expect(res.json().order.status).toBe("ERROR");
       expect(res.json().order.history[0]).toEqual(
         expect.objectContaining({ source: "creation", status: "ERROR", detail: "La pasarela no respondió" }),
       );
+      expect(res.json().trace).toEqual([
+        expect.objectContaining({ stage: "backend", level: "info" }),
+        expect.objectContaining({
+          stage: "response",
+          level: "error",
+          label: "SDK → Comercio (error técnico)",
+          detail: "La pasarela no respondió",
+        }),
+      ]);
+    });
+
+    it("should return structured backend trace on approved, hosted redirect, PSE redirect and declined orders", async () => {
+      const cardRes = await createOrder({ type: "CARD", cardToken: "tok_test_longtoken", installments: 1 });
+      expect(cardRes.json().trace).toEqual([
+        expect.objectContaining({
+          stage: "backend",
+          detail: expect.stringContaining("Token tok_test… (sin datos de tarjeta)"),
+        }),
+        expect.objectContaining({
+          stage: "response",
+          level: "ok",
+          label: "SDK → Comercio (TRANSACTION)",
+          detail: expect.stringContaining("estado APPROVED · nativo APPROVED"),
+        }),
+      ]);
+
+      const hostedRes = await createOrder({ type: "CARD", installments: 1 }, oneBottle, "hosted-pay");
+      expect(hostedRes.json().trace).toEqual([
+        expect.objectContaining({
+          stage: "backend",
+          detail: expect.stringContaining("Tarjeta en página alojada"),
+        }),
+        expect.objectContaining({
+          stage: "response",
+          level: "warn",
+          label: "SDK → Comercio (REDIRECT_REQUIRED)",
+          detail: expect.stringContaining("redirige a pay.example"),
+        }),
+      ]);
+
+      payments.createPayment.mockResolvedValueOnce({
+        transactionId: "tx-declined-2",
+        status: "DECLINED",
+        nativeStatus: "rejected_by_issuer",
+        declineReason: { code: "021", category: "INSUFFICIENT_FUNDS" },
+      });
+      const declinedRes = await createOrder(card);
+      expect(declinedRes.json().trace[1]).toMatchObject({
+        stage: "response",
+        level: "error",
+        label: "SDK → Comercio (TRANSACTION)",
+        detail: expect.stringContaining("rechazo 021 (INSUFFICIENT_FUNDS)"),
+      });
     });
 
     it("should answer 500 for an error that is not a technical failure", async () => {
@@ -393,7 +521,19 @@ describe("checkout skeleton", () => {
     });
   });
 
-  describe("GET /api/orders/:id", () => {
+  describe("GET /api/orders and GET /api/orders/:id", () => {
+    it("should return session orders newest first", async () => {
+      expect((await app.inject({ method: "GET", url: "/api/orders" })).json()).toEqual({ orders: [] });
+
+      const first = (await createOrder(card)).json().order;
+      const second = (await createOrder(pse)).json().order;
+
+      const res = await app.inject({ method: "GET", url: "/api/orders" });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().orders.map((order: { id: string }) => order.id)).toEqual([second.id, first.id]);
+    });
+
     it("should ask the gateway for the status and record the change", async () => {
       const { order } = (await createOrder(pse)).json();
 
@@ -403,6 +543,10 @@ describe("checkout skeleton", () => {
       expect(payments.getPaymentStatus).toHaveBeenCalledWith("token-pay", "tx-pse-1");
       expect(res.json().order.status).toBe("APPROVED");
       expect(res.json().order.history.map((entry: { source: string }) => entry.source)).toEqual(["creation", "query"]);
+      expect(res.json().trace).toEqual([
+        expect.objectContaining({ stage: "backend", label: "Backend → SDK (getPaymentStatus)" }),
+        expect.objectContaining({ stage: "response", level: "ok", label: "SDK → Comercio (consulta)" }),
+      ]);
     });
 
     it("should not add a history entry when a query repeats the last status", async () => {
@@ -414,7 +558,7 @@ describe("checkout skeleton", () => {
       expect(res.json().order.history).toHaveLength(1);
     });
 
-    it("should keep the last status and answer 502 when the query fails technically", async () => {
+    it("should keep the last status, include error trace and answer 502 when the query fails technically", async () => {
       const { order } = (await createOrder(pse)).json();
       payments.getPaymentStatus.mockRejectedValueOnce(new PaymentTechnicalError("timeout"));
 
@@ -422,6 +566,15 @@ describe("checkout skeleton", () => {
 
       expect(res.statusCode).toBe(502);
       expect(res.json().order.status).toBe("PENDING");
+      expect(res.json().trace).toEqual([
+        expect.objectContaining({ stage: "backend", label: "Backend → SDK (getPaymentStatus)" }),
+        expect.objectContaining({
+          stage: "response",
+          level: "error",
+          label: "SDK → Comercio (consulta con error)",
+          detail: "timeout",
+        }),
+      ]);
     });
 
     it("should not query the gateway for an order whose payment was never created", async () => {
@@ -431,6 +584,7 @@ describe("checkout skeleton", () => {
       const res = await app.inject({ method: "GET", url: `/api/orders/${order.id}` });
 
       expect(res.statusCode).toBe(200);
+      expect(res.json().trace).toEqual([]);
       expect(payments.getPaymentStatus).not.toHaveBeenCalled();
     });
 
@@ -645,9 +799,14 @@ describe("the storefront does not name a gateway", () => {
     "src/routes/api.ts",
     "src/routes/pages.ts",
     "src/orders/OrderStore.ts",
+    "src/orders/backendTrace.ts",
   ];
 
   it.each(files)("%s", (file) => {
-    expect(readFileSync(path.join(root, file), "utf8")).not.toMatch(/wompi|mercado\s*pago|kushki|rapyd/i);
+    const content = readFileSync(path.join(root, file), "utf8").replace(
+      /\/\* test-cards:start \*\/[\s\S]*?\/\* test-cards:end \*\//g,
+      "",
+    );
+    expect(content).not.toMatch(/wompi|mercado\s*pago|kushki|rapyd/i);
   });
 });

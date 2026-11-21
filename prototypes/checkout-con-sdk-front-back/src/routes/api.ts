@@ -1,7 +1,8 @@
 import { FastifyInstance, FastifyReply } from "fastify";
 import { MAX_QUANTITY, PRODUCTS, RequestedItem, linesTotal, orderDescription, orderLines } from "../catalog";
 import { GatewayOption, Payer, PaymentMethodRequest, PaymentTechnicalError } from "../checkout/PaymentsPort";
-import { Order } from "../orders/OrderStore";
+import { BackendTraceStep, captureBackendCalls, traceStep } from "../orders/backendTrace";
+import { describeDecline, Order } from "../orders/OrderStore";
 import { trace } from "../trace";
 import { RouteContext } from "./context";
 
@@ -85,9 +86,34 @@ function createOrderSchema(gateways: readonly GatewayOption[]) {
 }
 
 /** Un fallo técnico que el módulo no pudo resolver reintentando sale como 502; lo demás sigue al manejador. */
-function technicalFailure(error: unknown, reply: FastifyReply, order: Order): FastifyReply {
+function technicalFailure(
+  error: unknown,
+  reply: FastifyReply,
+  order: Order,
+  steps: readonly BackendTraceStep[],
+): FastifyReply {
   if (!(error instanceof PaymentTechnicalError)) throw error;
-  return reply.code(502).send({ order, error: error.message });
+  return reply.code(502).send({ order, error: error.message, trace: steps });
+}
+
+function safeHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+function maskTokenPreview(token: string): string {
+  return token.length > 10 ? `${token.slice(0, 8)}…` : token;
+}
+
+function methodSummary(method: PaymentMethodRequest): string {
+  if (method.type === "PSE") return `PSE (banco ${method.bankCode}) → kit.createPayment()`;
+  if (method.cardToken) {
+    return `Token ${maskTokenPreview(method.cardToken)} (sin datos de tarjeta) → kit.createPayment()`;
+  }
+  return `Tarjeta en página alojada (${method.installments} cuota/s) → kit.createPayment()`;
 }
 
 function methodWords(method: PaymentMethodRequest): string {
@@ -138,8 +164,17 @@ export async function apiRoutes(app: FastifyInstance, context: RouteContext): Pr
       `  orden ${order.id}: ${orderDescription(lines)} por $${order.amountInPesos.toLocaleString("es-CO")} COP, ` +
         `${methodWords(method)}, con ${gateway.name} → módulo de pagos`,
     );
-    try {
-      const payment = await payments.createPayment({
+    const steps: BackendTraceStep[] = [
+      traceStep(
+        "backend",
+        "info",
+        `Backend → SDK (${order.id})`,
+        `$${order.amountInPesos.toLocaleString("es-CO")} COP · ${gateway.name} · ${methodSummary(method)}`,
+      ),
+    ];
+    const started = Date.now();
+    const captured = await captureBackendCalls(() =>
+      payments.createPayment({
         gateway: gateway.id,
         orderReference: order.id,
         amountInPesos: order.amountInPesos,
@@ -148,41 +183,78 @@ export async function apiRoutes(app: FastifyInstance, context: RouteContext): Pr
         method,
         returnUrl: `${publicBaseUrl}/orders/${order.id}`,
         payerIp: request.ip,
-      });
-      orders.record(
-        order,
-        {
-          source: "creation",
-          status: payment.status,
-          nativeStatus: payment.nativeStatus,
-          declineReason: payment.declineReason,
-        },
-        payment.transactionId,
-      );
-      return reply.code(201).send({ order, redirectUrl: payment.redirectUrl });
-    } catch (error) {
-      if (error instanceof PaymentTechnicalError) {
-        orders.record(order, { source: "creation", status: "ERROR", detail: error.message });
+      }),
+    );
+    const durationMs = Date.now() - started;
+    steps.push(...captured.steps);
+
+    if (captured.error !== undefined) {
+      const errMsg = captured.error instanceof Error ? captured.error.message : String(captured.error);
+      steps.push(traceStep("response", "error", "SDK → Comercio (error técnico)", errMsg, durationMs));
+      if (captured.error instanceof PaymentTechnicalError) {
+        orders.record(order, { source: "creation", status: "ERROR", detail: captured.error.message });
       }
-      return technicalFailure(error, reply, order);
+      return technicalFailure(captured.error, reply, order, steps);
     }
+
+    const payment = captured.result!;
+    orders.record(
+      order,
+      {
+        source: "creation",
+        status: payment.status,
+        nativeStatus: payment.nativeStatus,
+        declineReason: payment.declineReason,
+      },
+      payment.transactionId,
+    );
+    const level = payment.status === "APPROVED" ? "ok" : payment.status === "PENDING" ? "warn" : "error";
+    const outcomeLabel = payment.redirectUrl ? "SDK → Comercio (REDIRECT_REQUIRED)" : "SDK → Comercio (TRANSACTION)";
+    const outcomeDetails = [
+      `estado ${payment.status}`,
+      `nativo ${payment.nativeStatus}`,
+      `tx ${payment.transactionId}`,
+      ...(payment.declineReason ? [`rechazo ${describeDecline(payment.declineReason)}`] : []),
+      ...(payment.redirectUrl ? [`redirige a ${safeHost(payment.redirectUrl)}`] : []),
+    ];
+    steps.push(traceStep("response", level, outcomeLabel, outcomeDetails.join(" · "), durationMs));
+    return reply.code(201).send({ order, redirectUrl: payment.redirectUrl, trace: steps });
   });
+
+  app.get("/api/orders", async () => ({ orders: orders.list() }));
 
   app.get<{ Params: { id: string } }>("/api/orders/:id", async (request, reply) => {
     const order = orders.get(request.params.id);
     if (!order) return reply.code(404).send({ error: `No existe la orden ${request.params.id}` });
-    if (!order.transactionId) return { order };
-    try {
-      const payment = await payments.getPaymentStatus(order.gateway, order.transactionId);
-      orders.record(order, {
-        source: "query",
-        status: payment.status,
-        nativeStatus: payment.nativeStatus,
-        declineReason: payment.declineReason,
-      });
-      return { order };
-    } catch (error) {
-      return technicalFailure(error, reply, order);
+    if (!order.transactionId) return { order, trace: [] };
+    const steps: BackendTraceStep[] = [
+      traceStep("backend", "info", "Backend → SDK (getPaymentStatus)", `Orden ${order.id} · tx ${order.transactionId}`),
+    ];
+    const started = Date.now();
+    const captured = await captureBackendCalls(() => payments.getPaymentStatus(order.gateway, order.transactionId!));
+    const durationMs = Date.now() - started;
+    steps.push(...captured.steps);
+
+    if (captured.error !== undefined) {
+      const errMsg = captured.error instanceof Error ? captured.error.message : String(captured.error);
+      steps.push(traceStep("response", "error", "SDK → Comercio (consulta con error)", errMsg, durationMs));
+      return technicalFailure(captured.error, reply, order, steps);
     }
+
+    const payment = captured.result!;
+    orders.record(order, {
+      source: "query",
+      status: payment.status,
+      nativeStatus: payment.nativeStatus,
+      declineReason: payment.declineReason,
+    });
+    const level = payment.status === "APPROVED" ? "ok" : payment.status === "PENDING" ? "warn" : "error";
+    const details = [
+      `estado ${payment.status}`,
+      `nativo ${payment.nativeStatus}`,
+      ...(payment.declineReason ? [`rechazo ${describeDecline(payment.declineReason)}`] : []),
+    ];
+    steps.push(traceStep("response", level, "SDK → Comercio (consulta)", details.join(" · "), durationMs));
+    return { order, trace: steps };
   });
 }
