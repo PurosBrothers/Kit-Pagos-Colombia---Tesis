@@ -42,7 +42,7 @@ El SRS especifica diecinueve requisitos funcionales (RF). Todos se encuentran im
 Los requisitos abarcan tres esquemas de integración:
 \begin{itemize}
     \item \textbf{P1 (Servidor a pasarela):} implementado a través del SDK (cubre de RF-01 a RF-08, RF-18 y RF-19).
-    \item \textbf{P2 (Navegador a API REST propia):} implementado en el prototipo C, donde el cliente consume la API interna (RF-16).
+    \item \textbf{P2 (Navegador a API REST propia):} implementado a través de la capa REST \texttt{/v1/api} (RF-16), que permite consumir el framework desde un cliente sin servidor de pagos propio.
     \item \textbf{P3 (Tokenización directa):} implementado parcialmente con el módulo unificado \texttt{KitPagosBrowser} (RF-17), a excepción de Rapyd, cuyo flujo exige redirigir al usuario a su página alojada.
 \end{itemize}
 
