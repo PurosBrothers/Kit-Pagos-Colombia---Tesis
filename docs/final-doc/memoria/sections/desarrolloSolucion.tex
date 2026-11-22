@@ -25,13 +25,13 @@ La clase principal del dominio es \texttt{Transaction}, una entidad inmutable qu
 
 Los objetos de valor validan que los datos sean correctos antes de enviar cualquier petición de red:
 \begin{itemize}
-    \item \textbf{\texttt{Amount} y \texttt{Currency}:} para evitar los errores de redondeo de punto flotante en JavaScript y la pérdida de ceros decimales al convertir un monto a texto JSON (\textit{JavaScript Object Notation}), \texttt{Amount} recibe el valor como una cadena decimal exacta y realiza sus cálculos con la biblioteca \texttt{big.js}, respetando la cantidad de decimales que define la norma ISO 4217 en \texttt{Currency}.
+    \item \textbf{\texttt{Amount} y \texttt{Currency}:} \texttt{Amount} recibe el valor como una cadena de texto con la parte decimal exacta y opera con la biblioteca \texttt{big.js} según la escala definida en \texttt{Currency}.
     \item \textbf{\texttt{PaymentResult} y \texttt{PendingRedirect}:} al crear un pago, el SDK entrega un resultado que distingue entre una transacción ya resuelta (\texttt{Transaction}) y una redirección pendiente (\texttt{PendingRedirect}, con la dirección \texttt{redirectUrl} a la que debe enviarse al comprador en pagos por PSE o en páginas alojadas).
     \item \textbf{\texttt{PaymentMethod}, \texttt{PseBank}, \texttt{PseBankCode}, \texttt{TaxBreakdown} y \texttt{ReturnUrlConfig}:} \texttt{PaymentMethod} construye el medio de pago a partir de un token de tarjeta o de los datos de PSE, sin aceptar nunca el número de la tarjeta en claro. Para PSE permite usar tanto el código propio de cada pasarela como el código estándar de ACH Colombia (\texttt{PseBankCode}). \texttt{TaxBreakdown} representa el desglose de IVA que requiere Kushki y \texttt{ReturnUrlConfig} agrupa las direcciones de retorno al comercio.
     \item \textbf{\texttt{KitPagosError} y \texttt{KitPagosErrorCode}:} representan los errores técnicos o de configuración (como credenciales inválidas, caída de conexión o tiempo de espera agotado) mediante trece códigos definidos. Cuando un banco rechaza un pago por falta de fondos o por reglas antifraude, el SDK no lanza una excepción técnica, sino que devuelve una \texttt{Transaction} en estado \texttt{DECLINED} junto con su motivo en \texttt{RejectionReason}.
 \end{itemize}
 
-Dentro del dominio, las tablas de estados traducen los nombres propios de cada proveedor a seis estados comunes (\texttt{APPROVED}, \texttt{DECLINED}, \texttt{PENDING}, \texttt{EXPIRED}, \texttt{VOIDED} y \texttt{ERROR}). A su vez, el servicio \texttt{WebhookVerifier} comprueba la firma de las notificaciones de cada pasarela usando comparación en tiempo constante (\texttt{crypto.timingSafeEqual}) y descartando avisos antiguos fuera de una ventana de cinco minutos (300 segundos). En el caso de Mercado Pago, cuya notificación solo informa el identificador de la orden sin incluir ni firmar el estado del cobro, el verificador entrega el evento como \texttt{PENDING} para que el comercio confirme el estado consultando a la pasarela.
+Dentro del dominio, las tablas de estados traducen los nombres propios de cada proveedor a seis estados comunes (\texttt{APPROVED}, \texttt{DECLINED}, \texttt{PENDING}, \texttt{EXPIRED}, \texttt{VOIDED} y \texttt{ERROR}). A su vez, el servicio \texttt{WebhookVerifier} comprueba la firma de las notificaciones usando \texttt{crypto.timingSafeEqual} y delega en el manejador de cada pasarela.
 
 \subsubsection{Capa de aplicación}
 
@@ -43,29 +43,13 @@ El control de fallos se reparte entre \texttt{ErrorHandler} y \texttt{RetryHandl
 
 En la capa de infraestructura, la fachada \texttt{KitPagos} ofrece los métodos públicos que consume el comercio, valida la configuración inicial con \texttt{SdkConfigurator} y solicita a la fábrica \texttt{GatewayFactory} el adaptador de la pasarela elegida. Las direcciones web de cada proveedor se seleccionan según el ambiente configurado (\texttt{Environment}: sandbox, producción o simulación).
 
-Cada uno de los cuatro adaptadores resuelve las particularidades de comunicación de su pasarela, resumidas en la Tabla~\ref{tab:adaptadores-http}:
+Cada uno de los cuatro adaptadores resuelve las particularidades de comunicación de su pasarela (resumidas en la Tabla \ref{tab:comparativa-pasarelas}):
 \begin{itemize}
     \item \textbf{Wompi (\texttt{WompiAdapter}):} solicita primero el token de aceptación de términos de un solo uso, calcula la firma SHA-256 de integridad (sobre la referencia, el monto en centavos, la moneda y el secreto de integridad) y envía la creación del pago. En PSE, realiza una consulta adicional para obtener la dirección del banco (\texttt{async\_payment\_url}).
     \item \textbf{Mercado Pago (\texttt{MercadoPagoAdapter}):} envía en cada cobro la cabecera de idempotencia (\texttt{X-Idempotency-Key}), que evita duplicar una orden, y procesa tanto tarjeta como PSE mediante su API de órdenes (\textit{Orders API}).
     \item \textbf{Kushki (\texttt{KushkiAdapter}):} utiliza la cabecera pública o privada del comercio según la operación, envía el monto con el desglose de impuestos requerido e interpreta las respuestas HTTP \texttt{400} de tarjeta para distinguir un rechazo bancario normal (que devuelve como \texttt{DECLINED}) de un error técnico en los datos de la petición.
     \item \textbf{Rapyd (\texttt{RapydAdapter}):} firma cada petición HTTP calculando un HMAC-SHA256 en Base64. En pagos con tarjeta crea una sesión de pago alojada por Rapyd y devuelve la dirección de redirección para no recibir datos de tarjeta en el servidor, mientras que en PSE registra los datos del titular y filtra los bancos habilitados en el ambiente de pruebas.
 \end{itemize}
-
-\begin{table}[H]
-\centering
-\caption{Diferencias de protocolo que resuelven los cuatro adaptadores del SDK.}
-\label{tab:adaptadores-http}
-\small\setlength{\tabcolsep}{4pt}
-\begin{tabular}{|p{2.3cm}|p{2.9cm}|p{2.9cm}|p{3.2cm}|p{2.6cm}|}
-\hline
-\textbf{Aspecto} & \textbf{Wompi} & \textbf{Mercado Pago} & \textbf{Kushki} & \textbf{Rapyd} \\ \hline
-\textbf{Autenticación} & \texttt{Bearer} con llave pública + firma SHA-256 de integridad & \texttt{Bearer} con llave privada + \texttt{X-Idempotency-Key} & \texttt{Public-Merchant-Id} o \texttt{Private-Merchant-Id} según ruta & Cabeceras \texttt{access\_key}, \texttt{salt}, \texttt{timestamp} y \texttt{signature} (HMAC) \\ \hline
-\textbf{Unidad de monto} & Centavos enteros (\texttt{amount\_in\_cents}) & Pesos enteros en texto (\texttt{total\_amount}) & Objeto con \texttt{subtotalIva}, \texttt{subtotalIva0}, \texttt{iva} e \texttt{ice} & Cadena decimal con escala de la divisa \\ \hline
-\textbf{Cobro con tarjeta} & 2 llamadas (token de aceptación y cobro) & Creación de orden (previa consulta de franquicia del token) & 1 llamada de cobro con el token del navegador & 1 llamada que devuelve redirección a página alojada \\ \hline
-\textbf{Cobro con PSE} & Creación de cobro + consulta de URL bancaria & 1 llamada de creación de orden con datos del pagador & 2 llamadas (token de transferencia e inicio) & 2 llamadas (creación de cliente y de pago) \\ \hline
-\textbf{Estado aprobado} & \texttt{APPROVED} & \texttt{processed} / \texttt{approved} & \texttt{APPROVAL} o \texttt{approvedTransaction} & \texttt{CLO} junto con \texttt{paid: true} \\ \hline
-\end{tabular}
-\end{table}
 
 Por su parte, el módulo \texttt{kit-pagos-colombia/browser} se ejecuta en el navegador del comprador sin depender de librerías de Node.js. Su clase principal, \texttt{KitPagosBrowser}, envía los datos de la tarjeta directamente a las rutas de tokenización de Wompi, Mercado Pago o Kushki (o al simulador local durante las pruebas) y entrega al comercio únicamente el token resultante. Si se invoca para Rapyd, informa mediante un \texttt{KitPagosError} que dicho proveedor captura la tarjeta en su propia página de pago.
 

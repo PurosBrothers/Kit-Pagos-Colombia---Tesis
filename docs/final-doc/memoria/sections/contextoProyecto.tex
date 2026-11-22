@@ -113,6 +113,7 @@ Cobro con tarjeta & 2 llamadas (token de aceptación + cobro) & Creación de una
 Cobro con PSE & Transacción + consulta de URL & Creación de una orden & Tres llamadas (token, inicio y estado) & Pago con un tipo de método por banco \\ \hline
 Algoritmo de firma en webhook & SHA-256 sobre campos concatenados & HMAC-SHA256 sobre manifiesto y \textit{request-id} & HMAC-SHA256 sobre cuerpo y marca de tiempo & HMAC-SHA256 en Base64 con \textit{salt} y fecha \\ \hline
 Contenido de la notificación & Transacción completa & Solo identificador del recurso & Transacción completa & Transacción completa \\ \hline
+Estado aprobado & \texttt{APPROVED} & \texttt{processed} con \texttt{approved} & \texttt{APPROVAL} o \texttt{approved\allowbreak transaction} & \texttt{CLO} junto con \texttt{paid: true} \\ \hline
 \end{tabular}
 \caption{Comparativa técnica de las cuatro pasarelas de pago seleccionadas}
 \label{tab:comparativa-pasarelas}

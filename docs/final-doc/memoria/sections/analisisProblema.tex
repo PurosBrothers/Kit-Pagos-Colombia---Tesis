@@ -38,13 +38,8 @@ El SRS especifica diecinueve requisitos funcionales (RF). Todos se encuentran im
     \item \textbf{RF-15 (comportamiento esperado por dato):} cada dato de prueba indica su resultado esperado y su fuente, y distingue lo medido en la API real de lo tomado de la documentación.
 \end{itemize}
 
-\paragraph{D. Patrones de integración y su estado}
-Los requisitos abarcan tres esquemas de integración:
-\begin{itemize}
-    \item \textbf{P1 (Servidor a pasarela):} implementado a través del SDK (cubre de RF-01 a RF-08, RF-18 y RF-19).
-    \item \textbf{P2 (Navegador a API REST propia):} implementado a través de la capa REST \texttt{/v1/api} (RF-16), que permite consumir el framework desde un cliente sin servidor de pagos propio.
-    \item \textbf{P3 (Tokenización directa):} implementado parcialmente con el módulo unificado \texttt{KitPagosBrowser} (RF-17), a excepción de Rapyd, cuyo flujo exige redirigir al usuario a su página alojada.
-\end{itemize}
+\paragraph{D. Patrones de x|ón y su estado}
+Los requisitos funcionales dan soporte a los tres patrones de integración definidos en el capítulo V: P1 (RF-01 a RF-08, RF-18 y RF-19), P2 (RF-16) y P3 (RF-17, con la excepción de Rapyd por su flujo de página alojada).
 
 \subsubsection{Criterios de calidad (clasificación FURPS+)}
 El SRS clasifica los requisitos no funcionales con el modelo FURPS+, que los agrupa en funcionalidad, usabilidad, confiabilidad, rendimiento y soporte, más las restricciones que indica el signo «+». En resumen:
@@ -120,7 +115,7 @@ El SPMP declara dos supuestos técnicos. El primero es que las APIs de las cuatr
 Esos flujos se prueban con la API de Simulación, que tiene sus propios límites declarados en la matriz de trazabilidad. Las combinaciones sin evidencia de cómo responde la pasarela real devuelven \texttt{501} (RF-10). Los datos de prueba de Rapyd y del PSE de Mercado Pago no llegan al simulador, porque en esos flujos el resultado lo decide la página del banco o de la pasarela. Esos resultados se eligen con los montos reservados (RF-15).
 
 \subsubsection{Exclusiones del alcance}
-El SPMP delimita el alcance con exclusiones que el capítulo II resume. No se cubren el efectivo, Nequi ni Daviplata, y tampoco las suscripciones ni los reembolsos. El framework crea pagos, consulta su estado, lista los bancos PSE y verifica los webhooks, pero no es un procesador de pagos. Arma la petición, la envía a la pasarela y normaliza la respuesta, mientras que la autorización, la liquidación y el procesamiento del cobro son siempre de la pasarela. Quedan por fuera, además, sumar otras pasarelas, recibir el número de tarjeta en el servidor del comercio, integrarse con sistemas contables o ERP, conciliar los pagos y administrar las cuentas que el comercio tiene con cada proveedor. El proyecto tampoco responde por la continuidad de las APIs de las pasarelas ni entrega interfaces de pago para producción, porque los cuatro prototipos (A, B, C y D) son demostraciones diseñadas para ambientes de prueba y simulación.
+El SPMP delimita el alcance con exclusiones que el capítulo II resume. Además de las exclusiones generales definidas en la sección 2.3 del capítulo II (medios alternativos, suscripciones, reembolsos, rol de procesador financiero e integración contable/ERP), el proyecto no cubre la incorporación de pasarelas adicionales, no garantiza la continuidad de las APIs externas, no concilia los pagos y no administra las cuentas que el comercio tiene con cada proveedor. El proyecto tampoco responde por la continuidad de las APIs de las pasarelas ni entrega interfaces de pago para producción, porque los cuatro prototipos (A, B, C y D) son demostraciones diseñadas para ambientes de prueba y simulación.
 
 \subsection{Especificación funcional}
 Esta sección describe los flujos principales. Las trece historias de usuario (HU) del SRS, con sus criterios de aceptación, detallan cada uno.
@@ -151,4 +146,4 @@ Cuando la pasarela envía un evento a la URL de notificación del comercio:
 \subsubsection{Flujos de error y de simulación}
 Cuando una operación falla por una condición esperada, el SDK lanza \texttt{KitPagosError} con un código de \texttt{KitPagosErrorCode}, la pasarela y el contexto de la operación, con las credenciales ocultas. Si el fallo es transitorio y la operación es idempotente, el SDK la reintenta antes de lanzar el error (HU-05). Un rechazo de negocio no se trata como error: llega como una \texttt{Transaction} en \texttt{DECLINED}, con su motivo cuando la pasarela lo entrega, aunque Wompi no envía un código de rechazo estable (HU-11).
 
-Con la API de Simulación, el flujo es el mismo, pero el resultado lo decide el escenario. El orden de precedencia es cabecera de escenario, marca en la credencial, dato de prueba de la pasarela y monto reservado; sin ninguno, el pago se aprueba. El simulador responde con el formato nativo de la pasarela, conserva el escenario en las consultas y emite el webhook firmado cuando el pago cambia de estado (HU-06 a HU-08).
+Con la API de Simulación, el flujo es el mismo, pero el resultado lo decide el escenario. El resultado se determina según el mecanismo de selección de escenarios definido en RF-10 (detallado en la sección 3.2, del capítulo VI); si no se especifica ninguno, el pago se aprueba. El simulador responde con el formato nativo de la pasarela, conserva el escenario en las consultas y emite el webhook firmado cuando el pago cambia de estado (HU-06 a HU-08).
