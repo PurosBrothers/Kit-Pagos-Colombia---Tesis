@@ -22,13 +22,13 @@ La Tabla~\ref{tab:riesgos-materializados} reúne los riesgos que se materializar
   \endlastfoot
   Cambio en una pasarela & Rapyd había completado la adquisición de PayU GPO en América Latina, y el mecanismo de firma de los webhooks cambió & Decisión documentada en el registro de arquitectura & PayU se reemplazó por Rapyd con un adaptador nuevo, sin tocar el dominio \\
   \hline
-  Límites de los sandboxes & Los sandboxes no permiten varios flujos de punta a punta, y las credenciales «de sandbox» de Mercado Pago resultaron ser de producción & Mediciones en \path{docs/testing-data/} & El simulador siguió simulando los flujos que los sandboxes no dejan completar, con las formas medidas \\
+  Límites de los sandboxes & Los sandboxes no permiten varios flujos de punta a punta, y las credenciales «de sandbox» de Mercado Pago resultaron ser de producción & Mediciones en \path{docs/testing-data/} & El simulador siguió simulando los flujos que los sandboxes no dejan completar, con las estructuras de respuesta medidas \\
   \hline
-  Métrica de complejidad mal calculada & El guion calculaba WMC como conteo de métodos y no veía la complejidad & Fórmulas en \texttt{metho\-dology.\allowbreak md}, sección 6.1 & Se corrigió la fórmula, el tope de WMC subió de 15 a 20 y se agregó MAX\_CC $\le 10$ \\
+  Métrica de complejidad mal calculada & El script calculaba WMC como conteo de métodos y no veía la complejidad & Fórmulas definidas en la sección 7.4 & Se corrigió la fórmula, el tope de WMC subió de 15 a 20 y se agregó MAX\_CC $\le 10$ \\
   \hline
-  Retraso del desarrollo & La Iteración 3 se extendió sobre las Fases 5 y 6 & Tabla~\ref{tab:carta-gantt}; \texttt{metho\-dology.\allowbreak md}, sección 10.2 & Las Fases 5 y 6 se comprimieron para no mover la entrega del 9 de noviembre \\
+  Retraso del desarrollo & La Iteración 3 se extendió sobre las Fases 5 y 6 & Tabla~\ref{tab:carta-gantt} (sección 4.3.2) & Las Fases 5 y 6 se comprimieron para no mover la entrega del 9 de noviembre \\
   \hline
-  Exposición de credenciales & En el ensayo de los webhooks en vivo, el log local del simulador guardó cabeceras con credenciales de Kushki & Registro de arquitectura y \texttt{redact\-Serializer.ts} & Las credenciales se dejaron fuera del log, y se revisó que el log de Render no las tuviera \\
+  Exposición de credenciales & En el ensayo de los webhooks en vivo, el registro (\textit{log}) local del simulador guardó cabeceras con credenciales de Kushki & Registro de arquitectura y \texttt{redact\-Serializer.ts} & Las credenciales se excluyeron del registro, y se verificó que el registro de Render no las contuviera \\
   \hline
 \end{longtable}
 \end{center}

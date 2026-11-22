@@ -1,16 +1,16 @@
 \subsection{Administración de Configuración y Documentación}
 
-El proyecto produce artefactos de varios tipos, código fuente, código de pruebas, documentación técnica, documentación académica y datos de configuración, que evolucionan a lo largo de los ciclos DSR. Para mantener trazabilidad, consistencia y la capacidad de retroceder a versiones anteriores si es necesario, se implementa un proceso riguroso de control de cambios.
+El proyecto produce artefactos de varios tipos (código fuente, código de pruebas, documentación técnica, documentación académica y datos de configuración) que evolucionan a lo largo de los ciclos DSR. Para mantener trazabilidad, consistencia y la capacidad de retroceder a versiones anteriores si es necesario, se implementa un proceso riguroso de control de cambios.
 
 Los ítems de configuración principales son identificados explícitamente. Todo el código se versiona en GitHub: el SDK de servidor en \texttt{sdk/src}, el módulo de navegador en \texttt{sdk/src-browser}, la API de Simulación en \texttt{simulator-api/src}, los prototipos en \texttt{prototypes/}, los ejemplos en \texttt{examples/} y la página de presentación en \texttt{landing/}. Las pruebas del SDK están junto al código (\texttt{*.test.ts} en \texttt{sdk/src}) y en \texttt{sdk/test}, y las del simulador en \texttt{simulator-api/test}. La rama \texttt{main} tiene lo publicado y \texttt{devops} es la rama de integración. Cada cambio se hace en una rama de trabajo que sale de \texttt{devops}, con el tipo de cambio y el número de su issue en el nombre (sección 7.1). La versión 1.0 de este plan nombraba otros directorios (\texttt{src/}, \texttt{api/} y \texttt{test/}) y otras ramas (\texttt{dev} y \texttt{feature/*}).
 
 Las decisiones de arquitectura están en el SAD. Los datos de prueba que usa la memoria están en su capítulo VI, y la guía de quien integra el SDK es el paquete publicado. No existen los documentos sueltos de arquitectura, de datos de sandbox, de guía de integración ni de registro de cambios del paquete que preveía la versión 1.0, ni se genera documentación con TypeDoc. La documentación académica (la memoria, el SRS, el SAD, el plan de pruebas y este SPMP) está en LaTeX en \texttt{docs/final-doc/}. Su historial de cambios es el de Git y la tabla de versiones de cada documento, no Google Drive. La matriz de trazabilidad es el Excel anexo del SRS, \path{docs/final-doc/srs/anexos/matriz-trazabilidad.xlsx}; el plan original la ubicaba en Google Sheets y le asignaba la «sección 1.3», que no es la matriz. Los anexos B y C del plan de riesgos y de mitigación no existen (sección 7.2).
 
-Para cambios en código, se sigue un proceso estructurado. El desarrollador crea una rama de trabajo desde \texttt{devops}, implementa el cambio y ejecuta las pruebas con cobertura (\texttt{npm test -- --coverage}). Luego sube la rama a GitHub y abre un pull request que describe el cambio y nombra su issue. La integración continua (\texttt{ci.yml}) ejecuta ESLint, las pruebas con su umbral de cobertura del 80\%, las métricas CK en modo guarda (WMC $\le 20$, CBO $\le 5$, RFC $\le 20$ y MAX\_CC $\le 10$) y la compilación. Si hay errores, el desarrollador los corrige e itera. Un integrante distinto al autor revisa el código, y las mejoras necesarias se registran como comentarios en el pull request. El autor las aborda y, una vez aprobado, el cambio se integra a \texttt{devops} y el issue se cierra a mano con un comentario. Los documentos siguen el mismo camino: el autor cambia la fuente del documento en una rama, otro integrante revisa el pull request y \texttt{final-doc.yml} compila los documentos en LaTeX.
+Para cambios en código, se sigue un proceso estructurado. El desarrollador crea una rama de trabajo desde \texttt{devops}, implementa el cambio y ejecuta las pruebas con cobertura (\texttt{npm test -- --coverage}). Luego sube la rama a GitHub y abre un pull request que describe el cambio y nombra su issue. La integración continua (\texttt{ci.yml}) ejecuta ESLint, las pruebas con su umbral de cobertura del 80~\%, las métricas CK en modo de verificación estricta (guarda) (WMC $\le 20$, CBO $\le 5$, RFC $\le 20$ y MAX\_CC $\le 10$) y la compilación. Si hay errores, el desarrollador los corrige e itera. Un integrante distinto al autor revisa el código, y las mejoras necesarias se registran como comentarios en el pull request. El autor las resuelve y, una vez aprobado, el cambio se integra a \texttt{devops} y el issue se cierra manualmente con un comentario. Los documentos siguen el mismo camino: el autor cambia la fuente del documento en una rama, otro integrante revisa el pull request y \texttt{final-doc.yml} compila los documentos en LaTeX.
 
-Las versiones del SDK siguen el versionamiento semántico, en su etapa previa a la 1.0 (\texttt{0.x.y}). \texttt{publish.yml} publica en npm cuando un cambio en \texttt{sdk/} llega a \texttt{main} y la versión de \texttt{sdk/package.json} todavía no existe en el registro. Al 7 de noviembre de 2026 había 14 versiones publicadas, con la 0.6.0 en \texttt{latest} y la 0.7.0-rc.2 en \texttt{next}. La primera versión del plan preveía, al cierre de cada fase, consolidar la rama de desarrollo en \texttt{main}, crear una etiqueta de versión y actualizar un registro de cambios del paquete; el repositorio no tiene etiquetas ni ese registro.
+Las versiones del SDK siguen el versionamiento semántico, en su etapa previa a la 1.0 (\texttt{0.x.y}). \texttt{publish.yml} publica en npm cuando un cambio en \texttt{sdk/} llega a \texttt{main} y la versión de \texttt{sdk/package.json} todavía no existe en el registro. En el corte del registro npm del 7 de noviembre de 2026 había 14 versiones publicadas, con la 0.6.0 en \texttt{latest} y la 0.7.0-rc.2 en \texttt{next}. La primera versión del plan preveía, al cierre de cada fase, consolidar la rama de desarrollo en \texttt{main}, crear una etiqueta de versión y actualizar un registro de cambios del paquete; el repositorio no tiene etiquetas ni ese registro.
 
-La Tabla~\ref{tab:artefactos-documentacion} describe dónde vive cada artefacto y en qué momento del proyecto se creó y se publicó.
+La Tabla~\ref{tab:artefactos-documentacion} describe dónde se ubica cada artefacto y en qué momento del proyecto se creó y se publicó.
 
 \begin{center}
 \renewcommand{\arraystretch}{1.2}
@@ -30,15 +30,15 @@ La Tabla~\ref{tab:artefactos-documentacion} describe dónde vive cada artefacto 
   \hline
   Módulo de navegador & \texttt{sdk/src-browser} & Código fuente & Iteración 3; se publica con el SDK \\
   \hline
-  Pruebas del SDK & \texttt{sdk/src} (\texttt{*.test.ts}) y \texttt{sdk/test} & Código de pruebas & Crecen con cada cambio; la integración continua las corre en cada pull request \\
+  Pruebas del SDK & \texttt{sdk/src} (\texttt{*.test.ts}) y \texttt{sdk/test} & Código de pruebas & Crecen con cada cambio; la integración continua las ejecuta en cada pull request \\
   \hline
   API de Simulación & \texttt{simulator-api/src} & Código fuente & Iteración 3; en Render desde el 5 de octubre de 2026 \\
   \hline
-  Pruebas del simulador & \texttt{simulator-api/test} & Código de pruebas & Crecen con cada cambio; la integración continua las corre en cada pull request \\
+  Pruebas del simulador & \texttt{simulator-api/test} & Código de pruebas & Crecen con cada cambio; la integración continua las ejecuta en cada pull request \\
   \hline
   Prototipos A a D & \texttt{prototypes/} & Código fuente & B y D en la Iteración 3; C desde el 13 de octubre y A desde el 21 de octubre de 2026 \\
   \hline
-  Ejemplos de integración & \texttt{examples/} & Código fuente & Desde la Iteración 2; la integración continua los compila contra el SDK \\
+  Ejemplos de integración & \texttt{examples/} & Código fuente & Desde la Iteración 2; la integración continua los compila con el SDK \\
   \hline
   Página de presentación & \texttt{landing/} & Código fuente & Iteración 3; en GitHub Pages desde el 4 de octubre de 2026 \\
   \hline
@@ -48,7 +48,7 @@ La Tabla~\ref{tab:artefactos-documentacion} describe dónde vive cada artefacto 
   \hline
   Guía de implementación & Paquete publicado en npm & Documentación del producto & Se actualiza con cada versión del SDK \\
   \hline
-  Matriz de trazabilidad & \path{docs/final-doc/srs/anexos/matriz-trazabilidad.xlsx} & Anexo del SRS & Cada pull request que toca un requerimiento actualiza su fila \\
+  Matriz de trazabilidad & \texttt{docs/\allowbreak final-doc/\allowbreak srs/\allowbreak anexos/\allowbreak matriz-\allowbreak trazabilidad.\allowbreak xlsx} & Anexo del SRS & Cada pull request que toca un requerimiento actualiza su fila \\
   \hline
   Documentos finales & \texttt{docs/final-doc/} & Documentación académica & En LaTeX desde octubre de 2026; versiones 1.0 de mayo en Word y Google Docs \\
   \hline

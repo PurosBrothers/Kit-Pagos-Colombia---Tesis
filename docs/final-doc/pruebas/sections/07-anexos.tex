@@ -34,7 +34,7 @@ RF-04 & Validar la firma criptográfica de un webhook. & CP-04 & HU-03 \\ \hline
 RF-05 & Convertir los fallos esperados en \texttt{KitPagosError}. & CP-03, CP-07 & HU-05, HU-11 \\ \hline
 RF-06 & Cambiar de pasarela sin cambiar el código de negocio. & CP-01, CP-04 & HU-04 \\ \hline
 RF-07 & Reintentar operaciones idempotentes con retroceso exponencial. & CP-07 & HU-05 \\ \hline
-RF-08 & Redactar credenciales y secretos de los errores. & Ningún caso; las suites \path{redacting-gateway.test.ts}, \path{http-failure.test.ts} y \path{ErrorHandler.test.ts} & HU-05 \\ \hline
+RF-08 & Ocultar credenciales y secretos en los errores. & Ningún caso; las suites \path{redacting-gateway.test.ts}, \path{http-failure.test.ts} y \path{ErrorHandler.test.ts} & HU-05 \\ \hline
 RF-09 & Exponer las rutas nativas bajo \texttt{/v1/sim}. & CP-01 a CP-05, CP-07 & HU-06, HU-07 \\ \hline
 RF-10 & Elegir el escenario por cabecera, dato, monto o marca. & CP-02, CP-03, CP-07 & HU-06, HU-07 \\ \hline
 RF-11 & Replicar la estructura de error nativa. & CP-03, CP-07 & HU-07 \\ \hline
@@ -66,13 +66,13 @@ La Tabla~\ref{tab:comandos} reúne los comandos que ejecutan las suites y los ej
 \textbf{Comprobación} & \textbf{Comando} & \textbf{Resultado esperado} \\ \hline
 \endhead
 Suite del SDK & \texttt{cd sdk \&\& npm test -- --coverage} & 58 suites y 1088 pruebas en verde; cobertura de 80~\% o más. \\ \hline
-README del SDK y manual & \texttt{cd sdk \&\& npm run build \&\& npm run} \path{check:readme} & Los fragmentos compilan contra \path{dist/}. \\ \hline
+README del SDK y manual & \texttt{cd sdk \&\& npm run build \&\& npm run} \path{check:readme} & Los fragmentos compilan con \path{dist/}. \\ \hline
 Contrato & \texttt{cd sdk \&\& npm run} \path{test:sandbox} & 25 pruebas ejecutadas, u omitidas por falta de \path{.env}. \\ \hline
 Suite de la API de Simulación & \texttt{cd simulator-api \&\& npm test -- --coverage}, sin \path{.env} en la raíz & 54 suites y 1301 pruebas en verde; cobertura de 80~\% o más. \\ \hline
 Escenarios & \texttt{cd examples \&\& npm run} \path{simulate:scenarios} & Cada línea con \texttt{OK}; código de salida 0. \\ \hline
 Intercambiabilidad & \texttt{cd examples \&\& npm run} \path{simulate:interchangeability} & Cuatro pasarelas con el mismo resultado; código 0. \\ \hline
 PSE de Wompi & \texttt{cd examples \&\& npm run} \path{simulate:wompi-pse} & Redirección \texttt{PENDING} y consulta \texttt{APPROVED}. \\ \hline
-Typecheck de ejemplos & \texttt{cd examples \&\& npm run typecheck} & Compila contra la superficie pública del SDK. \\ \hline
+Typecheck de ejemplos & \texttt{cd examples \&\& npm run typecheck} & Compila frente a la API pública del SDK. \\ \hline
 Prototipos & \texttt{npm test} y \texttt{npm run typecheck} en cada carpeta de \path{prototypes/} & Suites de la Tabla~\ref{tab:pruebas-prototipos} y compilación en verde. \\ \hline
 Paridad de esqueleto & \path{./prototypes/check-skeleton-parity.sh} & Sin diferencias entre B y D. \\ \hline
 Postman local & Newman o Postman con el ambiente \texttt{local} & 42 peticiones con sus aserciones en verde. \\ \hline

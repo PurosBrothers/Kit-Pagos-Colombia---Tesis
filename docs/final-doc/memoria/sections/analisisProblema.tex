@@ -38,7 +38,7 @@ El SRS especifica diecinueve requisitos funcionales (RF). Todos se encuentran im
     \item \textbf{RF-15 (comportamiento esperado por dato):} cada dato de prueba indica su resultado esperado y su fuente, y distingue lo medido en la API real de lo tomado de la documentación.
 \end{itemize}
 
-\paragraph{D. Patrones de x|ón y su estado}
+\paragraph{D. Patrones de integración y su estado}
 Los requisitos funcionales dan soporte a los tres patrones de integración definidos en el capítulo V: P1 (RF-01 a RF-08, RF-18 y RF-19), P2 (RF-16) y P3 (RF-17, con la excepción de Rapyd por su flujo de página alojada).
 
 \subsubsection{Criterios de calidad (clasificación FURPS+)}
@@ -46,7 +46,7 @@ El SRS clasifica los requisitos no funcionales con el modelo FURPS+, que los agr
 \begin{itemize}
     \item \textbf{Funcionalidad y seguridad (\textit{functionality}):} las cuatro operaciones, con tarjeta tokenizada y con PSE, en las cuatro pasarelas. Las credenciales no aparecen en registros, mensajes de error ni respuestas del SDK, y la comunicación con las pasarelas usa HTTP cifrado (HTTPS). La firma de cada webhook se verifica antes de procesar el evento, con una ventana de tolerancia y una comparación en tiempo constante (\texttt{crypto.timingSafeEqual}).
     \item \textbf{Usabilidad (\textit{usability}):} el paquete se distribuye mediante el registro npm. La documentación incluye guías con ejemplos para los flujos principales los cuales son validados automáticamente durante la integración continua para garantizar que el código de la documentación coincida con la interfaz pública vigente del SDK.
-    \item \textbf{Confiabilidad (\textit{reliability}):} solo las operaciones idempotentes (\texttt{getPaymentStatus()} y \texttt{getPseBanks()}) se reintentan. El sistema implementa una política de retroceso exponencial (\textit{exponential backoff}) con variación aleatoria (\textit{jitter}) y un límite máximo de espera configurable. \texttt{createPayment()} no se reintenta. Las condiciones de error esperadas se convierten en \texttt{KitPagosError} con uno de los trece códigos de \texttt{KitPagosErrorCode}. La definición de terminado (DoD) exige una cobertura de pruebas de al menos 80\,\% en el SDK y en la API de Simulación, la cual se valida de forma automática mediante integración continua (CI).
+    \item \textbf{Confiabilidad (\textit{reliability}):} solo las operaciones idempotentes (\texttt{getPaymentStatus()} y \texttt{getPseBanks()}) se reintentan. El sistema implementa una política de retroceso exponencial (\textit{backoff}) con variación aleatoria (\textit{jitter}) (3 intentos por omisión, espera base de 1~s y tope de 4~s). \texttt{createPayment()} no se reintenta. Las condiciones de error esperadas se convierten en \texttt{KitPagosError} con uno de los trece códigos de \texttt{KitPagosErrorCode}. La definición de terminado (DoD) exige una cobertura de pruebas de al menos 80\,\% en el SDK y en la API de Simulación, la cual se valida de forma automática mediante integración continua (CI).
     \item \textbf{Rendimiento (\textit{performance}):} cada petición a una pasarela tiene un límite de tiempo configurable (\texttt{timeoutMs}, 30 segundos por omisión). No se declaran umbrales de latencia del SDK ni del simulador porque no se midieron en un entorno controlado; el escenario \texttt{TIMEOUT} del simulador introduce el retardo que se configure. El módulo de navegador pesa 5,3 kilobytes (KB) comprimido con gzip, medido en la versión 0.6.0.
     \item \textbf{Soporte y mantenibilidad (\textit{supportability}):} con la arquitectura hexagonal, sumar una pasarela requiere un adaptador nuevo sin modificar el núcleo. La CI ejecuta el análisis estático de estilo, las pruebas con cobertura y la verificación de las métricas CK del SDK y de la API de Simulación. También compila y empaqueta el SDK, prueba los prototipos y compila los documentos finales.
 \end{itemize}
@@ -75,7 +75,7 @@ RF-04 & Validar webhook & SDK & CP-04 \\ \hline
 RF-05 & Excepciones tipadas & SDK & CP-03, CP-07 \\ \hline
 RF-06 & Cambiar de pasarela & SDK & CP-01, CP-04 \\ \hline
 RF-07 & Reintentos & SDK & CP-07 \\ \hline
-RF-08 & Credenciales no expuestas & SDK & Suites automatizadas de redacción y errores del SDK \\ \hline
+RF-08 & Credenciales no expuestas & SDK & Suites automatizadas de ocultamiento de credenciales y errores del SDK \\ \hline
 RF-09 & Rutas por pasarela & API de Simulación & CP-01 a CP-05, CP-07 \\ \hline
 RF-10 & Elección del escenario & API de Simulación & CP-02, CP-03, CP-07 \\ \hline
 RF-11 & Estructura de error nativa & API de Simulación & CP-03, CP-07 \\ \hline
@@ -84,7 +84,7 @@ RF-13 & Especificación OpenAPI & API de Simulación & CP-06 \\ \hline
 RF-14 & Datos de prueba por pasarela & Datos de prueba & CP-02, CP-03, CP-05 \\ \hline
 RF-15 & Comportamiento esperado por dato & Datos de prueba & CP-03, CP-05 \\ \hline
 RF-16 & Capa REST propia & API de Simulación & CP-06 \\ \hline
-RF-17 & Tokenización en el navegador & SDK (navegador) & CP-05 \\ \hline
+RF-17 & Tokenización en el navegador & Módulo de navegador & CP-05 \\ \hline
 RF-18 & Motivo de rechazo & SDK & CP-03, CP-06 \\ \hline
 RF-19 & Bancos PSE & SDK & CP-02, CP-06 \\ \hline
 \end{longtable}

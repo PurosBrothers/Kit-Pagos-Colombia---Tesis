@@ -7,9 +7,9 @@ Kit Pagos Colombia es un framework de desarrollo de software de código abierto 
 El framework está compuesto por cuatro componentes complementarios:
 
 \begin{itemize}
-  \item \textbf{SDK de servidor (\texttt{kit-pagos-colombia}):} biblioteca TypeScript que abstrae las diferencias técnicas entre Wompi, Rapyd (que adquirió PayU GPO), Mercado Pago y Kushki. Expone una API normalizada para crear pagos con tarjeta o PSE, consultar el estado, listar los bancos PSE y validar webhooks.
-  \item \textbf{Módulo de navegador (\texttt{kit-pagos-colombia/browser}):} módulo que tokeniza la tarjeta en el navegador del pagador contra Wompi, Mercado Pago y Kushki, de modo que el número de la tarjeta no pase por el servidor del comercio. Rapyd cobra la tarjeta en su página alojada y el módulo la rechaza con \texttt{UNSUPPORTED\_OPERATION}.
-  \item \textbf{API de Simulación:} servicio Fastify con dos superficies. \texttt{/v1/sim} imita las APIs nativas de las cuatro pasarelas para probar sin credenciales reales; \texttt{/v1/api} expone las operaciones de Kit Pagos por REST. Corre en local y se despliega en Render desde la rama \texttt{devops}.
+  \item \textbf{SDK (\textit{Software Development Kit}) de servidor (\texttt{kit-pagos-colombia}):} librería TypeScript que abstrae las diferencias técnicas entre Wompi, Rapyd (que adquirió PayU GPO, \textit{Global Payment Organisation}), Mercado Pago y Kushki. Expone una API normalizada para crear pagos con tarjeta o PSE (Pagos Seguros en Línea), consultar el estado, listar los bancos PSE y validar webhooks.
+  \item \textbf{Módulo de navegador (\texttt{kit-pagos-colombia/browser}):} módulo que tokeniza la tarjeta en el navegador del pagador directamente con Wompi, Mercado Pago y Kushki, de modo que el número de la tarjeta no pase por el servidor del comercio. Rapyd procesa el cobro con tarjeta en su página alojada y el módulo la rechaza con \texttt{UNSUPPORTED\_OPERATION}.
+  \item \textbf{API de Simulación:} servicio Fastify con dos interfaces HTTP. \texttt{/v1/sim} imita las APIs nativas de las cuatro pasarelas para probar sin credenciales reales; \texttt{/v1/api} expone las operaciones de Kit Pagos por REST. Se ejecuta en entorno local y se despliega en Render desde la rama \texttt{devops}.
   \item \textbf{Documentación de datos de prueba (\texttt{docs/testing-data/}):} repositorio que consolida credenciales de sandbox, tarjetas, montos, referencias y flujos medidos de cada pasarela, con el nivel de evidencia de cada afirmación.
 \end{itemize}
 
@@ -18,7 +18,7 @@ El framework está compuesto por cuatro componentes complementarios:
 El framework contempla tres patrones de integración:
 
 \begin{itemize}
-  \item \textbf{P1 --- Backend hacia SDK:} el servidor del comercio usa el SDK y habla con la pasarela. Es el patrón principal y el que usan los prototipos A y B; el prototipo D integra las pasarelas a mano como control.
+  \item \textbf{P1 --- Backend hacia SDK:} el servidor del comercio utiliza el SDK para comunicarse con la pasarela. Es el patrón principal y el que usan los prototipos A y B; el prototipo D integra las pasarelas de forma manual como caso de control.
   \item \textbf{P2 --- Frontend hacia REST hacia SDK:} un cliente de navegador consume \texttt{/v1/api} sin instalar el SDK ni conocer la pasarela. Está implementado en el prototipo C.
   \item \textbf{P3 --- Frontend hacia SDK unificado:} \texttt{KitPagosBrowser} unifica la tokenización de tarjeta en el navegador para Wompi, Mercado Pago y Kushki. Rapyd no tokeniza en el navegador: redirige a su página alojada. Por eso P3 está implementado en parte y no sustituye la integración de pagos del backend.
 \end{itemize}
@@ -29,8 +29,8 @@ El framework cubre las siguientes operaciones sobre las pasarelas integradas: cr
 
 Las pasarelas soportadas son Wompi, Rapyd (PayU GPO), Mercado Pago Colombia y Kushki.
 
-El framework NO cubre efectivo, Nequi, Daviplata, suscripciones ni reembolsos. Tampoco cubre: procesamiento directo del número de tarjeta en el servidor del comercio; protección de la página donde se escribe la tarjeta (la Content-Security-Policy y el monto son responsabilidad del comercio); gestión de cuentas de comercio; conciliación financiera; ni operaciones administrativas sobre las cuentas de los proveedores.
+El framework NO cubre efectivo, Nequi, Daviplata, suscripciones ni reembolsos. Tampoco cubre: procesamiento directo del número de tarjeta en el servidor del comercio; protección de la página donde el usuario ingresa los datos de la tarjeta (la Content-Security-Policy y el monto son responsabilidad del comercio); gestión de cuentas de comercio; conciliación financiera; ni operaciones administrativas sobre las cuentas de los proveedores.
 
 \subsection{Objetivo del producto}
 
-Reducir la complejidad técnica y el tiempo requerido para integrar múltiples pasarelas de pago en aplicaciones de software colombianas, ofreciendo una capa de abstracción reutilizable, un entorno de simulación accesible, tokenización de tarjeta en el navegador y una fuente centralizada de datos de prueba válidos para el contexto local.
+Reducir la complejidad técnica y el tiempo requerido para integrar múltiples pasarelas de pago en aplicaciones de software colombianas mediante una capa de abstracción reutilizable, un entorno de simulación accesible, tokenización de tarjeta en el navegador y una fuente centralizada de datos de prueba válidos para el contexto local.

@@ -4,7 +4,7 @@ El inicio del proyecto contempla las actividades necesarias para preparar al equ
 
 \subsubsection{Entrenamiento del Personal}
 
-El equipo cuenta con base sólida en programación orientada a objetos, TypeScript y consumo de APIs REST. No obstante, la ejecución del proyecto requiere competencias específicas que no todos los integrantes dominan con la misma profundidad al inicio. El plan a continuación cierra esas brechas.
+El equipo cuenta con base sólida en programación orientada a objetos, TypeScript y consumo de APIs REST. No obstante, la ejecución del proyecto requiere competencias específicas que no todos los integrantes dominaban con la misma profundidad al inicio. La tabla siguiente recoge el plan de capacitación definido en la versión 1.0 para cerrar esas brechas.
 
 \begin{center}
 \renewcommand{\arraystretch}{1.2}
@@ -18,15 +18,15 @@ El equipo cuenta con base sólida en programación orientada a objetos, TypeScri
   Conocimiento / Habilidad & Brecha identificada & Integrantes & Responsable de la transferencia & Mecanismo & Momento \\
   \hline
   \endhead
-  Arquitectura hexagonal aplicada en TypeScript & Conocimiento conceptual presente; aplicación práctica insuficiente & Todos & Líder de arquitectura y núcleo & Sesión grupal de 2 horas con código de ejemplo; revisión del capítulo aplicado de Cockburn (2024) & Inicio de la Fase 3 \\
+  Arquitectura hexagonal aplicada en TypeScript & Conocimiento conceptual presente; aplicación práctica insuficiente & Todos & Líder de arquitectura y núcleo & Sesión grupal de 2 horas con código de ejemplo; revisión del capítulo aplicado de Cockburn y Garrido de Paz (2024) & Inicio de la Fase 3 \\
   \hline
-  Fastify con TypeScript y validación de esquemas JSON & Conocimiento de Express presente; Fastify desconocido & Líder de integración & Autoaprendizaje guiado con documentación oficial de Fastify; endpoint de ejemplo documentado en Notion & Fase 3 &  \\
+  Fastify con TypeScript y validación de esquemas JSON & Conocimiento de Express presente; Fastify desconocido & Líder de integración & \hspace{0pt}Auto\-aprendizaje (Líder de integración) & Autoaprendizaje guiado con documentación oficial de Fastify; endpoint de ejemplo documentado en Notion & Fase 3 \\
   \hline
-  ts-morph para extracción de métricas CK & Herramienta no conocida por ningún integrante & Líder de evaluación (autoaprendizaje previo) → sesión de transferencia & Autoaprendizaje individual; sesión práctica grupal de 1.5 horas con casos reales del proyecto & Autoaprendizaje en Fase 3; sesión grupal antes de Fase 5 &  \\
+  ts-morph para extracción de métricas CK & Herramienta no conocida por ningún integrante & Todos & Líder de evaluación (\hspace{0pt}auto\-apren\-di\-zaje previo $\rightarrow$ sesión de transferencia) & Autoaprendizaje individual; sesión práctica grupal de 1.5 horas con casos reales del proyecto & \hspace{0pt}Auto\-apren\-di\-zaje en Fase 3; sesión grupal antes de Fase 5 \\
   \hline
-  APIs de las cuatro pasarelas & Conocimiento heterogéneo; ningún integrante conoce las cuatro & Un integrante por pasarela según asignación de la Fase 1 & Revisión documental individual de documentación oficial; transferencia al equipo mediante programación en pares en Fase 4 & Fase 1; transferencia en Fase 4 &  \\
+  APIs de las cuatro pasarelas & Conocimiento heterogéneo; ningún integrante conoce las cuatro & Todos & Un integrante por pasarela según asignación de la Fase 1 & Revisión documental individual de documentación oficial; transferencia al equipo mediante programación en pares en Fase 4 & Fase 1; transferencia en Fase 4 \\
   \hline
-  Publicación de paquete en npm & No realizado previamente por el equipo & Líder de arquitectura & Autoaprendizaje con documentación oficial de npm; guía de publicación redactada en Notion & Antes del hito H3 &  \\
+  Publicación de paquete en npm & No realizado previamente por el equipo & Líder de arquitectura & \hspace{0pt}Auto\-aprendizaje (Líder de arquitectura) & Autoaprendizaje con documentación oficial de npm; guía de publicación redactada en Notion & Antes del hito H3 \\
   \hline
 \end{longtable}
 \end{center}
@@ -49,7 +49,7 @@ La siguiente tabla describe las tareas de configuración y mantenimiento de la i
   Tarea & Rol responsable & Momento & Frecuencia \\
   \hline
   \endhead
-  Crear el repositorio GitHub con las ramas \texttt{main} y \texttt{devops} y una rama de trabajo por issue, con la política de pull requests revisados de este plan. En GitHub ninguna de las dos ramas tiene reglas de protección; la política la sostiene el equipo & Líder de arquitectura & Semana 1 & Una vez; política se revisa si surgen problemas de flujo \\
+  Crear el repositorio GitHub con las ramas \texttt{main} y \texttt{devops} y una rama de trabajo por issue, con la política de pull requests revisados definida en la sección 7.3. En GitHub ninguna de las dos ramas tiene reglas de protección; el equipo mantiene esa política por acuerdo interno & Líder de arquitectura & Semana 1 & Una vez; política se revisa si surgen problemas de flujo \\
   \hline
   Inicializar proyecto TypeScript con tsconfig estricto, estructura de paquete npm y licencia Apache 2.0 & Líder de arquitectura & Semana 1 & Una vez; tsconfig se ajusta al agregar dependencias \\
   \hline
@@ -57,7 +57,7 @@ La siguiente tabla describe las tareas de configuración y mantenimiento de la i
   \hline
   Crear un hito de GitHub por fase e iteración y cargar el backlog como issues (el primero, el 20 de agosto de 2026); el tablero de GitHub Projects no se usó & Coordinador & Semana 1 & Backlog se actualiza al inicio de cada fase \\
   \hline
-  Crear el servicio en Render, en el plan gratuito, con \texttt{render.yaml}, y desplegar automáticamente desde la rama \texttt{devops} (\texttt{autoDeploy: true}; sección 3.3) & Líder de integración & Inicio Fase 4, Iteración 3 & Una vez; verificar disponibilidad mensualmente \\
+  Crear el servicio en Render, en el plan gratuito, con \texttt{render.yaml}, y desplegar automáticamente desde la rama \texttt{devops} (\texttt{autoDeploy: true}; sección 3.2.3) & Líder de integración & Inicio Fase 4, Iteración 3 & Una vez; verificar disponibilidad mensualmente \\
   \hline
   Llevar en el SAD las decisiones técnicas, lo medido y los cambios de arquitectura & Coordinador & Semana 1 & Actualización continua por todos los integrantes \\
   \hline
@@ -70,4 +70,4 @@ La siguiente tabla describe las tareas de configuración y mantenimiento de la i
 \end{longtable}
 \end{center}
 
-Ninguna credencial se versiona en el repositorio. Las de los sandboxes viven en archivos \texttt{.env} locales, que \texttt{.gitignore} excluye, y en Render, en un archivo secreto (\textit{Secret File}) \texttt{.env} que el servicio lee al arrancar. \texttt{render.yaml} declara esas variables con \texttt{sync: false} para que sus valores no se escriban en el archivo. En GitHub Actions, el único secreto que nombran los workflows es \texttt{NPM\_TOKEN}, el de la publicación en npm (\texttt{publish.yml}).
+Ninguna credencial se versiona en el repositorio. Las de los sandboxes se guardan en archivos \texttt{.env} locales, que \texttt{.gitignore} excluye, y en Render, en un archivo secreto (\textit{Secret File}) \texttt{.env} que el servicio lee al arrancar. \texttt{render.yaml} declara esas variables con \texttt{sync: false} para que sus valores no se escriban en el archivo. En GitHub Actions, el único secreto declarado en los flujos de trabajo (\textit{workflows}) es \texttt{NPM\_TOKEN}, empleado para publicar en npm (\texttt{publish.yml}).

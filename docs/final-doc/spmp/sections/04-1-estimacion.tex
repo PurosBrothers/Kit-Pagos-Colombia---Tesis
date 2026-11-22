@@ -1,6 +1,6 @@
 \section{Administración del Proyecto}
 
-La administración del proyecto define los mecanismos utilizados para planificar, coordinar y controlar la ejecución del Kit Pagos Colombia a lo largo de todas sus fases. Esta sección describe cómo se estimará el esfuerzo, cómo se pondrá en marcha el entorno de trabajo y cómo se organizarán las actividades, recursos y responsabilidades necesarias para garantizar el cumplimiento de los objetivos del proyecto.
+La administración del proyecto define los mecanismos utilizados para planificar, coordinar y controlar la ejecución del Kit Pagos Colombia a lo largo de todas sus fases. Esta sección describe cómo se estimaron el tamaño y el esfuerzo del software, cómo se configuró el entorno de trabajo y cómo se organizaron las actividades, los recursos y las responsabilidades para cumplir los objetivos del proyecto.
 
 \subsection{Métodos y Herramientas de Estimación}
 
@@ -32,7 +32,7 @@ Se empleó estimación por conteo de componentes, partiendo de la arquitectura y
   \hline
   Adaptador Kushki & Implementación de puertos para Kushki & 4–6 \\
   \hline
-  API de simulación & Controladores Fastify, manejadores de escenarios & 8–12 \\
+  API de Simulación & Controladores Fastify, manejadores de escenarios & 8–12 \\
   \hline
   Infraestructura de pruebas & Suites Jest para núcleo, adaptadores y API & 10–15 \\
   \hline
@@ -41,17 +41,15 @@ Se empleó estimación por conteo de componentes, partiendo de la arquitectura y
 \end{longtable}
 \end{center}
 
-Lo construido es bastante más grande que lo estimado. Contado el 7 de noviembre de 2026 con \texttt{git ls-tree}, hay 83 archivos \texttt{.ts} que no son pruebas en \texttt{sdk/src} y \texttt{sdk/src-browser}, y 74 en \texttt{simulator-api/src}; de pruebas, 62 en \texttt{sdk/} y 54 en \texttt{simulator-api/}. La estimación tampoco contaba el módulo de navegador, los cuatro prototipos de \texttt{prototypes/}, los ejemplos de \texttt{examples/} ni la página de presentación de \texttt{landing/}.
+Lo construido supera ampliamente la estimación inicial. En el corte del repositorio del 7 de noviembre de 2026, medido con \texttt{git ls-tree}, se registran 83 archivos \texttt{.ts} de código fuente en \texttt{sdk/src} y \texttt{sdk/src-browser}, y 74 en \texttt{simulator-api/src}, además de 62 archivos de prueba en \texttt{sdk/} y 54 en \texttt{simulator-api/}. La estimación tampoco contemplaba el módulo de navegador, los cuatro prototipos de \texttt{prototypes/}, los ejemplos de \texttt{examples/} ni la página de presentación de \texttt{landing/}.
 
-Estimación del esfuerzo del proyecto
+\subsubsection{Estimación del esfuerzo del proyecto}
 
-Se combinaron juicio de expertos y estimación por analogía. El referente es el trabajo de Manuaba e Hisyam (2022), que integró dos pasarelas de pago en condiciones similares. El Kit Pagos Colombia integra cuatro pasarelas, añade la API de simulación y el componente de evaluación con métricas CK, lo que representa aproximadamente el doble de la complejidad del referente.
+Se combinaron juicio de expertos y estimación por analogía. El referente es el trabajo de Hisyam y Manuaba (2022), que integró dos pasarelas de pago en condiciones similares. El Kit Pagos Colombia integra cuatro pasarelas, añade la API de Simulación y el componente de evaluación con métricas CK, lo que representa aproximadamente el doble de la complejidad del referente.
 
-El aumento en la complejidad frente al referente no se debe únicamente a que el proyecto integra cuatro pasarelas en lugar de dos. El framework también incluye componentes adicionales que incrementan el esfuerzo de desarrollo, como la API de simulación, las pruebas automatizadas, la documentación técnica generada para el SDK y el proceso de evaluación mediante métricas CK. Además, la arquitectura hexagonal adoptada requiere definir previamente los contratos y la estructura del núcleo antes de implementar los adaptadores, lo que añade trabajo de diseño y validación técnica durante las primeras fases del proyecto.
+Además de integrar cuatro pasarelas en lugar de dos, el esfuerzo adicional respecto al referente responde a las pruebas automatizadas, la API de Simulación, la documentación centralizada de datos de prueba y la evaluación mediante métricas CK (la estimación de la versión 1.0 incluía también documentación técnica generada automáticamente para el SDK, que finalmente no se produjo, como se indica en la sección 3.2.4). Por su parte, la arquitectura hexagonal exige definir los contratos y la estructura del núcleo antes de implementar los adaptadores, lo que concentra trabajo de diseño y validación técnica durante las primeras fases del proyecto.
 
-\begin{enumerate}
-  \item Cada integrante destina en promedio 12 horas semanales durante las 18 semanas del semestre, resultando en 864 horas-persona de esfuerzo total. La distribución por fase es la siguiente:
-\end{enumerate}
+En la estimación inicial, cada integrante destinaba en promedio 12 horas semanales durante las 18 semanas del semestre, para un esfuerzo total de 864 horas-persona. La distribución proyectada por fase es la siguiente:
 
 \begin{center}
 \renewcommand{\arraystretch}{1.2}

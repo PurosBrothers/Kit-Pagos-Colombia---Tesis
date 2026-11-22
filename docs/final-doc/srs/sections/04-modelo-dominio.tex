@@ -23,7 +23,7 @@ El dominio del problema se organiza alrededor del concepto de transacción de pa
   \hline
   Estado de transacción & Representa la condición actual de una transacción en el ciclo de vida del pago. Los estados normalizados del framework son: \texttt{APPROVED}, \texttt{DECLINED}, \texttt{PENDING}, \texttt{EXPIRED}, \texttt{VOIDED} y \texttt{ERROR}. \\
   \hline
-  Resultado de pago & Unión que distingue dos desenlaces de la creación de un pago: una transacción resuelta (\texttt{TRANSACTION}) o una redirección requerida (\texttt{REDIRECT\_REQUIRED}) con la URL a la que hay que enviar al pagador, el identificador de la pasarela y el estado nativo. \\
+  Resultado de pago & Unión que distingue dos resultados posibles en la creación de un pago: una transacción resuelta (\texttt{TRANSACTION}) o una redirección requerida (\texttt{REDIRECT\_REQUIRED}) con la URL a la que se debe redirigir al pagador, el identificador de la pasarela y el estado nativo. \\
   \hline
   Pasarela de pago & Proveedor externo que procesa las transacciones de pago. Cada pasarela define sus propias convenciones de API, autenticación, formatos de respuesta y mecanismos de notificación. Las pasarelas soportadas son Wompi, Rapyd (PayU GPO), Mercado Pago y Kushki. \\
   \hline
@@ -33,7 +33,7 @@ El dominio del problema se organiza alrededor del concepto de transacción de pa
   \hline
   Método de pago & Mecanismo a través del cual el comprador efectúa el pago. El framework soporta tarjeta de crédito o débito, a partir de un token emitido por la pasarela, y transferencia bancaria PSE. \\
   \hline
-  Banco PSE & Entidad financiera habilitada para cobrar por PSE. Se identifica con el código que exige cada pasarela y, cuando está en el catálogo, con el código de compensación de ACH Colombia. \\
+  Banco PSE & Entidad financiera habilitada para procesar pagos por PSE. Se identifica con el código que exige cada pasarela y, cuando está en el catálogo, con el código de compensación de ACH Colombia. \\
   \hline
   Webhook & Notificación asíncrona que una pasarela envía hacia una URL registrada por el comercio para informar sobre cambios en el estado de una transacción. Cada pasarela define su propio formato y mecanismo de firma. \\
   \hline

@@ -5,8 +5,8 @@
 \begin{itemize}
   \item El SDK de servidor y la API de Simulación se implementan en TypeScript sobre Node.js. El módulo de navegador se distribuye como módulo ES y no depende de APIs de Node.js. No se desarrollan versiones para otros lenguajes o entornos de ejecución.
   \item El paquete declara \texttt{engines.node >= 20.19.0}. La versión 20.18 o anterior no carga el módulo de navegador y queda fuera del soporte declarado.
-  \item La API de Simulación corre en local con \texttt{npm run dev} o \texttt{npm start} en \texttt{simulator-api/} y se despliega en Render desde la rama \texttt{devops}. No se incluye una imagen Docker en esta versión.
-  \item El SDK de servidor no recibe el número de tarjeta: solo acepta un token emitido por la pasarela. El módulo de navegador tokeniza contra la pasarela y el servidor del comercio recibe el token opaco.
+  \item La API de Simulación se ejecuta en entorno local con \texttt{npm run dev} o \texttt{npm start} en \texttt{simulator-api/} y se despliega en Render desde la rama \texttt{devops}. No se incluye una imagen Docker en esta versión.
+  \item El SDK de servidor no recibe el número de tarjeta: solo acepta tokens emitidos por las pasarelas. El módulo de navegador tokeniza la tarjeta directamente con la pasarela y el servidor del comercio recibe únicamente el token de un solo uso emitido por la pasarela.
   \item Las llamadas a las pasarelas usan HTTPS. El simulador local puede usar HTTP porque no transporta datos reales; el servicio desplegado en Render usa HTTPS.
   \item El framework depende de la disponibilidad de los ambientes sandbox de cada pasarela para su validación. Cambios en las APIs de los proveedores pueden requerir actualizaciones en los adaptadores.
 \end{itemize}
@@ -14,7 +14,7 @@
 \subsection{Restricciones regulatorias}
 
 \begin{itemize}
-  \item El SDK de servidor queda fuera del alcance de PCI DSS para los datos de la tarjeta porque no los recibe. El módulo de navegador los envía del navegador a la pasarela. La página donde se escribe la tarjeta sigue en el alcance del comercio (SAQ A-EP), y la Content-Security-Policy la debe enviar su servidor.
+  \item El SDK de servidor queda fuera del alcance de PCI DSS (\textit{Payment Card Industry Data Security Standard}) para los datos de la tarjeta porque no los recibe. El módulo de navegador los envía directamente a la pasarela. La página donde el usuario ingresa los datos de la tarjeta sigue en el alcance del comercio (SAQ A-EP, \textit{Self-Assessment Questionnaire A-EP}), y la Content-Security-Policy la debe enviar su servidor.
   \item El uso del framework en entornos de producción está sujeto a los términos y condiciones de las APIs de cada pasarela (Wompi, Rapyd, Mercado Pago, Kushki).
   \item El framework no modifica ni intercepta los flujos de autenticación internos de las pasarelas, en cumplimiento de las políticas de seguridad de cada proveedor.
 \end{itemize}

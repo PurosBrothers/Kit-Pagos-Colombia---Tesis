@@ -13,13 +13,13 @@ Se identifican cuatro perfiles de usuario que interactúan con el framework Kit 
     \hline
     Descripción & Desarrollador con menos de dos años de experiencia profesional que se enfrenta por primera vez a la integración de una pasarela de pago. Puede ser estudiante universitario, freelancer o parte de un equipo de una startup en etapa temprana. \\
     \hline
-    Experiencia técnica & Conocimiento básico de REST APIs y JavaScript/TypeScript. Poca o nula experiencia previa con pasarelas de pago colombianas. \\
+    Experiencia técnica & Conocimiento básico de APIs REST y JavaScript/TypeScript. Poca o nula experiencia previa con pasarelas de pago colombianas. \\
     \hline
     Frecuencia de uso & Esporádica. Utiliza el framework durante el desarrollo inicial de un proyecto y ocasionalmente para agregar nuevas pasarelas. \\
     \hline
     Necesidades principales & Documentación clara, ejemplos de código funcionales, datos de prueba accesibles y un entorno de simulación que no requiera configuración compleja. \\
     \hline
-    Interacción con el framework & Principalmente con el SDK de servidor, el módulo de navegador para tokenizar la tarjeta, la documentación de datos de prueba y la API de Simulación en local. \\
+    Interacción con el framework & Principalmente con el SDK de servidor, el módulo de navegador para tokenizar la tarjeta, la documentación de datos de prueba y la API de Simulación en entorno local. \\
     \hline
   \end{tabularx}
   \caption{Perfil del desarrollador junior.}
@@ -63,7 +63,7 @@ Se identifican cuatro perfiles de usuario que interactúan con el framework Kit 
     \hline
     Experiencia técnica & Dominio de JavaScript/TypeScript, del DOM y de peticiones HTTP desde el navegador. Familiaridad con formularios de tarjeta y con Content-Security-Policy. \\
     \hline
-    Frecuencia de uso & Durante la implementación del checkout y cada vez que se agrega una pasarela o se ajusta la página de pago. \\
+    Frecuencia de uso & Durante la implementación del flujo de pago (\textit{checkout}) y cada vez que se agrega una pasarela o se ajusta la página de pago. \\
     \hline
     Necesidades principales & Un módulo de tokenización que no exponga el número de tarjeta al servidor del comercio, una API REST para cobrar sin instalar el SDK, y ejemplos de protección de la página. \\
     \hline
@@ -83,13 +83,13 @@ Se identifican cuatro perfiles de usuario que interactúan con el framework Kit 
     \hline
     \textbf{Característica} & \textbf{Descripción} \\
     \hline
-    Descripción & Persona responsable de verificar el correcto funcionamiento de la integración de pagos en una aplicación. Puede ser un QA engineer, un desarrollador en fase de pruebas o un integrante del equipo de proyecto encargado de validar los flujos de pago antes de salir a producción. \\
+    Descripción & Persona responsable de verificar el correcto funcionamiento de la integración de pagos en una aplicación. Puede ser un ingeniero de aseguramiento de calidad (QA), un desarrollador en fase de pruebas o un integrante del equipo de proyecto encargado de validar los flujos de pago antes de salir a producción. \\
     \hline
     Experiencia técnica & Conocimiento funcional de los flujos de pago. Experiencia con herramientas de prueba de APIs (Postman, curl). No necesariamente escribe código de integración. \\
     \hline
     Frecuencia de uso & Intensiva durante los ciclos de prueba del proyecto. Usa principalmente la API de Simulación y la documentación de datos de prueba. \\
     \hline
-    Necesidades principales & Acceso a escenarios de prueba predefinidos (éxito, rechazo, error de red, timeout), datos de prueba válidos por pasarela y una API de simulación estable y predecible. \\
+    Necesidades principales & Acceso a escenarios de prueba predefinidos (éxito, rechazo, error de red, timeout), datos de prueba válidos por pasarela y una API de Simulación estable y predecible. \\
     \hline
     Interacción con el framework & Principalmente con \texttt{/v1/sim} y \texttt{/v1/api} a través de herramientas REST, con la colección de Postman y con la documentación centralizada de datos de prueba. \\
     \hline

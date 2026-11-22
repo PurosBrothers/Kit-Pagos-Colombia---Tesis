@@ -1,12 +1,12 @@
 \subsection{Planes de Trabajo del Proyecto}
 
-Los planes de trabajo describen cómo se ejecutarán las principales actividades del proyecto durante su desarrollo. Esta sección define la descomposición de tareas, la calendarización, la asignación de recursos y la distribución del esfuerzo, estableciendo responsables, herramientas y momentos de ejecución para cada actividad relevante del proyecto.
+Los planes de trabajo describen cómo se estructuraron y ejecutaron las principales actividades del proyecto. Esta sección detalla la descomposición de tareas, la calendarización comparada entre lo planeado y lo ejecutado, la asignación de recursos y la distribución del esfuerzo, indicando responsables, herramientas y momentos de ejecución para cada actividad relevante.
 
 \subsubsection{Descomposición de Actividades}
 
 La estructura de descomposición de trabajo (WBS) del proyecto se construyó tomando como referencia las seis fases del enfoque Design Science Research (DSR) definido para el desarrollo del framework. Cada fase agrupa actividades técnicas, organizacionales y de validación asociadas a los principales entregables del proyecto.
 
-Dado el carácter iterativo de la Fase 4 ---correspondiente al desarrollo del framework--- se presenta el detalle completo de una iteración representativa, incluyendo actividades de implementación, pruebas y validación incremental de los componentes del SDK. La gestión del proyecto se considera transversal a todas las fases y contempla actividades permanentes de seguimiento, documentación y control del avance.
+Dado el carácter iterativo de la Fase 4, correspondiente al desarrollo del framework, se presenta el detalle de las tres iteraciones de desarrollo, incluyendo actividades de implementación, pruebas y validación incremental de los componentes del SDK y de la API de Simulación. La gestión del proyecto es transversal a todas las fases y contempla actividades permanentes de seguimiento, documentación y control del avance.
 
 1. Kit Pagos Colombia
 
@@ -44,8 +44,8 @@ Dado el carácter iterativo de la Fase 4 ---correspondiente al desarrollo del fr
   \item 1.4.1 Modelo de dominio unificado (clases y relaciones)
   \item 1.4.2 Especificación de puertos de la arquitectura hexagonal
   \item 1.4.3 Especificación de adaptadores por pasarela
-  \item 1.4.4 Diseño de la API de simulación (endpoints y escenarios)
-  \item 1.4.5 Registro de ADRs para decisiones arquitectónicas clave (Hito H2)
+  \item 1.4.4 Diseño de la API de Simulación (endpoints y escenarios)
+  \item 1.4.5 Registro de decisiones arquitectónicas (ADR) clave (Hito H2)
 \end{itemize}
 
 1.5 Fase 4 – Desarrollo iterativo
@@ -53,7 +53,7 @@ Dado el carácter iterativo de la Fase 4 ---correspondiente al desarrollo del fr
 \begin{itemize}
   \item 1.5.1 Iteración 1 – Núcleo del SDK
   \item 1.5.1.1 Implementación del modelo de dominio y contratos de puerto
-  \item 1.5.1.2 Pruebas unitarias del núcleo (cobertura $\geq$ 80 \%)
+  \item 1.5.1.2 Pruebas unitarias del núcleo (cobertura $\geq 80$~\%)
   \item 1.5.1.3 Revisión técnica grupal del núcleo (Hito H3 parcial)
 \end{itemize}
 
@@ -67,7 +67,7 @@ Dado el carácter iterativo de la Fase 4 ---correspondiente al desarrollo del fr
   \item 1.5.2.5 Validación cruzada de los cuatro adaptadores (Hito H3 completo)
 \end{itemize}
 
-1.5.3 Iteración 3 – API de simulación y soporte de validación
+1.5.3 Iteración 3 – API de Simulación y soporte de validación
 
 \begin{itemize}
   \item 1.5.3.1 Implementación de escenarios de prueba para las pasarelas soportadas
@@ -100,7 +100,7 @@ Dado el carácter iterativo de la Fase 4 ---correspondiente al desarrollo del fr
 
 La Tabla~\ref{tab:carta-gantt} reemplaza a la carta Gantt de la versión 1.0, que estaba en semanas relativas y sin fechas. Cada fase e iteración del WBS tiene dos filas: la ventana prevista en el plan original (\GPlan) y la que se ejecutó (\GReal). Las columnas 1 a 18 son las semanas S01 a S18, ancladas al calendario como en la sección 3.1.3. La S01 empieza el lunes 13 de julio de 2026, y la S18, el lunes 9 de noviembre. La columna «Abr--jun» reúne lo hecho entre abril y junio de 2026, antes de la S01.
 
-Las ventanas reales van del primer al último issue cerrado de cada hito de GitHub, en hora de Colombia. Las de las Fases 1 y 2 salen de las respuestas del equipo. La del diseño suma la versión 1.0 del SAD, de mayo de 2026, y el hito «Fase 3 -- Diseño (cierre)», del 20 de agosto al 6 de septiembre. La Iteración 3 y la Fase 5 cerraron el 9 de noviembre de 2026; la Fase 6 sigue en curso. El cronograma de este plan había comprimido las Fases 5 y 6 para no mover la entrega del 9 de noviembre; la tabla muestra que la Iteración 3 se extendió sobre ambas.
+Las ventanas reales van del primer al último issue cerrado de cada hito de GitHub, en hora de Colombia. Las de las Fases 1 y 2 salen de las respuestas del equipo. La del diseño suma la versión 1.0 del SAD, de mayo de 2026, y el hito «Fase 3 -- Diseño (cierre)», del 20 de agosto al 6 de septiembre. La Iteración 3 y la Fase 5 cerraron el 9 de noviembre de 2026; la Fase 6 sigue en curso. El ajuste del cronograma comprimió las Fases 5 y 6 para no mover la entrega del 9 de noviembre; la tabla muestra que la Iteración 3 se extendió sobre ambas.
 
 \begingroup
 \footnotesize
@@ -138,7 +138,7 @@ Las ventanas reales van del primer al último issue cerrado de cada hito de GitH
   \cline{2-21}
    & Real &  &  &  &  &  &  &  &  &  & \GReal & \GReal & \GReal &  &  &  &  &  &  &  \\
   \hline
-  1.5.3 Iteración 3 -- API de simulación y soporte de validación & Plan & &  &  &  &  &  &  &  &  &  &  & \GPlan & \GPlan &  &  &  &  &  &  \\
+  1.5.3 Iteración 3 -- API de Simulación y soporte de validación & Plan & &  &  &  &  &  &  &  &  &  &  & \GPlan & \GPlan &  &  &  &  &  &  \\
   \cline{2-21}
    & Real &  &  &  &  &  &  &  &  &  &  &  & \GReal & \GReal & \GReal & \GReal & \GReal & \GReal & \GReal & \GReal \\
   \hline
@@ -179,23 +179,23 @@ Para cada actividad principal del WBS se indica el conjunto de roles involucrado
   Actividad (WBS) & Roles involucrados & Herramientas \\
   \hline
   \endhead
-  1.1 Gestión del proyecto & Coordinador (primario); todos los integrantes como reportantes & GitHub (hitos, issues y pull requests), Microsoft Teams, WhatsApp \\
+  1.1 Gestión del proyecto & Coordinador (primario); todos los integrantes como colaboradores que reportan avances & GitHub (hitos, issues y pull requests), Microsoft Teams, WhatsApp \\
   \hline
   1.2 Fase 1 – Identificación & Todos (un integrante por pasarela); Coordinador consolida el mapa del ecosistema & Documentaciones oficiales de las pasarelas \\
   \hline
   1.3 Fase 2 – Definición & Líder de evaluación redacta el SRS; Coordinador gestiona el backlog; todos revisan y aprueban & Word y Google Docs (versiones 1.0 de mayo del SRS y del SPMP) \\
   \hline
-  1.4 Fase 3 – Diseño & Líder de arquitectura lidera; todos revisan los contratos de puerto y los ADRs & Google Docs (versión 1.0 del SAD, de mayo, con sus ADR) y PlantUML \\
+  1.4 Fase 3 – Diseño & Líder de arquitectura lidera; todos revisan los contratos de puerto y los ADR & Google Docs (versión 1.0 del SAD, de mayo, con sus ADR) y PlantUML \\
   \hline
   1.5.1 Iter 1 – Núcleo del SDK & Líder de arquitectura (primario); revisión obligatoria de todos antes de iniciar Iter 2 & TypeScript, Jest, GitHub (PR + CI), VS Code \\
   \hline
   1.5.2 Iter 2 – Adaptadores & Líder de integración coordina; cada adaptador se desarrolla en par con otro integrante & TypeScript, Jest, sandboxes de las cuatro pasarelas, GitHub \\
   \hline
-  1.5.3 Iter 3 – API de simulación & Líder de integración (primario); Líder de arquitectura apoya en diseño de contratos & Fastify, TypeScript, Render, Postman y Newman, GitHub \\
+  1.5.3 Iter 3 – API de Simulación & Líder de integración (primario); Líder de arquitectura apoya en diseño de contratos & Fastify, TypeScript, Render, Postman y Newman, GitHub \\
   \hline
-  1.6 Fase 5 – Evaluación & Líder de evaluación lidera; todos construyen los prototipos asignados & ts-morph, TypeScript, Jest y los guiones de medición del SDK (\texttt{ck-metrics.ts} y \texttt{native-concepts.ts}) \\
+  1.6 Fase 5 – Evaluación & Líder de evaluación lidera; todos construyen los prototipos asignados & ts-morph, TypeScript, Jest y los scripts de medición del SDK (\texttt{ck-metrics.ts} y \texttt{native-concepts.ts}) \\
   \hline
-  1.7 Fase 6 – Comunicación & Líder de evaluación coordina la redacción del documento; todos contribuyen por secciones; Coordinador gestiona la publicación del repositorio & LaTeX con \texttt{latexmk}, GitHub, GitHub Pages, npm \\
+  1.7 Fase 6 – Comunicación & Líder de evaluación coordina la redacción de la memoria; todos contribuyen por secciones; Coordinador gestiona la publicación del repositorio & LaTeX con \texttt{latexmk}, GitHub, GitHub Pages, npm \\
   \hline
 \end{longtable}
 \end{center}
@@ -204,7 +204,7 @@ Los recursos del proyecto son exclusivamente humanos y de herramientas software.
 
 \subsubsection{Asignación de Presupuesto y Justificación}
 
-Costos reales del proyecto
+\paragraph{Costos reales del proyecto.}
 
 El proyecto opera íntegramente con herramientas de acceso gratuito; según el equipo, no se pagó nada. Los únicos costos potencialmente reales eran los del despliegue de la API de Simulación, y Render se usa en su plan gratuito.
 
@@ -235,7 +235,7 @@ El proyecto opera íntegramente con herramientas de acceso gratuito; según el e
 \end{longtable}
 \end{center}
 
-Estimación del costo del software
+\paragraph{Estimación del costo del software.}
 
 Aunque no se movilizan recursos financieros reales, el esfuerzo invertido tiene un valor económico equivalente. Para su cálculo se utiliza una tarifa de referencia de COP 25.000 por hora, correspondiente al rango de mercado para un desarrollador junior con competencias en TypeScript y arquitecturas de software en Colombia en 2026.
 

@@ -1,8 +1,8 @@
 \subsection{Organización del Proyecto y Comunicación}
 
-La estructura de participantes del Kit Pagos Colombia es más acotada que la de proyectos con clientes externos o múltiples grupos de interés. El equipo de desarrollo no negocia entregas con un stakeholder ni valida funcionalidades con usuarios en campo.
+La estructura de participantes del Kit Pagos Colombia es más acotada que la de proyectos con clientes externos o múltiples grupos de interés. El equipo de desarrollo no negocia entregas con un \textit{stakeholder} ni valida funcionalidades con usuarios en campo.
 
-El proyecto tiene adicionalmente dependencias técnicas con las cuatro pasarelas de pago analizadas en la fase de identificación. Estas entidades no intervienen activamente en el proceso; la relación con ellas es unidireccional: el equipo consume sus portales de documentación y entornos sandbox, sin coordinación humana directa bajo condiciones normales.
+El proyecto tiene además dependencias técnicas con las cuatro pasarelas de pago analizadas en la fase de identificación. Estas entidades no intervienen activamente en el proceso; la relación con ellas es unidireccional: el equipo consume sus portales de documentación y entornos sandbox, sin coordinación humana directa bajo condiciones normales.
 
 \subsubsection{Interfaces Externas}
 
@@ -10,11 +10,11 @@ El proyecto tiene adicionalmente dependencias técnicas con las cuatro pasarelas
 \renewcommand{\arraystretch}{1.2}
 \begin{longtable}{|P{0.243}|P{0.241}|P{0.241}|P{0.241}|}
   \hline
-  Nombre de la entidad & Descripción & Responsabilidades en el proyecto & Datos de contacto / medio de comunicación. \\
+  Nombre de la entidad & Descripción & Responsabilidades en el proyecto & Datos de contacto / medio de comunicación \\
   \hline
   \endfirsthead
   \hline
-  Nombre de la entidad & Descripción & Responsabilidades en el proyecto & Datos de contacto / medio de comunicación. \\
+  Nombre de la entidad & Descripción & Responsabilidades en el proyecto & Datos de contacto / medio de comunicación \\
   \hline
   \endhead
   \caption{Interfaces Externas}
@@ -39,7 +39,7 @@ La versión 1.0 de este plan preveía registrar en actas o bitácoras toda inter
 
 \subsubsection{Organigrama y Descripción de Roles}
 
-A diferencia de esquemas con rotación de roles por sprint, se adoptaron asignaciones estables que reflejan las especializaciones técnicas del framework: un componente de arquitectura y núcleo, cuatro adaptadores de pasarela con una API de simulación, y un proceso de evaluación con métricas de código.
+A diferencia de esquemas con rotación de roles por sprint, se adoptaron asignaciones estables que reflejan las especializaciones técnicas del framework: un componente de arquitectura y núcleo, cuatro adaptadores de pasarela con una API de Simulación, y un proceso de evaluación con métricas de código.
 
 Cada integrante lidera uno de esos frentes sin dejar de contribuir a los demás, especialmente durante la fase de desarrollo iterativo. Es decir, todos deben aportar a cada entregable de manera equitativa, independientemente de su responsabilidad principal dentro de lo establecido a continuación.
 
@@ -68,13 +68,13 @@ La jerarquía en el nivel operativo es plana. El coordinador del equipo no tiene
   \endlastfoot
   Ph.D. Jaime Andrés Pavlich Mariscal & Director del Proyecto & Supervisor académico externo al equipo. No participa en la implementación técnica & Aprobación de entregables clave, retroalimentación sobre arquitectura, métricas de evaluación y alcance del framework \\
   \hline
-  Andres Henao Niño & Coordinador del equipo & Integrante responsable de la gestión operativa del proyecto. Participa activamente en el desarrollo & Mantenimiento del backlog y seguimiento del calendario; coordinación de reuniones internas; comunicación con el director; registro de actas y decisiones clave \\
+  Andres Henao Niño & Coordinador del equipo & Integrante responsable de la gestión operativa del proyecto. Participa activamente en el desarrollo & Mantenimiento del backlog y seguimiento del calendario; coordinación de reuniones internas; comunicación con el director; seguimiento de decisiones clave en GitHub y en el SAD (la versión 1.0 asignaba además el registro de actas en Notion, que no se utilizó) \\
   \hline
   Joshua Prieto Zambrano & Líder de arquitectura y núcleo SDK & Responsable del diseño estructural del framework y la implementación del núcleo & Diseño del modelo de dominio unificado; especificación de los puertos de la arquitectura hexagonal; implementación del núcleo del SDK; revisión de que los adaptadores cumplan los contratos de puerto \\
   \hline
-  David Estevan Rodriguez Jurado & Líder de integración & Responsable de los cuatro adaptadores por pasarela y de la API de simulación & Implementación de los adaptadores de Wompi, Rapyd, Mercado Pago y Kushki; desarrollo y despliegue de la API de simulación; consolidación de la documentación de datos de prueba \\
+  David Estevan Rodriguez Jurado & Líder de integración & Responsable de los cuatro adaptadores por pasarela y de la API de Simulación & Implementación de los adaptadores de Wompi, Rapyd, Mercado Pago y Kushki; desarrollo y despliegue de la API de Simulación; consolidación de la documentación de datos de prueba \\
   \hline
-  Joan Emmanuel Orduz Chia & Líder de evaluación y documentación & Integrante responsable del proceso de medición con métricas CK, los proyectos prototípicos y el documento final & Diseño y ejecución de la evaluación comparativa con métricas WMC, CBO y RFC; desarrollo de los prototipos de medición; redacción del documento de grado y publicación del repositorio público \\
+  Joan Emmanuel Orduz Chia & Líder de evaluación y documentación & Integrante responsable del proceso de medición con métricas CK, los proyectos prototípicos y la memoria & Diseño y ejecución de la evaluación comparativa con métricas WMC, CBO y RFC; desarrollo de los prototipos de medición; redacción de la memoria y publicación del repositorio público \\
   \hline
 \end{longtable}
 \end{center}
