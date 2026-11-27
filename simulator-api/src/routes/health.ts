@@ -14,7 +14,8 @@ import { getHealthSchema } from "./schemas/health.schemas";
  * usar el futuro HTTPRouter.
  */
 export async function healthRoute(app: FastifyInstance): Promise<void> {
-  app.get("/health", { schema: getHealthSchema }, async () => {
+  app.get("/health", { schema: getHealthSchema }, async (_request, reply) => {
+    reply.header("access-control-allow-origin", "*");
     return { status: "ok" };
   });
 }

@@ -312,13 +312,14 @@ async function checkRenderHealth(): Promise<void> {
   const text = document.getElementById("render-status-text");
   if (!dot || !text) return;
 
+  const healthUrl = "https://kit-pagos-colombia.onrender.com/health";
   const wakingTimeout = setTimeout(() => {
     dot.className = "status-indicator-dot status-dot-waking";
     text.textContent = "API en Render: Despertando contenedor (~30s)...";
   }, 2500);
 
   try {
-    const res = await fetch("https://kit-pagos-colombia.onrender.com/health", {
+    const res = await fetch(healthUrl, {
       method: "GET",
       headers: { Accept: "application/json" },
     });
@@ -331,9 +332,21 @@ async function checkRenderHealth(): Promise<void> {
       text.textContent = `API en Render: Respuesta HTTP ${res.status}`;
     }
   } catch {
-    clearTimeout(wakingTimeout);
-    dot.className = "status-indicator-dot status-dot-waking";
-    text.textContent = "API en Render: Inactiva o despertando (~30s)";
+    try {
+      // Fallback no-cors si la instancia desplegada aún no envía Access-Control-Allow-Origin en /health
+      await fetch(healthUrl, {
+        method: "GET",
+        mode: "no-cors",
+        cache: "no-store",
+      });
+      clearTimeout(wakingTimeout);
+      dot.className = "status-indicator-dot status-dot-online";
+      text.textContent = "API en Render: En línea (activa)";
+    } catch {
+      clearTimeout(wakingTimeout);
+      dot.className = "status-indicator-dot status-dot-waking";
+      text.textContent = "API en Render: Inactiva o despertando (~30s)";
+    }
   }
 }
 
